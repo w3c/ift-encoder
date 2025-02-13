@@ -120,7 +120,6 @@ class SegmentationContext {
     unmapped_glyphs = {};
     and_glyph_groups = {};
     or_glyph_groups = {};
-    patch_id_to_segment_index = {};
     fallback_segments = {};
   }
 
@@ -231,7 +230,6 @@ class SegmentationContext {
   btree_set<glyph_id_t> unmapped_glyphs;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> and_glyph_groups;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> or_glyph_groups;
-  std::vector<segment_index_t> patch_id_to_segment_index; // TODO XXXX shouldn't need anymore?
   btree_set<segment_index_t> fallback_segments;
 
   // Caches and logging
@@ -407,10 +405,8 @@ Status GlyphSegmentation::GroupsToSegmentation(
     const btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>>&
         or_glyph_groups,
     const btree_set<segment_index_t>& fallback_group,
-    std::vector<segment_index_t>& patch_id_to_segment_index,
     GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
-  std::vector<patch_id_t> segment_to_patch_id;
 
   // Map segments into patch ids
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
@@ -422,17 +418,7 @@ Status GlyphSegmentation::GroupsToSegmentation(
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     // All 1 segment and conditions are considered to be exclusive
     segmentation.conditions_.insert(
-        ActivationCondition::exclusive_segment(segment, next_id));
-
-    if (segment + 1 > segment_to_patch_id.size()) {
-      uint32_t size = segment_to_patch_id.size();
-      for (uint32_t i = 0; i < (segment + 1) - size; i++) {
-        segment_to_patch_id.push_back(-1);
-      }
-    }
-
-    patch_id_to_segment_index.push_back(segment);
-    segment_to_patch_id[segment] = next_id++;
+        ActivationCondition::exclusive_segment(segment, next_id++));
   }
 
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
@@ -668,8 +654,7 @@ StatusOr<std::optional<segment_index_t>> MergeNextBaseSegment(
     }
 
     patch_id_t base_patch = condition->activated();
-    segment_index_t base_segment_index =
-        context.patch_id_to_segment_index[base_patch];
+    segment_index_t base_segment_index = (*condition->conditions().begin()->begin());
     if (base_segment_index < start_segment) {
       // Already processed, skip
       continue;
@@ -763,8 +748,7 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
     segmentation.CopySegments(context.segments);
 
     TRYV(GroupsToSegmentation(context.and_glyph_groups, context.or_glyph_groups,
-                              context.fallback_segments,
-                              context.patch_id_to_segment_index, segmentation));
+                              context.fallback_segments, segmentation));
     context.LogClosureCount("Condition grouping");
 
     if (patch_size_min_bytes == 0) {
