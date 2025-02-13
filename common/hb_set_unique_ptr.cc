@@ -13,6 +13,10 @@ hb_set_unique_ptr make_hb_set() {
   return hb_set_unique_ptr(hb_set_create(), &hb_set_destroy);
 }
 
+hb_set_unique_ptr make_hb_set(hb_set_t* set) {
+  return hb_set_unique_ptr(set, &hb_set_destroy);
+}
+
 hb_set_unique_ptr make_hb_set(const absl::flat_hash_set<uint32_t>& int_set) {
   hb_set_unique_ptr out = make_hb_set();
   for (uint32_t v : int_set) {

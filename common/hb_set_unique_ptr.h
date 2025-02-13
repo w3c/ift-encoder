@@ -12,6 +12,9 @@ typedef std::unique_ptr<hb_set_t, decltype(&hb_set_destroy)> hb_set_unique_ptr;
 
 hb_set_unique_ptr make_hb_set();
 
+// Takes ownership of set
+hb_set_unique_ptr make_hb_set(hb_set_t* set);
+
 hb_set_unique_ptr make_hb_set(const absl::flat_hash_set<uint32_t>& int_set);
 
 hb_set_unique_ptr make_hb_set(int length, ...);
