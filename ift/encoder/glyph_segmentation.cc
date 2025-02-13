@@ -231,7 +231,7 @@ class SegmentationContext {
   btree_set<glyph_id_t> unmapped_glyphs;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> and_glyph_groups;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> or_glyph_groups;
-  std::vector<segment_index_t> patch_id_to_segment_index;
+  std::vector<segment_index_t> patch_id_to_segment_index; // TODO XXXX shouldn't need anymore?
   btree_set<segment_index_t> fallback_segments;
 
   // Caches and logging
@@ -420,8 +420,9 @@ Status GlyphSegmentation::GroupsToSegmentation(
 
     segment_index_t segment = *and_segments.begin();
     segmentation.patches_.insert(std::pair(next_id, glyphs));
+    // All 1 segment and conditions are considered to be exclusive
     segmentation.conditions_.insert(
-        ActivationCondition::and_patches({next_id}, next_id));
+        ActivationCondition::exclusive_segment(segment, next_id));
 
     if (segment + 1 > segment_to_patch_id.size()) {
       uint32_t size = segment_to_patch_id.size();
@@ -440,19 +441,9 @@ Status GlyphSegmentation::GroupsToSegmentation(
       continue;
     }
 
-    btree_set<patch_id_t> and_patches;
-    for (segment_index_t segment : and_segments) {
-      if (segment_to_patch_id[segment] == -1) {
-        return absl::InternalError(StrCat(
-            "Segment s", segment,
-            " does not have an assigned patch id (found in an and_segment)."));
-      }
-      and_patches.insert(segment_to_patch_id[segment]);
-    }
-
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
-        ActivationCondition::and_patches(and_patches, next_id));
+        ActivationCondition::and_segments(and_segments, next_id));
 
     next_id++;
   }
@@ -469,24 +460,11 @@ Status GlyphSegmentation::GroupsToSegmentation(
           StrCat("Unexpected or_segment with only one segment: s",
                  *or_segments.begin()));
     }
-    btree_set<patch_id_t> or_patches;
-    for (segment_index_t segment : or_segments) {
-      if (segment_to_patch_id[segment] == -1) {
-        return absl::InternalError(StrCat(
-            "Segment s", segment,
-            " does not have an assigned patch id (found in an or_segment)."));
-      }
-
-      if (!or_patches.insert(segment_to_patch_id[segment]).second) {
-        return absl::InternalError(
-            StrCat("Two different segments are mapped to the same patch: s",
-                   segment, " -> p", segment_to_patch_id[segment]));
-      }
-    }
+    
     bool is_fallback = (or_segments == fallback_group);
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
-        ActivationCondition::or_patches(or_patches, next_id, is_fallback));
+        ActivationCondition::or_segments(or_segments, next_id, is_fallback));
 
     next_id++;
   }
@@ -503,16 +481,6 @@ StatusOr<uint32_t> PatchSizeBytes(hb_face_t* original_face,
   GlyphKeyedDiff diff(font_data, id, {FontHelper::kGlyf, FontHelper::kGvar}, 9);
   auto patch_data = TRY(diff.CreatePatch(gids));
   return patch_data.size();
-}
-
-hb_set_unique_ptr ToSegmentIndices(const hb_set_t* patches,
-                                   const std::vector<segment_index_t>& map) {
-  hb_set_unique_ptr out = make_hb_set();
-  patch_id_t next = HB_SET_VALUE_INVALID;
-  while (hb_set_next(patches, &next)) {
-    hb_set_add(out.get(), map[next]);
-  }
-  return out;
 }
 
 void MergeSegments(const SegmentationContext& context, const hb_set_t* segments,
@@ -538,10 +506,9 @@ StatusOr<uint32_t> EstimatePatchSize(SegmentationContext& context,
 
 StatusOr<bool> TryMerge(SegmentationContext& context,
                         segment_index_t base_segment_index,
-                        const hb_set_t* patches) {
+                        const hb_set_t* segments) {
   // Create a merged segment, and remove all of the others
-  hb_set_unique_ptr to_merge_segments =
-      ToSegmentIndices(patches, context.patch_id_to_segment_index);
+  hb_set_unique_ptr to_merge_segments = make_hb_set(hb_set_copy(segments));
   hb_set_del(to_merge_segments.get(), base_segment_index);
 
   uint32_t size_before =
@@ -592,7 +559,7 @@ template <typename ConditionIt>
 StatusOr<bool> TryMergingACompositeCondition(
     SegmentationContext& context,
     const GlyphSegmentation& candidate_segmentation,
-    segment_index_t base_segment_index, patch_id_t base_patch,
+    segment_index_t base_segment_index, patch_id_t base_patch, // TODO XXX is base_patch needed?
     const ConditionIt& condition_it) {
   auto next_condition = condition_it;
   next_condition++;
@@ -604,14 +571,14 @@ StatusOr<bool> TryMergingACompositeCondition(
       continue;
     }
 
-    hb_set_unique_ptr triggering_patches = make_hb_set();
-    next_condition->TriggeringPatches(triggering_patches.get());
-    if (!hb_set_has(triggering_patches.get(), base_patch)) {
+    hb_set_unique_ptr triggering_segments = make_hb_set();
+    next_condition->TriggeringSegments(triggering_segments.get());
+    if (!hb_set_has(triggering_segments.get(), base_segment_index)) {
       next_condition++;
       continue;
     }
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_patches.get()))) {
+    if (!TRY(TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -644,10 +611,10 @@ StatusOr<bool> TryMergingABaseSegment(
       continue;
     }
 
-    hb_set_unique_ptr triggering_patches = make_hb_set();
-    next_condition->TriggeringPatches(triggering_patches.get());
+    hb_set_unique_ptr triggering_segments = make_hb_set();
+    next_condition->TriggeringSegments(triggering_segments.get());
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_patches.get()))) {
+    if (!TRY(TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -793,6 +760,7 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
     segmentation.unmapped_glyphs_ = context.unmapped_glyphs;
     segmentation.init_font_glyphs_ =
         to_btree_set(context.initial_closure.get());
+    segmentation.CopySegments(context.segments);
 
     TRYV(GroupsToSegmentation(context.and_glyph_groups, context.or_glyph_groups,
                               context.fallback_segments,
@@ -824,13 +792,28 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
   return absl::InternalError("unreachable");
 }
 
+void GlyphSegmentation::CopySegments(const std::vector<hb_set_unique_ptr>& segments) {
+  segments_.clear();
+  for (const auto& set : segments) {
+    segments_.push_back(to_btree_set(set.get()));
+  }
+}
+
+GlyphSegmentation::ActivationCondition GlyphSegmentation::ActivationCondition::exclusive_segment(segment_index_t index, patch_id_t activated) {
+  ActivationCondition condition;
+  condition.activated_ = activated;
+  condition.conditions_ = {{index}};
+  condition.is_exclusive_ = true;
+  return condition;
+}
+
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::and_patches(
-    const absl::btree_set<patch_id_t>& ids, patch_id_t activated) {
+GlyphSegmentation::ActivationCondition::and_segments(
+    const absl::btree_set<segment_index_t>& segments, patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
 
-  for (auto id : ids) {
+  for (auto id : segments) {
     conditions.conditions_.push_back({id});
   }
 
@@ -838,12 +821,12 @@ GlyphSegmentation::ActivationCondition::and_patches(
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::or_patches(
-    const absl::btree_set<patch_id_t>& ids, patch_id_t activated,
+GlyphSegmentation::ActivationCondition::or_segments(
+    const absl::btree_set<segment_index_t>& segments, patch_id_t activated,
     bool is_fallback) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
-  conditions.conditions_.push_back(ids);
+  conditions.conditions_.push_back(segments);
   conditions.is_fallback_ = is_fallback;
 
   return conditions;
@@ -896,7 +879,7 @@ std::string GlyphSegmentation::ActivationCondition::ToString() const {
       } else {
         first_inner = false;
       }
-      out << "p" << id;
+      out << "s" << id;
     }
     if (set.size() > 1) {
       out << ")";
