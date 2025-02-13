@@ -183,7 +183,6 @@ class GlyphSegmentation {
       const absl::btree_map<absl::btree_set<segment_index_t>,
                             absl::btree_set<glyph_id_t>>& or_glyph_groups,
       const absl::btree_set<segment_index_t>& fallback_group,
-      std::vector<segment_index_t>& patch_id_to_segment_index,
       GlyphSegmentation& segmentation);
 
 
