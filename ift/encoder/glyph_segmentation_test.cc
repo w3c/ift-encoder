@@ -3,10 +3,10 @@
 #include "common/font_data.h"
 #include "gtest/gtest.h"
 
+using absl::btree_set;
 using common::FontData;
 using common::hb_face_unique_ptr;
 using common::make_hb_face;
-using absl::btree_set;
 
 namespace ift::encoder {
 
@@ -91,15 +91,16 @@ if ((s0 OR s1)) then p2
 
 TEST_F(GlyphSegmentationTest, MergeBase_ViaConditions) {
   // {e, f} is too small, the merger should select {i, l} to merge since
-  // there is a dependency between these two. The result should have no conditional
-  // patches since ligatures will have been brought into the merged {e, f, i, l}
+  // there is a dependency between these two. The result should have no
+  // conditional patches since ligatures will have been brought into the merged
+  // {e, f, i, l}
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<btree_set<hb_codepoint_t>> expected_segments = {
-    {'a', 'b', 'd'}, {'e', 'f', 'i', 'l'}, {'j', 'k', 'm', 'n'}, {}
-  };
+      {'a', 'b', 'd'}, {'e', 'f', 'i', 'l'}, {'j', 'k', 'm', 'n'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -114,14 +115,18 @@ if (s2) then p2
 }
 
 TEST_F(GlyphSegmentationTest, MergeBases) {
-  // {e, f} is too smal, since no conditional patches exist it should merge with the next available base
-  // which is {'j', 'k'}
+  // {e, f} is too smal, since no conditional patches exist it should merge with
+  // the next available base which is {'j', 'k'}
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<btree_set<hb_codepoint_t>> expected_segments = {
-    {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {}, {'m', 'n', 'o', 'p'},
+      {'a', 'b', 'd'},
+      {'e', 'f', 'j', 'k'},
+      {},
+      {'m', 'n', 'o', 'p'},
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -137,16 +142,17 @@ if (s3) then p2
 }
 
 TEST_F(GlyphSegmentationTest, MergeBases_MaxSize) {
-  // {e, f} is too small, since no conditional patches exist it will merge with the next available base
-  // which is {'m', 'n', 'o', 'p'}. However that patch is too large, so the next one {j, k} will actually be 
-  // chosen.
+  // {e, f} is too small, since no conditional patches exist it will merge with
+  // the next available base which is {'m', 'n', 'o', 'p'}. However that patch
+  // is too large, so the next one {j, k} will actually be chosen.
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370, 700);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370,
+      700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<btree_set<hb_codepoint_t>> expected_segments = {
-    {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {'m', 'n', 'o', 'p'}, {}
-  };
+      {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {'m', 'n', 'o', 'p'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -165,7 +171,8 @@ TEST_F(GlyphSegmentationTest, MixedAndOr) {
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f', 0xc1}, {'i', 0x106}};
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f', 0xc1},
+                                                              {'i', 0x106}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -207,6 +214,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
-// TODO(garretrieger): add test where or_set glyphs are moved back to unmapped due to found "additional conditions".
+// TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
+// due to found "additional conditions".
 
 }  // namespace ift::encoder

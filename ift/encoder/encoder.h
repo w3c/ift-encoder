@@ -2,19 +2,18 @@
 #define IFT_ENCODER_ENCODER_H_
 
 #include <cstdint>
-#include <initializer_list>
 #include <random>
 
-#include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "common/axis_range.h"
 #include "common/compat_id.h"
 #include "common/font_data.h"
 #include "hb-subset.h"
+#include "ift/encoder/condition.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
 
@@ -26,48 +25,9 @@ namespace ift::encoder {
  */
 class Encoder {
  public:
-  typedef absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space_t;
-
   // TODO(garretrieger): add api to configure brotli quality level (for glyph
   // and table keyed).
   //                     Default to 11 but in tests run lower quality.
-
-  // TODO XXXXXX be consistent with terminology used for patches/segments (ie.
-  // standardize on one or the other throughout).
-
-  /*
-   * This conditions is satisfied if the input subset definition matches at
-   * least one segment in each required group and every feature in
-   * required_features.
-   */
-  struct Condition {
-    std::vector<absl::btree_set<uint32_t>> required_groups;
-    absl::btree_set<hb_tag_t> required_features;
-    uint32_t activated_segment_id;
-
-    Condition() : required_groups(), activated_segment_id(0) {}
-
-    // Construct a condition that maps a segment to itself.
-    Condition(uint32_t segment_id)
-        : required_groups({{segment_id}}), activated_segment_id(segment_id) {}
-
-    // Returns true if this condition is activated by exactly one segment and no
-    // features.
-    bool IsUnitary() const {
-      return (required_groups.size() == 1) &&
-             required_groups.at(0).size() == 1 && required_features.size() == 0;
-    }
-
-    bool operator<(const Condition& other) const;
-
-    bool operator==(const Condition& other) const {
-      return required_groups == other.required_groups &&
-             required_features == other.required_features &&
-             activated_segment_id == other.activated_segment_id;
-    }
-
-    friend void PrintTo(const Condition& point, std::ostream* os);
-  };
 
   Encoder()
       : face_(common::make_hb_face(nullptr))
@@ -95,26 +55,13 @@ class Encoder {
    * An id is provided which uniquely identifies this segment and can be used to
    * specify dependencies against this segment.
    */
-  absl::Status AddGlyphDataSegment(uint32_t segment_id,
-                                   const absl::flat_hash_set<uint32_t>& gids);
-
-  // TODO(garretrieger): add a second type of activation condition which is
-  // SubsetDefinition -> segment_id. That will be used to set up the base
-  // activation conditions and then this method is only used for constructing
-  // composite conditions. Stop inferering the subset definition from the gids
-  // in a segment.
-  absl::Status AddGlyphDataActivationCondition(Condition condition);
+  absl::Status AddGlyphDataPatch(uint32_t patch_id,
+                                 const absl::btree_set<uint32_t>& gids);
 
   /*
-   * Marks that the segment identified by 'activated_id' will only be loaded if
-   * 'feature_tag' is in the  target subset and the segment identified by
-   * 'original_id' has been matched.
-   *
-   * The segments associated with 'original_id' and 'id' must have been
-   * previously supplied via AddGlyphDataSegment().
+   * Adds a condition which may trigger the inclusion of a glyph data patch.
    */
-  absl::Status AddFeatureDependency(uint32_t original_id, uint32_t activated_id,
-                                    hb_tag_t feature_tag);
+  absl::Status AddGlyphDataPatchCondition(Condition condition);
 
   void SetFace(hb_face_t* face) { face_.reset(hb_face_reference(face)); }
 
@@ -131,16 +78,24 @@ class Encoder {
     return absl::OkStatus();
   }
 
-  // Set up the base subset to cover all codepoints not listed in any glyph
-  // segments plus codepoints and gids from any segments referenced in
-  // 'included_segments'
-  absl::Status SetBaseSubsetFromSegments(
-      const absl::flat_hash_set<uint32_t>& included_segments);
+  /*
+   * Set up the base subset to cover all glyphs in the provided list of glyph
+   * data patches.
+   */
+  absl::Status SetBaseSubsetFromPatches(
+      const absl::flat_hash_set<uint32_t>& included_glyph_data);
 
-  absl::Status SetBaseSubsetFromSegments(
+  /*
+   * Set up the base subset to cover all glyphs in the provided list of glyph
+   * data patches. Additionally, instance to the supplied design space.
+   */
+  absl::Status SetBaseSubsetFromPatches(
       const absl::flat_hash_set<uint32_t>& included_segments,
       const design_space_t& design_space);
 
+  /*
+   * Adds a segment around which the non glyph data in the font will be split.
+   */
   void AddNonGlyphDataSegment(
       const absl::flat_hash_set<hb_codepoint_t>& subset) {
     SubsetDefinition def;
@@ -157,13 +112,6 @@ class Encoder {
   void AddFeatureGroupSegment(const absl::btree_set<hb_tag_t>& feature_tag);
 
   void AddDesignSpaceSegment(const design_space_t& space);
-
-  /*
-   * Configure an extension subset for the non glyph dependent graph formed
-   * from the glyphs available in one or more glyph data segments.
-   */
-  absl::Status AddNonGlyphSegmentFromGlyphSegments(
-      const absl::flat_hash_set<uint32_t>& ids);
 
   struct Encoding {
     common::FontData init_font;
@@ -186,56 +134,6 @@ class Encoder {
       absl::string_view font, bool glyf_transform = true);
 
  public:
-  struct SubsetDefinition {
-    SubsetDefinition() {}
-    SubsetDefinition(std::initializer_list<uint32_t> codepoints_in) {
-      for (uint32_t cp : codepoints_in) {
-        codepoints.insert(cp);
-      }
-    }
-
-    friend void PrintTo(const SubsetDefinition& point, std::ostream* os);
-
-    absl::flat_hash_set<uint32_t> codepoints;
-    absl::flat_hash_set<uint32_t> gids;
-    absl::btree_set<hb_tag_t> feature_tags;
-    design_space_t design_space;
-
-    bool IsVariable() const {
-      for (const auto& [tag, range] : design_space) {
-        if (range.IsRange()) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    bool empty() const {
-      return codepoints.empty() && gids.empty() && feature_tags.empty() &&
-             design_space.empty();
-    }
-
-    bool operator==(const SubsetDefinition& other) const {
-      return codepoints == other.codepoints && gids == other.gids &&
-             feature_tags == other.feature_tags &&
-             design_space == other.design_space;
-    }
-
-    template <typename H>
-    friend H AbslHashValue(H h, const SubsetDefinition& s) {
-      return H::combine(std::move(h), s.codepoints, s.gids, s.feature_tags,
-                        s.design_space);
-    }
-
-    void Union(const SubsetDefinition& other);
-
-    void Subtract(const SubsetDefinition& other);
-
-    void ConfigureInput(hb_subset_input_t* input, hb_face_t* face) const;
-
-    ift::proto::PatchMap::Coverage ToCoverage() const;
-  };
-
   absl::Status SetBaseSubsetFromDef(const SubsetDefinition& base_subset) {
     if (!base_subset_.empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
@@ -284,14 +182,14 @@ class Encoder {
                                           const SubsetDefinition& base_subset,
                                           bool is_root = true) const;
 
-  absl::StatusOr<SubsetDefinition> SubsetDefinitionForSegments(
-      const absl::flat_hash_set<uint32_t>& ids) const;
+  absl::StatusOr<SubsetDefinition> SubsetDefinitionForPatches(
+      const absl::flat_hash_set<uint32_t>& patch_ids) const;
 
   /*
    * Returns true if this encoding will contain both glyph keyed and table keyed
    * patches.
    */
-  bool IsMixedMode() const { return !glyph_data_segments_.empty(); }
+  bool IsMixedMode() const { return !glyph_data_patches_.empty(); }
 
   absl::Status EnsureGlyphKeyedPatchesPopulated(
       ProcessingContext& context, const design_space_t& design_space,
@@ -349,9 +247,8 @@ class Encoder {
                         common::CompatId& compat_id) const;
 
   common::hb_face_unique_ptr face_;
-  absl::btree_map<uint32_t, SubsetDefinition> glyph_data_segments_;
-
-  absl::btree_set<Condition> activation_conditions_;
+  absl::btree_map<uint32_t, absl::btree_set<uint32_t>> glyph_data_patches_;
+  std::vector<Condition> glyph_patch_conditions_;
 
   SubsetDefinition base_subset_;
   std::vector<SubsetDefinition> extension_subsets_;

@@ -55,45 +55,9 @@ using ift::proto::TABLE_KEYED_PARTIAL;
 
 namespace ift::encoder {
 
-void PrintTo(const Encoder::SubsetDefinition& def, std::ostream* os) {
-  *os << "[{";
-
-  btree_set<uint32_t> sorted;
-  for (uint32_t cp : def.codepoints) {
-    sorted.insert(cp);
-  }
-
-  bool first = true;
-  for (uint32_t cp : sorted) {
-    if (!first) {
-      *os << ", ";
-    }
-    first = false;
-    *os << cp;
-  }
-
-  *os << "}";
-
-  if (!def.design_space.empty()) {
-    *os << ", {";
-    bool first = true;
-    for (const auto& [tag, range] : def.design_space) {
-      if (!first) {
-        *os << ", ";
-      }
-      first = false;
-      *os << FontHelper::ToString(tag) << ": ";
-      PrintTo(range, os);
-    }
-    *os << "}";
-  }
-
-  *os << "]";
-}
-
 void Encoder::AddCombinations(const std::vector<const SubsetDefinition*>& in,
                               uint32_t choose,
-                              std::vector<Encoder::SubsetDefinition>& out) {
+                              std::vector<SubsetDefinition>& out) {
   if (!choose || in.size() < choose) {
     return;
   }
@@ -110,7 +74,7 @@ void Encoder::AddCombinations(const std::vector<const SubsetDefinition*>& in,
     std::vector<const SubsetDefinition*> remaining;
     std::copy(it_inner, in.end(), std::back_inserter(remaining));
 
-    std::vector<Encoder::SubsetDefinition> combinations;
+    std::vector<SubsetDefinition> combinations;
     AddCombinations(remaining, choose - 1, combinations);
     for (auto& s : combinations) {
       s.Union(**it);
@@ -123,11 +87,13 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
     const ProcessingContext& context) const {
   SubsetDefinition all;
   all.Union(base_subset_);
+
   for (const auto& s : extension_subsets_) {
     all.Union(s);
   }
-  for (const auto& [id, s] : glyph_data_segments_) {
-    all.Union(s);
+
+  for (const auto& [id, gids] : glyph_data_patches_) {
+    all.gids.insert(gids.begin(), gids.end());
   }
 
   // Union doesn't work completely correctly with respect to design spaces so
@@ -145,7 +111,7 @@ bool is_subset(const flat_hash_set<uint32_t>& a,
                      [&a](const uint32_t& v) { return a.count(v) > 0; });
 }
 
-std::vector<Encoder::SubsetDefinition> Encoder::OutgoingEdges(
+std::vector<SubsetDefinition> Encoder::OutgoingEdges(
     const SubsetDefinition& base_subset, uint32_t choose) const {
   std::vector<SubsetDefinition> remaining_subsets;
   for (const auto& s : extension_subsets_) {
@@ -163,7 +129,7 @@ std::vector<Encoder::SubsetDefinition> Encoder::OutgoingEdges(
     input.push_back(&s);
   }
 
-  std::vector<Encoder::SubsetDefinition> result;
+  std::vector<SubsetDefinition> result;
   for (uint32_t i = 1; i <= choose; i++) {
     AddCombinations(input, i, result);
   }
@@ -171,200 +137,68 @@ std::vector<Encoder::SubsetDefinition> Encoder::OutgoingEdges(
   return result;
 }
 
-template <typename S>
-S subtract(const S& a, const S& b) {
-  S c;
-  for (uint32_t v : a) {
-    if (!b.contains(v)) {
-      c.insert(v);
-    }
-  }
-  return c;
-}
-
-Encoder::design_space_t subtract(const Encoder::design_space_t& a,
-                                 const Encoder::design_space_t& b) {
-  Encoder::design_space_t c;
-
-  for (const auto& [tag, range] : a) {
-    auto e = b.find(tag);
-    if (e == b.end()) {
-      c[tag] = range;
-      continue;
-    }
-
-    if (e->second.IsPoint()) {
-      // range minus a point, does nothing.
-      c[tag] = range;
-    }
-
-    // TODO(garretrieger): this currently operates only at the axis
-    //  level. Partial ranges within an axis are not supported.
-    //  to implement this we'll need to subtract the two ranges
-    //  from each other. However, this can produce two resulting ranges
-    //  instead of one.
-    //
-    //  It's likely that we'll forbid disjoint ranges, so we can simply
-    //  error out if a configuration would result in one.
-  }
-
-  return c;
-}
-
-void Encoder::SubsetDefinition::Subtract(const SubsetDefinition& other) {
-  codepoints = subtract(codepoints, other.codepoints);
-  gids = subtract(gids, other.gids);
-  feature_tags = subtract(feature_tags, other.feature_tags);
-  design_space = subtract(design_space, other.design_space);
-}
-
-void Encoder::SubsetDefinition::Union(const SubsetDefinition& other) {
-  std::copy(other.codepoints.begin(), other.codepoints.end(),
-            std::inserter(codepoints, codepoints.begin()));
-  std::copy(other.gids.begin(), other.gids.end(),
-            std::inserter(gids, gids.begin()));
-  std::copy(other.feature_tags.begin(), other.feature_tags.end(),
-            std::inserter(feature_tags, feature_tags.begin()));
-
-  for (const auto& [tag, range] : other.design_space) {
-    auto existing = design_space.find(tag);
-    if (existing == design_space.end()) {
-      design_space[tag] = range;
-      continue;
-    }
-
-    // TODO(garretrieger): this is a simplified implementation that
-    //  only allows expanding a point to a range. This needs to be
-    //  updated to handle a generic union.
-    //
-    //  It's likely that we'll forbid disjoint ranges, so we can simply
-    //  error out if a configuration would result in one.
-    if (existing->second.IsPoint() && range.IsRange()) {
-      design_space[tag] = range;
-    }
-  }
-}
-
-void Encoder::SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
-                                               hb_face_t* face) const {
-  hb_set_t* unicodes = hb_subset_input_unicode_set(input);
-  for (hb_codepoint_t cp : codepoints) {
-    hb_set_add(unicodes, cp);
-  }
-
-  hb_set_t* features =
-      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
-  for (hb_tag_t tag : feature_tags) {
-    hb_set_add(features, tag);
-  }
-
-  for (const auto& [tag, range] : design_space) {
-    hb_subset_input_set_axis_range(input, face, tag, range.start(), range.end(),
-                                   NAN);
-  }
-
-  if (gids.empty()) {
-    return;
-  }
-
-  hb_set_t* gids_set = hb_subset_input_glyph_set(input);
-  hb_set_add(gids_set, 0);
-  for (hb_codepoint_t gid : gids) {
-    hb_set_add(gids_set, gid);
-  }
-}
-
-PatchMap::Coverage Encoder::SubsetDefinition::ToCoverage() const {
-  PatchMap::Coverage coverage;
-  coverage.codepoints = codepoints;
-  coverage.features = feature_tags;
-  for (const auto& [tag, range] : design_space) {
-    coverage.design_space[tag] = range;
-  }
-  return coverage;
-}
-
-Encoder::SubsetDefinition Encoder::Combine(const SubsetDefinition& s1,
-                                           const SubsetDefinition& s2) const {
+SubsetDefinition Encoder::Combine(const SubsetDefinition& s1,
+                                  const SubsetDefinition& s2) const {
   SubsetDefinition result;
   result.Union(s1);
   result.Union(s2);
   return result;
 }
 
-Status Encoder::AddGlyphDataSegment(uint32_t id,
-                                    const absl::flat_hash_set<uint32_t>& gids) {
+Status Encoder::AddGlyphDataPatch(uint32_t id,
+                                  const absl::btree_set<uint32_t>& gids) {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }
 
-  if (glyph_data_segments_.contains(id)) {
+  if (glyph_data_patches_.contains(id)) {
     return absl::FailedPreconditionError(
         StrCat("A segment with id, ", id, ", has already been supplied."));
   }
 
   uint32_t glyph_count = hb_face_get_glyph_count(face_.get());
 
-  SubsetDefinition subset;
-  auto gid_to_unicode = FontHelper::GidToUnicodeMap(face_.get());
   for (uint32_t gid : gids) {
-    subset.gids.insert(gid);
-
-    auto cp = gid_to_unicode.find(gid);
-    if (cp == gid_to_unicode.end()) {
-      if (gid >= glyph_count) {
-        return absl::InvalidArgumentError(
-            StrCat("Patch has gid, ", gid, ", which is not in the font."));
-      }
-      // Gid is in the font but not in the cmap, ignore it.
-      continue;
+    if (gid >= glyph_count) {
+      return absl::InvalidArgumentError(
+          StrCat("Patch has gid, ", gid, ", which is not in the font."));
     }
-
-    subset.codepoints.insert(cp->second);
   }
 
-  glyph_data_segments_[id] = subset;
+  glyph_data_patches_[id] = gids;
   next_id_ = std::max(next_id_, id + 1);
   return absl::OkStatus();
 }
 
-Status Encoder::AddGlyphDataActivationCondition(Condition condition) {
-  for (const auto& group : condition.required_groups) {
-    for (const auto& id : group) {
-      if (!glyph_data_segments_.contains(id)) {
-        return absl::InvalidArgumentError(
-            StrCat("Glyh keyed segment ", id,
-                   " has not been supplied via AddGlyphDataSegment()"));
-      }
+Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
+  uint32_t new_index = glyph_patch_conditions_.size();
+  for (uint32_t child_index : condition.child_conditions) {
+    if (child_index >= new_index) {
+      return absl::InvalidArgumentError(
+          StrCat("Child conditions must only references previous conditions: ",
+                 child_index, " >= ", new_index));
     }
   }
-  if (!glyph_data_segments_.contains(condition.activated_segment_id)) {
+
+  if (condition.activated_patch_id.has_value() &&
+      !glyph_data_patches_.contains(*condition.activated_patch_id)) {
     return absl::InvalidArgumentError(
-        StrCat("Glyh keyed segment ", condition.activated_segment_id,
-               " has not been supplied via AddGlyphDataSegment()"));
+        StrCat("Glyh data patch ", *condition.activated_patch_id,
+               " has not been supplied via AddGlyphDataPatch()"));
   }
-  activation_conditions_.insert(condition);
+
+  glyph_patch_conditions_.push_back(condition);
   return absl::OkStatus();
 }
 
-Status Encoder::AddFeatureDependency(uint32_t original_id, uint32_t id,
-                                     hb_tag_t feature_tag) {
-  Condition condition;
-  condition.activated_segment_id = id;
-  condition.required_features.insert(feature_tag);
-  condition.required_groups.push_back({original_id});
-
-  return AddGlyphDataActivationCondition(std::move(condition));
-}
-
-Status Encoder::SetBaseSubsetFromSegments(
-    const flat_hash_set<uint32_t>& included_segments) {
+Status Encoder::SetBaseSubsetFromPatches(
+    const flat_hash_set<uint32_t>& included_glyph_data) {
   design_space_t empty;
-  return SetBaseSubsetFromSegments(included_segments, empty);
+  return SetBaseSubsetFromPatches(included_glyph_data, empty);
 }
 
-Status Encoder::SetBaseSubsetFromSegments(
-    const flat_hash_set<uint32_t>& included_segments,
+Status Encoder::SetBaseSubsetFromPatches(
+    const flat_hash_set<uint32_t>& included_glyph_data,
     const design_space_t& design_space) {
   // TODO(garretrieger): support also providing initial features.
   if (!face_) {
@@ -375,14 +209,14 @@ Status Encoder::SetBaseSubsetFromSegments(
     return absl::FailedPreconditionError("Base subset has already been set.");
   }
 
-  for (uint32_t id : included_segments) {
-    if (!glyph_data_segments_.contains(id)) {
-      return absl::InvalidArgumentError(
-          StrCat("Glyph data segment, ", id, ", not added to the encoder."));
+  for (uint32_t patch_id : included_glyph_data) {
+    if (!glyph_data_patches_.contains(patch_id)) {
+      return absl::InvalidArgumentError(StrCat("Glyph data patch, ", patch_id,
+                                               ", not added to the encoder."));
     }
   }
 
-  auto included = SubsetDefinitionForSegments(included_segments);
+  auto included = SubsetDefinitionForPatches(included_glyph_data);
   if (!included.ok()) {
     return included.status();
   }
@@ -409,17 +243,6 @@ Status Encoder::SetBaseSubsetFromSegments(
   return absl::OkStatus();
 }
 
-Status Encoder::AddNonGlyphSegmentFromGlyphSegments(
-    const flat_hash_set<uint32_t>& ids) {
-  auto subset = SubsetDefinitionForSegments(ids);
-  if (!subset.ok()) {
-    return subset.status();
-  }
-
-  extension_subsets_.push_back(*subset);
-  return absl::OkStatus();
-}
-
 void Encoder::AddFeatureGroupSegment(const btree_set<hb_tag_t>& feature_tags) {
   SubsetDefinition def;
   def.feature_tags = feature_tags;
@@ -432,17 +255,27 @@ void Encoder::AddDesignSpaceSegment(const design_space_t& space) {
   extension_subsets_.push_back(def);
 }
 
-StatusOr<Encoder::SubsetDefinition> Encoder::SubsetDefinitionForSegments(
-    const flat_hash_set<uint32_t>& ids) const {
+StatusOr<SubsetDefinition> Encoder::SubsetDefinitionForPatches(
+    const flat_hash_set<uint32_t>& patch_ids) const {
+  auto gid_to_unicode = FontHelper::GidToUnicodeMap(face_.get());
+
   SubsetDefinition result;
-  for (uint32_t id : ids) {
-    auto p = glyph_data_segments_.find(id);
-    if (p == glyph_data_segments_.end()) {
+  for (uint32_t patch_id : patch_ids) {
+    auto p = glyph_data_patches_.find(patch_id);
+    if (p == glyph_data_patches_.end()) {
       return absl::InvalidArgumentError(
-          StrCat("Glyph data segment, ", id, ", not found."));
+          StrCat("Glyph data patches, ", patch_id, ", not found."));
     }
-    result.Union(p->second);
+
+    for (uint32_t gid : p->second) {
+      auto cp = gid_to_unicode.find(gid);
+      if (cp != gid_to_unicode.end()) {
+        result.codepoints.insert(cp->second);
+      }
+      result.gids.insert(gid);
+    }
   }
+
   return result;
 }
 
@@ -503,13 +336,15 @@ bool Encoder::AllocatePatchSet(ProcessingContext& context,
 Status Encoder::EnsureGlyphKeyedPatchesPopulated(
     ProcessingContext& context, const design_space_t& design_space,
     std::string& uri_template, CompatId& compat_id) const {
-  if (glyph_data_segments_.empty()) {
+  if (glyph_data_patches_.empty()) {
     return absl::OkStatus();
   }
 
   flat_hash_set<uint32_t> reachable_segments;
-  for (const auto& condition : activation_conditions_) {
-    reachable_segments.insert(condition.activated_segment_id);
+  for (const auto& condition : glyph_patch_conditions_) {
+    if (condition.activated_patch_id.has_value()) {
+      reachable_segments.insert(*condition.activated_patch_id);
+    }
   }
 
   if (!AllocatePatchSet(context, design_space, uri_template, compat_id)) {
@@ -534,18 +369,15 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
                         {FontHelper::kGlyf, FontHelper::kGvar});
 
   for (uint32_t index : reachable_segments) {
-    auto e = glyph_data_segments_.find(index);
-    if (e == glyph_data_segments_.end()) {
+    auto e = glyph_data_patches_.find(index);
+    if (e == glyph_data_patches_.end()) {
       return absl::InvalidArgumentError(
           StrCat("Glyph data segment ", index, " was not provided."));
     }
 
     std::string url = URLTemplate::PatchToUrl(uri_template, index);
 
-    SubsetDefinition subset = e->second;
-    btree_set<uint32_t> gids;
-    std::copy(subset.gids.begin(), subset.gids.end(),
-              std::inserter(gids, gids.begin()));
+    const auto& gids = e->second;
     auto patch = differ.CreatePatch(gids);
     if (!patch.ok()) {
       return patch.status();
@@ -557,225 +389,24 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
   return absl::OkStatus();
 }
 
-void PrintTo(const Encoder::Condition& c, std::ostream* os) {
-  *os << "{";
-  for (const auto& group : c.required_groups) {
-    *os << "{";
-    for (auto v : group) {
-      *os << v << ", ";
-    }
-    *os << "}, ";
-  }
-
-  *os << "}, {";
-
-  for (auto t : c.required_features) {
-    *os << FontHelper::ToString(t) << ", ";
-  }
-
-  *os << "} => " << c.activated_segment_id;
-}
-
-bool Encoder::Condition::operator<(const Condition& other) const {
-  if (required_groups.size() != other.required_groups.size()) {
-    return required_groups.size() < other.required_groups.size();
-  }
-
-  auto a = required_groups.begin();
-  auto b = other.required_groups.begin();
-  while (a != required_groups.end() && b != other.required_groups.end()) {
-    if (a->size() != b->size()) {
-      return a->size() < b->size();
-    }
-
-    auto aa = a->begin();
-    auto bb = b->begin();
-    while (aa != a->end() && bb != b->end()) {
-      if (*aa != *bb) {
-        return *aa < *bb;
-      }
-      aa++;
-      bb++;
-    }
-
-    a++;
-    b++;
-  }
-
-  if (required_features.size() != other.required_features.size()) {
-    return required_features.size() < other.required_features.size();
-  }
-
-  auto f_a = required_features.begin();
-  auto f_b = other.required_features.begin();
-  while (f_a != required_features.end() &&
-         f_b != other.required_features.end()) {
-    if (*f_a != *f_b) {
-      return *f_a < *f_b;
-    }
-    f_a++;
-    f_b++;
-  }
-
-  if (activated_segment_id != other.activated_segment_id) {
-    return activated_segment_id < other.activated_segment_id;
-  }
-
-  // These two are equal
-  return false;
-}
-
 Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
-  if (glyph_data_segments_.empty()) {
+  if (glyph_data_patches_.empty()) {
     return absl::OkStatus();
   }
 
-  // TODO XXXXX handle features.
+  uint32_t last_patch_index = 0;
+  for (const auto& condition : glyph_patch_conditions_) {
+    auto coverage = condition.subset_definition.ToCoverage();
+    coverage.child_indices.insert(condition.child_conditions.begin(),
+                                  condition.child_conditions.end());
+    coverage.conjunctive = condition.conjunctive;
 
-  // The conditions list describes what the patch map should do, here
-  // we need to convert that into an equivalent list of entries.
-  //
-  // To minimize encoded size we can reuse set definitions in later entries
-  // via the copy indices mechanism. The conditions are evaluated in three
-  // phases to successively build up a set of common entries which can be reused
-  // by later ones.
-
-  // Tracks the list of conditions which have not yet been placed in a map
-  // entry.
-  btree_set<Condition> remaining_conditions = activation_conditions_;
-
-  // Phase 1 generate the base entries, there should be one for each
-  // unique glyph segment that is referenced in at least one condition.
-  // the conditions will refer back to these base entries via copy indices
-  //
-  // Each base entry can be used to map one condition as well.
-  flat_hash_map<uint32_t, uint32_t> patch_id_to_entry_index;
-  uint32_t next_entry_index = 0;
-  uint32_t last_patch_id = 0;
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end();) {
-    bool remove = false;
-    for (const auto& group : condition->required_groups) {
-      for (uint32_t patch_id : group) {
-        if (patch_id_to_entry_index.contains(patch_id)) {
-          continue;
-        }
-
-        auto original = glyph_data_segments_.find(patch_id);
-        if (original == glyph_data_segments_.end()) {
-          return absl::InvalidArgumentError(
-              StrCat("Glyph data patch ", patch_id, " not found."));
-        }
-        const auto& original_def = original->second;
-
-        PatchMap::Coverage coverage;
-        coverage.codepoints = original_def.codepoints;
-
-        if (condition->IsUnitary()) {
-          // this condition can use this entry to map itself.
-          TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
-                                  GLYPH_KEYED));
-          last_patch_id = condition->activated_segment_id;
-          remove = true;
-        } else {
-          // Otherwise this entry does nothing (ignored = true), but will be
-          // referenced by later entries the assigned id doesn't matter, but
-          // using last_patch_id + 1 it will avoid needing to encoding the entry
-          // id delta.
-          TRYV(
-              patch_map.AddEntry(coverage, ++last_patch_id, GLYPH_KEYED, true));
-        }
-
-        patch_id_to_entry_index[patch_id] = next_entry_index++;
-      }
-    }
-
-    if (remove) {
-      condition = remaining_conditions.erase(condition);
+    if (condition.activated_patch_id.has_value()) {
+      last_patch_index = *condition.activated_patch_id;
+      TRYV(patch_map.AddEntry(coverage, last_patch_index, GLYPH_KEYED));
     } else {
-      ++condition;
+      TRYV(patch_map.AddEntry(coverage, ++last_patch_index, GLYPH_KEYED, true));
     }
-  }
-
-  // Phase 2 generate entries for all groups of patches reusing the base entries
-  // written in phase one. When writing an entry if the triggering group is the
-  // only one in the condition then that condition can utilize the entry (just
-  // like in Phase 1).
-  flat_hash_map<btree_set<uint32_t>, uint32_t> patch_group_to_entry_index;
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end();) {
-    bool remove = false;
-
-    if (condition->required_features.size() > 1) {
-      return absl::UnimplementedError(
-          "Conditions with more than one feature are not yet supported.");
-    }
-
-    for (const auto& group : condition->required_groups) {
-      if (group.size() <= 1 || patch_group_to_entry_index.contains(group)) {
-        // don't handle groups of size one, those will just reference the base
-        // entry directly.
-        continue;
-      }
-
-      PatchMap::Coverage coverage;
-      coverage.conjunctive = false;  // ... OR ...
-
-      for (uint32_t patch_id : group) {
-        auto entry_index = patch_id_to_entry_index.find(patch_id);
-        if (entry_index == patch_id_to_entry_index.end()) {
-          return absl::InternalError(StrCat("entry for patch_id = ", patch_id,
-                                            " was not previously created."));
-        }
-        coverage.child_indices.insert(entry_index->second);
-      }
-
-      if (condition->required_groups.size() == 1 &&
-          condition->required_features.size() == 0) {
-        TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
-                                GLYPH_KEYED));
-        last_patch_id = condition->activated_segment_id;
-        remove = true;
-      } else {
-        TRYV(patch_map.AddEntry(coverage, ++last_patch_id, GLYPH_KEYED, true));
-      }
-
-      patch_group_to_entry_index[group] = next_entry_index++;
-    }
-
-    if (remove) {
-      condition = remaining_conditions.erase(condition);
-    } else {
-      ++condition;
-    }
-  }
-
-  // Phase 3 for any remaining conditions create the actual entries utilizing
-  // the groups (phase 2) and base entries (phase 1) as needed
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end(); condition++) {
-    PatchMap::Coverage coverage;
-    coverage.conjunctive = true;  // ... AND ...
-
-    for (const auto& group : condition->required_groups) {
-      if (group.size() == 1) {
-        coverage.child_indices.insert(patch_id_to_entry_index[*group.begin()]);
-        continue;
-      }
-
-      coverage.child_indices.insert(patch_group_to_entry_index[group]);
-    }
-
-    // TODO(garretrieger): required_features implies f1 AND f2 ..., but
-    // coverage.features matches on OR.
-    //                     above we fail on any conditions with more than one
-    //                     feature, so for now this works. Need to correctly
-    //                     implement handling more than one feature by creating
-    //                     an appropriate composite entry.
-    coverage.features = condition->required_features;
-
-    TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
-                            GLYPH_KEYED));
   }
 
   return absl::OkStatus();
