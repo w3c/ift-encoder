@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 
 namespace ift::testdata {
@@ -27,8 +28,8 @@ static uint32_t TEST_SEGMENT_1[] = {
     987,  992,  993,  994,  1001, 1002, 1003, 1004, 1006, 1008, 1010, 1012,
     1013, 1014, 1015, 1016, 1022, 1030, 1033, 1034};
 
-static absl::flat_hash_set<uint32_t> TestSegment1() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestSegment1() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_SEGMENT_1) {
     result.insert(v);
   }
@@ -57,8 +58,8 @@ static uint32_t TEST_SEGMENT_2[] = {
     1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048,
     1049, 1050, 1051, 1052, 1053, 1054, 1055};
 
-static absl::flat_hash_set<uint32_t> TestSegment2() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestSegment2() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_SEGMENT_2) {
     result.insert(v);
   }
@@ -67,8 +68,8 @@ static absl::flat_hash_set<uint32_t> TestSegment2() {
 
 static uint32_t TEST_SEGMENT_3[] = {169};
 
-static absl::flat_hash_set<uint32_t> TestSegment3() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestSegment3() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_SEGMENT_3) {
     result.insert(v);
   }
@@ -113,8 +114,8 @@ static uint32_t TEST_SEGMENT_4[] = {
     847,  925,  928,  931, 932, 933, 934, 936, 938, 939, 1017, 1019, 1020, 1026,
     1027, 1028, 1029, 1032};
 
-static absl::flat_hash_set<uint32_t> TestSegment4() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestSegment4() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_SEGMENT_4) {
     result.insert(v);
   }

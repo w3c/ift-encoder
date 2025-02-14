@@ -446,7 +446,7 @@ Status GlyphSegmentation::GroupsToSegmentation(
           StrCat("Unexpected or_segment with only one segment: s",
                  *or_segments.begin()));
     }
-    
+
     bool is_fallback = (or_segments == fallback_group);
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
@@ -545,7 +545,8 @@ template <typename ConditionIt>
 StatusOr<bool> TryMergingACompositeCondition(
     SegmentationContext& context,
     const GlyphSegmentation& candidate_segmentation,
-    segment_index_t base_segment_index, patch_id_t base_patch, // TODO XXX is base_patch needed?
+    segment_index_t base_segment_index,
+    patch_id_t base_patch,  // TODO XXX is base_patch needed?
     const ConditionIt& condition_it) {
   auto next_condition = condition_it;
   next_condition++;
@@ -564,7 +565,8 @@ StatusOr<bool> TryMergingACompositeCondition(
       continue;
     }
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_segments.get()))) {
+    if (!TRY(
+            TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -600,7 +602,8 @@ StatusOr<bool> TryMergingABaseSegment(
     hb_set_unique_ptr triggering_segments = make_hb_set();
     next_condition->TriggeringSegments(triggering_segments.get());
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_segments.get()))) {
+    if (!TRY(
+            TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -654,7 +657,8 @@ StatusOr<std::optional<segment_index_t>> MergeNextBaseSegment(
     }
 
     patch_id_t base_patch = condition->activated();
-    segment_index_t base_segment_index = (*condition->conditions().begin()->begin());
+    segment_index_t base_segment_index =
+        (*condition->conditions().begin()->begin());
     if (base_segment_index < start_segment) {
       // Already processed, skip
       continue;
@@ -776,14 +780,17 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
   return absl::InternalError("unreachable");
 }
 
-void GlyphSegmentation::CopySegments(const std::vector<hb_set_unique_ptr>& segments) {
+void GlyphSegmentation::CopySegments(
+    const std::vector<hb_set_unique_ptr>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(to_btree_set(set.get()));
   }
 }
 
-GlyphSegmentation::ActivationCondition GlyphSegmentation::ActivationCondition::exclusive_segment(segment_index_t index, patch_id_t activated) {
+GlyphSegmentation::ActivationCondition
+GlyphSegmentation::ActivationCondition::exclusive_segment(
+    segment_index_t index, patch_id_t activated) {
   ActivationCondition condition;
   condition.activated_ = activated;
   condition.conditions_ = {{index}};
@@ -927,5 +934,165 @@ bool GlyphSegmentation::ActivationCondition::operator<(
   // These two are equal
   return false;
 }
+
+// TODO XXXX The code below should be ported to work with segmentation
+// activation conditions to produce a set of encoder conditions.
+/*
+Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
+  if (glyph_data_patches_.empty()) {
+    return absl::OkStatus();
+  }
+
+  // TODO XXXXX handle features.
+
+  // The conditions list describes what the patch map should do, here
+  // we need to convert that into an equivalent list of entries.
+  //
+  // To minimize encoded size we can reuse set definitions in later entries
+  // via the copy indices mechanism. The conditions are evaluated in three
+  // phases to successively build up a set of common entries which can be reused
+  // by later ones.
+
+  // Tracks the list of conditions which have not yet been placed in a map
+  // entry.
+  btree_set<Condition> remaining_conditions = activation_conditions_;
+
+  // Phase 1 generate the base entries, there should be one for each
+  // unique glyph segment that is referenced in at least one condition.
+  // the conditions will refer back to these base entries via copy indices
+  //
+  // Each base entry can be used to map one condition as well.
+  flat_hash_map<uint32_t, uint32_t> patch_id_to_entry_index;
+  uint32_t next_entry_index = 0;
+  uint32_t last_patch_id = 0;
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end();) {
+    bool remove = false;
+    for (const auto& group : condition->required_groups) {
+      for (uint32_t patch_id : group) {
+        if (patch_id_to_entry_index.contains(patch_id)) {
+          continue;
+        }
+
+        auto original = glyph_data_segments_.find(patch_id);
+        if (original == glyph_data_segments_.end()) {
+          return absl::InvalidArgumentError(
+              StrCat("Glyph data patch ", patch_id, " not found."));
+        }
+        const auto& original_def = original->second;
+
+        PatchMap::Coverage coverage;
+        coverage.codepoints = original_def.codepoints;
+
+        if (condition->IsUnitary()) {
+          // this condition can use this entry to map itself.
+          TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
+                                  GLYPH_KEYED));
+          last_patch_id = condition->activated_segment_id;
+          remove = true;
+        } else {
+          // Otherwise this entry does nothing (ignored = true), but will be
+          // referenced by later entries the assigned id doesn't matter, but
+          // using last_patch_id + 1 it will avoid needing to encoding the entry
+          // id delta.
+          TRYV(
+              patch_map.AddEntry(coverage, ++last_patch_id, GLYPH_KEYED, true));
+        }
+
+        patch_id_to_entry_index[patch_id] = next_entry_index++;
+      }
+    }
+
+    if (remove) {
+      condition = remaining_conditions.erase(condition);
+    } else {
+      ++condition;
+    }
+  }
+
+  // Phase 2 generate entries for all groups of patches reusing the base entries
+  // written in phase one. When writing an entry if the triggering group is the
+  // only one in the condition then that condition can utilize the entry (just
+  // like in Phase 1).
+  flat_hash_map<btree_set<uint32_t>, uint32_t> patch_group_to_entry_index;
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end();) {
+    bool remove = false;
+
+    if (condition->required_features.size() > 1) {
+      return absl::UnimplementedError(
+          "Conditions with more than one feature are not yet supported.");
+    }
+
+    for (const auto& group : condition->required_groups) {
+      if (group.size() <= 1 || patch_group_to_entry_index.contains(group)) {
+        // don't handle groups of size one, those will just reference the base
+        // entry directly.
+        continue;
+      }
+
+      PatchMap::Coverage coverage;
+      coverage.conjunctive = false;  // ... OR ...
+
+      for (uint32_t patch_id : group) {
+        auto entry_index = patch_id_to_entry_index.find(patch_id);
+        if (entry_index == patch_id_to_entry_index.end()) {
+          return absl::InternalError(StrCat("entry for patch_id = ", patch_id,
+                                            " was not previously created."));
+        }
+        coverage.child_indices.insert(entry_index->second);
+      }
+
+      if (condition->required_groups.size() == 1 &&
+          condition->required_features.size() == 0) {
+        TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
+                                GLYPH_KEYED));
+        last_patch_id = condition->activated_segment_id;
+        remove = true;
+      } else {
+        TRYV(patch_map.AddEntry(coverage, ++last_patch_id, GLYPH_KEYED, true));
+      }
+
+      patch_group_to_entry_index[group] = next_entry_index++;
+    }
+
+    if (remove) {
+      condition = remaining_conditions.erase(condition);
+    } else {
+      ++condition;
+    }
+  }
+
+  // Phase 3 for any remaining conditions create the actual entries utilizing
+  // the groups (phase 2) and base entries (phase 1) as needed
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end(); condition++) {
+    PatchMap::Coverage coverage;
+    coverage.conjunctive = true;  // ... AND ...
+
+    for (const auto& group : condition->required_groups) {
+      if (group.size() == 1) {
+        coverage.child_indices.insert(patch_id_to_entry_index[*group.begin()]);
+        continue;
+      }
+
+      coverage.child_indices.insert(patch_group_to_entry_index[group]);
+    }
+
+    // TODO(garretrieger): required_features implies f1 AND f2 ..., but
+    // coverage.features matches on OR.
+    //                     above we fail on any conditions with more than one
+    //                     feature, so for now this works. Need to correctly
+    //                     implement handling more than one feature by creating
+    //                     an appropriate composite entry.
+    coverage.features = condition->required_features;
+
+    TRYV(patch_map.AddEntry(coverage, condition->activated_segment_id,
+                            GLYPH_KEYED));
+  }
+
+  return absl::OkStatus();
+}
+*/
 
 }  // namespace ift::encoder

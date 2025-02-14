@@ -173,12 +173,14 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
   }
 
   if (segmentation != nullptr) {
-    btree_map<ift::encoder::patch_id_t, std::pair<std::string, int>> patch_id_to_url;
+    btree_map<ift::encoder::patch_id_t, std::pair<std::string, int>>
+        patch_id_to_url;
     for (const auto& condition : segmentation->Conditions()) {
       std::string url =
           URLTemplate::PatchToUrl("1_{id}.gk", condition.activated());
 
-      int type = condition.IsExclusive() ? 0 : (!condition.IsFallback() ? 1 : 2);
+      int type =
+          condition.IsExclusive() ? 0 : (!condition.IsFallback() ? 1 : 2);
       patch_id_to_url[condition.activated()] = std::pair(url, type);
     }
 
@@ -201,8 +203,9 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         fallback_size += url_size->second;
       }
 
-      printf("  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n", url.c_str(),
-             id, id_postfix, url_size->second, NETWORK_REQUEST_BYTE_OVERHEAD);
+      printf("  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n",
+             url.c_str(), id, id_postfix, url_size->second,
+             NETWORK_REQUEST_BYTE_OVERHEAD);
     }
   } else {
     for (const auto& [url, size] : url_to_size) {
@@ -217,12 +220,17 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
   printf("  mapping table: %u bytes\n", iftx.size());
 
   if (segmentation != nullptr) {
-    double base_percent = ((double) base_size / (double) total_size) * 100.0;
-    double conditional_percent = ((double) conditional_size / (double) total_size) * 100.0;
-    double fallback_percent = ((double) fallback_size / (double) total_size) * 100.0;
-    printf("  base patches total size:        %u bytes (%f%%)\n", base_size, base_percent);
-    printf("  conditional patches total size: %u bytes (%f%%)\n", conditional_size, conditional_percent);
-    printf("  fallback patch total size:      %u bytes (%f%%)\n", fallback_size, fallback_percent);
+    double base_percent = ((double)base_size / (double)total_size) * 100.0;
+    double conditional_percent =
+        ((double)conditional_size / (double)total_size) * 100.0;
+    double fallback_percent =
+        ((double)fallback_size / (double)total_size) * 100.0;
+    printf("  base patches total size:        %u bytes (%f%%)\n", base_size,
+           base_percent);
+    printf("  conditional patches total size: %u bytes (%f%%)\n",
+           conditional_size, conditional_percent);
+    printf("  fallback patch total size:      %u bytes (%f%%)\n", fallback_size,
+           fallback_percent);
   }
 
   return total_size;

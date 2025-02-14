@@ -41,7 +41,8 @@ class GlyphSegmentation {
      * Constructs a condition that activates when the input intersects(patch_1)
      * AND ... AND inersects(patch_n).
      */
-    static ActivationCondition exclusive_segment(segment_index_t index, patch_id_t activated);
+    static ActivationCondition exclusive_segment(segment_index_t index,
+                                                 patch_id_t activated);
 
     /*
      * Constructs a condition that activates when the input intersects(patch_1)
@@ -92,9 +93,7 @@ class GlyphSegmentation {
      */
     patch_id_t activated() const { return activated_; }
 
-    bool IsExclusive() const {
-      return is_exclusive_;
-    }
+    bool IsExclusive() const { return is_exclusive_; }
 
     bool operator<(const ActivationCondition& other) const;
 
@@ -141,7 +140,8 @@ class GlyphSegmentation {
   }
 
   /*
-   * The list of codepoint segmentations that are utilized as part of Conditions().
+   * The list of codepoint segmentations that are utilized as part of
+   * Conditions().
    *
    * Segment indices in conditions refer to a set of codepoints here.
    */
@@ -184,7 +184,6 @@ class GlyphSegmentation {
                             absl::btree_set<glyph_id_t>>& or_glyph_groups,
       const absl::btree_set<segment_index_t>& fallback_group,
       GlyphSegmentation& segmentation);
-
 
   void CopySegments(const std::vector<common::hb_set_unique_ptr>& segments);
 
