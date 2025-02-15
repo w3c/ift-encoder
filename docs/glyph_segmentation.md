@@ -1,4 +1,4 @@
-# Generating Glyph Keyed Segmentations during IFT Encoding
+# Generating Glyph Keyed Segmentations during IFT Encoding using Subsetter Glyph Closure
 
 Author: Garret Rieger  
 Date: Jan 27, 2025
@@ -25,9 +25,9 @@ both an f and i character it will load both patches, however this makes it possi
 to be used. Thus we need to make the fi glyph available in this case. One way to do that is to
 form a third patch containing the ligature glyph and assign the activation condition (f and i).
 
-The remainder of this document describes a procedure for analyzing a font to determine how to split
-glyphs across a set of patches and what activation conditions should be assigned to each of those
-patches.
+The remainder of this document describes a potential procedure for analyzing a font to determine how
+to split glyphs across a set of patches and what activation conditions should be assigned to each of
+those patches.
 
 The code that implements the procedures in this document can be found in
 [glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc)
@@ -37,6 +37,40 @@ There is also a command line utility to generate segmentations:
 
 At the end of this document you can find a couple of [examples](#examples) which illustrate how the
 procedures work in practice.
+
+## Status
+
+Development of a robust glyph segmentation process that produces performant, low over head
+segmentations is an area of active development in the ift encoder. The current prototype
+implementation in [glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc) can produce
+segmentations that satisfy the closure requirement, but does not yet necessarily produce ones that
+are performant.
+
+The approach laid out in this document is just one possible approach to solving the problem. This
+document aims primarily to describe how the prototype implementation in
+[glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc) functions, and is not intended to
+present a the final (or only) solution to the problem. There are several unsolved problems and
+remaining areas for development in this particular approach:
+
+* Input segmentation generation: selecting good quality input code point segmentations is critically
+  important to achieving high quality glyph segmentations. A high quality code point segmentation
+  will need to balance keeping interacting code points together with also keeping code points that
+  are commonly used together. This document and the implementation make no attempt to solve this
+  problem yet.
+
+* Patch merging: a very basic patch merging process has been included in the implementation but
+  there is lots of room for improvement. Notably, it does not yet handle conditional patch merging.
+  Additionally, a more advanced heuristic is needed for selecting which patches to merge.
+
+* [Multi segment analysis](#multi-segment-dependencies): the current implementation only does single
+  segment analysis which in some cases leaves sizable fallback glyph sets. How to implement multi
+  segment analysis is an open question and more development is needed.
+  
+One of the main down sides to this approach is it's reliance on a subsetting closure function which
+are computationally costly. Complex fonts which can require hundreds of closure operation which as a
+result can be slow to process. So another area of open research is if a non closure based approach
+could be developed that is computationally cheaper (for example by producing a segmentation by
+working directly with the substitution and dependencies encoded in a font).
 
 ## Goals
 
