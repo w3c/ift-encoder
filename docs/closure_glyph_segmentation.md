@@ -1,4 +1,4 @@
-# Generating Glyph Keyed Segmentations during IFT Encoding using Subsetter Glyph Closure
+# Converting Unicode Code Point to Glyph Keyed Segmentations during IFT Encoding using Subsetter Glyph Closure
 
 Author: Garret Rieger  
 Date: Jan 27, 2025
@@ -25,15 +25,19 @@ both an f and i character it will load both patches, however this makes it possi
 to be used. Thus we need to make the fi glyph available in this case. One way to do that is to
 form a third patch containing the ligature glyph and assign the activation condition (f and i).
 
-The remainder of this document describes a potential procedure for analyzing a font to determine how
-to split glyphs across a set of patches and what activation conditions should be assigned to each of
-those patches.
+Because the IFT font will use unicode code points in the activation conditions, it will be typical to
+express a desired segmentation of the original font using unicode code points. The remainder of
+this document describes a procedure for converting a desired unicode code point segmentation into a
+set of glyph patches with load conditions described in terms of those provided unicode segments.
+
+Notably, this document does not aim to describe a solution to producing the unicode code point segmentation
+which is of high importance to the production of performant overall glyph segmentations.
 
 The code that implements the procedures in this document can be found in
-[glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc)
+[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc)
 
 There is also a command line utility to generate segmentations:
-[util/glyph_keyed_segmenter](../util/glyph_keyed_segmenter.cc)
+[util/closure_glyph_keyed_segmenter_util](../util/closure_glyph_keyed_segmenter_util.cc)
 
 At the end of this document you can find a couple of [examples](#examples) which illustrate how the
 procedures work in practice.
@@ -42,13 +46,13 @@ procedures work in practice.
 
 Development of a robust glyph segmentation process that produces performant, low over head
 segmentations is an area of active development in the ift encoder. The current prototype
-implementation in [glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc) can produce
+implementation in [closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) can produce
 segmentations that satisfy the closure requirement, but does not yet necessarily produce ones that
 are performant.
 
 The approach laid out in this document is just one possible approach to solving the problem. This
 document aims primarily to describe how the prototype implementation in
-[glyph_segmentation.cc](../ift/encoder/glyph_segmentation.cc) functions, and is not intended to
+[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) functions, and is not intended to
 present a the final (or only) solution to the problem. There are several unsolved problems and
 remaining areas for development in this particular approach:
 
@@ -82,7 +86,7 @@ The segmentation procedure described in this document aims to achieve the follow
 
 * Determine the activation conditions for each of those patches. An activation condition is a boolean
   expression using conjunction and disjunction with the presence of Unicode code points being the boolean
-  values.
+  values. The input unicode code point segmentations are used to form the conditions.
 
 * Optimize for minimal data transfer by avoiding duplicating glyphs across patches where possible.
 
