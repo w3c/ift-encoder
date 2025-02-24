@@ -4,7 +4,10 @@ cc_library(
     "encoder.h",
     "encoder.cc",
     "glyph_segmentation.h",
-    "glyph_segmentation.cc"
+    "glyph_segmentation.cc",
+    "glyph_segmenter.h",
+    "closure_glyph_segmenter.h",
+    "closure_glyph_segmenter.cc",
   ],
   deps = [
     "//ift/proto",
@@ -47,10 +50,10 @@ cc_test(
 )
 
 cc_test(
-  name = "glyph_segmentation_test",
+  name = "closure_glyph_segmenter_test",
   size = "small",
   srcs = [
-    "glyph_segmentation_test.cc",
+    "closure_glyph_segmenter_test.cc",
   ],
   data = [
     "//ift:testdata",

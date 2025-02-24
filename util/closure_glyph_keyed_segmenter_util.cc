@@ -22,6 +22,7 @@
 #include "hb.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/url_template.h"
 
 /*
@@ -70,6 +71,7 @@ using common::make_hb_set;
 using ift::URLTemplate;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
+using ift::encoder::ClosureGlyphSegmenter;
 
 StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -360,7 +362,9 @@ int main(int argc, char** argv) {
   auto groups =
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
 
-  auto result = ift::encoder::GlyphSegmentation::CodepointToGlyphSegments(
+  ift::encoder::ClosureGlyphSegmenter segmenter;
+
+  auto result = segmenter.CodepointToGlyphSegments(
       font->get(), {}, groups, absl::GetFlag(FLAGS_min_patch_size_bytes),
       absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (!result.ok()) {

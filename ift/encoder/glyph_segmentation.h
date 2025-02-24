@@ -6,8 +6,7 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
+#include "absl/status/status.h"
 #include "hb.h"
 
 namespace ift::encoder {
@@ -21,9 +20,9 @@ typedef uint32_t glyph_id_t;
  * patches.
  *
  * A segmentation describes the groups of glyphs belong to each patch as well as
- * the conditions under which those patches should be loaded. This gaurantees
- * that the produced set of patches and conditions will satisfy the "glyph
- * closure requirement", which is:
+ * the conditions under which those patches should be loaded. A properly formed
+ * segmentation should have an associated set of patches and conditions which will
+ * satisfy the "glyph closure requirement", which is:
  *
  * The set of glyphs contained in patches loaded for a font subset definition (a
  * set of Unicode codepoints and a set of layout feature tags) through the patch
@@ -32,6 +31,9 @@ typedef uint32_t glyph_id_t;
  */
 class GlyphSegmentation {
  public:
+  /*
+   * The conditions under which a group of glyphs should be laoded.
+   */
   // TODO(garretrieger): merge this with Encoder::Condition they are basically
   // identical.
   class ActivationCondition {
@@ -109,20 +111,6 @@ class GlyphSegmentation {
     patch_id_t activated_;
   };
 
-  /*
-   * Analyzes a set of codepoint segments using a subsetter closure and computes
-   * a GlyphSegmentation which will satisfy the "glyph closure requirement" for
-   * the provided font face.
-   *
-   * initial_segment is the set of codepoints that will be placed into the
-   * initial ift font.
-   */
-  // TODO(garretrieger): also support optional feature segments.
-  static absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
-      hb_face_t* face, absl::flat_hash_set<hb_codepoint_t> initial_segment,
-      std::vector<absl::flat_hash_set<hb_codepoint_t>> codepoint_segments,
-      uint32_t patch_size_min_bytes = 0,
-      uint32_t patch_size_max_bytes = UINT32_MAX);
 
   /*
    * Returns a human readable string representation of this segmentation and
@@ -165,7 +153,6 @@ class GlyphSegmentation {
     return init_font_glyphs_;
   };
 
- private:
   static absl::Status GroupsToSegmentation(
       const absl::btree_map<absl::btree_set<segment_index_t>,
                             absl::btree_set<glyph_id_t>>& and_glyph_groups,
