@@ -30,8 +30,9 @@ express a desired segmentation of the original font using unicode code points. T
 this document describes a procedure for converting a desired unicode code point segmentation into a
 set of glyph patches with load conditions described in terms of those provided unicode segments.
 
-Notably, this document does not aim to describe a solution to producing the unicode code point segmentation
-which is of high importance to the production of performant overall glyph segmentations.
+Notably, this document does not aim to describe a solution to producing the unicode code point
+segmentation which is of high importance to the production of performant overall glyph
+segmentations.
 
 The code that implements the procedures in this document can be found in
 [closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc)
@@ -62,9 +63,12 @@ remaining areas for development in this particular approach:
   are commonly used together. This document and the implementation make no attempt to solve this
   problem yet.
 
-* Patch merging: a very basic patch merging process has been included in the implementation but
-  there is lots of room for improvement. Notably, it does not yet handle conditional patch merging.
-  Additionally, a more advanced heuristic is needed for selecting which patches to merge.
+* Patch merging: is the process of combining patches from a found segmentation together in order to
+  reduce overall overhead (eg. if there was a patch containing only one glyph the overhead cost of
+  the patch format and network transfer would dominate, therefore it may make sense to merge into
+  another similar patch). A very basic patch merging process has been included in the implementation
+  but there is lots of room for improvement. Notably, it does not yet handle conditional patch
+  merging.  Additionally, a more advanced heuristic is needed for selecting which patches to merge.
 
 * [Multi segment analysis](#multi-segment-dependencies): the current implementation only does single
   segment analysis which in some cases leaves sizable fallback glyph sets. How to implement multi
@@ -206,6 +210,14 @@ Next, we can use the per glyph information to form the glyph groupings:
 4. Lastly, collect the set of glyphs that are not part of any patch formed in steps 1 through 3. These form a fallback patch
    whose activation condition is $\bigvee_{1}^{n} s_j$.
    
+## Fallback Patch
+
+An output of the segmentation process above will include a fallback patch which is activated on the
+presence of any input segment. In practice it will be slightly more efficient to instead move all of
+the glyphs in the fallback patch into the initial font. This has the same overall effect as using a
+fallback patch. In some cases the encoder may be purposely trying to minimize and/or eliminate glyph
+data in the initial font. In these cases leaving them in the fallback patch may make the most sense.
+
 ## Merging
 
 In some cases the patch set produced above may result in some patches that contain a small number of
@@ -217,7 +229,7 @@ There are two types of patches that can be merged: exclusive and conditional. Th
 merging is dependent on the type.  The next two sections provide some guidelines for merging the two
 types together.
 
-### Merging Exclusive Patches
+### Merging Input Segments
 
 This section outlines a procedure to find and merge input code point segments in order to increase
 the sizes of one or more exclusive patches. It searches for other input segments that interact with
@@ -280,10 +292,10 @@ the activation condition.
 There are also two other options for merging conditional patches, though these are generally less
 preferable than the merging procedure described above:
 
-1. Move the patch's glyphs into the initial font or merge with the fallback patch. This removes the patch at
-   the cost of always loading the glyph's data. This may be useful when there is a very small patch
-   with a wide activation condition. In this case it may not be desirable to merge with other larger
-   conditional patches due to excessive widening of their activation conditions.
+1. Move the patch's glyphs into the initial font or merge with the fallback patch. This removes the
+   patch at the cost of always loading the glyph's data. This may be useful when there is a very
+   small patch with a wide activation condition. In this case it may not be desirable to merge with
+   other larger conditional patches due to excessive widening of their activation conditions.
    
 2. Duplicate the patch's glyphs into the segments that make up the patch's condition. This
    eliminates the patch at the cost of duplicating glyph data. It may be useful in cases of small
