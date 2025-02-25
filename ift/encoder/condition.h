@@ -17,13 +17,9 @@ struct Condition {
   SubsetDefinition subset_definition;
   absl::btree_set<uint32_t> child_conditions;
   bool conjunctive = false;
-  std::optional<uint32_t> activated_patch_id;
+  std::optional<uint32_t> activated_patch_id = std::nullopt;
 
-  Condition()
-      : subset_definition(),
-        child_conditions(),
-        conjunctive(false),
-        activated_patch_id(std::nullopt) {}
+  Condition() : subset_definition(), child_conditions() {}
 
   static Condition SimpleCondition(SubsetDefinition subset_definition,
                                    uint32_t patch_id) {
