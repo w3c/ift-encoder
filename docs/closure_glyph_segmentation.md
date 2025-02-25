@@ -74,6 +74,12 @@ remaining areas for development in this particular approach:
   segment analysis which in some cases leaves sizable fallback glyph sets. How to implement multi
   segment analysis is an open question and more development is needed.
   
+* Incorporating dependency information: whatever produces the input code point segments will likely
+  have discovered dependency information related to those code points. That information can be
+  reused in this process to narrow selections during patch merging and multi segment
+  analysis. Future work will look at adding dependency information as an optional input to this
+  procedure.
+
 One of the main down sides to this approach is it's reliance on a subsetting closure function which
 are computationally costly. Complex fonts which can require hundreds of closure operation which as a
 result can be slow to process. So another area of open research is if a non closure based approach
