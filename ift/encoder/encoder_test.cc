@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
@@ -679,8 +680,6 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   // TODO XXXXX Check graph instead
 }
 
-/*
-TODO XXXXXXXX
 TEST_F(EncoderTest, Encode_FourSubsets) {
   absl::flat_hash_set<hb_codepoint_t> s1 = {'b'};
   absl::flat_hash_set<hb_codepoint_t> s2 = {'c'};
@@ -761,28 +760,62 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
   encoder.SetFace(face);
 
   auto s = encoder.SetBaseSubset({});
-  s.Update(encoder.AddGlyphDataSegment(1, {69}));  // a
-  s.Update(encoder.AddGlyphDataSegment(2, {70}));  // b
-  s.Update(encoder.AddGlyphDataSegment(3, {71}));  // c
-  s.Update(encoder.AddGlyphDataSegment(4, {72}));  // d
-  s.Update(encoder.AddGlyphDataSegment(5, {50}));
-  s.Update(encoder.AddGlyphDataSegment(6, {60}));
-  s.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({1, 2, 3, 4}));
+  s.Update(encoder.AddGlyphDataPatch(1, {69}));  // a
+  s.Update(encoder.AddGlyphDataPatch(2, {70}));  // b
+  s.Update(encoder.AddGlyphDataPatch(3, {71}));  // c
+  s.Update(encoder.AddGlyphDataPatch(4, {72}));  // d
+  s.Update(encoder.AddGlyphDataPatch(5, {50}));
+  s.Update(encoder.AddGlyphDataPatch(6, {60}));
 
-  Encoder::Condition condition;
-  s.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
+  encoder.AddNonGlyphDataSegment({'a', 'b', 'c', 'd'});
 
-  condition.required_groups = {{3}};
-  condition.activated_segment_id = 4;
-  s.Update(encoder.AddGlyphDataActivationCondition(condition));
+  // 0
+  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+    SubsetDefinition::Codepoints(flat_hash_set<uint32_t> {'b'}), 2)));
+  
+  // 1
+  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+      SubsetDefinition::Codepoints(flat_hash_set<uint32_t> {'c'}), 4)));
 
-  condition.required_groups = {{1, 3}};
-  condition.activated_segment_id = 5;
-  s.Update(encoder.AddGlyphDataActivationCondition(condition));
+  {
+    // 2
+    Condition condition;
+    condition.activated_patch_id = std::nullopt;
+    condition.subset_definition = SubsetDefinition::Codepoints(flat_hash_set<uint32_t> {'a'});
+    s.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+  {
+    // 3
+    Condition condition;
+    condition.activated_patch_id = std::nullopt;
+    condition.subset_definition = SubsetDefinition::Codepoints(flat_hash_set<uint32_t> {'d'});
+    s.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
 
-  condition.required_groups = {{1, 3}, {2, 4}};
-  condition.activated_segment_id = 6;
-  s.Update(encoder.AddGlyphDataActivationCondition(condition));
+  {
+    // 4
+    Condition condition;
+    condition.activated_patch_id = 5;
+    condition.child_conditions = {1, 2};
+    s.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 5
+    Condition condition;
+    condition.activated_patch_id = std::nullopt;
+    condition.child_conditions = {0, 3};
+    s.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 5
+    Condition condition;
+    condition.activated_patch_id = 6;
+    condition.child_conditions = {4, 5};
+    condition.conjunctive = true;
+    s.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
 
   ASSERT_TRUE(s.ok()) << s;
   auto encoding = encoder.Encode();
@@ -872,80 +905,5 @@ TEST_F(EncoderTest, RoundTripWoff2_Fails) {
   auto ttf = Encoder::RoundTripWoff2(woff2_font.str());
   ASSERT_TRUE(absl::IsInternal(ttf.status())) << ttf.status();
 }
-
-TEST_F(EncoderTest, Condition_IsUnitary) {
-  Encoder::Condition empty;
-  ASSERT_FALSE(empty.IsUnitary());
-
-  Encoder::Condition a;
-  a.required_groups = {{3}};
-  ASSERT_TRUE(a.IsUnitary());
-
-  a.required_features = {100};
-  ASSERT_FALSE(a.IsUnitary());
-
-  Encoder::Condition b;
-  b.required_groups = {{3}, {4}};
-  ASSERT_FALSE(b.IsUnitary());
-
-  b.required_groups = {{1, 2}};
-  ASSERT_FALSE(b.IsUnitary());
-}
-
-TEST_F(EncoderTest, Condition_Ordering) {
-  Encoder::Condition empty;
-
-  Encoder::Condition a;
-  a.required_groups = {{2}};
-
-  Encoder::Condition b;
-  b.required_groups = {{3}};
-
-  Encoder::Condition c;
-  c.required_groups = {{1, 2}};
-
-  Encoder::Condition d;
-  d.required_groups = {{1, 2}};
-  d.required_features = {100};
-
-  Encoder::Condition e;
-  e.required_groups = {{1, 2}};
-  e.required_features = {101};
-
-  Encoder::Condition f;
-  f.required_groups = {{1, 2}};
-  f.required_features = {100, 200};
-
-  Encoder::Condition g;
-  g.required_groups = {{1}, {2}};
-  g.activated_segment_id = 5;
-
-  Encoder::Condition h;
-  h.required_groups = {{1}, {2}};
-  h.activated_segment_id = 7;
-
-  Encoder::Condition i;
-  i.required_groups = {{1}, {3}};
-
-  Encoder::Condition j;
-  j.required_groups = {{1}, {1, 2}};
-
-  btree_set<Encoder::Condition> conditions{i, h,     g, f, e, d, c,
-                                           b, empty, a, b, h, g, j};
-
-  auto it = conditions.begin();
-  ASSERT_EQ(*it++, empty);
-  ASSERT_EQ(*it++, a);
-  ASSERT_EQ(*it++, b);
-  ASSERT_EQ(*it++, c);
-  ASSERT_EQ(*it++, d);
-  ASSERT_EQ(*it++, e);
-  ASSERT_EQ(*it++, f);
-  ASSERT_EQ(*it++, g);
-  ASSERT_EQ(*it++, h);
-  ASSERT_EQ(*it++, i);
-  ASSERT_EQ(*it++, j);
-}
-  */
 
 }  // namespace ift::encoder
