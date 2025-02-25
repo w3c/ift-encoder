@@ -69,12 +69,12 @@ class Encoder {
    * Configure the base subset to cover the provided codepoints, and the set of
    * layout features retained by default in the harfbuzz subsetter.
    */
-  absl::Status SetBaseSubset(
-      const absl::flat_hash_set<hb_codepoint_t>& base_subset) {
+  template <typename T>
+  absl::Status SetBaseSubset(const T& base_subset) {
     if (!base_subset_.empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    base_subset_.codepoints = base_subset;
+    base_subset_.codepoints.insert(base_subset.begin(), base_subset.end());
     return absl::OkStatus();
   }
 
@@ -96,10 +96,10 @@ class Encoder {
   /*
    * Adds a segment around which the non glyph data in the font will be split.
    */
-  void AddNonGlyphDataSegment(
-      const absl::flat_hash_set<hb_codepoint_t>& subset) {
+  template <typename T>
+  void AddNonGlyphDataSegment(const T& codepoints) {
     SubsetDefinition def;
-    def.codepoints = subset;
+    def.codepoints.insert(codepoints.begin(), codepoints.end());
     extension_subsets_.push_back(def);
   }
 

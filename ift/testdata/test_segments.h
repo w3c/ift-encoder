@@ -142,8 +142,8 @@ static uint32_t TEST_VF_SEGMENT_1[] = {
     994,  1001, 1002, 1003, 1004, 1006, 1008, 1010, 1012, 1013, 1014, 1015,
     1016, 1022, 1030};
 
-static absl::flat_hash_set<uint32_t> TestVfSegment1() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestVfSegment1() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_VF_SEGMENT_1) {
     result.insert(v);
   }
@@ -173,8 +173,8 @@ static uint32_t TEST_VF_SEGMENT_2[] = {
     1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1054, 1055,
 };
 
-static absl::flat_hash_set<uint32_t> TestVfSegment2() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestVfSegment2() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_VF_SEGMENT_2) {
     result.insert(v);
   }
@@ -183,8 +183,8 @@ static absl::flat_hash_set<uint32_t> TestVfSegment2() {
 
 static uint32_t TEST_VF_SEGMENT_3[] = {169};
 
-static absl::flat_hash_set<uint32_t> TestVfSegment3() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestVfSegment3() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_VF_SEGMENT_3) {
     result.insert(v);
   }
@@ -217,8 +217,8 @@ static uint32_t TEST_VF_SEGMENT_4[] = {
     843,  844,  846,  847,  925,  928,  931, 932, 933, 934, 936, 938, 939, 1017,
     1019, 1020, 1026, 1027, 1028, 1029, 1032};
 
-static absl::flat_hash_set<uint32_t> TestVfSegment4() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestVfSegment4() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_VF_SEGMENT_4) {
     result.insert(v);
   }
@@ -236,8 +236,8 @@ static uint32_t TEST_FEATURE_SEGMENT_1[] = {
     461, 462, 463, 469, 477, 478, 801, 802, 803, 804, 805, 806, 807, 808, 809,
     810, 811, 812, 813, 814, 815, 817, 822, 826, 827};
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment1() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment1() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_1) {
     result.insert(v);
   }
@@ -255,8 +255,8 @@ static uint32_t TEST_FEATURE_SEGMENT_2[] = {
     465, 468, 470, 471, 472, 479, 816, 818, 819, 820, 821, 823,
 };
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment2() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment2() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_2) {
     result.insert(v);
   }
@@ -265,8 +265,8 @@ static absl::flat_hash_set<uint32_t> TestFeatureSegment2() {
 
 static uint32_t TEST_FEATURE_SEGMENT_3[] = {169};
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment3() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment3() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_3) {
     result.insert(v);
   }
@@ -307,8 +307,8 @@ static uint32_t TEST_FEATURE_SEGMENT_4[] = {
     762, 763, 764, 765, 766, 767, 768, 769, 791, 792, 793, 794, 795, 796, 797,
     798, 799, 800};
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment4() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment4() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_4) {
     result.insert(v);
   }
@@ -335,8 +335,8 @@ static uint32_t TEST_FEATURE_SEGMENT_5[] = {
     1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052,
     1053, 1054, 1055};
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment5() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment5() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_5) {
     result.insert(v);
   }
@@ -347,8 +347,8 @@ static uint32_t TEST_FEATURE_SEGMENT_6[] = {
     777, 778, 838, 839, 841, 842,  843,  844,  846,  847,  925,  928,  931, 932,
     933, 934, 936, 938, 939, 1017, 1019, 1020, 1026, 1027, 1028, 1029, 1032};
 
-static absl::flat_hash_set<uint32_t> TestFeatureSegment6() {
-  absl::flat_hash_set<uint32_t> result;
+static absl::btree_set<uint32_t> TestFeatureSegment6() {
+  absl::btree_set<uint32_t> result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_6) {
     result.insert(v);
   }

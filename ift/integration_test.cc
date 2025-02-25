@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <optional>
 #include <string>
 
 #include "absl/container/flat_hash_set.h"
@@ -10,7 +12,9 @@
 #include "gtest/gtest.h"
 #include "hb.h"
 #include "ift/client/fontations_client.h"
+#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
 #include "ift/testdata/test_segments.h"
 
@@ -18,6 +22,7 @@ using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
+using absl::StatusOr;
 using absl::StrCat;
 using common::AxisRange;
 using common::FontData;
@@ -30,7 +35,9 @@ using common::make_hb_face;
 using common::make_hb_set;
 using ift::client::Extend;
 using ift::client::ExtendWithDesignSpace;
+using ift::encoder::Condition;
 using ift::encoder::Encoder;
+using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 using ift::testdata::TestFeatureSegment1;
@@ -80,7 +87,7 @@ class IntegrationTest : public ::testing::Test {
     roboto_vf_.set(blob.get());
   }
 
-  Status InitEncoderForMixedMode(Encoder& encoder) {
+  StatusOr<btree_set<uint32_t>> InitEncoderForMixedMode(Encoder& encoder) {
     auto face = noto_sans_jp_.face();
 
     hb_set_unique_ptr init = make_hb_set();
@@ -95,17 +102,21 @@ class IntegrationTest : public ::testing::Test {
     hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_4,
                             std::size(testdata::TEST_SEGMENT_4));
     hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_hash_set(init.get());
+    auto init_segment = common::to_btree_set(init.get());
 
     encoder.SetFace(face.get());
 
-    auto sc = encoder.AddGlyphDataSegment(0, init_segment);
-    sc.Update(encoder.AddGlyphDataSegment(1, TestSegment1()));
-    sc.Update(encoder.AddGlyphDataSegment(2, TestSegment2()));
-    sc.Update(encoder.AddGlyphDataSegment(3, TestSegment3()));
-    sc.Update(encoder.AddGlyphDataSegment(4, TestSegment4()));
+    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    sc.Update(encoder.AddGlyphDataPatch(1, TestSegment1()));
+    sc.Update(encoder.AddGlyphDataPatch(2, TestSegment2()));
+    sc.Update(encoder.AddGlyphDataPatch(3, TestSegment3()));
+    sc.Update(encoder.AddGlyphDataPatch(4, TestSegment4()));
 
-    return sc;
+    if (!sc.ok()) {
+      return sc;
+    }
+
+    return init_segment;
   }
 
   Status InitEncoderForVfMixedMode(Encoder& encoder) {
@@ -124,13 +135,13 @@ class IntegrationTest : public ::testing::Test {
     hb_set_add_sorted_array(excluded.get(), testdata::TEST_VF_SEGMENT_4,
                             std::size(testdata::TEST_VF_SEGMENT_4));
     hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_hash_set(init.get());
+    auto init_segment = common::to_btree_set(init.get());
 
-    auto sc = encoder.AddGlyphDataSegment(0, init_segment);
-    sc.Update(encoder.AddGlyphDataSegment(1, TestVfSegment1()));
-    sc.Update(encoder.AddGlyphDataSegment(2, TestVfSegment2()));
-    sc.Update(encoder.AddGlyphDataSegment(3, TestVfSegment3()));
-    sc.Update(encoder.AddGlyphDataSegment(4, TestVfSegment4()));
+    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    sc.Update(encoder.AddGlyphDataPatch(1, TestVfSegment1()));
+    sc.Update(encoder.AddGlyphDataPatch(2, TestVfSegment2()));
+    sc.Update(encoder.AddGlyphDataPatch(3, TestVfSegment3()));
+    sc.Update(encoder.AddGlyphDataPatch(4, TestVfSegment4()));
     return sc;
   }
 
@@ -154,15 +165,15 @@ class IntegrationTest : public ::testing::Test {
     hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_6,
                             std::size(testdata::TEST_FEATURE_SEGMENT_6));
     hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_hash_set(init.get());
+    auto init_segment = common::to_btree_set(init.get());
 
-    auto sc = encoder.AddGlyphDataSegment(0, init_segment);
-    sc.Update(encoder.AddGlyphDataSegment(1, TestFeatureSegment1()));
-    sc.Update(encoder.AddGlyphDataSegment(2, TestFeatureSegment2()));
-    sc.Update(encoder.AddGlyphDataSegment(3, TestFeatureSegment3()));
-    sc.Update(encoder.AddGlyphDataSegment(4, TestFeatureSegment4()));
-    sc.Update(encoder.AddGlyphDataSegment(5, TestFeatureSegment5()));
-    sc.Update(encoder.AddGlyphDataSegment(6, TestFeatureSegment6()));
+    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    sc.Update(encoder.AddGlyphDataPatch(1, TestFeatureSegment1()));
+    sc.Update(encoder.AddGlyphDataPatch(2, TestFeatureSegment2()));
+    sc.Update(encoder.AddGlyphDataPatch(3, TestFeatureSegment3()));
+    sc.Update(encoder.AddGlyphDataPatch(4, TestFeatureSegment4()));
+    sc.Update(encoder.AddGlyphDataPatch(5, TestFeatureSegment5()));
+    sc.Update(encoder.AddGlyphDataPatch(6, TestFeatureSegment6()));
     return sc;
   }
 
@@ -268,11 +279,11 @@ TEST_F(IntegrationTest, TableKeyedOnly) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset({0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment({0x45, 0x46, 0x47});
-  encoder.AddNonGlyphDataSegment({0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment({0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment({0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -309,11 +320,11 @@ TEST_F(IntegrationTest, TableKeyedMultiple) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset({0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment({0x45, 0x46, 0x47});
-  encoder.AddNonGlyphDataSegment({0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment({0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment({0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -350,12 +361,12 @@ TEST_F(IntegrationTest, TableKeyedWithOverlaps) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset({0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment(
-      {0x45, 0x46, 0x47, 0x48});  // 0x48 is in two subsets
-  encoder.AddNonGlyphDataSegment({0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment({0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment({0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{
+      0x45, 0x46, 0x47, 0x48});  // 0x48 is in two subsets
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -400,12 +411,12 @@ TEST_F(IntegrationTest, TableKeyed_DesignSpaceAugmentation_IgnoresDesignSpace) {
   auto sc = InitEncoderForVf(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  Encoder::SubsetDefinition def{'a', 'b', 'c'};
+  SubsetDefinition def{'a', 'b', 'c'};
   def.design_space[kWdth] = AxisRange::Point(100.0f);
   sc = encoder.SetBaseSubsetFromDef(def);
 
-  encoder.AddNonGlyphDataSegment({'d', 'e', 'f'});
-  encoder.AddNonGlyphDataSegment({'h', 'i', 'j'});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'d', 'e', 'f'});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'h', 'i', 'j'});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -446,12 +457,12 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   auto sc = InitEncoderForVf(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  Encoder::SubsetDefinition def{'a', 'b', 'c'};
+  SubsetDefinition def{'a', 'b', 'c'};
   def.design_space[kWdth] = AxisRange::Point(100.0f);
   sc = encoder.SetBaseSubsetFromDef(def);
 
-  encoder.AddNonGlyphDataSegment({'d', 'e', 'f'});
-  encoder.AddNonGlyphDataSegment({'h', 'i', 'j'});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'d', 'e', 'f'});
+  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'h', 'i', 'j'});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -509,19 +520,33 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
 
 TEST_F(IntegrationTest, MixedMode) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_jp_.face();
+  auto base_segment = FontHelper::GidsToUnicodes(face.get(), *init_gids);
 
   // target paritions: {{0, 1}, {2}, {3, 4}}
-  sc = encoder.SetBaseSubsetFromSegments({0, 1});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3, 4}));
+  auto sc = encoder.SetBaseSubsetFromPatches({0, 1});
+
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
+  encoder.AddNonGlyphDataSegment(segment_2);
+
+  auto segment = segment_3;
+  segment.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment);
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Setup activations for 2 through 4 (1 is init)
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -573,20 +598,51 @@ TEST_F(IntegrationTest, MixedMode_OptionalFeatureTags) {
   // With optional feature chunks for vrt3:
   //   1, 2 -> 5
   //   4    -> 6
-  sc = encoder.SetBaseSubsetFromSegments({0});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({1}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({4}));
+  sc = encoder.SetBaseSubsetFromPatches({0});
 
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(1)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  auto face = feature_test_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
-  sc.Update(encoder.AddFeatureDependency(1, 5, kVrt3));
-  sc.Update(encoder.AddFeatureDependency(2, 5, kVrt3));
-  sc.Update(encoder.AddFeatureDependency(4, 6, kVrt3));
+  encoder.AddNonGlyphDataSegment(segment_1);
+  encoder.AddNonGlyphDataSegment(segment_2);
+  encoder.AddNonGlyphDataSegment(segment_3);
+  encoder.AddNonGlyphDataSegment(segment_4);
+
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+
+  {
+    Condition condition;
+    condition.child_conditions = {0};
+    condition.subset_definition.feature_tags = {kVrt3};
+    condition.activated_patch_id = 5;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    Condition condition;
+    condition.child_conditions = {1};
+    condition.subset_definition.feature_tags = {kVrt3};
+    condition.activated_patch_id = 5;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    Condition condition;
+    condition.child_conditions = {3};
+    condition.subset_definition.feature_tags = {kVrt3};
+    condition.activated_patch_id = 6;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
 
   encoder.AddFeatureGroupSegment({kVrt3});
   ASSERT_TRUE(sc.ok()) << sc;
@@ -645,23 +701,79 @@ TEST_F(IntegrationTest, MixedMode_OptionalFeatureTags) {
 
 TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_jp_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+  flat_hash_set<uint32_t> all;
+  all.insert(segment_1.begin(), segment_1.end());
+  all.insert(segment_2.begin(), segment_2.end());
+  all.insert(segment_3.begin(), segment_3.end());
+  all.insert(segment_4.begin(), segment_4.end());
 
   // target paritions: {}, {{1}, {2}, {3, 4}}
-  sc = encoder.SetBaseSubsetFromSegments({});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({1, 2, 3, 4}));
+  auto sc = encoder.SetBaseSubsetFromPatches({});
+  encoder.AddNonGlyphDataSegment(all);
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Setup some composite activation conditions
-  Encoder::Condition condition;
-  condition.required_groups = {{1, 2}, {3}};  // (1 OR 2) AND 3
-  condition.activated_segment_id = {4};
-  sc.Update(encoder.AddGlyphDataActivationCondition(condition));
+  {
+    // 0
+    Condition condition;
+    condition.subset_definition = SubsetDefinition::Codepoints(segment_1);
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
 
-  condition.required_groups = {{1}, {2, 3}};  // 1 AND (2 OR 3)
-  condition.activated_segment_id = {3};
-  sc.Update(encoder.AddGlyphDataActivationCondition(condition));
+  {
+    // 1
+    Condition condition;
+    condition.subset_definition = SubsetDefinition::Codepoints(segment_2);
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 2
+    Condition condition;
+    condition.subset_definition = SubsetDefinition::Codepoints(segment_3);
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 3
+    Condition condition;
+    condition.child_conditions = {0, 1};  // (1 OR 2)
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 4
+    Condition condition;
+    condition.conjunctive = true;
+    condition.child_conditions = {3, 2};  // (1 OR 2) AND 3
+    condition.activated_patch_id = 4;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 5
+    Condition condition;
+    condition.child_conditions = {1, 2};  // (2 OR 3)
+    condition.activated_patch_id = std::nullopt;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
+
+  {
+    // 6
+    Condition condition;
+    condition.child_conditions = {0, 5};  // 1 AND (2 OR 3)
+    condition.conjunctive = true;
+    condition.activated_patch_id = 3;
+    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+  }
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -718,19 +830,30 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
 
 TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init.ok()) << init.status();
+
+  auto face = noto_sans_jp_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0}, {1}, {2}, {3}, {4}}
-  sc = encoder.SetBaseSubsetFromSegments({0});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({1}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({4}));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(1)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  auto sc = encoder.SetBaseSubsetFromPatches({0});
+  encoder.AddNonGlyphDataSegment(segment_1);
+  encoder.AddNonGlyphDataSegment(segment_2);
+  encoder.AddNonGlyphDataSegment(segment_3);
+  encoder.AddNonGlyphDataSegment(segment_4);
+
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -786,18 +909,32 @@ TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
 
 TEST_F(IntegrationTest, MixedMode_Complex) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init.ok()) << init.status();
+
+  auto face = noto_sans_jp_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0}, {1, 2}, {3, 4}}
-  sc = encoder.SetBaseSubsetFromSegments({0});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({1, 2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3, 4}));
+  auto sc = encoder.SetBaseSubsetFromPatches({0});
+  auto segment_1_and_2 = segment_1;
+  segment_1_and_2.insert(segment_2.begin(), segment_2.end());
+  encoder.AddNonGlyphDataSegment(segment_1_and_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment_3_and_4);
 
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(1)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -832,18 +969,27 @@ TEST_F(IntegrationTest, MixedMode_Complex) {
 
 TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init.ok()) << init.status();
+
+  auto face = noto_sans_jp_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0, 1}, {2}, {3}, {4}}
-  sc = encoder.SetBaseSubsetFromSegments({0, 1});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({4}));
+  auto sc = encoder.SetBaseSubsetFromPatches({0, 1});
+  encoder.AddNonGlyphDataSegment(segment_2);
+  encoder.AddNonGlyphDataSegment(segment_3);
+  encoder.AddNonGlyphDataSegment(segment_4);
 
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -867,16 +1013,28 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   auto sc = InitEncoderForVfMixedMode(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
+  auto face = noto_sans_vf_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
   // target paritions: {{0, 1}, {2}, {3, 4}} + add wght axis
-  sc = encoder.SetBaseSubsetFromSegments({0, 1},
-                                         {{kWght, AxisRange::Point(100)}});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3, 4}));
+  sc = encoder.SetBaseSubsetFromPatches({0, 1},
+                                        {{kWght, AxisRange::Point(100)}});
+
+  encoder.AddNonGlyphDataSegment(segment_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment_3_and_4);
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
 
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -914,16 +1072,27 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   auto sc = InitEncoderForVfMixedMode(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
+  auto face = noto_sans_vf_.face();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
   // target paritions: {{0, 1}, {2}, {3, 4}} + add wght axis
-  sc = encoder.SetBaseSubsetFromSegments({0, 1},
-                                         {{kWght, AxisRange::Point(100)}});
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({2}));
-  sc.Update(encoder.AddNonGlyphSegmentFromGlyphSegments({3, 4}));
+  sc = encoder.SetBaseSubsetFromPatches({0, 1},
+                                        {{kWght, AxisRange::Point(100)}});
+  encoder.AddNonGlyphDataSegment(segment_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment_3_and_4);
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
 
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(2)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(3)));
-  sc.Update(encoder.AddGlyphDataActivationCondition(Encoder::Condition(4)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
 
   ASSERT_TRUE(sc.ok()) << sc;
 
