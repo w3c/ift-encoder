@@ -30,6 +30,13 @@ struct Condition {
   }
 
   friend void PrintTo(const Condition& condition, std::ostream* os);
+
+  bool operator==(const Condition& other) const {
+    return subset_definition == other.subset_definition &&
+           child_conditions == other.child_conditions &&
+           conjunctive == other.conjunctive &&
+           activated_patch_id == other.activated_patch_id;
+  }
 };
 
 }  // namespace ift::encoder
