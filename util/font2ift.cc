@@ -1,5 +1,6 @@
 #include <google/protobuf/text_format.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -15,7 +16,10 @@
 #include "common/font_data.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
+#include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/subset_definition.h"
 #include "util/encoder_config.pb.h"
 
 /*
@@ -50,7 +54,18 @@ using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::make_hb_blob;
+using ift::encoder::Condition;
+using ift::encoder::design_space_t;
 using ift::encoder::Encoder;
+using ift::encoder::GlyphSegmentation;
+using ift::encoder::SubsetDefinition;
+
+// TODO(garretrieger): add check that all glyph patches have at least one
+// activation condition.
+// TODO(garretrieger): add check that warns when not all parts of the input font
+// are reachable in the generated encoding.
+//                     (all glyph ids covered by a patch, all codepoints, etc,
+//                     covered by non glyph segments).
 
 StatusOr<FontData> load_file(const char* path) {
   hb_blob_unique_ptr blob =
@@ -113,8 +128,8 @@ int write_output(const Encoder::Encoding& encoding) {
 }
 
 template <typename T>
-flat_hash_set<uint32_t> values(const T& proto_set) {
-  flat_hash_set<uint32_t> result;
+btree_set<uint32_t> values(const T& proto_set) {
+  btree_set<uint32_t> result;
   for (uint32_t v : proto_set.values()) {
     result.insert(v);
   }
@@ -130,8 +145,8 @@ btree_set<hb_tag_t> tag_values(const T& proto_set) {
   return result;
 }
 
-StatusOr<Encoder::design_space_t> to_design_space(const DesignSpace& proto) {
-  Encoder::design_space_t result;
+StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
+  design_space_t result;
   for (const auto& [tag_str, range_proto] : proto.ranges()) {
     auto range =
         TRY(common::AxisRange::Range(range_proto.start(), range_proto.end()));
@@ -140,61 +155,69 @@ StatusOr<Encoder::design_space_t> to_design_space(const DesignSpace& proto) {
   return result;
 }
 
+GlyphSegmentation::ActivationCondition FromProto(
+    const ActivationCondition& condition) {
+  // TODO(garretrieger): once glyph segmentation activation conditions can
+  // support features copy those here.
+  std::vector<btree_set<uint32_t>> groups;
+  for (const auto& group : condition.required_codepoint_sets()) {
+    btree_set<uint32_t> set;
+    set.insert(group.values().begin(), group.values().end());
+    groups.push_back(set);
+  }
+
+  return GlyphSegmentation::ActivationCondition::composite_condition(
+      groups, condition.activated_patch());
+}
+
 Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   // First configure the glyph keyed segments, including features deps
   for (const auto& [id, gids] : config.glyph_patches()) {
-    TRYV(encoder.AddGlyphDataSegment(id, values(gids)));
+    TRYV(encoder.AddGlyphDataPatch(id, values(gids)));
   }
 
+  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions;
   for (const auto& c : config.glyph_patch_conditions()) {
-    if (c.required_features().values_size() > 1) {
+    if (c.required_features().values_size() > 0) {
       return absl::UnimplementedError(
-          "Conditions with more than one feature or segment aren't supported "
-          "yet.");
+          "Conditions with more features aren't supported yet.");
     }
 
-    Encoder::Condition condition;
-    for (const auto& g : c.required_patch_groups()) {
-      btree_set<uint32_t> group;
-      for (const auto& v : g.values()) {
-        group.insert(v);
-      }
-      condition.required_groups.push_back(group);
-    }
+    activation_conditions.push_back(FromProto(c));
+  }
 
-    for (const auto& f : c.required_features().values()) {
-      condition.required_features.insert(FontHelper::ToTag(f));
-    }
+  flat_hash_map<uint32_t, flat_hash_set<uint32_t>> codepoint_sets;
+  for (const auto& [id, set] : config.codepoint_sets()) {
+    codepoint_sets[id].insert(set.values().begin(), set.values().end());
+  }
 
-    condition.activated_segment_id = c.activated_patch();
-
-    TRYV(encoder.AddGlyphDataActivationCondition(condition));
+  auto condition_entries =
+      TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+          activation_conditions, codepoint_sets));
+  for (const auto& entry : condition_entries) {
+    TRYV(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   // Initial subset definition
   auto init_codepoints = values(config.initial_codepoints());
   auto init_features = tag_values(config.initial_features());
-  auto init_segments = values(config.initial_glyph_patches());
+  auto init_codepoint_sets = values(config.initial_codepoint_sets());
   auto init_design_space = TRY(to_design_space(config.initial_design_space()));
 
-  if ((!init_codepoints.empty() || !init_features.empty()) &&
-      init_segments.empty()) {
-    Encoder::SubsetDefinition base_subset;
-    base_subset.codepoints = init_codepoints;
-    base_subset.feature_tags = init_features;
-    base_subset.design_space = init_design_space;
-    TRYV(encoder.SetBaseSubsetFromDef(base_subset));
-  } else if (init_codepoints.empty() && init_features.empty() &&
-             init_design_space.empty() && !init_segments.empty()) {
-    TRYV(encoder.SetBaseSubsetFromSegments(init_segments));
-  } else if (init_codepoints.empty() && init_features.empty() &&
-             !init_design_space.empty() && !init_segments.empty()) {
-    TRYV(encoder.SetBaseSubsetFromSegments(init_segments, init_design_space));
-  } else {
-    return absl::UnimplementedError(
-        "Setting base subset from both codepoints and glyph patches is not yet "
-        "supported.");
+  SubsetDefinition base_subset;
+  base_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
+  for (const auto set_id : init_codepoint_sets) {
+    auto set = codepoint_sets.find(set_id);
+    if (set == codepoint_sets.end()) {
+      return absl::InvalidArgumentError(
+          StrCat("Codepoint set id, ", set_id, ", not found."));
+    }
+
+    base_subset.codepoints.insert(set->second.begin(), set->second.end());
   }
+  base_subset.feature_tags = init_features;
+  base_subset.design_space = init_design_space;
+  TRYV(encoder.SetBaseSubsetFromDef(base_subset));
 
   // Next configure the table keyed segments
   for (const auto& codepoints : config.non_glyph_codepoint_segmentation()) {
@@ -211,8 +234,17 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     encoder.AddDesignSpaceSegment(design_space);
   }
 
-  for (const auto& segments : config.glyph_patch_groupings()) {
-    TRYV(encoder.AddNonGlyphSegmentFromGlyphSegments(values(segments)));
+  for (const auto& sets : config.non_glyph_codepoint_set_groups()) {
+    flat_hash_set<uint32_t> codepoints;
+    for (const auto& set_id : sets.values()) {
+      auto set = codepoint_sets.find(set_id);
+      if (set == codepoint_sets.end()) {
+        return absl::InvalidArgumentError(
+            StrCat("Codepoint set id, ", set_id, ", not found."));
+      }
+      codepoints.insert(set->second.begin(), set->second.end());
+    }
+    encoder.AddNonGlyphDataSegment(codepoints);
   }
 
   // Lastly graph shape parameters
@@ -221,11 +253,6 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   }
 
   // Check for unsupported settings
-  if (config.add_everything_else_segments()) {
-    return absl::UnimplementedError(
-        "add_everything_else_segments is not yet supported.");
-  }
-
   if (config.include_all_segment_patches()) {
     return absl::UnimplementedError(
         "include_all_segment_patches is not yet supported.");
