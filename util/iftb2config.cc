@@ -46,7 +46,8 @@ int main(int argc, char** argv) {
 
   auto face = load_font(absl::GetFlag(FLAGS_font).c_str());
   if (!face.ok()) {
-    std::cerr << "Failed to load font " << absl::GetFlag(FLAGS_font) << " " << face.status() << std::endl;
+    std::cerr << "Failed to load font " << absl::GetFlag(FLAGS_font) << " "
+              << face.status() << std::endl;
   }
 
   std::stringstream ss;
