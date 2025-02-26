@@ -8,12 +8,15 @@
 #include "absl/container/btree_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "common/font_helper.h"
+#include "hb.h"
 #include "util/encoder_config.pb.h"
 
 using absl::btree_map;
 using absl::btree_set;
 using absl::StatusOr;
 using absl::string_view;
+using common::FontHelper;
 
 namespace util {
 
@@ -65,11 +68,20 @@ btree_map<std::uint32_t, uint32_t> load_gid_map(string_view line) {
 
 StatusOr<EncoderConfig> create_config(
     const btree_map<std::uint32_t, uint32_t>& gid_map,
-    const btree_set<uint32_t>& loaded_chunks) {
+    const btree_set<uint32_t>& loaded_chunks, hb_face_t* face) {
+  auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
   EncoderConfig config;
   // Populate segments in the config. chunks are directly analagous to segments.
   auto segments = config.mutable_glyph_patches();
   for (const auto [gid, chunk] : gid_map) {
+    auto cp = gid_to_unicode.find(gid);
+    if (cp != gid_to_unicode.end()) {
+      Codepoints codepoints;
+      auto [it, added] =
+          config.mutable_codepoint_sets()->insert(std::pair(chunk, codepoints));
+      it->second.add_values(cp->second);
+    }
+
     Glyphs glyphs;
     auto [it, added] = segments->insert(std::pair(chunk, glyphs));
     it->second.add_values(gid);
@@ -77,7 +89,7 @@ StatusOr<EncoderConfig> create_config(
 
   // Set up the initial subset, which is specified by loaded_chunks
   for (auto chunk : loaded_chunks) {
-    config.mutable_initial_glyph_patches()->add_values(chunk);
+    config.mutable_initial_codepoint_sets()->add_values(chunk);
   }
 
   // Add all non-initial segments to a single non-glyph segment
@@ -91,15 +103,19 @@ StatusOr<EncoderConfig> create_config(
     non_initial_segments.insert(chunk);
   }
 
-  GlyphPatches* patches = config.add_glyph_patch_groupings();
+  CodepointSets* codepoint_sets = config.add_non_glyph_codepoint_set_groups();
   for (auto chunk : non_initial_segments) {
-    patches->add_values(chunk);
+    codepoint_sets->add_values(chunk);
+    ActivationCondition* condition = config.add_glyph_patch_conditions();
+    condition->set_activated_patch(chunk);
+    condition->mutable_required_codepoint_sets()->Add()->mutable_values()->Add(
+        chunk);
   }
 
   return config;
 }
 
-StatusOr<EncoderConfig> convert_iftb(string_view iftb_dump) {
+StatusOr<EncoderConfig> convert_iftb(string_view iftb_dump, hb_face_t* face) {
   btree_map<std::uint32_t, uint32_t> gid_map;
   btree_set<uint32_t> loaded_chunks;
 
@@ -123,7 +139,7 @@ StatusOr<EncoderConfig> convert_iftb(string_view iftb_dump) {
     }
   }
 
-  return create_config(gid_map, loaded_chunks);
+  return create_config(gid_map, loaded_chunks, face);
 }
 
 }  // namespace util
