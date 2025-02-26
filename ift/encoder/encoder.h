@@ -138,6 +138,13 @@ class Encoder {
     if (!base_subset_.empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
+    // TODO(garretrieger): XXXXXXX we need to use the last gid trick  from
+    //                     SetBaseSubsetFromPatches (if we're mixed mode) or
+    //                     table keyed patch generation needs to extend the loca
+    //                     up to the maximum reachable gid for each subset.
+    //
+    //                     Also add a test that checks this case works
+    //                     correctly.
     base_subset_ = base_subset;
     return absl::OkStatus();
   }
