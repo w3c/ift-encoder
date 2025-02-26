@@ -8,18 +8,18 @@ edition = "2023";
 // patches to extend non-glyph data (everything other than glyf, gvar, CFF, and CFF2) and glyph keyed patches
 // to extend the glyph data tables (glyf, gvar, CFF, CFF2).
 //
-// The configuration has two distinct parts, the first "Glyph Data Extension Configuration" section
-// configures how the font will be split into a set of glyph keyed patches. The generated encoding will
-// contain one glyph keyed patch per specified glyph segment and unique configuration of the design space
-// reachable via the non glyph table keyed patches.
+// The configuration has three distinct parts, the first "Codepoint Sets" defines a list of unicode codepoint
+// sets which will be reused in the remainder of the configuration.
 //
-// glyph_patches is used to configure a segmentation of the glyphs in the font. These are the building blocks
-// used to construct other parts of the encoding plan. glyph_patches can be moved into the initial font via 
-// initial_glyph_patches or they can be configured to be loaded via patches by specifying a loading condition
-// via glyph_patch_conditions. Note that glyph_patches which do not have an activation condition will not 
-// have patches generated for them.
+// Next, "Glyph Data Extension Configuration" section configures how the font will be split into a set of
+// glyph keyed patches. The generated encoding will contain one glyph keyed patch per specified glyph id set
+// and unique configuration of the design space reachable via the non glyph table keyed patches.
 //
-// The second section of the configuration is the "Non Glyph Extension Configuration" which describes how to
+// In order to be reachable patches must have activation conditions assigned to them. These conditions specify
+// the conditions under which the activated patch should be loaded into the font. Patches which are not assigned
+// conditions will not be reachable.
+//
+// The last section of the configuration is the "Non Glyph Extension Configuration" which describes how to
 // segment the data in all non-glyph tables (everything but glyf, gvar, CFF, and CFF2). These tables will be
 // extended by table keyed patches. Since table keyed patches are invalidating
 // (see: https://w3c.github.io/IFT/Overview.html#font-patch-invalidations) a graph of patches will be
@@ -54,32 +54,40 @@ message EncoderConfig {
   // - check that fully expanded font meets closure requirement.
   // TODO mechanism to specify uvs to glyph patch deps.
 
+  // ### Codepoint Sets ###
+
+  // Codepoint sets are utilized in the rest of the config to configure things like glyph activation conditions
+  // and non glyph data extensions. Sets are referenced later on in the config utilizing the key in the mapping
+  // (codepoint set id).
+  map<uint32, Codepoints> codepoint_sets = 1;
+
+
   // ### Glyph Data Extension Configuration ###
 
-  // A list of segments. In the generated encoding there will be one glyph keyed patch (containing all
-  // data for all of the glyphs in the segment) per segment and unique design space configuration.
+  // A list of patches and the set of glyphs they contain. In the generated encoding there will be one glyph keyed
+  // patch (containing all data for all of the glyphs) per entry here and unique design space configuration.
   //
-  // The key of the mapping is an integer id which other parts of the configuration can use to reference
-  // the segment.
-  map<uint32, Glyphs> glyph_patches = 1;
+  // The key of the mapping is an integer id (patch id) which other parts of the configuration can use to reference
+  // the patch.
+  map<uint32, Glyphs> glyph_patches = 2;
 
   // Lists the conditions under which the patches specified in glyph_patches will be loaded. Every patch
   // should be given at least one condition here other wise it won't be accessible in the produced mapping.
   //
   // An entry in this map implies that the patch mapping entry for the glyph patch identified by
   // ActivationCondition.activated_patch will be set up such that it will only be activated for loading iff:
-  // - At least one patch in each ActivationCondition.required_patch_groups is matched, AND
-  // - All of GlyphPatchDependency.required_features are matched.
+  // - At least one codepoint set in each ActivationCondition.required_codepoint_sets is matched, AND
+  // - All of ActivationCondition.required_features are matched.
   //
   // More then one condition can exist for the same patch. That patch will be activated when at least one
   // condition is satisfied.
-  repeated ActivationCondition glyph_patch_conditions = 2;
+  repeated ActivationCondition glyph_patch_conditions = 3;
 
   // ### Non Glyph Extension Configuration ###
 
   // For table keyed patches the patch graph will include patches that can add up to this many
   // segments in a single patch. Defaults to 1.
-  uint32 jump_ahead = 3;
+  uint32 jump_ahead = 4;
 
   // For table keyed patches the patch graph will be at most this many levels deep, or in other
   // words at most max depth round trips will ever be needed to reach any content in the font.
@@ -88,37 +96,35 @@ message EncoderConfig {
   // only a single patch which adds everything remaining.
   //
   // Defaults to unlimited depth.
-  uint32 max_depth = 4;
+  uint32 max_depth = 5;
 
   // In the generated table keyed patch graph every node (in addition to the usual patches) will
   // have a patch available which adds everything remaining to the font. This makes it possible
   // for the client to reach any combination of coverage in at most one round trip from any
   // intermediate (or initial) state.
-  bool include_all_segment_patches = 5;  
+  bool include_all_segment_patches = 6;
 
   // The initial_* fields defines all of the data that the initial IFT font will include. If these are all
   // left empty then the initial font will be a desiccated font which contains the minimum possible amount of
   // data.
   //
-  // Any glyph patches listed in initial_glyph_patches will be added to the initial font and patch files will
-  // not be generated for them. Glyph dependencies will be automatically updated to reflect the inclusion of
-  // these patches in the initial font. Any glyph patches whose dependencies are satisfied as a result will
-  // also be included in the initial font (this is done recursively).
-  Codepoints initial_codepoints = 6;
-  GlyphPatches initial_glyph_patches = 7;
-  Features initial_features = 8;
-  DesignSpace initial_design_space = 9;
+  // init_codepoint_sets contains codepoint set ids referencing "codepoint_sets". Each referenced set will be
+  // unioned into initial_codepoints.
+  Codepoints initial_codepoints = 7;
+  CodepointSets initial_codepoint_sets = 8;
+  Features initial_features = 9;
+  DesignSpace initial_design_space = 10;
 
   // Groups of codepoints which the non glyph data in the font can be extended in a single
   // jump. These can be specified as either groups of codepoints
-  // (via non_glyph_codepoint_segmentation), or by grouping together glyph keyed patches defined
+  // (via non_glyph_codepoint_segmentation), or by grouping together codepoint sets defined
   // above (via glyph_patch_groupings).
-  repeated Codepoints non_glyph_codepoint_segmentation = 10;
+  repeated Codepoints non_glyph_codepoint_segmentation = 11;
 
   // An alternative way to specify codepoint segmentations. One segment will be formed from
-  // the union of all of the codepoints associated with each referenced glyph patch. Glyph
-  // patches are defined above. This field can be used in addition to non_glyph_codepoint_segmentation.
-  repeated GlyphPatches glyph_patch_groupings = 11;
+  // the union of all of the codepoints associated with each referenced codepoint set (from EncoderConfig.codepoint_sets).
+  // This field can be used in addition to non_glyph_codepoint_segmentation.
+  repeated CodepointSets non_glyph_codepoint_set_groups = 12;
 
   // Groups of open type layout features which the non glyph data in the font can be extended
   // for in a single jump.
@@ -127,36 +133,26 @@ message EncoderConfig {
   //       in the "default feature list" (https://w3c.github.io/IFT/Overview.html#feature-tag-list)
   //       so this segmentation should be used to provide optional access to features not already
   //       on that list.
-  repeated Features non_glyph_feature_segmentation = 12;
+  repeated Features non_glyph_feature_segmentation = 13;
 
   // Parts of the fonts overall design space which the non glyph data in the font can be extended
   // for in a single jump.
-  repeated DesignSpace non_glyph_design_space_segmentation = 13;
-
-  // ### Glyph and Non Glyph Configuration ###
-
-  // If true, the for each of glyph, codepoint, feature, and design space segmentations an additional segment
-  // will be automatically added (if needed) which includes anything not covered by the specified segments
-  // 
-  // Note: this applies to both the glyph and non-glyph segmentations.
-  //
-  // Setting this ensures that all data in the original font is always reachable.
-  bool add_everything_else_segments = 14;
+  repeated DesignSpace non_glyph_design_space_segmentation = 14;
 }
 
-// Activated when at least one of every patch group is matched and all required_features match.
-// More formally, if p_i_j is patch j in group i, and f_i is feature i:
+// Activated when at least one set in every group is matched and all required_features match.
+// More formally, if s_i_j is set j in group i, and f_i is feature i:
 //
-// (p_1_1 OR p_1_2 OR ...) AND (p_2_1 OR ...) AND
+// (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) AND
 // f_1 AND f_2 AND ...
 message ActivationCondition {
-  repeated GlyphPatches required_patch_groups = 1;
+  repeated CodepointSets required_codepoint_sets = 1;
   Features required_features = 2;
   uint32 activated_patch = 3;
 }
 
-// A list of glyph patch ids
-message GlyphPatches {
+// A list of codepoint set ids that reference sets in "EncoderConfig.codepoint_sets"
+message CodepointSets {
   repeated uint32 values = 1;
 }
 
