@@ -20,8 +20,10 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
 
 /*
@@ -68,8 +70,10 @@ using common::hb_set_unique_ptr;
 using common::make_hb_blob;
 using common::make_hb_set;
 using ift::URLTemplate;
+using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
+using ift::encoder::SubsetDefinition;
 
 StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -254,9 +258,9 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
   Encoder encoder;
   encoder.SetFace(font);
 
-  flat_hash_set<uint32_t> all_segments;
+  flat_hash_set<uint32_t> all_unicodes;
 
-  TRYV(encoder.SetBaseSubset({}));
+  TRYV(encoder.SetBaseSubsetFromPatches({}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -267,14 +271,18 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
       remainder_glyphs--;
     }
 
-    flat_hash_set<uint32_t> gids;
+    btree_set<uint32_t> gids;
     gids.insert(begin, glyphs_it);
-    TRYV(encoder.AddGlyphDataSegment(i, gids));
-    all_segments.insert(i);
-    TRYV(encoder.AddGlyphDataActivationCondition(Encoder::Condition(i)));
+    auto unicodes = FontHelper::GidsToUnicodes(font, gids);
+
+    TRYV(encoder.AddGlyphDataPatch(i, gids));
+    all_unicodes.insert(unicodes.begin(), unicodes.end());
+
+    TRYV(encoder.AddGlyphDataPatchCondition(
+        Condition::SimpleCondition(SubsetDefinition::Codepoints(unicodes), i)));
   }
 
-  TRYV(encoder.AddNonGlyphSegmentFromGlyphSegments(all_segments));
+  encoder.AddNonGlyphDataSegment(all_unicodes);
 
   auto encoding = TRY(encoder.Encode());
   return EncodingSize(nullptr, encoding);
@@ -298,24 +306,36 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_segments;
 
-  TRYV(encoder.SetBaseSubset({}));
+  TRYV(encoder.SetBaseSubsetFromPatches({}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
-    flat_hash_set<uint32_t> s;
+    btree_set<uint32_t> s;
     s.insert(glyph_set.begin(), glyph_set.end());
-    TRYV(encoder.AddGlyphDataSegment(id, s));
+    TRYV(encoder.AddGlyphDataPatch(id, s));
     all_segments.insert(id);
   }
 
-  TRYV(encoder.AddNonGlyphSegmentFromGlyphSegments(all_segments));
+  btree_set<uint32_t> all_codepoints;
+  for (const auto& s : segmentation.Segments()) {
+    all_codepoints.insert(s.begin(), s.end());
+  }
+  encoder.AddNonGlyphDataSegment(all_codepoints);
 
+  std::vector<GlyphSegmentation::ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
-    Encoder::Condition condition;
-    for (const auto& g : c.conditions()) {
-      condition.required_groups.push_back(g);
-    }
-    condition.activated_segment_id = c.activated();
-    TRYV(encoder.AddGlyphDataActivationCondition(condition));
+    conditions.push_back(c);
+  }
+
+  flat_hash_map<uint32_t, flat_hash_set<uint32_t>> segments;
+  uint32_t i = 0;
+  for (const auto& s : segmentation.Segments()) {
+    segments[i++].insert(s.begin(), s.end());
+  }
+
+  auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+      conditions, segments));
+  for (const auto& e : entries) {
+    TRYV(encoder.AddGlyphDataPatchCondition(e));
   }
 
   auto encoding = TRY(encoder.Encode());
