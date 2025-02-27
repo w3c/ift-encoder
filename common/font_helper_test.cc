@@ -478,6 +478,61 @@ TEST_F(FontHelperTest, BuildFont) {
   ASSERT_EQ(table_2.str(), "table_2");
 }
 
+TEST_F(FontHelperTest, GlyfData_ShortOverflow) {
+  // This glyph has a start < 65536 and end > 65536 and so will create an
+  // overflow in offset calculation if the wrong data types are used.
+  auto data = FontHelper::GlyfData(roboto_vf.get(), 558);
+  ASSERT_TRUE(data.ok()) << data.status();
+  ASSERT_GT(data->size(), 0);
+}
+
+TEST_F(FontHelperTest, GlyfData_ShortOverflowSynthetic) {
+  hb_face_unique_ptr face = make_hb_face(hb_face_builder_create());
+
+  std::vector<uint8_t> loca = {
+      0xC3, 0x50,  // 50,000 (100,000 actual)
+      0xC3, 0x52,  // 50,002 (100,005 actual)
+  };
+  {
+    auto blob =
+        make_hb_blob(hb_blob_create((const char*)loca.data(), loca.size(),
+                                    HB_MEMORY_MODE_READONLY, nullptr, nullptr));
+    hb_face_builder_add_table(face.get(), HB_TAG('l', 'o', 'c', 'a'),
+                              blob.get());
+  }
+
+  std::vector<uint8_t> head(53, 0);
+  head[51] = 0;
+  {
+    auto blob =
+        make_hb_blob(hb_blob_create((const char*)head.data(), head.size(),
+                                    HB_MEMORY_MODE_READONLY, nullptr, nullptr));
+    hb_face_builder_add_table(face.get(), HB_TAG('h', 'e', 'a', 'd'),
+                              blob.get());
+  }
+
+  std::vector<uint8_t> glyf(100004, 0);
+  glyf[100000] = 1;
+  glyf[100001] = 2;
+  glyf[100002] = 3;
+  glyf[100003] = 4;
+  {
+    auto blob =
+        make_hb_blob(hb_blob_create((const char*)glyf.data(), glyf.size(),
+                                    HB_MEMORY_MODE_READONLY, nullptr, nullptr));
+    hb_face_builder_add_table(face.get(), HB_TAG('g', 'l', 'y', 'f'),
+                              blob.get());
+  }
+
+  auto blob = make_hb_blob(hb_face_reference_blob(face.get()));
+  auto concrete_face = make_hb_face(hb_face_create(blob.get(), 0));
+
+  auto data = FontHelper::GlyfData(concrete_face.get(), 0);
+  ASSERT_TRUE(data.ok()) << data.status();
+  std::string expected = {1, 2, 3, 4};
+  ASSERT_EQ(*data, expected);
+}
+
 // TODO test BuildFont...
 
 }  // namespace common

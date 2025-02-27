@@ -1,6 +1,8 @@
 #ifndef COMMON_INDEXED_DATA_READER_H_
 #define COMMON_INDEXED_DATA_READER_H_
 
+#include <cstdint>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -28,11 +30,14 @@ class IndexedDataReader {
           absl::StrCat("Entry ", id, " not found in offset table."));
     }
 
-    offset_type start_offset =
-        ReadValue(start_index, offsets_) * offset_multiplier;
-    offset_type end_offset = ReadValue(end_index, offsets_) * offset_multiplier;
+    uint32_t start_offset =
+        ((uint32_t)ReadValue(start_index, offsets_)) * offset_multiplier;
+    uint32_t end_offset =
+        ((uint32_t)ReadValue(end_index, offsets_)) * offset_multiplier;
     if (end_offset < start_offset) {
-      return absl::InvalidArgumentError("Invalid index. end < start.");
+      return absl::InvalidArgumentError(
+          absl::StrCat("Invalid index. end (", end_offset, ") < start (",
+                       start_offset, "), width = ", width, "."));
     }
 
     if (end_offset > data_.size()) {
