@@ -69,35 +69,21 @@ class Encoder {
    * Configure the base subset to cover the provided codepoints, and the set of
    * layout features retained by default in the harfbuzz subsetter.
    */
-  template <typename T>
-  absl::Status SetBaseSubset(const T& base_subset) {
+  template <typename Set>
+  absl::Status SetBaseSubset(const Set& base_codepoints) {
     if (!base_subset_.empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    base_subset_.codepoints.insert(base_subset.begin(), base_subset.end());
+    base_subset_.codepoints.insert(base_codepoints.begin(),
+                                   base_codepoints.end());
     return absl::OkStatus();
   }
 
   /*
-   * Set up the base subset to cover all glyphs in the provided list of glyph
-   * data patches.
-   */
-  absl::Status SetBaseSubsetFromPatches(
-      const absl::flat_hash_set<uint32_t>& included_glyph_data);
-
-  /*
-   * Set up the base subset to cover all glyphs in the provided list of glyph
-   * data patches. Additionally, instance to the supplied design space.
-   */
-  absl::Status SetBaseSubsetFromPatches(
-      const absl::flat_hash_set<uint32_t>& included_segments,
-      const design_space_t& design_space);
-
-  /*
    * Adds a segment around which the non glyph data in the font will be split.
    */
-  template <typename T>
-  void AddNonGlyphDataSegment(const T& codepoints) {
+  template <typename Set>
+  void AddNonGlyphDataSegment(const Set& codepoints) {
     SubsetDefinition def;
     def.codepoints.insert(codepoints.begin(), codepoints.end());
     extension_subsets_.push_back(def);
@@ -138,13 +124,6 @@ class Encoder {
     if (!base_subset_.empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    // TODO(garretrieger): XXXXXXX we need to use the last gid trick  from
-    //                     SetBaseSubsetFromPatches (if we're mixed mode) or
-    //                     table keyed patch generation needs to extend the loca
-    //                     up to the maximum reachable gid for each subset.
-    //
-    //                     Also add a test that checks this case works
-    //                     correctly.
     base_subset_ = base_subset;
     return absl::OkStatus();
   }
@@ -188,9 +167,6 @@ class Encoder {
   absl::StatusOr<common::FontData> Encode(ProcessingContext& context,
                                           const SubsetDefinition& base_subset,
                                           bool is_root = true) const;
-
-  absl::StatusOr<SubsetDefinition> SubsetDefinitionForPatches(
-      const absl::flat_hash_set<uint32_t>& patch_ids) const;
 
   /*
    * Returns true if this encoding will contain both glyph keyed and table keyed
@@ -283,6 +259,7 @@ class Encoder {
 
     absl::flat_hash_map<SubsetDefinition, common::FontData> built_subsets_;
     absl::flat_hash_map<std::string, common::FontData> patches_;
+    SubsetDefinition base_subset_;
 
     common::CompatId GenerateCompatId();
   };

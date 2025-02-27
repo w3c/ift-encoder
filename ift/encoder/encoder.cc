@@ -20,6 +20,7 @@
 #include "common/try.h"
 #include "common/woff2.h"
 #include "hb-subset.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -86,7 +87,7 @@ void Encoder::AddCombinations(const std::vector<const SubsetDefinition*>& in,
 StatusOr<FontData> Encoder::FullyExpandedSubset(
     const ProcessingContext& context) const {
   SubsetDefinition all;
-  all.Union(base_subset_);
+  all.Union(context.base_subset_);
 
   for (const auto& s : extension_subsets_) {
     all.Union(s);
@@ -191,58 +192,6 @@ Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
   return absl::OkStatus();
 }
 
-Status Encoder::SetBaseSubsetFromPatches(
-    const flat_hash_set<uint32_t>& included_glyph_data) {
-  design_space_t empty;
-  return SetBaseSubsetFromPatches(included_glyph_data, empty);
-}
-
-Status Encoder::SetBaseSubsetFromPatches(
-    const flat_hash_set<uint32_t>& included_glyph_data,
-    const design_space_t& design_space) {
-  // TODO(garretrieger): support also providing initial features.
-  if (!face_) {
-    return absl::FailedPreconditionError("Encoder must have a face set.");
-  }
-
-  if (!base_subset_.empty()) {
-    return absl::FailedPreconditionError("Base subset has already been set.");
-  }
-
-  for (uint32_t patch_id : included_glyph_data) {
-    if (!glyph_data_patches_.contains(patch_id)) {
-      return absl::InvalidArgumentError(StrCat("Glyph data patch, ", patch_id,
-                                               ", not added to the encoder."));
-    }
-  }
-
-  auto included = SubsetDefinitionForPatches(included_glyph_data);
-  if (!included.ok()) {
-    return included.status();
-  }
-
-  base_subset_ = *included;
-  base_subset_.design_space = design_space;
-
-  // Glyph keyed patches can't change the glyph count in the font (and hence
-  // loca len) so always include the last gid in the base subset to force the
-  // loca table to remain at the full length from the start.
-  //
-  // TODO(garretrieger): this unnecessarily includes the last gid in the subset,
-  //                     should update the subsetter to retain the glyph count
-  //                     but not actually keep the last gid.
-  //
-  // TODO(garretrieger): instead of forcing max glyph count here we can utilize
-  //                     table keyed patches to change loca len/glyph count to
-  //                     the max for any currently reachable segments. This
-  //                     would improve efficiency slightly by avoid including
-  //                     extra space in the initial font.
-  uint32_t gid_count = hb_face_get_glyph_count(face_.get());
-  if (gid_count > 0) base_subset_.gids.insert(gid_count - 1);
-
-  return absl::OkStatus();
-}
-
 void Encoder::AddFeatureGroupSegment(const btree_set<hb_tag_t>& feature_tags) {
   SubsetDefinition def;
   def.feature_tags = feature_tags;
@@ -255,36 +204,35 @@ void Encoder::AddDesignSpaceSegment(const design_space_t& space) {
   extension_subsets_.push_back(def);
 }
 
-StatusOr<SubsetDefinition> Encoder::SubsetDefinitionForPatches(
-    const flat_hash_set<uint32_t>& patch_ids) const {
-  auto gid_to_unicode = FontHelper::GidToUnicodeMap(face_.get());
-
-  SubsetDefinition result;
-  for (uint32_t patch_id : patch_ids) {
-    auto p = glyph_data_patches_.find(patch_id);
-    if (p == glyph_data_patches_.end()) {
-      return absl::InvalidArgumentError(
-          StrCat("Glyph data patches, ", patch_id, ", not found."));
-    }
-
-    for (uint32_t gid : p->second) {
-      auto cp = gid_to_unicode.find(gid);
-      if (cp != gid_to_unicode.end()) {
-        result.codepoints.insert(cp->second);
-      }
-      result.gids.insert(gid);
-    }
-  }
-
-  return result;
-}
-
 StatusOr<Encoder::Encoding> Encoder::Encode() const {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }
 
   ProcessingContext context(next_id_);
+  context.base_subset_ = base_subset_;
+  if (IsMixedMode()) {
+    // Glyph keyed patches can't change the glyph count in the font (and hence
+    // loca len) so always include the last gid in the base subset to force the
+    // loca table to remain at the full length from the start.
+    //
+    // TODO(garretrieger): this unnecessarily includes the last gid in the
+    // subset,
+    //                     should update the subsetter to retain the glyph count
+    //                     but not actually keep the last gid.
+    //
+    // TODO(garretrieger): instead of forcing max glyph count here we can
+    // utilize
+    //                     table keyed patches to change loca len/glyph count to
+    //                     the max for any currently reachable segments. This
+    //                     would improve efficiency slightly by avoid including
+    //                     extra space in the initial font. However, it would
+    //                     require us to examine conditions against each subset
+    //                     to determine patch reachability.
+    uint32_t gid_count = hb_face_get_glyph_count(face_.get());
+    if (gid_count > 0) context.base_subset_.gids.insert(gid_count - 1);
+  }
+
   context.force_long_loca_and_gvar_ = false;
   auto expanded = FullyExpandedSubset(context);
   if (!expanded.ok()) {
@@ -297,7 +245,7 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
       FontHelper::HasLongLoca(expanded_face.get()) ||
       FontHelper::HasWideGvar(expanded_face.get());
 
-  auto init_font = Encode(context, base_subset_, true);
+  auto init_font = Encode(context, context.base_subset_, true);
   if (!init_font.ok()) {
     return init_font.status();
   }
@@ -603,7 +551,7 @@ StatusOr<FontData> Encoder::GenerateBaseGvar(
   }
 
   // Step 2: glyph subsetting
-  SubsetDefinition subset = base_subset_;
+  SubsetDefinition subset = context.base_subset_;
   // We don't want to apply any instancing here as it was done in step 1
   // so clear out the design space.
   subset.design_space = {};

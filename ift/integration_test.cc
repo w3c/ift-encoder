@@ -119,7 +119,7 @@ class IntegrationTest : public ::testing::Test {
     return init_segment;
   }
 
-  Status InitEncoderForVfMixedMode(Encoder& encoder) {
+  StatusOr<btree_set<uint32_t>> InitEncoderForVfMixedMode(Encoder& encoder) {
     auto face = noto_sans_vf_.face();
     encoder.SetFace(face.get());
 
@@ -142,10 +142,11 @@ class IntegrationTest : public ::testing::Test {
     sc.Update(encoder.AddGlyphDataPatch(2, TestVfSegment2()));
     sc.Update(encoder.AddGlyphDataPatch(3, TestVfSegment3()));
     sc.Update(encoder.AddGlyphDataPatch(4, TestVfSegment4()));
-    return sc;
+    return init_segment;
   }
 
-  Status InitEncoderForMixedModeFeatureTest(Encoder& encoder) {
+  StatusOr<btree_set<uint32_t>> InitEncoderForMixedModeFeatureTest(
+      Encoder& encoder) {
     auto face = feature_test_.face();
     encoder.SetFace(face.get());
 
@@ -174,7 +175,7 @@ class IntegrationTest : public ::testing::Test {
     sc.Update(encoder.AddGlyphDataPatch(4, TestFeatureSegment4()));
     sc.Update(encoder.AddGlyphDataPatch(5, TestFeatureSegment5()));
     sc.Update(encoder.AddGlyphDataPatch(6, TestFeatureSegment6()));
-    return sc;
+    return init_segment;
   }
 
   Status InitEncoderForTableKeyed(Encoder& encoder) {
@@ -527,11 +528,16 @@ TEST_F(IntegrationTest, MixedMode) {
   auto base_segment = FontHelper::GidsToUnicodes(face.get(), *init_gids);
 
   // target paritions: {{0, 1}, {2}, {3, 4}}
-  auto sc = encoder.SetBaseSubsetFromPatches({0, 1});
-
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
+  flat_hash_set<uint32_t> base;
+  base.insert(segment_0.begin(), segment_0.end());
+  base.insert(segment_1.begin(), segment_1.end());
+  auto sc = encoder.SetBaseSubset(base);
 
   encoder.AddNonGlyphDataSegment(segment_2);
 
@@ -591,20 +597,21 @@ TEST_F(IntegrationTest, MixedMode) {
 
 TEST_F(IntegrationTest, MixedMode_OptionalFeatureTags) {
   Encoder encoder;
-  auto sc = InitEncoderForMixedModeFeatureTest(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init_gids = InitEncoderForMixedModeFeatureTest(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   // target paritions: {{0}, {1}, {2}, {3}, {4}}
   // With optional feature chunks for vrt3:
   //   1, 2 -> 5
   //   4    -> 6
-  sc = encoder.SetBaseSubsetFromPatches({0});
-
   auto face = feature_test_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
   auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
+  auto sc = encoder.SetBaseSubset(segment_0);
 
   encoder.AddNonGlyphDataSegment(segment_1);
   encoder.AddNonGlyphDataSegment(segment_2);
@@ -716,7 +723,7 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
   all.insert(segment_4.begin(), segment_4.end());
 
   // target paritions: {}, {{1}, {2}, {3, 4}}
-  auto sc = encoder.SetBaseSubsetFromPatches({});
+  auto sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
   encoder.AddNonGlyphDataSegment(all);
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -830,17 +837,18 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
 
 TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
   Encoder encoder;
-  auto init = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(init.ok()) << init.status();
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   auto face = noto_sans_jp_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
   auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0}, {1}, {2}, {3}, {4}}
-  auto sc = encoder.SetBaseSubsetFromPatches({0});
+  auto sc = encoder.SetBaseSubset(segment_0);
   encoder.AddNonGlyphDataSegment(segment_1);
   encoder.AddNonGlyphDataSegment(segment_2);
   encoder.AddNonGlyphDataSegment(segment_3);
@@ -909,17 +917,18 @@ TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
 
 TEST_F(IntegrationTest, MixedMode_Complex) {
   Encoder encoder;
-  auto init = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(init.ok()) << init.status();
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   auto face = noto_sans_jp_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
   auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0}, {1, 2}, {3, 4}}
-  auto sc = encoder.SetBaseSubsetFromPatches({0});
+  auto sc = encoder.SetBaseSubset(segment_0);
   auto segment_1_and_2 = segment_1;
   segment_1_and_2.insert(segment_2.begin(), segment_2.end());
   encoder.AddNonGlyphDataSegment(segment_1_and_2);
@@ -969,17 +978,20 @@ TEST_F(IntegrationTest, MixedMode_Complex) {
 
 TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
   Encoder encoder;
-  auto init = InitEncoderForMixedMode(encoder);
-  ASSERT_TRUE(init.ok()) << init.status();
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   auto face = noto_sans_jp_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
   auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0, 1}, {2}, {3}, {4}}
-  auto sc = encoder.SetBaseSubsetFromPatches({0, 1});
+  btree_set<uint32_t> segment_0_and_1 = segment_0;
+  segment_0_and_1.insert(segment_1.begin(), segment_1.end());
+  auto sc = encoder.SetBaseSubset(segment_0_and_1);
   encoder.AddNonGlyphDataSegment(segment_2);
   encoder.AddNonGlyphDataSegment(segment_3);
   encoder.AddNonGlyphDataSegment(segment_4);
@@ -1010,18 +1022,23 @@ TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
 
 TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   Encoder encoder;
-  auto sc = InitEncoderForVfMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init_gids = InitEncoderForVfMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   auto face = noto_sans_vf_.face();
-  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
-  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
-  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
-  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1_gids = TestVfSegment1();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), segment_1_gids);
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
 
   // target paritions: {{0, 1}, {2}, {3, 4}} + add wght axis
-  sc = encoder.SetBaseSubsetFromPatches({0, 1},
-                                        {{kWght, AxisRange::Point(100)}});
+  SubsetDefinition base_def;
+  base_def.codepoints.insert(segment_0.begin(), segment_0.end());
+  base_def.codepoints.insert(segment_1.begin(), segment_1.end());
+  base_def.design_space = {{kWght, AxisRange::Point(100)}};
+  auto sc = encoder.SetBaseSubsetFromDef(base_def);
 
   encoder.AddNonGlyphDataSegment(segment_2);
   auto segment_3_and_4 = segment_3;
@@ -1069,18 +1086,22 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
 
 TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   Encoder encoder;
-  auto sc = InitEncoderForVfMixedMode(encoder);
-  ASSERT_TRUE(sc.ok()) << sc;
+  auto init_gids = InitEncoderForVfMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
 
   auto face = noto_sans_vf_.face();
-  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
-  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
-  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
-  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
 
   // target paritions: {{0, 1}, {2}, {3, 4}} + add wght axis
-  sc = encoder.SetBaseSubsetFromPatches({0, 1},
-                                        {{kWght, AxisRange::Point(100)}});
+  SubsetDefinition base_def;
+  base_def.codepoints.insert(segment_0.begin(), segment_0.end());
+  base_def.codepoints.insert(segment_1.begin(), segment_1.end());
+  base_def.design_space = {{kWght, AxisRange::Point(100)}};
+  auto sc = encoder.SetBaseSubsetFromDef(base_def);
   encoder.AddNonGlyphDataSegment(segment_2);
   auto segment_3_and_4 = segment_3;
   segment_3_and_4.insert(segment_4.begin(), segment_4.end());

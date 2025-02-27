@@ -260,7 +260,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_unicodes;
 
-  TRYV(encoder.SetBaseSubsetFromPatches({}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -306,7 +306,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_segments;
 
-  TRYV(encoder.SetBaseSubsetFromPatches({}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
     btree_set<uint32_t> s;

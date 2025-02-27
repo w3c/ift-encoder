@@ -9,9 +9,12 @@
 namespace ift::encoder {
 
 /*
- * This conditions is satisfied if the input subset definition matches at
- * least one segment in each required group and every feature in
- * required_features.
+ * This conditions is satisfied if the input subset definition
+ * matches the conditions subset_definition and all child conditions
+ * are matched.
+ *
+ * Child conditions refer to the indices of previous condition entries
+ * See: https://w3c.github.io/IFT/Overview.html#mapping-entry-childentryindices
  */
 struct Condition {
   SubsetDefinition subset_definition;
