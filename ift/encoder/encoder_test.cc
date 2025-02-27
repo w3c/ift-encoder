@@ -349,9 +349,6 @@ TEST_F(EncoderTest, MissingFace) {
   auto s1 = encoder.AddGlyphDataPatch(1, segment_1_gids);
   ASSERT_TRUE(absl::IsFailedPrecondition(s1)) << s1;
 
-  auto s2 = encoder.SetBaseSubsetFromPatches({});
-  ASSERT_TRUE(absl::IsFailedPrecondition(s2)) << s2;
-
   auto s3 = encoder.Encode();
   ASSERT_TRUE(absl::IsFailedPrecondition(s3.status())) << s3.status();
 }
@@ -368,21 +365,6 @@ TEST_F(EncoderTest, GlyphDataSegments_GidsNotInFace) {
   ASSERT_TRUE(absl::IsInvalidArgument(s)) << s;
 }
 
-TEST_F(EncoderTest, InvalidGlyphDataPatchIds) {
-  Encoder encoder;
-  {
-    hb_face_t* face = noto_sans_jp.reference_face();
-    encoder.SetFace(face);
-    hb_face_destroy(face);
-  }
-
-  auto s = encoder.AddGlyphDataPatch(1, segment_1_gids);
-  ASSERT_TRUE(s.ok()) << s;
-
-  s = encoder.SetBaseSubsetFromPatches({2});
-  ASSERT_TRUE(absl::IsInvalidArgument(s)) << s;
-}
-
 TEST_F(EncoderTest, DontClobberBaseSubset) {
   Encoder encoder;
   {
@@ -394,13 +376,13 @@ TEST_F(EncoderTest, DontClobberBaseSubset) {
   auto s = encoder.AddGlyphDataPatch(1, segment_1_gids);
   ASSERT_TRUE(s.ok()) << s;
 
-  s = encoder.SetBaseSubsetFromPatches({});
+  s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
   ASSERT_TRUE(s.ok()) << s;
 
   s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{1});
-  ASSERT_TRUE(absl::IsFailedPrecondition(s)) << s;
+  ASSERT_TRUE(s.ok()) << s;
 
-  s = encoder.SetBaseSubsetFromPatches({});
+  s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
   ASSERT_TRUE(absl::IsFailedPrecondition(s)) << s;
 }
 
@@ -587,7 +569,11 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
       SubsetDefinition::Codepoints(segment_4_cps), 4)));
 
-  s.Update(encoder.SetBaseSubsetFromPatches({0, 1, 2}));
+  flat_hash_set<uint32_t> base_subset;
+  base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
+  base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
+  base_subset.insert(segment_2_cps.begin(), segment_2_cps.end());
+  s.Update(encoder.SetBaseSubset(base_subset));
 
   flat_hash_set<uint32_t> extension_segment;
   extension_segment.insert(segment_3_cps.begin(), segment_3_cps.end());
@@ -658,7 +644,10 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   ASSERT_TRUE(s.ok()) << s;
 
   // Partitions {0, 1}, {2, 3, 4}, +ccmp
-  s.Update(encoder.SetBaseSubsetFromPatches({0, 1}));
+  flat_hash_set<uint32_t> base_subset;
+  base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
+  base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
+  s.Update(encoder.SetBaseSubset(base_subset));
 
   flat_hash_set<uint32_t> extension_segment;
   extension_segment.insert(segment_2_cps.begin(), segment_2_cps.end());
