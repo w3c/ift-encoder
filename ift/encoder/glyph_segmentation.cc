@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <sstream>
 
 #include "absl/container/btree_map.h"
@@ -22,6 +23,7 @@ using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
+using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -120,7 +122,6 @@ class SegmentationContext {
     unmapped_glyphs = {};
     and_glyph_groups = {};
     or_glyph_groups = {};
-    patch_id_to_segment_index = {};
     fallback_segments = {};
   }
 
@@ -231,7 +232,6 @@ class SegmentationContext {
   btree_set<glyph_id_t> unmapped_glyphs;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> and_glyph_groups;
   btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>> or_glyph_groups;
-  std::vector<segment_index_t> patch_id_to_segment_index;
   btree_set<segment_index_t> fallback_segments;
 
   // Caches and logging
@@ -407,10 +407,8 @@ Status GlyphSegmentation::GroupsToSegmentation(
     const btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>>&
         or_glyph_groups,
     const btree_set<segment_index_t>& fallback_group,
-    std::vector<segment_index_t>& patch_id_to_segment_index,
     GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
-  std::vector<patch_id_t> segment_to_patch_id;
 
   // Map segments into patch ids
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
@@ -420,18 +418,9 @@ Status GlyphSegmentation::GroupsToSegmentation(
 
     segment_index_t segment = *and_segments.begin();
     segmentation.patches_.insert(std::pair(next_id, glyphs));
+    // All 1 segment and conditions are considered to be exclusive
     segmentation.conditions_.insert(
-        ActivationCondition::and_patches({next_id}, next_id));
-
-    if (segment + 1 > segment_to_patch_id.size()) {
-      uint32_t size = segment_to_patch_id.size();
-      for (uint32_t i = 0; i < (segment + 1) - size; i++) {
-        segment_to_patch_id.push_back(-1);
-      }
-    }
-
-    patch_id_to_segment_index.push_back(segment);
-    segment_to_patch_id[segment] = next_id++;
+        ActivationCondition::exclusive_segment(segment, next_id++));
   }
 
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
@@ -440,19 +429,9 @@ Status GlyphSegmentation::GroupsToSegmentation(
       continue;
     }
 
-    btree_set<patch_id_t> and_patches;
-    for (segment_index_t segment : and_segments) {
-      if (segment_to_patch_id[segment] == -1) {
-        return absl::InternalError(StrCat(
-            "Segment s", segment,
-            " does not have an assigned patch id (found in an and_segment)."));
-      }
-      and_patches.insert(segment_to_patch_id[segment]);
-    }
-
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
-        ActivationCondition::and_patches(and_patches, next_id));
+        ActivationCondition::and_segments(and_segments, next_id));
 
     next_id++;
   }
@@ -469,24 +448,11 @@ Status GlyphSegmentation::GroupsToSegmentation(
           StrCat("Unexpected or_segment with only one segment: s",
                  *or_segments.begin()));
     }
-    btree_set<patch_id_t> or_patches;
-    for (segment_index_t segment : or_segments) {
-      if (segment_to_patch_id[segment] == -1) {
-        return absl::InternalError(StrCat(
-            "Segment s", segment,
-            " does not have an assigned patch id (found in an or_segment)."));
-      }
 
-      if (!or_patches.insert(segment_to_patch_id[segment]).second) {
-        return absl::InternalError(
-            StrCat("Two different segments are mapped to the same patch: s",
-                   segment, " -> p", segment_to_patch_id[segment]));
-      }
-    }
     bool is_fallback = (or_segments == fallback_group);
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
-        ActivationCondition::or_patches(or_patches, next_id, is_fallback));
+        ActivationCondition::or_segments(or_segments, next_id, is_fallback));
 
     next_id++;
   }
@@ -503,16 +469,6 @@ StatusOr<uint32_t> PatchSizeBytes(hb_face_t* original_face,
   GlyphKeyedDiff diff(font_data, id, {FontHelper::kGlyf, FontHelper::kGvar}, 9);
   auto patch_data = TRY(diff.CreatePatch(gids));
   return patch_data.size();
-}
-
-hb_set_unique_ptr ToSegmentIndices(const hb_set_t* patches,
-                                   const std::vector<segment_index_t>& map) {
-  hb_set_unique_ptr out = make_hb_set();
-  patch_id_t next = HB_SET_VALUE_INVALID;
-  while (hb_set_next(patches, &next)) {
-    hb_set_add(out.get(), map[next]);
-  }
-  return out;
 }
 
 void MergeSegments(const SegmentationContext& context, const hb_set_t* segments,
@@ -538,10 +494,9 @@ StatusOr<uint32_t> EstimatePatchSize(SegmentationContext& context,
 
 StatusOr<bool> TryMerge(SegmentationContext& context,
                         segment_index_t base_segment_index,
-                        const hb_set_t* patches) {
+                        const hb_set_t* segments) {
   // Create a merged segment, and remove all of the others
-  hb_set_unique_ptr to_merge_segments =
-      ToSegmentIndices(patches, context.patch_id_to_segment_index);
+  hb_set_unique_ptr to_merge_segments = make_hb_set(hb_set_copy(segments));
   hb_set_del(to_merge_segments.get(), base_segment_index);
 
   uint32_t size_before =
@@ -592,7 +547,8 @@ template <typename ConditionIt>
 StatusOr<bool> TryMergingACompositeCondition(
     SegmentationContext& context,
     const GlyphSegmentation& candidate_segmentation,
-    segment_index_t base_segment_index, patch_id_t base_patch,
+    segment_index_t base_segment_index,
+    patch_id_t base_patch,  // TODO XXX is base_patch needed?
     const ConditionIt& condition_it) {
   auto next_condition = condition_it;
   next_condition++;
@@ -604,14 +560,15 @@ StatusOr<bool> TryMergingACompositeCondition(
       continue;
     }
 
-    hb_set_unique_ptr triggering_patches = make_hb_set();
-    next_condition->TriggeringPatches(triggering_patches.get());
-    if (!hb_set_has(triggering_patches.get(), base_patch)) {
+    hb_set_unique_ptr triggering_segments = make_hb_set();
+    next_condition->TriggeringSegments(triggering_segments.get());
+    if (!hb_set_has(triggering_segments.get(), base_segment_index)) {
       next_condition++;
       continue;
     }
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_patches.get()))) {
+    if (!TRY(
+            TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -644,10 +601,11 @@ StatusOr<bool> TryMergingABaseSegment(
       continue;
     }
 
-    hb_set_unique_ptr triggering_patches = make_hb_set();
-    next_condition->TriggeringPatches(triggering_patches.get());
+    hb_set_unique_ptr triggering_segments = make_hb_set();
+    next_condition->TriggeringSegments(triggering_segments.get());
 
-    if (!TRY(TryMerge(context, base_segment_index, triggering_patches.get()))) {
+    if (!TRY(
+            TryMerge(context, base_segment_index, triggering_segments.get()))) {
       next_condition++;
       continue;
     }
@@ -702,7 +660,7 @@ StatusOr<std::optional<segment_index_t>> MergeNextBaseSegment(
 
     patch_id_t base_patch = condition->activated();
     segment_index_t base_segment_index =
-        context.patch_id_to_segment_index[base_patch];
+        (*condition->conditions().begin()->begin());
     if (base_segment_index < start_segment) {
       // Already processed, skip
       continue;
@@ -793,10 +751,10 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
     segmentation.unmapped_glyphs_ = context.unmapped_glyphs;
     segmentation.init_font_glyphs_ =
         to_btree_set(context.initial_closure.get());
+    segmentation.CopySegments(context.segments);
 
     TRYV(GroupsToSegmentation(context.and_glyph_groups, context.or_glyph_groups,
-                              context.fallback_segments,
-                              context.patch_id_to_segment_index, segmentation));
+                              context.fallback_segments, segmentation));
     context.LogClosureCount("Condition grouping");
 
     if (patch_size_min_bytes == 0) {
@@ -824,13 +782,31 @@ StatusOr<GlyphSegmentation> GlyphSegmentation::CodepointToGlyphSegments(
   return absl::InternalError("unreachable");
 }
 
+void GlyphSegmentation::CopySegments(
+    const std::vector<hb_set_unique_ptr>& segments) {
+  segments_.clear();
+  for (const auto& set : segments) {
+    segments_.push_back(to_btree_set(set.get()));
+  }
+}
+
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::and_patches(
-    const absl::btree_set<patch_id_t>& ids, patch_id_t activated) {
+GlyphSegmentation::ActivationCondition::exclusive_segment(
+    segment_index_t index, patch_id_t activated) {
+  ActivationCondition condition;
+  condition.activated_ = activated;
+  condition.conditions_ = {{index}};
+  condition.is_exclusive_ = true;
+  return condition;
+}
+
+GlyphSegmentation::ActivationCondition
+GlyphSegmentation::ActivationCondition::and_segments(
+    const absl::btree_set<segment_index_t>& segments, patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
 
-  for (auto id : ids) {
+  for (auto id : segments) {
     conditions.conditions_.push_back({id});
   }
 
@@ -838,13 +814,26 @@ GlyphSegmentation::ActivationCondition::and_patches(
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::or_patches(
-    const absl::btree_set<patch_id_t>& ids, patch_id_t activated,
+GlyphSegmentation::ActivationCondition::or_segments(
+    const absl::btree_set<segment_index_t>& segments, patch_id_t activated,
     bool is_fallback) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
-  conditions.conditions_.push_back(ids);
+  conditions.conditions_.push_back(segments);
   conditions.is_fallback_ = is_fallback;
+
+  return conditions;
+}
+
+GlyphSegmentation::ActivationCondition
+GlyphSegmentation::ActivationCondition::composite_condition(
+    absl::Span<const absl::btree_set<segment_index_t>> groups,
+    patch_id_t activated) {
+  ActivationCondition conditions;
+  conditions.activated_ = activated;
+  for (const auto& group : groups) {
+    conditions.conditions_.push_back(group);
+  }
 
   return conditions;
 }
@@ -896,7 +885,7 @@ std::string GlyphSegmentation::ActivationCondition::ToString() const {
       } else {
         first_inner = false;
       }
-      out << "p" << id;
+      out << "s" << id;
     }
     if (set.size() > 1) {
       out << ")";
@@ -959,6 +948,153 @@ bool GlyphSegmentation::ActivationCondition::operator<(
 
   // These two are equal
   return false;
+}
+
+StatusOr<std::vector<Condition>>
+GlyphSegmentation::ActivationConditionsToConditionEntries(
+    Span<const ActivationCondition> conditions,
+    const absl::flat_hash_map<segment_index_t,
+                              absl::flat_hash_set<hb_codepoint_t>>& segments) {
+  // TODO(garretrieger): extend this to work with segments that are
+  // SubsetDefinition's instead of just codepoints. This would allow for
+  // features and other things to be worked into conditions.
+  std::vector<Condition> entries;
+  if (conditions.empty()) {
+    return entries;
+  }
+
+  // The conditions list describes what the patch map should do, here
+  // we need to convert that into an equivalent list of encoder condition
+  // entries.
+  //
+  // To minimize encoded size we can reuse set definitions in later entries
+  // via the copy indices mechanism. The conditions are evaluated in three
+  // phases to successively build up a set of common entries which can be reused
+  // by later ones.
+  //
+  // Tracks the list of conditions which have not yet been placed in a map
+  // entry.
+  btree_set<ActivationCondition> remaining_conditions;
+  remaining_conditions.insert(conditions.begin(), conditions.end());
+
+  // Phase 1 generate the base entries, there should be one for each
+  // unique glyph segment that is referenced in at least one condition.
+  // the conditions will refer back to these base entries via copy indices
+  //
+  // Each base entry can be used to map one condition as well.
+  flat_hash_map<uint32_t, uint32_t> segment_id_to_entry_index;
+  uint32_t next_entry_index = 0;
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end();) {
+    bool remove = false;
+    for (const auto& group : condition->conditions()) {
+      for (uint32_t segment_id : group) {
+        if (segment_id_to_entry_index.contains(segment_id)) {
+          continue;
+        }
+
+        auto original = segments.find(segment_id);
+        if (original == segments.end()) {
+          return absl::InvalidArgumentError(
+              StrCat("Codepoint segment ", segment_id, " not found."));
+        }
+        const auto& original_def = original->second;
+
+        Condition entry;
+        entry.subset_definition.codepoints = original_def;
+
+        if (condition->IsUnitary()) {
+          // this condition can use this entry to map itself.
+          entry.activated_patch_id = condition->activated();
+          remove = true;
+        } else {
+          // Otherwise this entry does nothing (ignored = true), but will be
+          // referenced by later entries, so don't assign an activated id.
+          entry.activated_patch_id = std::nullopt;
+        }
+
+        entries.push_back(entry);
+        segment_id_to_entry_index[segment_id] = next_entry_index++;
+      }
+    }
+
+    if (remove) {
+      condition = remaining_conditions.erase(condition);
+    } else {
+      ++condition;
+    }
+  }
+
+  // Phase 2 generate entries for all groups of patches reusing the base entries
+  // written in phase one. When writing an entry if the triggering group is the
+  // only one in the condition then that condition can utilize the entry (just
+  // like in Phase 1).
+  flat_hash_map<btree_set<segment_index_t>, uint32_t>
+      segment_group_to_entry_index;
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end();) {
+    bool remove = false;
+
+    for (const auto& group : condition->conditions()) {
+      if (group.size() <= 1 || segment_group_to_entry_index.contains(group)) {
+        // don't handle groups of size one, those will just reference the base
+        // entry directly.
+        continue;
+      }
+
+      Condition entry;
+      entry.conjunctive = false;  // ... OR ...
+
+      for (uint32_t segment_id : group) {
+        auto entry_index = segment_id_to_entry_index.find(segment_id);
+        if (entry_index == segment_id_to_entry_index.end()) {
+          return absl::InternalError(
+              StrCat("entry for segment_id = ", segment_id,
+                     " was not previously created."));
+        }
+        entry.child_conditions.insert(entry_index->second);
+      }
+
+      if (condition->conditions().size() == 1) {
+        entry.activated_patch_id = condition->activated();
+        remove = true;
+      } else {
+        entry.activated_patch_id = std::nullopt;
+      }
+
+      entries.push_back(entry);
+      segment_group_to_entry_index[group] = next_entry_index++;
+    }
+
+    if (remove) {
+      condition = remaining_conditions.erase(condition);
+    } else {
+      ++condition;
+    }
+  }
+
+  // Phase 3 for any remaining conditions create the actual entries utilizing
+  // the groups (phase 2) and base entries (phase 1) as needed
+  for (auto condition = remaining_conditions.begin();
+       condition != remaining_conditions.end(); condition++) {
+    Condition entry;
+    entry.conjunctive = true;  // ... AND ...
+
+    for (const auto& group : condition->conditions()) {
+      if (group.size() == 1) {
+        entry.child_conditions.insert(
+            segment_id_to_entry_index[*group.begin()]);
+        continue;
+      }
+
+      entry.child_conditions.insert(segment_group_to_entry_index[group]);
+    }
+
+    entry.activated_patch_id = condition->activated();
+    entries.push_back(entry);
+  }
+
+  return entries;
 }
 
 }  // namespace ift::encoder

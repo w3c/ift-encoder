@@ -128,6 +128,19 @@ StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {
   return *count;
 }
 
+btree_set<uint32_t> FontHelper::GidsToUnicodes(
+    hb_face_t* face, const btree_set<uint32_t>& gids) {
+  auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
+  btree_set<uint32_t> result;
+  for (uint32_t gid : gids) {
+    auto unicode = gid_to_unicode.find(gid);
+    if (unicode != gid_to_unicode.end()) {
+      result.insert(unicode->second);
+    }
+  }
+  return result;
+}
+
 flat_hash_map<uint32_t, uint32_t> FontHelper::GidToUnicodeMap(hb_face_t* face) {
   hb_map_t* unicode_to_gid = hb_map_create();
   hb_face_collect_nominal_glyph_mapping(face, unicode_to_gid, nullptr);

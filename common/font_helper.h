@@ -178,6 +178,9 @@ class FontHelper {
   static absl::flat_hash_map<uint32_t, uint32_t> GidToUnicodeMap(
       hb_face_t* face);
 
+  static absl::btree_set<uint32_t> GidsToUnicodes(
+      hb_face_t* face, const absl::btree_set<uint32_t>& gids);
+
   static absl::btree_set<uint32_t> ToCodepointsSet(hb_face_t* face);
 
   static absl::flat_hash_set<hb_tag_t> GetTags(hb_face_t* face);

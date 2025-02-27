@@ -4,7 +4,11 @@ cc_library(
     "encoder.h",
     "encoder.cc",
     "glyph_segmentation.h",
-    "glyph_segmentation.cc"
+    "glyph_segmentation.cc",
+    "subset_definition.h",
+    "subset_definition.cc",
+    "condition.h",
+    "condition.cc",
   ],
   deps = [
     "//ift/proto",

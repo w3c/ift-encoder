@@ -71,6 +71,7 @@ cc_test(
     ],
     data = [
         "testdata/convert-iftb-sample.txt",
+        "testdata/Roboto-Regular.Awesome.ttf",
     ],
     deps = [
         ":convert_iftb",

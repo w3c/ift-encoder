@@ -8,7 +8,10 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
+#include "common/hb_set_unique_ptr.h"
 #include "hb.h"
+#include "ift/encoder/condition.h"
 
 namespace ift::encoder {
 
@@ -40,16 +43,31 @@ class GlyphSegmentation {
      * Constructs a condition that activates when the input intersects(patch_1)
      * AND ... AND inersects(patch_n).
      */
-    static ActivationCondition and_patches(
-        const absl::btree_set<patch_id_t>& ids, patch_id_t activated);
+    static ActivationCondition exclusive_segment(segment_index_t index,
+                                                 patch_id_t activated);
 
     /*
      * Constructs a condition that activates when the input intersects(patch_1)
-     * OR ... OR inersects(patch_n).
+     * AND ... AND inersects(patch_n).
      */
-    static ActivationCondition or_patches(
-        const absl::btree_set<patch_id_t>& ids, patch_id_t activated,
+    static ActivationCondition and_segments(
+        const absl::btree_set<segment_index_t>& ids, patch_id_t activated);
+
+    /*
+     * Constructs a condition that activates when the input intersects
+     * (patch_1) OR ... OR inersects(patch_n).
+     */
+    static ActivationCondition or_segments(
+        const absl::btree_set<segment_index_t>& ids, patch_id_t activated,
         bool is_fallback = false);
+
+    /*
+     * Constructs a condition that activates when the input intersects:
+     * (s1 OR ..) AND (si OR ...) AND ...
+     */
+    static ActivationCondition composite_condition(
+        absl::Span<const absl::btree_set<segment_index_t>> groups,
+        patch_id_t activated);
 
     /*
      * This condition is activated if every set of patch ids intersects the
@@ -57,7 +75,8 @@ class GlyphSegmentation {
      * input subset def intersects {...} AND ...
      *     which is effectively: (p_1 OR p_2) AND ...
      */
-    const std::vector<absl::btree_set<patch_id_t>>& conditions() const {
+    const absl::Span<const absl::btree_set<segment_index_t>> conditions()
+        const {
       return conditions_;
     }
 
@@ -67,10 +86,10 @@ class GlyphSegmentation {
      * Populates out with the set of patch ids that are part of this condition
      * (excluding the activated patch)
      */
-    void TriggeringPatches(hb_set_t* out) const {
+    void TriggeringSegments(hb_set_t* out) const {
       for (auto g : conditions_) {
-        for (auto patch_id : g) {
-          hb_set_add(out, patch_id);
+        for (auto segment_id : g) {
+          hb_set_add(out, segment_id);
         }
       }
     }
@@ -85,14 +104,10 @@ class GlyphSegmentation {
      */
     patch_id_t activated() const { return activated_; }
 
-    bool IsExclusive() const {
-      if (conditions_.size() == 1) {
-        const auto& ids = conditions_.at(0);
-        if (ids.size() == 1) {
-          return *ids.begin() == activated_;
-        }
-      }
-      return false;
+    bool IsExclusive() const { return is_exclusive_; }
+
+    bool IsUnitary() const {
+      return conditions().size() == 1 && conditions().at(0).size() == 1;
     }
 
     bool operator<(const ActivationCondition& other) const;
@@ -105,9 +120,20 @@ class GlyphSegmentation {
     ActivationCondition() : conditions_(), activated_(0) {}
 
     bool is_fallback_ = false;
-    std::vector<absl::btree_set<patch_id_t>> conditions_;
+    bool is_exclusive_ = false;
+    std::vector<absl::btree_set<segment_index_t>> conditions_;
     patch_id_t activated_;
   };
+
+  /*
+   * Converts a list of activation conditions into a list of condition entries
+   * which are used by the encoder to specify conditions.
+   */
+  static absl::StatusOr<std::vector<Condition>>
+  ActivationConditionsToConditionEntries(
+      absl::Span<const ActivationCondition> conditions,
+      const absl::flat_hash_map<segment_index_t,
+                                absl::flat_hash_set<hb_codepoint_t>>& segments);
 
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
@@ -136,6 +162,16 @@ class GlyphSegmentation {
    */
   const absl::btree_set<ActivationCondition>& Conditions() const {
     return conditions_;
+  }
+
+  /*
+   * The list of codepoint segmentations that are utilized as part of
+   * Conditions().
+   *
+   * Segment indices in conditions refer to a set of codepoints here.
+   */
+  const std::vector<absl::btree_set<hb_codepoint_t>>& Segments() const {
+    return segments_;
   }
 
   /*
@@ -172,8 +208,9 @@ class GlyphSegmentation {
       const absl::btree_map<absl::btree_set<segment_index_t>,
                             absl::btree_set<glyph_id_t>>& or_glyph_groups,
       const absl::btree_set<segment_index_t>& fallback_group,
-      std::vector<segment_index_t>& patch_id_to_segment_index,
       GlyphSegmentation& segmentation);
+
+  void CopySegments(const std::vector<common::hb_set_unique_ptr>& segments);
 
   // TODO(garretrieger): the output conditions need to also capture the base
   // codepoint segmentations since those
@@ -182,6 +219,7 @@ class GlyphSegmentation {
   absl::btree_set<glyph_id_t> init_font_glyphs_;
   absl::btree_set<glyph_id_t> unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
+  std::vector<absl::btree_set<hb_codepoint_t>> segments_;
   absl::btree_map<patch_id_t, absl::btree_set<glyph_id_t>> patches_;
 };
 

@@ -1,8 +1,12 @@
 #include "ift/encoder/glyph_segmentation.h"
 
+#include <optional>
+
 #include "common/font_data.h"
 #include "gtest/gtest.h"
+#include "ift/encoder/condition.h"
 
+using absl::btree_set;
 using common::FontData;
 using common::hb_face_unique_ptr;
 using common::make_hb_face;
@@ -38,12 +42,15 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentation) {
       roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'b'}, {'c'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid70 }
 p1: { gid71 }
-if (p0) then p0
-if (p1) then p1
+if (s0) then p0
+if (s1) then p1
 )");
 }
 
@@ -52,14 +59,17 @@ TEST_F(GlyphSegmentationTest, AndCondition) {
       roboto.get(), {'a'}, {{'f'}, {'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f'}, {'i'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid74 }
 p1: { gid77 }
 p2: { gid444, gid446 }
-if (p0) then p0
-if (p1) then p1
-if (p0 AND p1) then p2
+if (s0) then p0
+if (s1) then p1
+if (s0 AND s1) then p2
 )");
 }
 
@@ -68,70 +78,94 @@ TEST_F(GlyphSegmentationTest, OrCondition) {
       roboto.get(), {'a'}, {{0xc1}, {0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{0xc1}, {0x106}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid37, gid640 }
 p1: { gid39, gid700 }
 p2: { gid117 }
-if (p0) then p0
-if (p1) then p1
-if ((p0 OR p1)) then p2
+if (s0) then p0
+if (s1) then p1
+if ((s0 OR s1)) then p2
 )");
 }
 
 TEST_F(GlyphSegmentationTest, MergeBase_ViaConditions) {
   // {e, f} is too small, the merger should select {i, l} to merge since
-  // there is a dependency between these two. The result should have no conditional
-  // patches since ligatures will have been brought into the merged {e, f, i, l}
+  // there is a dependency between these two. The result should have no
+  // conditional patches since ligatures will have been brought into the merged
+  // {e, f, i, l}
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+      {'a', 'b', 'd'}, {'e', 'f', 'i', 'l'}, {'j', 'k', 'm', 'n'}, {}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid69, gid70, gid72 }
 p1: { gid73, gid74, gid77, gid80, gid444, gid445, gid446, gid447 }
 p2: { gid78, gid79, gid81, gid82 }
-if (p0) then p0
-if (p1) then p1
-if (p2) then p2
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
 )");
 }
 
 TEST_F(GlyphSegmentationTest, MergeBases) {
-  // {e, f} is too smal, since no conditional patches exist it should merge with the next available base
-  // which is {'j', 'k'}
+  // {e, f} is too smal, since no conditional patches exist it should merge with
+  // the next available base which is {'j', 'k'}
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+      {'a', 'b', 'd'},
+      {'e', 'f', 'j', 'k'},
+      {},
+      {'m', 'n', 'o', 'p'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid69, gid70, gid72 }
 p1: { gid73, gid74, gid78, gid79 }
 p2: { gid81, gid82, gid83, gid84 }
-if (p0) then p0
-if (p1) then p1
-if (p2) then p2
+if (s0) then p0
+if (s1) then p1
+if (s3) then p2
 )");
 }
 
 TEST_F(GlyphSegmentationTest, MergeBases_MaxSize) {
-  // {e, f} is too smal, since no conditional patches exist it will merge with the next available base
-  // which is {'m', 'n', 'o', 'p'}. However that patch is too large, so the next one {j, k} will actually be 
-  // chosen.
+  // {e, f} is too small, since no conditional patches exist it will merge with
+  // the next available base which is {'m', 'n', 'o', 'p'}. However that patch
+  // is too large, so the next one {j, k} will actually be chosen.
   auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370, 700);
+      roboto.get(), {},
+      {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370,
+      700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+      {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {'m', 'n', 'o', 'p'}, {}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid69, gid70, gid72 }
 p1: { gid73, gid74, gid78, gid79 }
 p2: { gid81, gid82, gid83, gid84 }
-if (p0) then p0
-if (p1) then p1
-if (p2) then p2
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
 )");
 }
 
@@ -140,16 +174,20 @@ TEST_F(GlyphSegmentationTest, MixedAndOr) {
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
+  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f', 0xc1},
+                                                              {'i', 0x106}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid37, gid74, gid640 }
 p1: { gid39, gid77, gid700 }
 p2: { gid444, gid446 }
 p3: { gid117 }
-if (p0) then p0
-if (p1) then p1
-if ((p0 OR p1)) then p3
-if (p0 AND p1) then p2
+if (s0) then p0
+if (s1) then p1
+if ((s0 OR s1)) then p3
+if (s0 AND s1) then p2
 )");
 }
 
@@ -169,16 +207,102 @@ p3: { gid158 }
 p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
 p5: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
 p6: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
-if (p0) then p0
-if (p1) then p1
-if (p2) then p2
-if (p3) then p3
-if ((p0 OR p1)) then p4
-if ((p2 OR p3)) then p6
-if ((p0 OR p1 OR p2 OR p3)) then p5
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if ((s0 OR s1)) then p4
+if ((s2 OR s3)) then p6
+if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
-// TODO(garretrieger): add test where or_set glyphs are moved back to unmapped due to found "additional conditions".
+TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
+  absl::flat_hash_map<segment_index_t, absl::flat_hash_set<hb_codepoint_t>>
+      segments = {
+          {1, {'a', 'b'}},
+          {2, {'c'}},
+          {3, {'d', 'e', 'f'}},
+          {4, {'g'}},
+      };
+
+  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
+      GlyphSegmentation::ActivationCondition::exclusive_segment(2, 2),
+      GlyphSegmentation::ActivationCondition::exclusive_segment(3, 4),
+      GlyphSegmentation::ActivationCondition::or_segments({1, 3}, 5),
+      GlyphSegmentation::ActivationCondition::composite_condition(
+          {{1, 3}, {2, 4}}, 6),
+  };
+
+  std::vector<Condition> expected;
+
+  // entry[0] {{2}} -> 2,
+  {
+    Condition condition;
+    condition.subset_definition.codepoints.insert('c');
+    condition.activated_patch_id = 2;
+    expected.push_back(condition);
+  }
+
+  // entry[1] {{3}} -> 4
+  {
+    Condition condition;
+    condition.subset_definition.codepoints.insert('d');
+    condition.subset_definition.codepoints.insert('e');
+    condition.subset_definition.codepoints.insert('f');
+    condition.activated_patch_id = 4;
+    expected.push_back(condition);
+  }
+
+  // entry[2] {{1}} ignored
+  {
+    Condition condition;
+    condition.subset_definition.codepoints.insert('a');
+    condition.subset_definition.codepoints.insert('b');
+    condition.activated_patch_id = std::nullopt;
+    expected.push_back(condition);
+  }
+
+  // entry[3] {{4}} ignored
+  {
+    Condition condition;
+    condition.subset_definition.codepoints.insert('g');
+    condition.activated_patch_id = std::nullopt;
+    expected.push_back(condition);
+  }
+
+  // entry[4] {{1 OR 3}} -> 5
+  {
+    Condition condition;
+    condition.child_conditions = {2, 1};  // entry[1], entry[2]
+    condition.activated_patch_id = 5;
+    expected.push_back(condition);
+  }
+
+  // entry[5] {{2 OR 4}} ignored
+  {
+    Condition condition;
+    condition.child_conditions = {0, 3};  // entry[0], entry[3]
+    condition.activated_patch_id = std::nullopt;
+    expected.push_back(condition);
+  }
+
+  // entry[6] {{1 OR 3} AND {2 OR 4}} -> 6
+  {
+    Condition condition;
+    condition.child_conditions = {4, 5};  // entry[4], entry[5]
+    condition.activated_patch_id = 6;
+    condition.conjunctive = true;
+    expected.push_back(condition);
+  }
+
+  auto entries = GlyphSegmentation::ActivationConditionsToConditionEntries(
+      activation_conditions, segments);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+  ASSERT_EQ(*entries, expected);
+}
+
+// TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
+// due to found "additional conditions".
 
 }  // namespace ift::encoder

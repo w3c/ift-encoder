@@ -5,12 +5,17 @@
 
 #include "hb.h"
 
+using absl::btree_set;
 using absl::flat_hash_set;
 
 namespace common {
 
 hb_set_unique_ptr make_hb_set() {
   return hb_set_unique_ptr(hb_set_create(), &hb_set_destroy);
+}
+
+hb_set_unique_ptr make_hb_set(hb_set_t* set) {
+  return hb_set_unique_ptr(set, &hb_set_destroy);
 }
 
 hb_set_unique_ptr make_hb_set(const absl::flat_hash_set<uint32_t>& int_set) {
@@ -51,6 +56,15 @@ hb_set_unique_ptr make_hb_set_from_ranges(int number_of_ranges, ...) {
 
 flat_hash_set<uint32_t> to_hash_set(const hb_set_t* set) {
   flat_hash_set<uint32_t> out;
+  hb_codepoint_t v = HB_SET_VALUE_INVALID;
+  while (hb_set_next(set, &v)) {
+    out.insert(v);
+  }
+  return out;
+}
+
+btree_set<uint32_t> to_btree_set(const hb_set_t* set) {
+  btree_set<uint32_t> out;
   hb_codepoint_t v = HB_SET_VALUE_INVALID;
   while (hb_set_next(set, &v)) {
     out.insert(v);

@@ -20,8 +20,10 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
 
 /*
@@ -68,8 +70,10 @@ using common::hb_set_unique_ptr;
 using common::make_hb_blob;
 using common::make_hb_set;
 using ift::URLTemplate;
+using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
+using ift::encoder::SubsetDefinition;
 
 StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -173,12 +177,14 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
   }
 
   if (segmentation != nullptr) {
-    btree_map<ift::encoder::patch_id_t, std::pair<std::string, int>> patch_id_to_url;
+    btree_map<ift::encoder::patch_id_t, std::pair<std::string, int>>
+        patch_id_to_url;
     for (const auto& condition : segmentation->Conditions()) {
       std::string url =
           URLTemplate::PatchToUrl("1_{id}.gk", condition.activated());
 
-      int type = condition.IsExclusive() ? 0 : (!condition.IsFallback() ? 1 : 2);
+      int type =
+          condition.IsExclusive() ? 0 : (!condition.IsFallback() ? 1 : 2);
       patch_id_to_url[condition.activated()] = std::pair(url, type);
     }
 
@@ -201,8 +207,9 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         fallback_size += url_size->second;
       }
 
-      printf("  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n", url.c_str(),
-             id, id_postfix, url_size->second, NETWORK_REQUEST_BYTE_OVERHEAD);
+      printf("  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n",
+             url.c_str(), id, id_postfix, url_size->second,
+             NETWORK_REQUEST_BYTE_OVERHEAD);
     }
   } else {
     for (const auto& [url, size] : url_to_size) {
@@ -217,12 +224,17 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
   printf("  mapping table: %u bytes\n", iftx.size());
 
   if (segmentation != nullptr) {
-    double base_percent = ((double) base_size / (double) total_size) * 100.0;
-    double conditional_percent = ((double) conditional_size / (double) total_size) * 100.0;
-    double fallback_percent = ((double) fallback_size / (double) total_size) * 100.0;
-    printf("  base patches total size:        %u bytes (%f%%)\n", base_size, base_percent);
-    printf("  conditional patches total size: %u bytes (%f%%)\n", conditional_size, conditional_percent);
-    printf("  fallback patch total size:      %u bytes (%f%%)\n", fallback_size, fallback_percent);
+    double base_percent = ((double)base_size / (double)total_size) * 100.0;
+    double conditional_percent =
+        ((double)conditional_size / (double)total_size) * 100.0;
+    double fallback_percent =
+        ((double)fallback_size / (double)total_size) * 100.0;
+    printf("  base patches total size:        %u bytes (%f%%)\n", base_size,
+           base_percent);
+    printf("  conditional patches total size: %u bytes (%f%%)\n",
+           conditional_size, conditional_percent);
+    printf("  fallback patch total size:      %u bytes (%f%%)\n", fallback_size,
+           fallback_percent);
   }
 
   return total_size;
@@ -246,9 +258,9 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
   Encoder encoder;
   encoder.SetFace(font);
 
-  flat_hash_set<uint32_t> all_segments;
+  flat_hash_set<uint32_t> all_unicodes;
 
-  TRYV(encoder.SetBaseSubset({}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -259,14 +271,18 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
       remainder_glyphs--;
     }
 
-    flat_hash_set<uint32_t> gids;
+    btree_set<uint32_t> gids;
     gids.insert(begin, glyphs_it);
-    TRYV(encoder.AddGlyphDataSegment(i, gids));
-    all_segments.insert(i);
-    TRYV(encoder.AddGlyphDataActivationCondition(Encoder::Condition(i)));
+    auto unicodes = FontHelper::GidsToUnicodes(font, gids);
+
+    TRYV(encoder.AddGlyphDataPatch(i, gids));
+    all_unicodes.insert(unicodes.begin(), unicodes.end());
+
+    TRYV(encoder.AddGlyphDataPatchCondition(
+        Condition::SimpleCondition(SubsetDefinition::Codepoints(unicodes), i)));
   }
 
-  TRYV(encoder.AddNonGlyphSegmentFromGlyphSegments(all_segments));
+  encoder.AddNonGlyphDataSegment(all_unicodes);
 
   auto encoding = TRY(encoder.Encode());
   return EncodingSize(nullptr, encoding);
@@ -290,24 +306,36 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_segments;
 
-  TRYV(encoder.SetBaseSubset({}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
-    flat_hash_set<uint32_t> s;
+    btree_set<uint32_t> s;
     s.insert(glyph_set.begin(), glyph_set.end());
-    TRYV(encoder.AddGlyphDataSegment(id, s));
+    TRYV(encoder.AddGlyphDataPatch(id, s));
     all_segments.insert(id);
   }
 
-  TRYV(encoder.AddNonGlyphSegmentFromGlyphSegments(all_segments));
+  btree_set<uint32_t> all_codepoints;
+  for (const auto& s : segmentation.Segments()) {
+    all_codepoints.insert(s.begin(), s.end());
+  }
+  encoder.AddNonGlyphDataSegment(all_codepoints);
 
+  std::vector<GlyphSegmentation::ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
-    Encoder::Condition condition;
-    for (const auto& g : c.conditions()) {
-      condition.required_groups.push_back(g);
-    }
-    condition.activated_segment_id = c.activated();
-    TRYV(encoder.AddGlyphDataActivationCondition(condition));
+    conditions.push_back(c);
+  }
+
+  flat_hash_map<uint32_t, flat_hash_set<uint32_t>> segments;
+  uint32_t i = 0;
+  for (const auto& s : segmentation.Segments()) {
+    segments[i++].insert(s.begin(), s.end());
+  }
+
+  auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+      conditions, segments));
+  for (const auto& e : entries) {
+    TRYV(encoder.AddGlyphDataPatchCondition(e));
   }
 
   auto encoding = TRY(encoder.Encode());
