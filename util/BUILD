@@ -6,6 +6,9 @@ proto_library(
 cc_proto_library(
     name = "encoder_config_cc_proto",
     deps = [":encoder_config_proto"],
+    visibility = [
+        "//ift/encoder:__pkg__",
+    ]
 )
 
 cc_binary(

@@ -26,6 +26,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
+#include "util/encoder_config.pb.h"
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -40,6 +41,13 @@
 
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
+
+ABSL_FLAG(bool, output_encoder_config, false,
+          "If set an encoder config representing the determined segmentation "
+          "will be output to stdout.");
+
+ABSL_FLAG(bool, output_segmentation_analysis, true,
+          "If set an analysis of the segmentation will be output to stderr.");
 
 ABSL_FLAG(
     std::string, codepoints_file, "",
@@ -70,12 +78,13 @@ using common::hb_face_unique_ptr;
 using common::hb_set_unique_ptr;
 using common::make_hb_blob;
 using common::make_hb_set;
+using google::protobuf::TextFormat;
 using ift::URLTemplate;
+using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
-using ift::encoder::ClosureGlyphSegmenter;
 
 StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -209,21 +218,21 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         fallback_size += url_size->second;
       }
 
-      printf("  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n",
-             url.c_str(), id, id_postfix, url_size->second,
-             NETWORK_REQUEST_BYTE_OVERHEAD);
+      fprintf(stderr, "  patch %s (p%u%s) adds %u bytes, %u bytes overhead\n",
+              url.c_str(), id, id_postfix, url_size->second,
+              NETWORK_REQUEST_BYTE_OVERHEAD);
     }
   } else {
     for (const auto& [url, size] : url_to_size) {
-      printf("  patch %s adds %u bytes, %u bytes overhead\n", url.c_str(), size,
-             NETWORK_REQUEST_BYTE_OVERHEAD);
+      fprintf(stderr, "  patch %s adds %u bytes, %u bytes overhead\n",
+              url.c_str(), size, NETWORK_REQUEST_BYTE_OVERHEAD);
     }
   }
 
   auto iftx =
       FontHelper::TableData(init_font.get(), HB_TAG('I', 'F', 'T', 'X'));
   total_size += iftx.size();
-  printf("  mapping table: %u bytes\n", iftx.size());
+  fprintf(stderr, "  mapping table: %u bytes\n", iftx.size());
 
   if (segmentation != nullptr) {
     double base_percent = ((double)base_size / (double)total_size) * 100.0;
@@ -231,12 +240,12 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         ((double)conditional_size / (double)total_size) * 100.0;
     double fallback_percent =
         ((double)fallback_size / (double)total_size) * 100.0;
-    printf("  base patches total size:        %u bytes (%f%%)\n", base_size,
-           base_percent);
-    printf("  conditional patches total size: %u bytes (%f%%)\n",
-           conditional_size, conditional_percent);
-    printf("  fallback patch total size:      %u bytes (%f%%)\n", fallback_size,
-           fallback_percent);
+    fprintf(stderr, "  base patches total size:        %u bytes (%f%%)\n",
+            base_size, base_percent);
+    fprintf(stderr, "  conditional patches total size: %u bytes (%f%%)\n",
+            conditional_size, conditional_percent);
+    fprintf(stderr, "  fallback patch total size:      %u bytes (%f%%)\n",
+            fallback_size, fallback_percent);
   }
 
   return total_size;
@@ -248,7 +257,7 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
 StatusOr<int> IdealSegmentationSize(hb_face_t* font,
                                     const GlyphSegmentation& segmentation,
                                     uint32_t number_input_segments) {
-  printf("IdealSegmentationSize():\n");
+  fprintf(stderr, "IdealSegmentationSize():\n");
   btree_set<uint32_t> glyphs;
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
     glyphs.insert(glyph_set.begin(), glyph_set.end());
@@ -302,7 +311,7 @@ uint32_t NumExclusivePatches(const GlyphSegmentation& segmentation) {
 
 StatusOr<int> SegmentationSize(hb_face_t* font,
                                const GlyphSegmentation& segmentation) {
-  printf("SegmentationSize():\n");
+  fprintf(stderr, "SegmentationSize():\n");
   Encoder encoder;
   encoder.SetFace(font);
 
@@ -341,6 +350,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   }
 
   auto encoding = TRY(encoder.Encode());
+
   return EncodingSize(&segmentation, encoding);
 }
 
@@ -399,10 +409,26 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  std::cout << ">> Computed Segmentation" << std::endl;
-  std::cout << result->ToString() << std::endl;
+  if (absl::GetFlag(FLAGS_output_encoder_config)) {
+    EncoderConfig config = result->ToConfigProto();
+    // TODO(garretrieger): assign a basic (single segment) table keyed config.
+    // Later on the input to this util should include information on how the
+    // segments should be grouped together for the table keyed portion of the
+    // font.
+    std::string config_string;
+    TextFormat::PrintToString(config, &config_string);
+    std::cout << config_string;
+  } else {
+    // No config requested, just output a simplified plain text representation
+    // of the segmentation.
+    std::cout << result->ToString() << std::endl;
+  }
 
-  std::cout << ">> Analysis" << std::endl;
+  if (!absl::GetFlag(FLAGS_output_segmentation_analysis)) {
+    return 0;
+  }
+
+  std::cerr << ">> Analysis" << std::endl;
   auto cost = SegmentationSize(font->get(), *result);
   if (!cost.ok()) {
     std::cerr << "Failed to compute segmentation cost: " << cost.status()
@@ -412,16 +438,16 @@ int main(int argc, char** argv) {
   auto ideal_cost =
       IdealSegmentationSize(font->get(), *result, NumExclusivePatches(*result));
   if (!ideal_cost.ok()) {
-    std::cerr << "Failed to compute segmentation cost: " << cost.status()
+    std::cerr << "Failed to compute ideal segmentation cost: " << cost.status()
               << std::endl;
     return -1;
   }
 
-  std::cout << std::endl;
-  std::cout << "glyphs_in_fallback = " << result->UnmappedGlyphs().size()
+  std::cerr << std::endl;
+  std::cerr << "glyphs_in_fallback = " << result->UnmappedGlyphs().size()
             << std::endl;
-  std::cout << "ideal_cost_bytes = " << *ideal_cost << std::endl;
-  std::cout << "total_cost_bytes = " << *cost << std::endl;
+  std::cerr << "ideal_cost_bytes = " << *ideal_cost << std::endl;
+  std::cerr << "total_cost_bytes = " << *cost << std::endl;
 
   double over_ideal_percent =
       (((double)*cost) / ((double)*ideal_cost) * 100.0) - 100.0;

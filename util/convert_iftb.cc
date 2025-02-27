@@ -106,7 +106,7 @@ StatusOr<EncoderConfig> create_config(
   CodepointSets* codepoint_sets = config.add_non_glyph_codepoint_set_groups();
   for (auto chunk : non_initial_segments) {
     codepoint_sets->add_values(chunk);
-    ActivationCondition* condition = config.add_glyph_patch_conditions();
+    ActivationConditionProto* condition = config.add_glyph_patch_conditions();
     condition->set_activated_patch(chunk);
     condition->mutable_required_codepoint_sets()->Add()->mutable_values()->Add(
         chunk);

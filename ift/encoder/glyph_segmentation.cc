@@ -387,4 +387,53 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
   return entries;
 }
 
+template <typename ProtoType>
+ProtoType ToSetProto(const btree_set<uint32_t>& set) {
+  ProtoType values;
+  for (uint32_t v : set) {
+    values.add_values(v);
+  }
+  return values;
+}
+
+ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
+    const {
+  ActivationConditionProto proto;
+
+  for (const auto& c : conditions()) {
+    CodepointSets group = *proto.add_required_codepoint_sets() =
+        ToSetProto<CodepointSets>(c);
+  }
+  proto.set_activated_patch(activated());
+
+  return proto;
+}
+
+EncoderConfig GlyphSegmentation::ToConfigProto() const {
+  EncoderConfig config;
+
+  uint32_t set_index = 0;
+  for (const auto& s : Segments()) {
+    if (!s.empty()) {
+      (*config.mutable_codepoint_sets())[set_index++] =
+          ToSetProto<Codepoints>(s);
+    } else {
+      set_index++;
+    }
+  }
+
+  for (const auto& [patch_id, gids] : GidSegments()) {
+    (*config.mutable_glyph_patches())[patch_id] = ToSetProto<Glyphs>(gids);
+  }
+
+  for (const auto& c : Conditions()) {
+    *config.add_glyph_patch_conditions() = c.ToConfigProto();
+  }
+
+  *config.mutable_initial_codepoints() =
+      ToSetProto<Codepoints>(InitialFontCodepoints());
+
+  return config;
+}
+
 }  // namespace ift::encoder
