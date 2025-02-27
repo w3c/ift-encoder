@@ -12,6 +12,7 @@
 #include "common/hb_set_unique_ptr.h"
 #include "hb.h"
 #include "ift/encoder/condition.h"
+#include "util/encoder_config.pb.h"
 
 namespace ift::encoder {
 
@@ -25,8 +26,8 @@ typedef uint32_t glyph_id_t;
  *
  * A segmentation describes the groups of glyphs belong to each patch as well as
  * the conditions under which those patches should be loaded. A properly formed
- * segmentation should have an associated set of patches and conditions which will
- * satisfy the "glyph closure requirement", which is:
+ * segmentation should have an associated set of patches and conditions which
+ * will satisfy the "glyph closure requirement", which is:
  *
  * The set of glyphs contained in patches loaded for a font subset definition (a
  * set of Unicode codepoints and a set of layout feature tags) through the patch
@@ -111,6 +112,8 @@ class GlyphSegmentation {
       return conditions().size() == 1 && conditions().at(0).size() == 1;
     }
 
+    ActivationConditionProto ToConfigProto() const;
+
     bool operator<(const ActivationCondition& other) const;
 
     bool operator==(const ActivationCondition& other) const {
@@ -126,9 +129,11 @@ class GlyphSegmentation {
     patch_id_t activated_;
   };
 
-  GlyphSegmentation(absl::btree_set<glyph_id_t> init_font_glyphs,
+  GlyphSegmentation(absl::btree_set<hb_codepoint_t> init_font_codepoints,
+                    absl::btree_set<glyph_id_t> init_font_glyphs,
                     absl::btree_set<glyph_id_t> unmapped_glyphs)
-      : init_font_glyphs_(init_font_glyphs),
+      : init_font_codepoints_(init_font_codepoints),
+        init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
 
   /*
@@ -192,6 +197,15 @@ class GlyphSegmentation {
     return init_font_glyphs_;
   };
 
+  /*
+   * These codepoints should be included in the initial font.
+   */
+  const absl::btree_set<hb_codepoint_t>& InitialFontCodepoints() const {
+    return init_font_codepoints_;
+  };
+
+  EncoderConfig ToConfigProto() const;
+
   static absl::Status GroupsToSegmentation(
       const absl::btree_map<absl::btree_set<segment_index_t>,
                             absl::btree_set<glyph_id_t>>& and_glyph_groups,
@@ -203,6 +217,7 @@ class GlyphSegmentation {
   void CopySegments(const std::vector<common::hb_set_unique_ptr>& segments);
 
  private:
+  absl::btree_set<hb_codepoint_t> init_font_codepoints_;
   absl::btree_set<glyph_id_t> init_font_glyphs_;
   absl::btree_set<glyph_id_t> unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;

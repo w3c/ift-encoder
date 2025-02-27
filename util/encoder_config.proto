@@ -81,7 +81,7 @@ message EncoderConfig {
   //
   // More then one condition can exist for the same patch. That patch will be activated when at least one
   // condition is satisfied.
-  repeated ActivationCondition glyph_patch_conditions = 3;
+  repeated ActivationConditionProto glyph_patch_conditions = 3;
 
   // ### Non Glyph Extension Configuration ###
 
@@ -145,7 +145,7 @@ message EncoderConfig {
 //
 // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) AND
 // f_1 AND f_2 AND ...
-message ActivationCondition {
+message ActivationConditionProto {
   repeated CodepointSets required_codepoint_sets = 1;
   Features required_features = 2;
   uint32 activated_patch = 3;

@@ -672,8 +672,9 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     context.ResetGroupings();
     TRYV(GroupGlyphs(context));
 
-    GlyphSegmentation segmentation(to_btree_set(context.initial_closure.get()),
-                                   context.unmapped_glyphs);
+    GlyphSegmentation segmentation(
+        to_btree_set(context.initial_codepoints.get()),
+        to_btree_set(context.initial_closure.get()), context.unmapped_glyphs);
     segmentation.CopySegments(context.segments);
 
     TRYV(GlyphSegmentation::GroupsToSegmentation(

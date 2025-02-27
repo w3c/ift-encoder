@@ -156,7 +156,7 @@ StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
 }
 
 GlyphSegmentation::ActivationCondition FromProto(
-    const ActivationCondition& condition) {
+    const ActivationConditionProto& condition) {
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
   std::vector<btree_set<uint32_t>> groups;
