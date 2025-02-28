@@ -1,4 +1,4 @@
-#include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/closure_glyph_segmenter.h"
 
 #include "common/font_data.h"
 #include "gtest/gtest.h"
@@ -29,12 +29,13 @@ class GlyphSegmentationTest : public ::testing::Test {
     return result.face();
   }
 
+  ClosureGlyphSegmenter segmenter;
   hb_face_unique_ptr roboto;
   hb_face_unique_ptr noto_nastaliq_urdu;
 };
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation) {
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -48,7 +49,7 @@ if (p1) then p1
 }
 
 TEST_F(GlyphSegmentationTest, AndCondition) {
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f'}, {'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -64,7 +65,7 @@ if (p0 AND p1) then p2
 }
 
 TEST_F(GlyphSegmentationTest, OrCondition) {
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{0xc1}, {0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -83,7 +84,7 @@ TEST_F(GlyphSegmentationTest, MergeBase_ViaConditions) {
   // {e, f} is too small, the merger should select {i, l} to merge since
   // there is a dependency between these two. The result should have no conditional
   // patches since ligatures will have been brought into the merged {e, f, i, l}
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -101,7 +102,7 @@ if (p2) then p2
 TEST_F(GlyphSegmentationTest, MergeBases) {
   // {e, f} is too smal, since no conditional patches exist it should merge with the next available base
   // which is {'j', 'k'}
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -120,7 +121,7 @@ TEST_F(GlyphSegmentationTest, MergeBases_MaxSize) {
   // {e, f} is too smal, since no conditional patches exist it will merge with the next available base
   // which is {'m', 'n', 'o', 'p'}. However that patch is too large, so the next one {j, k} will actually be 
   // chosen.
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {}, {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370, 700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -136,7 +137,7 @@ if (p2) then p2
 }
 
 TEST_F(GlyphSegmentationTest, MixedAndOr) {
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -154,7 +155,7 @@ if (p0 AND p1) then p2
 }
 
 TEST_F(GlyphSegmentationTest, UnmappedGlyphs_FallbackSegment) {
-  auto segmentation = GlyphSegmentation::CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
