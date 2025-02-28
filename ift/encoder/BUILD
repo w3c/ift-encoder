@@ -9,6 +9,8 @@ cc_library(
     "subset_definition.cc",
     "condition.h",
     "condition.cc",
+    "closure_glyph_segmenter.h",
+    "closure_glyph_segmenter.cc",
   ],
   deps = [
     "//ift/proto",
@@ -55,6 +57,23 @@ cc_test(
   size = "small",
   srcs = [
     "glyph_segmentation_test.cc",
+  ],
+  data = [
+    "//ift:testdata",
+    "//common:testdata",
+  ],
+  deps = [
+    ":encoder",
+     "@googletest//:gtest_main",
+     "//common",
+  ],
+)
+
+cc_test(
+  name = "closure_glyph_segmenter_test",
+  size = "small",
+  srcs = [
+    "closure_glyph_segmenter_test.cc",
   ],
   data = [
     "//ift:testdata",
