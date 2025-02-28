@@ -36,6 +36,9 @@ using common::to_hash_set;
 
 namespace ift::encoder {
 
+// An indepth description of how this segmentation implementation works can
+// be found in ../../docs/glyph_segmentation.md.
+
 // TODO(garretrieger): extensions/improvements that could be made:
 // - Make a HbSet class which implements hash and equality so we can use in map
 // keys and sets.
