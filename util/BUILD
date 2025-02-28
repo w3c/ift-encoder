@@ -28,9 +28,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "glyph_keyed_segmenter",
+    name = "closure_glyph_keyed_segmenter_util",
     srcs = [
-        "glyph_keyed_segmenter.cc",
+        "closure_glyph_keyed_segmenter_util.cc",
     ],
     deps = [
         "//ift",

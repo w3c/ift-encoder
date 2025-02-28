@@ -20,6 +20,7 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -74,6 +75,7 @@ using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
+using ift::encoder::ClosureGlyphSegmenter;
 
 StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -260,7 +262,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_unicodes;
 
-  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t>{}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -306,7 +308,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
 
   flat_hash_set<uint32_t> all_segments;
 
-  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t> {}));
+  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t>{}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
     btree_set<uint32_t> s;
@@ -388,7 +390,8 @@ int main(int argc, char** argv) {
   auto groups =
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
 
-  auto result = ift::encoder::GlyphSegmentation::CodepointToGlyphSegments(
+  ClosureGlyphSegmenter segmenter;
+  auto result = segmenter.CodepointToGlyphSegments(
       font->get(), {}, groups, absl::GetFlag(FLAGS_min_patch_size_bytes),
       absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (!result.ok()) {
