@@ -18,7 +18,7 @@ namespace ift::encoder {
  * glyph segmentations.
  *
  * More details about this specific approach can be found in:
- * ../../docs/closure_glyph_segmentation.md.
+ * ../../docs/experimental/closure_glyph_segmentation.md.
  */
 class ClosureGlyphSegmenter {
  public:

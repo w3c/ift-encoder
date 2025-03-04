@@ -25,10 +25,11 @@ both an f and i character it will load both patches, however this makes it possi
 to be used. Thus we need to make the fi glyph available in this case. One way to do that is to
 form a third patch containing the ligature glyph and assign the activation condition (f and i).
 
-Because the IFT font will use unicode code points in the activation conditions, it will be typical to
-express a desired segmentation of the original font using unicode code points. The remainder of
-this document describes a procedure for converting a desired unicode code point segmentation into a
-set of glyph patches with load conditions described in terms of those provided unicode segments.
+Because the IFT font will use unicode code points in the activation conditions, it will be typical
+to express a desired segmentation of the original font using unicode code points. The remainder of
+this document describes a possible procedure for converting a desired unicode code point
+segmentation into a set of glyph patches with load conditions described in terms of those provided
+unicode segments.
 
 Notably, this document does not aim to describe a solution to producing the unicode code point
 segmentation which is of high importance to the production of performant overall glyph
@@ -54,7 +55,7 @@ are performant.
 The approach laid out in this document is just one possible approach to solving the problem. This
 document aims primarily to describe how the prototype implementation in
 [closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) functions, and is not intended to
-present a the final (or only) solution to the problem. There are several unsolved problems and
+present the final (or only) solution to the problem. There are several unsolved problems and
 remaining areas for development in this particular approach:
 
 * Input segmentation generation: selecting good quality input code point segmentations is critically
