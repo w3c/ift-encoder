@@ -31,6 +31,20 @@ cc_binary(
 )
 
 cc_binary(
+    name = "generate_table_keyed_config",
+    srcs = [
+        "generate_table_keyed_config.cc",
+    ],
+    deps = [
+        ":encoder_config_cc_proto",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_binary(
     name = "closure_glyph_keyed_segmenter_util",
     srcs = [
         "closure_glyph_keyed_segmenter_util.cc",
@@ -40,6 +54,7 @@ cc_binary(
         "//ift/encoder",
         "//common",
         ":encoder_config_cc_proto",
+        ":load_codepoints",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
@@ -66,6 +81,22 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "load_codepoints",
+    srcs = [
+        "load_codepoints.cc",
+    ],
+    hdrs = [
+        "load_codepoints.h",
+    ],
+    deps = [
+        "//common",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@harfbuzz",
+    ],
+)
+
 cc_test(
     name = "convert_iftb_test",
     size = "small",
@@ -78,6 +109,23 @@ cc_test(
     ],
     deps = [
         ":convert_iftb",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "load_codepoints_test",
+    size = "small",
+    srcs = [
+        "load_codepoints_test.cc",
+    ],
+    data = [
+        "testdata/codepoints.txt",
+        "testdata/codepoints_invalid_1.txt",
+        "testdata/codepoints_invalid_2.txt",
+    ],
+    deps = [
+        ":load_codepoints",
         "@googletest//:gtest_main",
     ],
 )

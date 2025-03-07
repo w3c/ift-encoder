@@ -27,6 +27,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
 #include "util/encoder_config.pb.h"
+#include "util/load_codepoints.h"
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -86,65 +87,13 @@ using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
 
-StatusOr<FontData> LoadFile(const char* path) {
-  hb_blob_unique_ptr blob =
-      make_hb_blob(hb_blob_create_from_file_or_fail(path));
-  if (!blob.get()) {
-    return absl::NotFoundError(StrCat("File ", path, " was not found."));
-  }
-  return FontData(blob.get());
-}
-
-StatusOr<std::vector<uint32_t>> LoadCodepoints(const char* path) {
-  std::vector<uint32_t> out;
-  std::ifstream in(path);
-
-  if (!in.is_open()) {
-    return absl::NotFoundError(
-        StrCat("Codepoints file ", path, " was not found."));
-  }
-
-  std::string line;
-  while (std::getline(in, line)) {
-    std::istringstream iss(line);
-    std::string hex_code;
-    std::string description;
-
-    // Extract the hex code and description
-    if (iss >> hex_code >> std::ws) {
-      if (hex_code.empty() || hex_code.substr(0, 1) == "#") {
-        // comment line, skip
-        continue;
-      } else if (hex_code.substr(0, 2) == "0x") {
-        try {
-          uint32_t cp = std::stoul(hex_code.substr(2), nullptr, 16);
-          out.push_back(cp);
-        } catch (const std::out_of_range& oor) {
-          return absl::InvalidArgumentError(
-              StrCat("Error converting hex code '", hex_code,
-                     "' to integer: ", oor.what()));
-        } catch (const std::invalid_argument& ia) {
-          return absl::InvalidArgumentError(StrCat(
-              "Invalid argument for hex code '", hex_code, "': ", ia.what()));
-        }
-      } else {
-        return absl::InvalidArgumentError("Invalid hex code format: " +
-                                          hex_code);
-      }
-    }
-  }
-
-  in.close();
-  return out;
-}
-
 StatusOr<std::vector<uint32_t>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file) {
   hb_set_unique_ptr font_unicodes = make_hb_set();
   hb_face_collect_unicodes(font, font_unicodes.get());
   std::vector<uint32_t> codepoints_filtered;
   if (!codepoints_file.empty()) {
-    auto codepoints = TRY(LoadCodepoints(codepoints_file.c_str()));
+    auto codepoints = TRY(util::LoadCodepointsOrdered(codepoints_file.c_str()));
     for (auto cp : codepoints) {
       if (hb_set_has(font_unicodes.get(), cp)) {
         codepoints_filtered.push_back(cp);
@@ -162,7 +111,7 @@ StatusOr<std::vector<uint32_t>> TargetCodepoints(
 }
 
 StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
-  return TRY(LoadFile(filename)).face();
+  return TRY(util::LoadFile(filename)).face();
 }
 
 constexpr uint32_t NETWORK_REQUEST_BYTE_OVERHEAD = 75;
