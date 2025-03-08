@@ -1143,8 +1143,8 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
                                         &fetched_uris);
 
   // correspond to ids 3, 4, 6, d
-  btree_set<std::string> expected_uris{"0O.tk",   "1K.tk",   "1_0C.gk",
-                                       "1_0G.gk", "2_0C.gk", "2_0G.gk"};
+  btree_set<std::string> expected_uris{"0O.ift_tk",   "1K.ift_tk",   "1_0C.ift_gk",
+                                       "1_0G.ift_gk", "2_0C.ift_gk", "2_0G.ift_gk"};
 
   ASSERT_EQ(fetched_uris, expected_uris);
 

@@ -142,11 +142,11 @@ class Encoder {
   std::string UrlTemplate(uint32_t patch_set_id) const {
     if (patch_set_id == 0) {
       // patch_set_id 0 is always used for table keyed patches
-      return "{id}.tk";
+      return "{id}.ift_tk";
     }
 
     // All other ids are for glyph keyed.
-    return absl::StrCat(patch_set_id, "_{id}.gk");
+    return absl::StrCat(patch_set_id, "_{id}.ift_gk");
   }
 
   static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
