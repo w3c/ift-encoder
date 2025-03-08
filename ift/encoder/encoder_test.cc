@@ -668,24 +668,24 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   graph expected{
-      {"", {"ABCDEFGH|08.tk", "|wght[200..700]|0C.tk"}},
-      {"ABCDEFGH", {"ABCDEFGH|wght[200..700]|0G.tk"}},
+      {"", {"ABCDEFGH|08.ift_tk", "|wght[200..700]|0C.ift_tk"}},
+      {"ABCDEFGH", {"ABCDEFGH|wght[200..700]|0G.ift_tk"}},
       {"ABCDEFGH|wght[200..700]", {}},
-      {"|wght[200..700]", {"ABCDEFGH|wght[200..700]|0K.tk"}},
+      {"|wght[200..700]", {"ABCDEFGH|wght[200..700]|0K.ift_tk"}},
   };
   ASSERT_EQ(g, expected);
 
   // Patches that don't modify variation space should not modify gvar:
-  auto has_gvar = PatchHasGvar(encoding->patches, "08.tk");
+  auto has_gvar = PatchHasGvar(encoding->patches, "08.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_FALSE(*has_gvar);
 
-  has_gvar = PatchHasGvar(encoding->patches, "0K.tk");
+  has_gvar = PatchHasGvar(encoding->patches, "0K.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_FALSE(*has_gvar);
 
   // Patches that modify variation space should replace gvar:
-  has_gvar = PatchHasGvar(encoding->patches, "0G.tk");
+  has_gvar = PatchHasGvar(encoding->patches, "0G.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_TRUE(*has_gvar);
 }
@@ -910,11 +910,12 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0x0, 0x0, 0x0, 0x0,      // compat id[3]
       0x03,                    // default patch format = glyph keyed
       0x00, 0x00, 0x07,        // entry count = 7
-      0x00, 0x00, 0x00, 0x2c,  // entries offset
+      0x00, 0x00, 0x00, 0x30,  // entries offset
       0x00, 0x00, 0x00, 0x00,  // string data offset (NULL)
-      0x00, 0x09,              // uri template length
+      0x00, 0x0D,              // uri template length
       0x31, 0x5f, 0x7b, 0x69,  // uri template
-      0x64, 0x7d, 0x2e, 0x67,  // uri template
+      0x64, 0x7d, 0x2e, 0x69,  // uri template
+      0x66, 0x74, 0x5f, 0x67,  // uri template
       0x6b,                    // uri template
 
       // entry[0] {{2}} -> 2,
@@ -956,7 +957,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0xff, 0xff, 0xff   // delta -1, id = 6
   };
 
-  ASSERT_EQ(ift_table.span(), absl::Span<const uint8_t>(expected_format2, 96));
+  ASSERT_EQ(ift_table.span(), absl::Span<const uint8_t>(expected_format2, 100));
 }
 
 TEST_F(EncoderTest, RoundTripWoff2) {

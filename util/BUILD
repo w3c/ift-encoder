@@ -37,6 +37,7 @@ cc_binary(
     ],
     deps = [
         ":encoder_config_cc_proto",
+        ":load_codepoints",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/status:statusor",

@@ -8,7 +8,19 @@ capable of generating a segmentation plan.
 
 The encoder functionality can either be accessed programmatically via ift/encoder.h or via a command line tool.
 
-## Command Line
+## Producing IFT Encoded Fonts
+
+IFT encoded fonts are produced in two steps:
+1. An encoding config is generated which specifies how the font file should be split up in the IFT encoding.
+2. The IFT encoded font and patches are generated using the encoding config.
+
+### Generating Encoding Configs
+
+TODO...
+
+### Generating the IFT Encoding
+
+TODO...
 
 The font2ift command line tool can be used to convert a non incremental font into an incremental font and collection of associated
 patches. Example usage:

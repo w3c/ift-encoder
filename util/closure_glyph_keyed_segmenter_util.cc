@@ -400,7 +400,7 @@ int main(int argc, char** argv) {
 
   double over_ideal_percent =
       (((double)*cost) / ((double)*ideal_cost) * 100.0) - 100.0;
-  std::cout << "%_extra_over_ideal = " << over_ideal_percent << std::endl;
+  std::cerr << "%_extra_over_ideal = " << over_ideal_percent << std::endl;
 
   return 0;
 }
