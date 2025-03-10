@@ -78,7 +78,7 @@ rust_library(
       ":font_types",
       "@fontations_deps//:bytemuck"
     ],
-    crate_features = ["bytemuck", "std"],
+    crate_features = ["bytemuck", "std", "ift"],
 )
 
 rust_library(
@@ -110,6 +110,7 @@ rust_library(
     deps = [
       "@fontations_deps//:brotlic",
       "@fontations_deps//:brotlic-sys",
+      "@fontations_deps//:cfg-if",
     ],
-    crate_features = ["bytemuck"],
+    crate_features = ["bytemuck", "c-brotli"],
 )
