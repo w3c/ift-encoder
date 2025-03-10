@@ -458,8 +458,8 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     std::string next_glyph_keyed_uri_template;
     CompatId next_glyph_keyed_compat_id;
     auto sc = EnsureGlyphKeyedPatchesPopulated(
-        context, base_subset.design_space, glyph_keyed_uri_template,
-        glyph_keyed_compat_id);
+        context, combined_subset.design_space, next_glyph_keyed_uri_template,
+        next_glyph_keyed_compat_id);
     if (!sc.ok()) {
       return sc;
     }

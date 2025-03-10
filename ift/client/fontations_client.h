@@ -22,7 +22,7 @@ typedef absl::btree_map<std::string, absl::btree_set<std::string>> graph;
  * representation of the graph into 'out'.
  */
 absl::Status ToGraph(const ift::encoder::Encoder::Encoding& encoding,
-                     graph& out);
+                     graph& out, bool include_patch_paths = false);
 
 /**
  * Runs 'ift_extend' on the IFT font created by encoder and returns the

@@ -219,7 +219,7 @@ class Encoder {
     // the replacement differ is used during design space expansions, both
     // gvar and "IFT " are overwritten to be compatible with the new design
     // space. Glyph segment patches for all prev loaded glyphs will be
-    // downloaded to repopulate variation data for existing glyphs.
+    // downloaded to repopulate variation data for any already loaded glyphs.
     return new TableKeyedDiff(base_compat_id, {"glyf", "loca"},
                               {"IFTX", "gvar"});
   }

@@ -109,7 +109,8 @@ StatusOr<std::string> Exec(const char* cmd) {
   return result;
 }
 
-Status ToGraph(const Encoder::Encoding& encoding, graph& out) {
+Status ToGraph(const Encoder::Encoding& encoding, graph& out,
+               bool include_patch_paths) {
   auto font_path = WriteFontToDisk(encoding);
   if (!font_path.ok()) {
     return font_path.status();
@@ -117,6 +118,10 @@ Status ToGraph(const Encoder::Encoding& encoding, graph& out) {
 
   std::string command = absl::StrCat(
       "${TEST_SRCDIR}/+_repo_rules+fontations/ift_graph --font=", *font_path);
+  if (include_patch_paths) {
+    command = absl::StrCat(command, " --include-patch-paths");
+  }
+
   auto r = Exec(command.c_str());
   if (!r.ok()) {
     return r.status();

@@ -1033,7 +1033,7 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
 
-  // target paritions: {{0, 1}, {2}, {3, 4}} + add wght axis
+  // target paritions: {0, 1}, {2}, {3, 4} + add wght axis
   SubsetDefinition base_def;
   base_def.codepoints.insert(segment_0.begin(), segment_0.end());
   base_def.codepoints.insert(segment_1.begin(), segment_1.end());
@@ -1082,6 +1082,22 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   // so ignore diffs in the first 7 bytes
   ASSERT_TRUE(
       GvarDataMatches(orig_face.get(), extended_face.get(), chunk3_cp, 7));
+
+  // Phase 3: add more codepoints to trigger additional table keyed patch.
+  //          should not clobber previously loaded gvar data since we aren't
+  //          changing design space.
+  encoding->init_font.shallow_copy(*extended);
+  extended = ExtendWithDesignSpace(*encoding, {chunk2_cp}, {},
+                                   {{kWght, *AxisRange::Range(100, 900)}});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  extended_face = extended->face();
+
+  ASSERT_TRUE(GvarHasLongOffsets(*extended));
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk0_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk1_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk2_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk3_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
 }
 
 TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {

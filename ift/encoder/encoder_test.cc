@@ -32,6 +32,7 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Span;
 using absl::Status;
+using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
 using common::AxisRange;
@@ -169,6 +170,18 @@ class EncoderTest : public ::testing::Test {
     return result;
   }
 };
+
+StatusOr<bool> PatchHasGvar(const flat_hash_map<std::string, FontData>& patches,
+                            const std::string& url) {
+  auto it = patches.find(url);
+  if (it == patches.end()) {
+    return absl::NotFoundError(
+        StrCat("Patch ", url, " not found in encoding output."));
+  }
+
+  const auto& font_data = it->second;
+  return font_data.str().find("gvar") != std::string::npos;
+}
 
 // TODO(garretrieger): additional tests:
 // - rejects duplicate glyph data segment ids.
@@ -613,6 +626,68 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   // - segment 4 (glyph keyed)
   // - shared brotli to (segment 3 + 4)
   // TODO XXXXX Check graph instead
+}
+
+TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
+  Encoder encoder;
+  {
+    hb_face_t* face = vf_font.reference_face();
+    encoder.SetFace(face);
+    hb_face_destroy(face);
+  }
+
+  auto s = encoder.AddGlyphDataPatch(0, {37, 38, 39, 40});
+  s.Update(encoder.AddGlyphDataPatch(1, {41, 42, 43, 44}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+      SubsetDefinition::Codepoints(
+          flat_hash_set<uint32_t>{0x41, 0x42, 0x43, 0x44}),
+      0)));
+  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+      SubsetDefinition::Codepoints(
+          flat_hash_set<uint32_t>{0x45, 0x46, 0x47, 0x48}),
+      1)));
+
+  SubsetDefinition base_subset;
+  base_subset.design_space[kWdth] = AxisRange::Point(100.0f);
+  base_subset.design_space[kWght] = AxisRange::Point(300.0f);
+  s.Update(encoder.SetBaseSubsetFromDef(base_subset));
+
+  flat_hash_set<uint32_t> extension_segment = {0x41, 0x42, 0x43, 0x44,
+                                               0x45, 0x46, 0x47, 0x48};
+  encoder.AddNonGlyphDataSegment(extension_segment);
+  encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(200.0f, 700.0f)}});
+
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto encoding = encoder.Encode();
+
+  graph g;
+  auto sc = ToGraph(*encoding, g, true);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  graph expected{
+      {"", {"ABCDEFGH|08.tk", "|wght[200..700]|0C.tk"}},
+      {"ABCDEFGH", {"ABCDEFGH|wght[200..700]|0G.tk"}},
+      {"ABCDEFGH|wght[200..700]", {}},
+      {"|wght[200..700]", {"ABCDEFGH|wght[200..700]|0K.tk"}},
+  };
+  ASSERT_EQ(g, expected);
+
+  // Patches that don't modify variation space should not modify gvar:
+  auto has_gvar = PatchHasGvar(encoding->patches, "08.tk");
+  ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
+  ASSERT_FALSE(*has_gvar);
+
+  has_gvar = PatchHasGvar(encoding->patches, "0K.tk");
+  ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
+  ASSERT_FALSE(*has_gvar);
+
+  // Patches that modify variation space should replace gvar:
+  has_gvar = PatchHasGvar(encoding->patches, "0G.tk");
+  ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
+  ASSERT_TRUE(*has_gvar);
 }
 
 TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
