@@ -9,13 +9,13 @@ This implementation is still in the early stages and as at the moment is work in
 We aim to keep it updated and consistent with the current IFT specification working draft
 found [here](https://w3c.github.io/IFT/Overview.html).
 
-The current implementation is capable of producing a spec compliant encoding, but does not 
-yet fully support all aspects of the specification. Notably support is missing for:
+The current implementation is capable of producing a spec-compliant encoding, but does not 
+yet fully support all aspects of the specification. Notably:
 
-*  Generating format 1 patch maps.
-*  Encoding CFF and CFF2 based fonts.
+*  Generating format 1 patch maps are not generated.
+*  Encoding CFF and CFF2 based fonts are not supported.
 *  Handling of feature and design space extension in an encoding is only partially implemented.
-*  Not all encoder config options are supported yet. These are marked as unimplmented in the schema.
+*  Not all encoder config options are supported yet. These are marked as unimplemented in the schema.
 
 Additionally, the produced encodings may not be fully optimized for minimal size yet.
 
