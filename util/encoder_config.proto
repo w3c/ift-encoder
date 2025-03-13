@@ -96,12 +96,16 @@ message EncoderConfig {
   // only a single patch which adds everything remaining.
   //
   // Defaults to unlimited depth.
+  //
+  // Note: this is currently UNIMPLEMENTED in the encoder.
   uint32 max_depth = 5;
 
   // In the generated table keyed patch graph every node (in addition to the usual patches) will
   // have a patch available which adds everything remaining to the font. This makes it possible
   // for the client to reach any combination of coverage in at most one round trip from any
   // intermediate (or initial) state.
+  //
+  // Note: this is currently UNIMPLEMENTED in the encoder.
   bool include_all_segment_patches = 6;
 
   // The initial_* fields defines all of the data that the initial IFT font will include. If these are all
@@ -147,7 +151,10 @@ message EncoderConfig {
 // f_1 AND f_2 AND ...
 message ActivationConditionProto {
   repeated CodepointSets required_codepoint_sets = 1;
+
+  // Note: handling of required_features is currently UNIMPLEMENTED.
   Features required_features = 2;
+  
   uint32 activated_patch = 3;
 }
 
