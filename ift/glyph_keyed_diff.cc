@@ -11,6 +11,7 @@
 #include "common/compat_id.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
+#include "common/try.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_map.h"
 
@@ -19,6 +20,7 @@ using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using absl::string_view;
 using common::BrotliBinaryDiff;
 using common::CompatId;
 using common::FontData;
@@ -81,11 +83,47 @@ StatusOr<FontData> GlyphKeyedDiff::CreatePatch(
   return result;
 }
 
+struct GlyfDataOperator {
+  GlyfDataOperator(hb_face_t* face) : face_(face) {}
+  hb_face_t* face_;
+
+  StatusOr<string_view> operator()(hb_codepoint_t gid) const {
+    return FontHelper::GlyfData(face_, gid);
+  }
+};
+
+struct GvarDataOperator {
+  GvarDataOperator(hb_face_t* face) : face_(face) {}
+  hb_face_t* face_;
+
+  StatusOr<string_view> operator()(hb_codepoint_t gid) const {
+    return FontHelper::GvarData(face_, gid);
+  }
+};
+
+template <typename Operator>
+Status PopulateTableData(const absl::btree_set<uint32_t>& gids,
+                         uint32_t offset_bias, Operator glyph_data_lookup,
+                         std::string& per_glyph_data,
+                         std::string& offset_data) {
+  for (auto gid : gids) {
+    auto data = glyph_data_lookup(gid);
+    if (!data.ok()) {
+      return data.status();
+    }
+
+    FontHelper::WriteUInt32(offset_bias + per_glyph_data.size(), offset_data);
+    per_glyph_data += *data;
+  }
+  return absl::OkStatus();
+}
+
 StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
     const btree_set<uint32_t>& gids, bool u16_gids) const {
   // check for unsupported tags.
   for (auto tag : tags_) {
-    if (tag != FontHelper::kGlyf && tag != FontHelper::kGvar) {
+    if (tag != FontHelper::kGlyf && tag != FontHelper::kGvar &&
+        tag != FontHelper::kCFF) {
       return absl::InvalidArgumentError(
           "Unsupported table type for glyph keyed diff.");
     }
@@ -103,19 +141,15 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
                       face_tags.contains(FontHelper::kLoca);
   bool include_gvar = tags_.contains(FontHelper::kGvar) &&
                       face_tags.contains(FontHelper::kGvar);
+  bool include_cff =
+      tags_.contains(FontHelper::kCFF) && face_tags.contains(FontHelper::kCFF);
 
   uint32_t glyph_count = gids.size();
   uint32_t glyph_id_width = u16_gids ? 2 : 3;
-  uint32_t table_count = (include_glyf ? 1 : 0) + (include_gvar ? 1 : 0);
+  uint32_t table_count =
+      (include_glyf ? 1 : 0) + (include_gvar ? 1 : 0) + (include_cff ? 1 : 0);
   uint32_t header_size = 5 + glyph_id_width * glyph_count + table_count * 4 +
                          4 * glyph_count * table_count + 4;
-
-  if (tags_.contains(FontHelper::kCFF) &&
-      face_tags.contains(FontHelper::kCFF)) {
-    // TODO(garretrieger): add CFF support
-    return absl::UnimplementedError(
-        "CFF glyph keyed patching not yet implemented.");
-  }
 
   if (tags_.contains(FontHelper::kCFF2) &&
       face_tags.contains(FontHelper::kCFF2)) {
@@ -126,30 +160,20 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
 
   if (include_glyf) {
     processed_tags.insert(FontHelper::kGlyf);
-
-    for (auto gid : gids) {
-      auto data = FontHelper::GlyfData(face.get(), gid);
-      if (!data.ok()) {
-        return data.status();
-      }
-
-      FontHelper::WriteUInt32(header_size + per_glyph_data.size(), offset_data);
-      per_glyph_data += *data;
-    }
+    GlyfDataOperator data_lookup(face.get());
+    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                           offset_data));
   }
 
   if (include_gvar) {
     processed_tags.insert(FontHelper::kGvar);
+    GvarDataOperator data_lookup(face.get());
+    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                           offset_data));
+  }
 
-    for (auto gid : gids) {
-      auto data = FontHelper::GvarData(face.get(), gid);
-      if (!data.ok()) {
-        return data.status();
-      }
-
-      FontHelper::WriteUInt32(header_size + per_glyph_data.size(), offset_data);
-      per_glyph_data += *data;
-    }
+  if (include_cff) {
+    // TODO .....
   }
 
   // Add the trailing offset
