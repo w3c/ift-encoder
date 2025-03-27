@@ -32,7 +32,7 @@
 #define HAVE_FONTCONFIG 1
 
 /* Have FreeType 2 library */
-#define HAVE_FREETYPE 1
+/* #undef HAVE_FREETYPE */
 
 /* Define to 1 if you have the `FT_Done_MM_Var' function. */
 #define HAVE_FT_DONE_MM_VAR 1
