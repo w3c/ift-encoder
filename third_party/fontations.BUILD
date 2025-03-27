@@ -43,7 +43,6 @@ rust_library(
       ":klippa",
       "@fontations_deps//:data-encoding",
       "@fontations_deps//:data-encoding-macro",
-      "@fontations_deps//:uri-template-system",
     ],
 )
 

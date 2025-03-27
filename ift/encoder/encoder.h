@@ -211,7 +211,7 @@ class Encoder {
 
   static ift::TableKeyedDiff* MixedModeTableKeyedDiff(
       common::CompatId base_compat_id) {
-    return new TableKeyedDiff(base_compat_id, {"IFTX", "glyf", "loca", "gvar"});
+    return new TableKeyedDiff(base_compat_id, {"IFTX", "glyf", "loca", "gvar", "CFF "});
   }
 
   static ift::TableKeyedDiff* ReplaceIftMapTableKeyedDiff(
@@ -220,7 +220,7 @@ class Encoder {
     // gvar and "IFT " are overwritten to be compatible with the new design
     // space. Glyph segment patches for all prev loaded glyphs will be
     // downloaded to repopulate variation data for any already loaded glyphs.
-    return new TableKeyedDiff(base_compat_id, {"glyf", "loca"},
+    return new TableKeyedDiff(base_compat_id, {"glyf", "loca", "CFF "},
                               {"IFTX", "gvar"});
   }
 
