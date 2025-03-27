@@ -108,6 +108,20 @@ StatusOr<string_view> FontHelper::GvarData(const hb_face_t* face,
   return reader.DataFor(gid);
 }
 
+FontData FontHelper::CffData(hb_face_t* face, uint32_t gid) {
+  hb_blob_t* data_blob = hb_subset_cff_get_charstring_data(face, gid);
+  FontData data(data_blob);
+  hb_blob_destroy(data_blob);
+  return data;
+}
+
+FontData FontHelper::Cff2Data(hb_face_t* face, uint32_t gid) {
+  hb_blob_t* data_blob = hb_subset_cff2_get_charstring_data(face, gid);
+  FontData data(data_blob);
+  hb_blob_destroy(data_blob);
+  return data;
+}
+
 StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {
   auto gvar = TableData(face, kGvar);
   if (gvar.empty()) {

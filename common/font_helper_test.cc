@@ -356,6 +356,25 @@ TEST_F(FontHelperTest, GvarData) {
   ASSERT_EQ(data->substr(0, 11), expected_str);
 }
 
+TEST_F(FontHelperTest, CffData) {
+  auto data = FontHelper::CffData(noto_sans_jp_otf.get(), 2);
+
+  // this was manually pulled out of the CFF table.
+  const uint8_t expected[38] = {0xfb, 0xcc, 0xf7, 0x09, 0x0a, 0xf7, 0x07, 0x0a,
+                                0x13, 0x50, 0x8f, 0x0a, 0x13, 0x60, 0xb6, 0xfd,
+                                0x26, 0x15, 0xb0, 0xa8, 0xa7, 0xb4, 0x1f, 0x13,
+                                0xa0, 0xb4, 0x6e, 0xa9, 0x66, 0x67, 0x6d, 0x6d,
+                                0x62, 0x1e, 0x13, 0x60, 0xf4, 0x0a};
+  string_view expected_str((const char*)expected, 38);
+
+  ASSERT_EQ(data.size(), 38);
+  ASSERT_EQ(data.str(), expected_str);
+
+  // undefined glyph is empty blob.
+  data = FontHelper::CffData(noto_sans_jp_otf.get(), 20000);
+  ASSERT_EQ(data.size(), 0);
+}
+
 TEST_F(FontHelperTest, GvarSharedTupleCount) {
   auto count = FontHelper::GvarSharedTupleCount(roboto_vf.get());
   ASSERT_TRUE(count.ok()) << count.status();

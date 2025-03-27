@@ -52,6 +52,9 @@ cc_library(
         "@harfbuzz",
         "@woff2",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+    ],
 )
 
 cc_library(
