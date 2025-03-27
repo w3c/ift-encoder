@@ -101,6 +101,16 @@ struct GvarDataOperator {
   }
 };
 
+struct CffDataOperator {
+  CffDataOperator(hb_face_t* face) : face_(face) {}
+  hb_face_t* face_;
+
+  StatusOr<std::string> operator()(hb_codepoint_t gid) {
+    FontData data = FontHelper::CffData(face_, gid);
+    return data.string();
+  }
+};
+
 template <typename Operator>
 Status PopulateTableData(const absl::btree_set<uint32_t>& gids,
                          uint32_t offset_bias, Operator glyph_data_lookup,
@@ -173,7 +183,10 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
   }
 
   if (include_cff) {
-    // TODO .....
+    processed_tags.insert(FontHelper::kCFF);
+    CffDataOperator data_lookup(face.get());
+    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                           offset_data));
   }
 
   // Add the trailing offset
