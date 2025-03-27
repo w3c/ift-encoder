@@ -97,6 +97,27 @@ const uint8_t data_stream_u16_short_loca[] = {
     0xff, 0x00, 0x96, 0xfe, 0xc6, 0xb8, 0xd5, 0xfc, 0x95, 0xff, 0x03, 0x3b,
     0xfb, 0xc6, 0x03, 0x34, 0xfc, 0xcc, 0x04, 0x3a, 0xfc, 0xd6, 0x03, 0x2a};
 
+const uint8_t data_stream_u16_cff[57] = {
+    // num header bytes = 37
+    0x00, 0x00, 0x00, 0x01,  // glyphCount
+    0x01,                    // table count
+
+    // glyphIds[1]
+    0x00, 0x02,  // gid 2
+
+    // tables[1]
+    'C', 'F', 'F', ' ',
+
+    // offset stream
+    0x00, 0x00, 0x00, 0x13,  // gid 2
+    0x00, 0x00, 0x00, 0x39,  // end (+38 bytes)
+
+    // gid 2 - A (38 bytes)
+    0xfb, 0xcc, 0xf7, 0x09, 0x0a, 0xf7, 0x07, 0x0a, 0x13, 0x50, 0x8f, 0x0a,
+    0x13, 0x60, 0xb6, 0xfd, 0x26, 0x15, 0xb0, 0xa8, 0xa7, 0xb4, 0x1f, 0x13,
+    0xa0, 0xb4, 0x6e, 0xa9, 0x66, 0x67, 0x6d, 0x6d, 0x62, 0x1e, 0x13, 0x60,
+    0xf4, 0x0a};
+
 namespace ift {
 
 class GlyphKeyedDiffTest : public ::testing::Test {
@@ -106,6 +127,7 @@ class GlyphKeyedDiffTest : public ::testing::Test {
     original = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
     roboto = from_file("common/testdata/Roboto-Regular.Awesome.ttf");
     roboto_vf = from_file("common/testdata/Roboto[wdth,wght].abcd.ttf");
+    noto_sans_jp_cff = from_file("common/testdata/NotoSansJP-Regular.otf");
   }
 
   FontData from_file(const char* filename) {
@@ -141,6 +163,7 @@ class GlyphKeyedDiffTest : public ::testing::Test {
   FontData original;
   FontData roboto;
   FontData roboto_vf;
+  FontData noto_sans_jp_cff;
   BrotliBinaryPatch unbrotli;
 };
 
@@ -222,6 +245,32 @@ TEST_F(GlyphKeyedDiffTest, CreatePatch_Glyf_ShortLoca) {
     ASSERT_EQ(uncompressed_stream.str(),
               absl::string_view((const char*)data_stream_u16_short_loca, 543));
   }
+}
+
+TEST_F(GlyphKeyedDiffTest, CreatePatch_Cff) {
+  const uint8_t header[29] = {
+      'i',  'f',  'g',  'k',  0x00, 0x00, 0x00, 0x00,  // reserved
+      0x00,                                            // flags
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
+      0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04,  // compat id
+      0x00, 0x00, 0x00, 0x39,  // max uncompressed length (57 bytes)
+  };
+
+  GlyphKeyedDiff differ(noto_sans_jp_cff, CompatId(1, 2, 3, 4),
+                        {FontHelper::kCFF});
+  auto patch = differ.CreatePatch({2});
+  ASSERT_TRUE(patch.ok()) << patch.status();
+
+  ASSERT_EQ(patch->str(0, 29), absl::string_view((const char*)header, 29));
+
+  FontData empty;
+  FontData compressed_stream(patch->str(29));
+  FontData uncompressed_stream;
+  auto status =
+     unbrotli.Patch(empty, compressed_stream, &uncompressed_stream);
+   ASSERT_TRUE(status.ok()) << status;
+   ASSERT_EQ(uncompressed_stream.str(),
+           absl::string_view((const char*)data_stream_u16_cff, 57));
 }
 
 TEST_F(GlyphKeyedDiffTest, CreatePatch_Gvar) {
