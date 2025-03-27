@@ -314,7 +314,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
   }
 
   GlyphKeyedDiff differ(instance, compat_id,
-                        {FontHelper::kGlyf, FontHelper::kGvar});
+                        {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF});
 
   for (uint32_t index : reachable_segments) {
     auto e = glyph_data_patches_.find(index);
