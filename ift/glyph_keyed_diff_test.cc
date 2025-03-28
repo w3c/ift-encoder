@@ -266,11 +266,10 @@ TEST_F(GlyphKeyedDiffTest, CreatePatch_Cff) {
   FontData empty;
   FontData compressed_stream(patch->str(29));
   FontData uncompressed_stream;
-  auto status =
-     unbrotli.Patch(empty, compressed_stream, &uncompressed_stream);
-   ASSERT_TRUE(status.ok()) << status;
-   ASSERT_EQ(uncompressed_stream.str(),
-           absl::string_view((const char*)data_stream_u16_cff, 57));
+  auto status = unbrotli.Patch(empty, compressed_stream, &uncompressed_stream);
+  ASSERT_TRUE(status.ok()) << status;
+  ASSERT_EQ(uncompressed_stream.str(),
+            absl::string_view((const char*)data_stream_u16_cff, 57));
 }
 
 TEST_F(GlyphKeyedDiffTest, CreatePatch_Gvar) {
