@@ -211,7 +211,8 @@ class Encoder {
 
   static ift::TableKeyedDiff* MixedModeTableKeyedDiff(
       common::CompatId base_compat_id) {
-    return new TableKeyedDiff(base_compat_id, {"IFTX", "glyf", "loca", "gvar", "CFF "});
+    return new TableKeyedDiff(base_compat_id,
+                              {"IFTX", "glyf", "loca", "gvar", "CFF "});
   }
 
   static ift::TableKeyedDiff* ReplaceIftMapTableKeyedDiff(
