@@ -623,8 +623,7 @@ StatusOr<FontData> Encoder::CutSubset(const ProcessingContext& context,
   }
 
   auto tags = FontHelper::GetTags(font);
-  if (IsMixedMode() && def.IsVariable() &&
-      tags.contains(FontHelper::kGvar)) {
+  if (IsMixedMode() && def.IsVariable() && tags.contains(FontHelper::kGvar)) {
     // In mixed mode glyph keyed patches handles gvar, except for when design
     // space is expanded, in which case a gvar table should be patched in that
     // only has coverage of the base (root) subset definition + the current

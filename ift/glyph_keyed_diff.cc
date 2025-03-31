@@ -111,6 +111,16 @@ struct CffDataOperator {
   }
 };
 
+struct Cff2DataOperator {
+  Cff2DataOperator(hb_face_t* face) : face_(face) {}
+  hb_face_t* face_;
+
+  StatusOr<std::string> operator()(hb_codepoint_t gid) {
+    FontData data = FontHelper::Cff2Data(face_, gid);
+    return data.string();
+  }
+};
+
 template <typename Operator>
 Status PopulateTableData(const absl::btree_set<uint32_t>& gids,
                          uint32_t offset_bias, Operator glyph_data_lookup,
@@ -133,7 +143,7 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
   // check for unsupported tags.
   for (auto tag : tags_) {
     if (tag != FontHelper::kGlyf && tag != FontHelper::kGvar &&
-        tag != FontHelper::kCFF) {
+        tag != FontHelper::kCFF && tag != FontHelper::kCFF2) {
       return absl::InvalidArgumentError(
           "Unsupported table type for glyph keyed diff.");
     }
@@ -153,20 +163,15 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
                       face_tags.contains(FontHelper::kGvar);
   bool include_cff =
       tags_.contains(FontHelper::kCFF) && face_tags.contains(FontHelper::kCFF);
+  bool include_cff2 = tags_.contains(FontHelper::kCFF2) &&
+                      face_tags.contains(FontHelper::kCFF2);
 
   uint32_t glyph_count = gids.size();
   uint32_t glyph_id_width = u16_gids ? 2 : 3;
-  uint32_t table_count =
-      (include_glyf ? 1 : 0) + (include_gvar ? 1 : 0) + (include_cff ? 1 : 0);
+  uint32_t table_count = (include_glyf ? 1 : 0) + (include_gvar ? 1 : 0) +
+                         (include_cff ? 1 : 0) + (include_cff2 ? 1 : 0);
   uint32_t header_size = 5 + glyph_id_width * glyph_count + table_count * 4 +
                          4 * glyph_count * table_count + 4;
-
-  if (tags_.contains(FontHelper::kCFF2) &&
-      face_tags.contains(FontHelper::kCFF2)) {
-    // TODO(garretrieger): add CFF2 support
-    return absl::UnimplementedError(
-        "CFF2 glyph keyed patching not yet implemented.");
-  }
 
   if (include_glyf) {
     processed_tags.insert(FontHelper::kGlyf);
@@ -185,6 +190,13 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
   if (include_cff) {
     processed_tags.insert(FontHelper::kCFF);
     CffDataOperator data_lookup(face.get());
+    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                           offset_data));
+  }
+
+  if (include_cff2) {
+    processed_tags.insert(FontHelper::kCFF2);
+    Cff2DataOperator data_lookup(face.get());
     TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
                            offset_data));
   }

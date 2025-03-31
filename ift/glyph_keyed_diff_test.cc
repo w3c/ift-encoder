@@ -98,7 +98,6 @@ const uint8_t data_stream_u16_short_loca[] = {
     0xfb, 0xc6, 0x03, 0x34, 0xfc, 0xcc, 0x04, 0x3a, 0xfc, 0xd6, 0x03, 0x2a};
 
 const uint8_t data_stream_u16_cff[57] = {
-    // num header bytes = 37
     0x00, 0x00, 0x00, 0x01,  // glyphCount
     0x01,                    // table count
 
@@ -118,6 +117,30 @@ const uint8_t data_stream_u16_cff[57] = {
     0xa0, 0xb4, 0x6e, 0xa9, 0x66, 0x67, 0x6d, 0x6d, 0x62, 0x1e, 0x13, 0x60,
     0xf4, 0x0a};
 
+const uint8_t data_stream_u16_cff2[115] = {
+    0x00, 0x00, 0x00, 0x01,  // glyphCount
+    0x01,                    // table count
+
+    // glyphIds[1]
+    0x00, 0x22,  // gid 34
+
+    // tables[1]
+    'C', 'F', 'F', '2',
+
+    // offset stream
+    0x00, 0x00, 0x00, 0x13,  // gid 34
+    0x00, 0x00, 0x00, 0x73,  // end (+96 bytes)
+
+    // gid 34 - A (96 bytes)
+    0x96, 0x78, 0x8c, 0x10, 0x16, 0xb0, 0xf7, 0x25, 0x8c, 0x10, 0x06, 0xf7,
+    0x2d, 0xf8, 0x47, 0xaa, 0xe3, 0xa5, 0xd5, 0xa6, 0xe6, 0x4f, 0x4c, 0x7f,
+    0x7d, 0x85, 0x98, 0x82, 0x7e, 0x93, 0x10, 0x19, 0x8f, 0x06, 0xa6, 0x30,
+    0xa4, 0x41, 0xaa, 0x33, 0x84, 0x9a, 0x85, 0x7c, 0x80, 0x99, 0x91, 0x10,
+    0x08, 0xf7, 0x2b, 0xfc, 0x47, 0xb3, 0x51, 0xca, 0xf7, 0x28, 0x8e, 0x10,
+    0x8b, 0xfb, 0x98, 0xf9, 0x6a, 0xa8, 0x9e, 0x8d, 0x10, 0x05, 0x6a, 0xfb,
+    0x49, 0x8c, 0x10, 0x06, 0xfb, 0x27, 0xfc, 0x68, 0xd4, 0x21, 0x8d, 0x10,
+    0x15, 0xf7, 0xd8, 0xab, 0xfb, 0xd8, 0xaf, 0xf5, 0x67, 0x8e, 0x10, 0x06};
+
 namespace ift {
 
 class GlyphKeyedDiffTest : public ::testing::Test {
@@ -128,6 +151,7 @@ class GlyphKeyedDiffTest : public ::testing::Test {
     roboto = from_file("common/testdata/Roboto-Regular.Awesome.ttf");
     roboto_vf = from_file("common/testdata/Roboto[wdth,wght].abcd.ttf");
     noto_sans_jp_cff = from_file("common/testdata/NotoSansJP-Regular.otf");
+    noto_sans_jp_cff2 = from_file("common/testdata/NotoSansJP-VF.subset.otf");
   }
 
   FontData from_file(const char* filename) {
@@ -164,6 +188,7 @@ class GlyphKeyedDiffTest : public ::testing::Test {
   FontData roboto;
   FontData roboto_vf;
   FontData noto_sans_jp_cff;
+  FontData noto_sans_jp_cff2;
   BrotliBinaryPatch unbrotli;
 };
 
@@ -270,6 +295,31 @@ TEST_F(GlyphKeyedDiffTest, CreatePatch_Cff) {
   ASSERT_TRUE(status.ok()) << status;
   ASSERT_EQ(uncompressed_stream.str(),
             absl::string_view((const char*)data_stream_u16_cff, 57));
+}
+
+TEST_F(GlyphKeyedDiffTest, CreatePatch_Cff2) {
+  const uint8_t header[29] = {
+      'i',  'f',  'g',  'k',  0x00, 0x00, 0x00, 0x00,  // reserved
+      0x00,                                            // flags
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
+      0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04,  // compat id
+      0x00, 0x00, 0x00, 0x73,  // max uncompressed length (115 bytes)
+  };
+
+  GlyphKeyedDiff differ(noto_sans_jp_cff2, CompatId(1, 2, 3, 4),
+                        {FontHelper::kCFF2});
+  auto patch = differ.CreatePatch({34});
+  ASSERT_TRUE(patch.ok()) << patch.status();
+
+  ASSERT_EQ(patch->str(0, 29), absl::string_view((const char*)header, 29));
+
+  FontData empty;
+  FontData compressed_stream(patch->str(29));
+  FontData uncompressed_stream;
+  auto status = unbrotli.Patch(empty, compressed_stream, &uncompressed_stream);
+  ASSERT_TRUE(status.ok()) << status;
+  ASSERT_EQ(uncompressed_stream.str(),
+            absl::string_view((const char*)data_stream_u16_cff2, 115));
 }
 
 TEST_F(GlyphKeyedDiffTest, CreatePatch_Gvar) {

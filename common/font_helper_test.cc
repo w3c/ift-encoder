@@ -68,6 +68,7 @@ class FontHelperTest : public ::testing::Test {
  protected:
   FontHelperTest()
       : noto_sans_jp_otf(make_hb_face(nullptr)),
+        noto_sans_vf_jp_otf(make_hb_face(nullptr)),
         noto_sans_ift_ttf(make_hb_face(nullptr)),
         roboto_ab(make_hb_face(nullptr)),
         roboto_Awesome(make_hb_face(nullptr)),
@@ -99,11 +100,16 @@ class FontHelperTest : public ::testing::Test {
     noto_sans_jp_otf = make_hb_face(hb_face_create(blob.get(), 0));
 
     blob = make_hb_blob(
+        hb_blob_create_from_file("common/testdata/NotoSansJP-VF.subset.otf"));
+    noto_sans_vf_jp_otf = make_hb_face(hb_face_create(blob.get(), 0));
+
+    blob = make_hb_blob(
         hb_blob_create_from_file("ift/testdata/NotoSansJP-Regular.ift.ttf"));
     noto_sans_ift_ttf = make_hb_face(hb_face_create(blob.get(), 0));
   }
 
   hb_face_unique_ptr noto_sans_jp_otf;
+  hb_face_unique_ptr noto_sans_vf_jp_otf;
   hb_face_unique_ptr noto_sans_ift_ttf;
   hb_face_unique_ptr roboto_ab;
   hb_face_unique_ptr roboto_Awesome;
@@ -372,6 +378,29 @@ TEST_F(FontHelperTest, CffData) {
 
   // undefined glyph is empty blob.
   data = FontHelper::CffData(noto_sans_jp_otf.get(), 20000);
+  ASSERT_EQ(data.size(), 0);
+}
+
+TEST_F(FontHelperTest, Cff2Data) {
+  auto data = FontHelper::Cff2Data(noto_sans_vf_jp_otf.get(), 34);
+
+  // this was manually pulled out of the CFF2 table.
+  const uint8_t expected[96] = {
+      0x96, 0x78, 0x8c, 0x10, 0x16, 0xb0, 0xf7, 0x25, 0x8c, 0x10, 0x06, 0xf7,
+      0x2d, 0xf8, 0x47, 0xaa, 0xe3, 0xa5, 0xd5, 0xa6, 0xe6, 0x4f, 0x4c, 0x7f,
+      0x7d, 0x85, 0x98, 0x82, 0x7e, 0x93, 0x10, 0x19, 0x8f, 0x06, 0xa6, 0x30,
+      0xa4, 0x41, 0xaa, 0x33, 0x84, 0x9a, 0x85, 0x7c, 0x80, 0x99, 0x91, 0x10,
+      0x08, 0xf7, 0x2b, 0xfc, 0x47, 0xb3, 0x51, 0xca, 0xf7, 0x28, 0x8e, 0x10,
+      0x8b, 0xfb, 0x98, 0xf9, 0x6a, 0xa8, 0x9e, 0x8d, 0x10, 0x05, 0x6a, 0xfb,
+      0x49, 0x8c, 0x10, 0x06, 0xfb, 0x27, 0xfc, 0x68, 0xd4, 0x21, 0x8d, 0x10,
+      0x15, 0xf7, 0xd8, 0xab, 0xfb, 0xd8, 0xaf, 0xf5, 0x67, 0x8e, 0x10, 0x06};
+  string_view expected_str((const char*)expected, 96);
+
+  ASSERT_EQ(data.size(), 96);
+  ASSERT_EQ(data.str(), expected_str);
+
+  // undefined glyph is empty blob.
+  data = FontHelper::Cff2Data(noto_sans_jp_otf.get(), 20000);
   ASSERT_EQ(data.size(), 0);
 }
 
