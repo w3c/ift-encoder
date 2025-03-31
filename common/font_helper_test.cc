@@ -404,6 +404,23 @@ TEST_F(FontHelperTest, Cff2Data) {
   ASSERT_EQ(data.size(), 0);
 }
 
+TEST_F(FontHelperTest, Cff2GetCharstrings) {
+  FontData noncharstrings;
+  FontData charstrings;
+  auto status = FontHelper::Cff2GetCharstrings(noto_sans_vf_jp_otf.get(),
+                                               noncharstrings, charstrings);
+  ASSERT_TRUE(status.ok()) << status;
+
+  uint32_t charstrings_offset = 0x8f;  // pulled manually from the font file.
+  auto cff2 =
+      FontHelper::TableData(noto_sans_vf_jp_otf.get(), FontHelper::kCFF2);
+  auto expected_noncharstrings = cff2.str(0, charstrings_offset);
+  auto expected_charstrings = cff2.str(charstrings_offset);
+
+  ASSERT_EQ(expected_noncharstrings, noncharstrings.str());
+  ASSERT_EQ(expected_charstrings, charstrings.str());
+}
+
 TEST_F(FontHelperTest, GvarSharedTupleCount) {
   auto count = FontHelper::GvarSharedTupleCount(roboto_vf.get());
   ASSERT_TRUE(count.ok()) << count.status();
