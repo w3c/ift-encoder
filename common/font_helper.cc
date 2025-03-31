@@ -15,6 +15,7 @@
 
 using absl::btree_set;
 using absl::flat_hash_map;
+using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
@@ -120,6 +121,33 @@ FontData FontHelper::Cff2Data(hb_face_t* face, uint32_t gid) {
   FontData data(data_blob);
   hb_blob_destroy(data_blob);
   return data;
+}
+
+Status FontHelper::Cff2GetCharstrings(hb_face_t* face,
+                                      FontData& non_charstrings,
+                                      FontData& charstrings) {
+  FontData cff2_data = FontHelper::TableData(face, FontHelper::kCFF2);
+  hb_blob_unique_ptr cff2_data_blob = cff2_data.blob();
+
+  hb_blob_unique_ptr charstrings_index_blob =
+      make_hb_blob(hb_subset_cff2_get_charstrings_index(face));
+  charstrings.set(charstrings_index_blob.get());
+
+  const char* cff2_start = cff2_data.data();
+  const char* charstrings_start = charstrings.data();
+  if (charstrings_start < cff2_start) {
+    return absl::InternalError("CharStrings is not after CFF2 start.");
+  }
+  uint64_t non_charstrings_length = (uint64_t)(charstrings_start - cff2_start);
+  if (non_charstrings_length > cff2_data.size()) {
+    return absl::InternalError("Non CharStrings data is too large.");
+  }
+
+  hb_blob_unique_ptr non_charstrings_blob = make_hb_blob(
+      hb_blob_create_sub_blob(cff2_data_blob.get(), 0, non_charstrings_length));
+  non_charstrings.set(non_charstrings_blob.get());
+
+  return absl::OkStatus();
 }
 
 StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {

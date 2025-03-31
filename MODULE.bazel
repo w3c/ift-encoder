@@ -37,9 +37,9 @@ http_archive(
 http_archive(
     name = "harfbuzz",
     build_file = "//third_party:harfbuzz.BUILD",
-    integrity = "sha256-7+uXin3Ov76LIARwi104FtmjW3ZIB0DlFiHnliAGVJ8=",
-    strip_prefix = "harfbuzz-0752e5852be6f98f2a9e8d0f8020db3654739860",
-    urls = ["https://github.com/harfbuzz/harfbuzz/archive/0752e5852be6f98f2a9e8d0f8020db3654739860.zip"],
+    integrity = "sha256-yNAzHL3p++Giyd3IKGYH/8Gn5YGbh2j2h/uyeWD/GtE=",
+    strip_prefix = "harfbuzz-a1e587b75acfa91b8756c21e5305af53fb2114af",
+    urls = ["https://github.com/harfbuzz/harfbuzz/archive/a1e587b75acfa91b8756c21e5305af53fb2114af.zip"],
 )
 
 # URI Templates
