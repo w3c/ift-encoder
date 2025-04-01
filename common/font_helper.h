@@ -148,6 +148,12 @@ class FontHelper {
                                          FontData& non_charstrings,
                                          FontData& charstrings);
 
+  static absl::StatusOr<std::optional<uint32_t>> CffCharStringsOffset(
+      hb_face_t* face);
+
+  static absl::StatusOr<std::optional<uint32_t>> Cff2CharStringsOffset(
+      hb_face_t* face);
+
   static absl::StatusOr<uint32_t> GvarSharedTupleCount(const hb_face_t* face);
 
   static absl::StatusOr<absl::string_view> Loca(const hb_face_t* face) {

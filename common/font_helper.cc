@@ -150,6 +150,51 @@ Status FontHelper::Cff2GetCharstrings(hb_face_t* face,
   return absl::OkStatus();
 }
 
+static StatusOr<std::optional<uint32_t>> CharStringsOffset(
+    hb_blob_t* all_data, hb_blob_t* charstrings_data) {
+  unsigned all_data_length = 0;
+  const char* cff_start = hb_blob_get_data(all_data, &all_data_length);
+  if (all_data_length == 0) {
+    // No CFF/CFF2 table.
+    return std::nullopt;
+  }
+
+  unsigned charstrings_length = 0;
+  const char* charstrings_start =
+      hb_blob_get_data(charstrings_data, &charstrings_length);
+
+  if (charstrings_start < cff_start) {
+    return absl::InternalError("CharStrings is not after CFF2 start.");
+  }
+
+  uint64_t non_charstrings_length = (uint64_t)(charstrings_start - cff_start);
+  if (non_charstrings_length > all_data_length) {
+    return absl::InternalError("CharStrings offset is too large.");
+  }
+
+  return non_charstrings_length;
+}
+
+StatusOr<std::optional<uint32_t>> FontHelper::CffCharStringsOffset(
+    hb_face_t* face) {
+  FontData cff_data = FontHelper::TableData(face, FontHelper::kCFF);
+  hb_blob_unique_ptr cff_data_blob = cff_data.blob();
+  hb_blob_unique_ptr charstrings_index_blob =
+      make_hb_blob(hb_subset_cff_get_charstrings_index(face));
+
+  return CharStringsOffset(cff_data_blob.get(), charstrings_index_blob.get());
+}
+
+StatusOr<std::optional<uint32_t>> FontHelper::Cff2CharStringsOffset(
+    hb_face_t* face) {
+  FontData cff_data = FontHelper::TableData(face, FontHelper::kCFF2);
+  hb_blob_unique_ptr cff_data_blob = cff_data.blob();
+  hb_blob_unique_ptr charstrings_index_blob =
+      make_hb_blob(hb_subset_cff2_get_charstrings_index(face));
+
+  return CharStringsOffset(cff_data_blob.get(), charstrings_index_blob.get());
+}
+
 StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {
   auto gvar = TableData(face, kGvar);
   if (gvar.empty()) {
