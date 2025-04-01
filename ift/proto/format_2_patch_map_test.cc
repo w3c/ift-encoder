@@ -18,30 +18,29 @@ class Format2PatchMapTest : public ::testing::Test {
   Format2PatchMapTest() {}
 };
 
-static std::string HeaderSimple(uint8_t entry_count = 1, uint8_t offset_delta = 0) {
-  std::string part1 {
-    0x02,  // format
-    0x00, 0x00, 0x00,
-    0x00,  // reserved
-    0x00, 0x00, 0x00,
-    0x01, 0x00, 0x00,
-    0x00, 0x02, 0x00,
-    0x00, 0x00, 0x03,
-    0x00, 0x00, 0x00,
-    0x04,                           // compat id
-    0x01,                           // default format = Table Keyed Full
-    0x00, 0x00, (char)entry_count,  // entry count
-    0x00, 0x00, 0x00};
+static std::string HeaderSimple(uint8_t entry_count = 1,
+                                uint8_t offset_delta = 0) {
+  std::string part1{0x02,  // format
+                    0x00, 0x00, 0x00,
+                    0x00,  // reserved
+                    0x00, 0x00, 0x00,
+                    0x01, 0x00, 0x00,
+                    0x00, 0x02, 0x00,
+                    0x00, 0x00, 0x03,
+                    0x00, 0x00, 0x00,
+                    0x04,  // compat id
+                    0x01,  // default format = Table Keyed Full
+                    0x00, 0x00, (char)entry_count,  // entry count
+                    0x00, 0x00, 0x00};
 
-  std::string part2 {
-    0x00, 0x00, 0x00,
-    0x00,        // entry id string data offset
-    0x00, 0x06,  // uri template length
-    0x66, 0x6f, 0x6f,
-    0x2f, 0x24, 0x31,
+  std::string part2{
+      0x00, 0x00, 0x00,
+      0x00,        // entry id string data offset
+      0x00, 0x06,  // uri template length
+      0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31,
   };
 
-  part1 += (char) ((uint8_t) 0x29 + offset_delta);
+  part1 += (char)((uint8_t)0x29 + offset_delta);
   part1 += part2;
   return part1;
 }
@@ -80,9 +79,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCffOffset) {
   auto encoded = Format2PatchMap::Serialize(table, 0x7856, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
-  std::string cff_offset = {
-      0x00, 0x00, 0x78, 0x56
-  };
+  std::string cff_offset = {0x00, 0x00, 0x78, 0x56};
 
   std::string entry_0 = {
       // entry 0
@@ -105,9 +102,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCff2Offset) {
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, 0x127856);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
-  std::string cff2_offset = {
-      0x00, 0x12, 0x78, 0x56
-  };
+  std::string cff2_offset = {0x00, 0x12, 0x78, 0x56};
 
   std::string entry_0 = {
       // entry 0
@@ -131,8 +126,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCffAndCff2Offset) {
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string offsets = {
-    0x00, 0x00, 0x01, 0x23,
-    0x00, 0x00, 0x04, 0x56,
+      0x00, 0x00, 0x01, 0x23, 0x00, 0x00, 0x04, 0x56,
   };
 
   std::string entry_0 = {
