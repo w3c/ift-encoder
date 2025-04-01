@@ -14,6 +14,7 @@
 #include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
 #include "common/sparse_bit_set.h"
+#include "common/try.h"
 #include "hb.h"
 #include "ift/proto/format_2_patch_map.h"
 
@@ -100,10 +101,11 @@ StatusOr<FontData> IFTTable::AddToFont(
 absl::StatusOr<common::FontData> IFTTable::AddToFont(
     hb_face_t* face, const IFTTable& main,
     std::optional<const IFTTable*> extension) {
-  // TODO XXXXX check for CFF/CFF2 and set offset as needed. Only set on the
-  // main table.
-  auto main_bytes =
-      Format2PatchMap::Serialize(main, std::nullopt, std::nullopt);
+  auto cff_charstrings_offset = TRY(FontHelper::CffCharStringsOffset(face));
+  auto cff2_charstrings_offset = TRY(FontHelper::Cff2CharStringsOffset(face));
+
+  auto main_bytes = Format2PatchMap::Serialize(main, cff_charstrings_offset,
+                                               cff2_charstrings_offset);
   if (!main_bytes.ok()) {
     return main_bytes.status();
   }

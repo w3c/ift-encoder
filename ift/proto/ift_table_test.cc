@@ -36,7 +36,8 @@ namespace ift::proto {
 
 class IFTTableTest : public ::testing::Test {
  protected:
-  IFTTableTest() : roboto_ab(make_hb_face(nullptr)) {
+  IFTTableTest()
+      : roboto_ab(make_hb_face(nullptr)), noto_sans_jp(make_hb_face(nullptr)) {
     sample.SetUrlTemplate("fonts/go/here");
     sample.SetId({1, 2, 3, 4});
     auto sc = sample.GetPatchMap().AddEntry({30, 32}, 1, TABLE_KEYED_PARTIAL);
@@ -63,9 +64,14 @@ class IFTTableTest : public ::testing::Test {
     hb_blob_unique_ptr blob = make_hb_blob(
         hb_blob_create_from_file("common/testdata/Roboto-Regular.ab.ttf"));
     roboto_ab = make_hb_face(hb_face_create(blob.get(), 0));
+
+    blob = make_hb_blob(
+        hb_blob_create_from_file("common/testdata/NotoSansJP-Regular.otf"));
+    noto_sans_jp = make_hb_face(hb_face_create(blob.get(), 0));
   }
 
   hb_face_unique_ptr roboto_ab;
+  hb_face_unique_ptr noto_sans_jp;
   IFTTable empty;
   IFTTable sample;
   IFTTable sample_with_extensions;
@@ -129,6 +135,25 @@ TEST_F(IFTTableTest, AddToFont_WithExtension) {
       std::find(new_tag_order.begin(), new_tag_order.end(), "IFTX"));
 
   EXPECT_EQ(original_tag_order, new_tag_order);
+}
+
+TEST_F(IFTTableTest, AddToFont_WithExtensionAndCharStringsOffset) {
+  auto font =
+      IFTTable::AddToFont(noto_sans_jp.get(), sample, &sample_with_extensions);
+  ASSERT_TRUE(font.ok()) << font.status();
+  hb_face_unique_ptr face = font->face();
+
+  FontData ift_table =
+      FontHelper::TableData(face.get(), HB_TAG('I', 'F', 'T', ' '));
+  FontData iftx_table =
+      FontHelper::TableData(face.get(), HB_TAG('I', 'F', 'T', 'X'));
+
+  FontData expected_ift(
+      *Format2PatchMap::Serialize(sample, 0xa7ed, std::nullopt));
+  FontData expected_iftx(*Format2PatchMap::Serialize(
+      sample_with_extensions, std::nullopt, std::nullopt));
+  ASSERT_EQ(ift_table, expected_ift);
+  ASSERT_EQ(iftx_table, expected_iftx);
 }
 
 TEST_F(IFTTableTest, GetId) { ASSERT_EQ(sample.GetId(), CompatId(1, 2, 3, 4)); }
