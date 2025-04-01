@@ -1,6 +1,7 @@
 #include "common/font_helper.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "absl/container/flat_hash_map.h"
 #include "common/font_data.h"
@@ -404,7 +405,26 @@ TEST_F(FontHelperTest, Cff2Data) {
   ASSERT_EQ(data.size(), 0);
 }
 
+TEST_F(FontHelperTest, CffGetCharstrings) {
+  auto offset = FontHelper::CffCharStringsOffset(noto_sans_jp_otf.get());
+  ASSERT_TRUE(offset.ok()) << offset.status();
+  ASSERT_EQ(**offset, 0xa7ed);
+}
+
 TEST_F(FontHelperTest, Cff2GetCharstrings) {
+  auto offset = FontHelper::Cff2CharStringsOffset(noto_sans_vf_jp_otf.get());
+  ASSERT_TRUE(offset.ok()) << offset.status();
+  ASSERT_EQ(**offset, 0x8f);
+}
+
+TEST_F(FontHelperTest, Cff2GetCharstrings_NoTable) {
+  auto offset = FontHelper::Cff2CharStringsOffset(
+      noto_sans_jp_otf.get());  // does not have CFF2
+  ASSERT_TRUE(offset.ok()) << offset.status();
+  ASSERT_EQ(*offset, std::nullopt);
+}
+
+TEST_F(FontHelperTest, Cff2GetCharstringsOffset) {
   FontData noncharstrings;
   FontData charstrings;
   auto status = FontHelper::Cff2GetCharstrings(noto_sans_vf_jp_otf.get(),
