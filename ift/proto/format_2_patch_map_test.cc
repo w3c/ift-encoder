@@ -1,5 +1,7 @@
 #include "ift/proto/format_2_patch_map.h"
 
+#include <optional>
+
 #include "common/axis_range.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -16,27 +18,32 @@ class Format2PatchMapTest : public ::testing::Test {
   Format2PatchMapTest() {}
 };
 
-static std::string HeaderSimple(uint8_t entry_count = 1) {
-  return {
-      0x02,  // format
-      0x00, 0x00, 0x00,
-      0x00,  // reserved
-      0x00, 0x00, 0x00,
-      0x01, 0x00, 0x00,
-      0x00, 0x02, 0x00,
-      0x00, 0x00, 0x03,
-      0x00, 0x00, 0x00,
-      0x04,                           // compat id
-      0x01,                           // default format = Table Keyed Full
-      0x00, 0x00, (char)entry_count,  // entry count
-      0x00, 0x00, 0x00,
-      0x29,  // entries offset
-      0x00, 0x00, 0x00,
-      0x00,        // entry id string data offset
-      0x00, 0x06,  // uri template length
-      0x66, 0x6f, 0x6f,
-      0x2f, 0x24, 0x31,  // foo/$1
+static std::string HeaderSimple(uint8_t entry_count = 1, uint8_t offset_delta = 0) {
+  std::string part1 {
+    0x02,  // format
+    0x00, 0x00, 0x00,
+    0x00,  // reserved
+    0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00,
+    0x00, 0x02, 0x00,
+    0x00, 0x00, 0x03,
+    0x00, 0x00, 0x00,
+    0x04,                           // compat id
+    0x01,                           // default format = Table Keyed Full
+    0x00, 0x00, (char)entry_count,  // entry count
+    0x00, 0x00, 0x00};
+
+  std::string part2 {
+    0x00, 0x00, 0x00,
+    0x00,        // entry id string data offset
+    0x00, 0x06,  // uri template length
+    0x66, 0x6f, 0x6f,
+    0x2f, 0x24, 0x31,
   };
+
+  part1 += (char) ((uint8_t) 0x29 + offset_delta);
+  part1 += part2;
+  return part1;
 }
 
 TEST_F(Format2PatchMapTest, Simple) {
@@ -49,7 +56,7 @@ TEST_F(Format2PatchMapTest, Simple) {
   table.SetUrlTemplate("foo/$1");
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -58,6 +65,82 @@ TEST_F(Format2PatchMapTest, Simple) {
       0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
   };
   ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(), entry_0));
+}
+
+TEST_F(Format2PatchMapTest, Simple_WithCffOffset) {
+  IFTTable table;
+  PatchMap& map = table.GetPatchMap();
+  PatchMap::Coverage coverage{1, 2, 3};
+  auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  table.SetUrlTemplate("foo/$1");
+  table.SetId({1, 2, 3, 4});
+
+  auto encoded = Format2PatchMap::Serialize(table, 0x7856, std::nullopt);
+  ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+  std::string cff_offset = {
+      0x00, 0x00, 0x78, 0x56
+  };
+
+  std::string entry_0 = {
+      // entry 0
+      0x10,                   // format = 00010000 = Codepoints
+      0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
+  };
+  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 4), cff_offset, entry_0));
+}
+
+TEST_F(Format2PatchMapTest, Simple_WithCff2Offset) {
+  IFTTable table;
+  PatchMap& map = table.GetPatchMap();
+  PatchMap::Coverage coverage{1, 2, 3};
+  auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  table.SetUrlTemplate("foo/$1");
+  table.SetId({1, 2, 3, 4});
+
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, 0x127856);
+  ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+  std::string cff2_offset = {
+      0x00, 0x12, 0x78, 0x56
+  };
+
+  std::string entry_0 = {
+      // entry 0
+      0x10,                   // format = 00010000 = Codepoints
+      0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
+  };
+  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 4), cff2_offset, entry_0));
+}
+
+TEST_F(Format2PatchMapTest, Simple_WithCffAndCff2Offset) {
+  IFTTable table;
+  PatchMap& map = table.GetPatchMap();
+  PatchMap::Coverage coverage{1, 2, 3};
+  auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  table.SetUrlTemplate("foo/$1");
+  table.SetId({1, 2, 3, 4});
+
+  auto encoded = Format2PatchMap::Serialize(table, 0x123, 0x456);
+  ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+  std::string offsets = {
+    0x00, 0x00, 0x01, 0x23,
+    0x00, 0x00, 0x04, 0x56,
+  };
+
+  std::string entry_0 = {
+      // entry 0
+      0x10,                   // format = 00010000 = Codepoints
+      0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
+  };
+  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 8), offsets, entry_0));
 }
 
 TEST_F(Format2PatchMapTest, IgnoreBit) {
@@ -70,7 +153,7 @@ TEST_F(Format2PatchMapTest, IgnoreBit) {
   table.SetUrlTemplate("foo/$1");
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -104,7 +187,7 @@ TEST_F(Format2PatchMapTest, CopyIndices) {
   table.SetUrlTemplate("foo/$1");
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -142,7 +225,7 @@ TEST_F(Format2PatchMapTest, TwoByteBias) {
   table.SetUrlTemplate("foo/$1");
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -165,7 +248,7 @@ TEST_F(Format2PatchMapTest, ThreeByteBias) {
   table.SetUrlTemplate("foo/$1");
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -189,7 +272,7 @@ TEST_F(Format2PatchMapTest, ComplexSet) {
   table.SetUrlTemplate(uri_template);
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -214,7 +297,7 @@ TEST_F(Format2PatchMapTest, Features) {
   table.SetUrlTemplate(uri_template);
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -244,7 +327,7 @@ TEST_F(Format2PatchMapTest, DesignSpace) {
   table.SetUrlTemplate(uri_template);
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string entry_0 = {
@@ -282,7 +365,7 @@ TEST_F(Format2PatchMapTest, NonDefaultPatchFormat) {
   table.SetUrlTemplate(uri_template);
   table.SetId({2, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string header = {
@@ -338,7 +421,7 @@ TEST_F(Format2PatchMapTest, IndexDeltas) {
   table.SetUrlTemplate(uri_template);
   table.SetId({1, 2, 3, 4});
 
-  auto encoded = Format2PatchMap::Serialize(table);
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
   ASSERT_TRUE(encoded.ok()) << encoded.status();
 
   std::string header = {
