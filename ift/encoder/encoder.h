@@ -181,6 +181,10 @@ class Encoder {
   absl::Status PopulateGlyphKeyedPatchMap(
       ift::proto::PatchMap& patch_map) const;
 
+  absl::StatusOr<hb_subset_plan_t*> CreateSubsetPlan(
+      const ProcessingContext& context, hb_face_t* font,
+      const SubsetDefinition& def) const;
+
   absl::StatusOr<common::hb_face_unique_ptr> CutSubsetFaceBuilder(
       const ProcessingContext& context, hb_face_t* font,
       const SubsetDefinition& def) const;
@@ -189,12 +193,16 @@ class Encoder {
       const ProcessingContext& context, hb_face_t* font,
       const design_space_t& design_space) const;
 
+  absl::StatusOr<common::FontData> GenerateBaseCff2(
+      const ProcessingContext& context, hb_face_t* font,
+      const design_space_t& design_space) const;
+
   void SetMixedModeSubsettingFlagsIfNeeded(const ProcessingContext& context,
                                            hb_subset_input_t* input) const;
 
-  absl::StatusOr<common::FontData> CutSubset(const ProcessingContext& context,
-                                             hb_face_t* font,
-                                             const SubsetDefinition& def) const;
+  absl::StatusOr<common::FontData> CutSubset(
+      const ProcessingContext& context, hb_face_t* font,
+      const SubsetDefinition& def, bool generate_glyph_keyed_bases) const;
 
   absl::StatusOr<common::FontData> Instance(
       const ProcessingContext& context, hb_face_t* font,
@@ -212,7 +220,7 @@ class Encoder {
   static ift::TableKeyedDiff* MixedModeTableKeyedDiff(
       common::CompatId base_compat_id) {
     return new TableKeyedDiff(base_compat_id,
-                              {"IFTX", "glyf", "loca", "gvar", "CFF "});
+                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
   }
 
   static ift::TableKeyedDiff* ReplaceIftMapTableKeyedDiff(
@@ -222,7 +230,7 @@ class Encoder {
     // space. Glyph segment patches for all prev loaded glyphs will be
     // downloaded to repopulate variation data for any already loaded glyphs.
     return new TableKeyedDiff(base_compat_id, {"glyf", "loca", "CFF "},
-                              {"IFTX", "gvar"});
+                              {"IFTX", "gvar", "CFF2"});
   }
 
   bool AllocatePatchSet(ProcessingContext& context,

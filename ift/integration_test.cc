@@ -8,6 +8,7 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/try.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
@@ -76,6 +77,10 @@ class IntegrationTest : public ::testing::Test {
         hb_blob_create_from_file("common/testdata/NotoSansJP-Regular.otf"));
     noto_sans_jp_cff_.set(blob.get());
 
+    blob = make_hb_blob(
+        hb_blob_create_from_file("common/testdata/NotoSansJP-VF.subset.otf"));
+    noto_sans_jp_cff2_.set(blob.get());
+
     // Noto Sans JP VF
     blob = make_hb_blob(
         hb_blob_create_from_file("ift/testdata/NotoSansJP[wght].subset.ttf"));
@@ -133,6 +138,16 @@ class IntegrationTest : public ::testing::Test {
     if (!sc.ok()) {
       return sc;
     }
+
+    return absl::OkStatus();
+  }
+
+  Status InitEncoderForMixedModeCff2(Encoder& encoder) {
+    auto face = noto_sans_jp_cff2_.face();
+    encoder.SetFace(face.get());
+
+    TRYV(encoder.AddGlyphDataPatch(1, {34, 35, 36}));      // A, B, C
+    TRYV(encoder.AddGlyphDataPatch(2, {46, 47, 49, 59}));  // M, N, P, Z
 
     return absl::OkStatus();
   }
@@ -221,6 +236,7 @@ class IntegrationTest : public ::testing::Test {
 
   FontData noto_sans_jp_;
   FontData noto_sans_jp_cff_;
+  FontData noto_sans_jp_cff2_;
   FontData noto_sans_vf_;
 
   FontData feature_test_;
@@ -1248,7 +1264,7 @@ TEST_F(IntegrationTest, MixedMode_Cff) {
   ASSERT_EQ(codepoints, all_codepoints);
 
   // patch 2 gids not present
-  ASSERT_EQ(FontHelper::CffData(encoded_face.get(), 43).size(),
+  ASSERT_EQ(FontHelper::CffData(extended_face.get(), 43).size(),
             1);  // empty glyphs in cff are one byte long
 
   // patch 1 gids present and match the desubroutinized face.
@@ -1261,10 +1277,84 @@ TEST_F(IntegrationTest, MixedMode_Cff) {
   ASSERT_TRUE(extended.ok()) << extended.status();
   extended_face = extended->face();
 
+  ASSERT_GT(FontHelper::CffData(extended_face.get(), 43).size(), 1);
   ASSERT_EQ(FontHelper::CffData(extended_face.get(), 43).span(),
             FontHelper::CffData(desubroutinized_face.get(), 43).span());
   ASSERT_EQ(FontHelper::CffData(extended_face.get(), 34).span(),
             FontHelper::CffData(desubroutinized_face.get(), 34).span());
+}
+
+TEST_F(IntegrationTest, MixedMode_Cff2) {
+  Encoder encoder;
+  auto sc = InitEncoderForMixedModeCff2(encoder);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  ASSERT_TRUE(encoder.SetBaseSubset(btree_set<uint32_t>()).ok());
+
+  auto all_codepoints = btree_set<uint32_t>{'A', 'B', 'C', 'M', 'N', 'P', 'Z'};
+  auto face = noto_sans_jp_cff2_.face();
+  encoder.AddNonGlyphDataSegment(all_codepoints);
+
+  // Setup activations for patches 1 and 2
+  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+      SubsetDefinition::Codepoints(btree_set<uint32_t>{'A', 'B', 'C'}), 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
+      SubsetDefinition::Codepoints(btree_set<uint32_t>{'M', 'N', 'P', 'Z'}),
+      2)));
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  ASSERT_TRUE(FontHelper::Cff2Data(encoded_face.get(), 34).empty());
+  ASSERT_TRUE(FontHelper::Cff2Data(encoded_face.get(), 35).empty());
+  ASSERT_TRUE(FontHelper::Cff2Data(encoded_face.get(), 47).empty());
+  ASSERT_TRUE(FontHelper::Cff2Data(encoded_face.get(), 49).empty());
+
+  auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
+  // Last gid (Z) is always included in initial font to force correct glyph
+  // count in CFF/CFF2.
+  ASSERT_EQ(codepoints, btree_set<uint32_t>{'Z'});
+
+  auto extended = Extend(*encoding, {'B'});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  // The encoder desubroutinizes CFF fonts, so generate a desubroutinized
+  // copy of the input face to use for comparisons.
+  auto desubroutinized = desubroutinize(face.get());
+  ASSERT_TRUE(desubroutinized.ok()) << desubroutinized.status();
+  auto desubroutinized_face = desubroutinized->face();
+
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_EQ(codepoints, all_codepoints);
+
+  // patch 2 gids not present
+  ASSERT_TRUE(FontHelper::Cff2Data(extended_face.get(), 47).empty());
+  ASSERT_TRUE(FontHelper::Cff2Data(extended_face.get(), 49).empty());
+
+  // patch 1 gids present and match the desubroutinized face.
+  ASSERT_FALSE(FontHelper::Cff2Data(extended_face.get(), 34).empty());
+  ASSERT_EQ(FontHelper::Cff2Data(extended_face.get(), 34).span(),
+            FontHelper::Cff2Data(desubroutinized_face.get(), 34).span());
+
+  ASSERT_FALSE(FontHelper::Cff2Data(extended_face.get(), 35).empty());
+  ASSERT_EQ(FontHelper::Cff2Data(extended_face.get(), 35).span(),
+            FontHelper::Cff2Data(desubroutinized_face.get(), 35).span());
+
+  // Second extension
+  encoding->init_font.shallow_copy(*extended);
+  extended = Extend(*encoding, {'P'});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  extended_face = extended->face();
+
+  ASSERT_FALSE(FontHelper::Cff2Data(extended_face.get(), 47).empty());
+  ASSERT_EQ(FontHelper::Cff2Data(extended_face.get(), 47).span(),
+            FontHelper::Cff2Data(desubroutinized_face.get(), 47).span());
+
+  ASSERT_FALSE(FontHelper::Cff2Data(extended_face.get(), 35).empty());
+  ASSERT_EQ(FontHelper::Cff2Data(extended_face.get(), 35).span(),
+            FontHelper::Cff2Data(desubroutinized_face.get(), 35).span());
 }
 
 }  // namespace ift

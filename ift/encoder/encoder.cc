@@ -103,7 +103,7 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
   // TODO(garretrieger): once union works correctly remove this.
   all.design_space.clear();
 
-  return CutSubset(context, face_.get(), all);
+  return CutSubset(context, face_.get(), all, false);
 }
 
 bool is_subset(const flat_hash_set<uint32_t>& a,
@@ -329,9 +329,9 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
     instance.shallow_copy(*result);
   }
 
-  GlyphKeyedDiff differ(
-      instance, compat_id,
-      {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF});
+  GlyphKeyedDiff differ(instance, compat_id,
+                        {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF,
+                         FontHelper::kCFF2});
 
   for (uint32_t index : reachable_segments) {
     auto e = glyph_data_patches_.find(index);
@@ -404,7 +404,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   // The first subset forms the base file, the remaining subsets are made
   // reachable via patches.
   auto full_face = context.fully_expanded_subset_.face();
-  auto base = CutSubset(context, full_face.get(), base_subset);
+  auto base = CutSubset(context, full_face.get(), base_subset, IsMixedMode());
   if (!base.ok()) {
     return base.status();
   }
@@ -520,7 +520,7 @@ StatusOr<std::unique_ptr<const BinaryDiff>> Encoder::GetDifferFor(
       Encoder::MixedModeTableKeyedDiff(compat_id));
 }
 
-StatusOr<hb_face_unique_ptr> Encoder::CutSubsetFaceBuilder(
+StatusOr<hb_subset_plan_t*> Encoder::CreateSubsetPlan(
     const ProcessingContext& context, hb_face_t* font,
     const SubsetDefinition& def) const {
   hb_subset_input_t* input = hb_subset_input_create_or_fail();
@@ -529,15 +529,29 @@ StatusOr<hb_face_unique_ptr> Encoder::CutSubsetFaceBuilder(
   }
 
   def.ConfigureInput(input, font);
-
   SetMixedModeSubsettingFlagsIfNeeded(context, input);
 
-  hb_face_unique_ptr result = make_hb_face(hb_subset_or_fail(font, input));
+  hb_subset_plan_t* plan = hb_subset_plan_create_or_fail(font, input);
+  hb_subset_input_destroy(input);
+  if (!plan) {
+    return absl::InternalError("Harfbuzz subsetting plan generation failed.");
+  }
+
+  return plan;
+}
+
+StatusOr<hb_face_unique_ptr> Encoder::CutSubsetFaceBuilder(
+    const ProcessingContext& context, hb_face_t* font,
+    const SubsetDefinition& def) const {
+  hb_subset_plan_t* plan = TRY(CreateSubsetPlan(context, font, def));
+
+  hb_face_unique_ptr result =
+      make_hb_face(hb_subset_plan_execute_or_fail(plan));
+  hb_subset_plan_destroy(plan);
   if (!result.get()) {
     return absl::InternalError("Harfbuzz subsetting operation failed.");
   }
 
-  hb_subset_input_destroy(input);
   return result;
 }
 
@@ -587,6 +601,127 @@ StatusOr<FontData> Encoder::GenerateBaseGvar(
   return result;
 }
 
+// Generate a CFF2 CharStrings index that retains glyph ids, but contains
+// glyph data from face only for gids.
+absl::StatusOr<std::string> GenerateCharStringsTable(hb_face_t* face,
+                                                     const hb_set_t* gids) {
+  // Create the per glyph data and offsets
+  std::string charstrings_per_glyph;
+
+  uint32_t glyph_count = hb_face_get_glyph_count(face);
+  uint32_t current_offset = 1;
+  std::vector<uint32_t> offsets;
+  for (uint32_t gid = 0; gid < glyph_count; gid++) {
+    offsets.push_back(current_offset);
+    if (!hb_set_has(gids, gid)) {
+      continue;
+    }
+
+    auto glyph_data = FontHelper::Cff2Data(face, gid);
+    charstrings_per_glyph += glyph_data.str();
+    current_offset += glyph_data.size();
+  }
+  offsets.push_back(current_offset);  // one extra offset at the end.
+
+  if (offsets.size() != glyph_count + 1) {
+    return absl::InternalError("Wrong number of offsets generated.");
+  }
+
+  // Determine offset size
+  uint64_t offset_size = 1;
+  for (; offset_size <= 4; offset_size++) {
+    uint64_t max_value = (1 << (8 * offset_size)) - 1;
+    if (current_offset <= max_value) {
+      break;
+    }
+  }
+  if (offset_size > 4) {
+    return absl::InvalidArgumentError(
+        "Offset overflow generating CFF2 charstrings.");
+  }
+
+  // Serialization, reference:
+  // https://learn.microsoft.com/en-us/typography/opentype/spec/cff2#index-data
+  std::string charstrings;
+
+  FontHelper::WriteUInt32(glyph_count, charstrings);
+  FontHelper::WriteUInt8(offset_size, charstrings);
+
+  for (uint32_t offset : offsets) {
+    switch (offset_size) {
+      case 1:
+        FontHelper::WriteUInt8(offset, charstrings);
+        break;
+      case 2:
+        FontHelper::WriteUInt16(offset, charstrings);
+        break;
+      case 3:
+        FontHelper::WriteUInt24(offset, charstrings);
+        break;
+      case 4:
+      default:
+        FontHelper::WriteUInt32(offset, charstrings);
+        break;
+    }
+  }
+
+  charstrings += charstrings_per_glyph;
+  return charstrings;
+}
+
+StatusOr<FontData> Encoder::GenerateBaseCff2(
+    const ProcessingContext& context, hb_face_t* font,
+    const design_space_t& design_space) const {
+  // The base CFF2 table is made by combining all of the non charstrings data
+  // from 'font' which has only been instanced to 'design_space' with the
+  // charstrings data for any glyphs retained by the base subset definition.
+  //
+  // To accomplish this we manually craft a new charstring table. This works
+  // because the IFT spec requires charstrings data is at the end of the table
+  // and doesn't overlap. so we are free to replace the charstrings table with
+  // our own.
+
+  // Step 1: Instancing
+  auto instance = Instance(context, font, design_space);
+  if (!instance.ok()) {
+    return instance.status();
+  }
+  auto instance_face = instance->face();
+
+  // Step 2: find the glyph closure for the base subset.
+  SubsetDefinition subset = context.base_subset_;
+  hb_subset_plan_t* plan = TRY(CreateSubsetPlan(context, font, subset));
+  hb_map_t* old_to_new = hb_subset_plan_old_to_new_glyph_mapping(plan);
+
+  int index = -1;
+  uint32_t old_gid = HB_MAP_VALUE_INVALID;
+  uint32_t new_gid = HB_MAP_VALUE_INVALID;
+  hb_set_unique_ptr gids = make_hb_set();
+  while (hb_map_next(old_to_new, &index, &old_gid, &new_gid)) {
+    hb_set_add(gids.get(), old_gid);
+  }
+  hb_subset_plan_destroy(plan);
+
+  // Step 3: locate charstrings data
+  FontData instance_non_charstrings;
+  FontData instance_charstrings;
+  TRYV(FontHelper::Cff2GetCharstrings(
+      instance_face.get(), instance_non_charstrings, instance_charstrings));
+
+  // Step 4: construct a new charstrings table.
+  // This charstring table includes charstring data from "instance_face" for all
+  // glyphs in "gids".
+  std::string charstrings =
+      TRY(GenerateCharStringsTable(instance_face.get(), gids.get()));
+
+  // Step 5: assemble the composite table.
+  std::string composite_table = instance_non_charstrings.string() + charstrings;
+
+  FontData result;
+  result.copy(composite_table);
+  return result;
+}
+
 void Encoder::SetMixedModeSubsettingFlagsIfNeeded(
     const ProcessingContext& context, hb_subset_input_t* input) const {
   if (IsMixedMode()) {
@@ -614,16 +749,32 @@ void Encoder::SetMixedModeSubsettingFlagsIfNeeded(
   }
 }
 
+// Creates a subset for a given subset definition.
+//
+// If 'generate_glyph_keyed_bases' is true then for tables such as gvar and CFF2
+// which have common data, the subsetted tables will be generated in a way that
+// preserves that common data in order to retain compatibility with glyph keyed
+// patching. See the comments in this function for more details.
+//
+// Additionally the set of glyphs in these tables will be set to the set of
+// glyphs in the base subset rather then what's in def since glyph keyed patches
+// are responsible for populating those.
+//
+// Special casing isn't needed for glyf or CFF since those are never patched
+// by table keyed patches and don't have common data (CFF is desubroutinized)
+// so we can just ignore them here.
 StatusOr<FontData> Encoder::CutSubset(const ProcessingContext& context,
                                       hb_face_t* font,
-                                      const SubsetDefinition& def) const {
+                                      const SubsetDefinition& def,
+                                      bool generate_glyph_keyed_bases) const {
   auto result = CutSubsetFaceBuilder(context, font, def);
   if (!result.ok()) {
     return result.status();
   }
 
   auto tags = FontHelper::GetTags(font);
-  if (IsMixedMode() && def.IsVariable() && tags.contains(FontHelper::kGvar)) {
+  if (generate_glyph_keyed_bases && def.IsVariable() &&
+      tags.contains(FontHelper::kGvar)) {
     // In mixed mode glyph keyed patches handles gvar, except for when design
     // space is expanded, in which case a gvar table should be patched in that
     // only has coverage of the base (root) subset definition + the current
@@ -636,6 +787,17 @@ StatusOr<FontData> Encoder::CutSubset(const ProcessingContext& context,
     hb_blob_unique_ptr gvar_blob = base_gvar.blob();
     hb_face_builder_add_table(result->get(), FontHelper::kGvar,
                               gvar_blob.get());
+  }
+
+  if (generate_glyph_keyed_bases && tags.contains(FontHelper::kCFF2)) {
+    // In mixed mode glyph keyed patches handles CFF2 per glyph data. However,
+    // the CFF2 table may contain shared variation data outside of the glyphs.
+    // So when creating a subsetted CFF2 table here we need to ensure the shared
+    // variation data will match whatever the glyph keyed patches were cut from.
+    auto base_cff2 = TRY(GenerateBaseCff2(context, font, def.design_space));
+    hb_blob_unique_ptr cff2_blob = base_cff2.blob();
+    hb_face_builder_add_table(result->get(), FontHelper::kCFF2,
+                              cff2_blob.get());
   }
 
   hb_blob_unique_ptr blob = make_hb_blob(hb_face_reference_blob(result->get()));
