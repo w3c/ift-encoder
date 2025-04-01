@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
@@ -99,7 +100,10 @@ StatusOr<FontData> IFTTable::AddToFont(
 absl::StatusOr<common::FontData> IFTTable::AddToFont(
     hb_face_t* face, const IFTTable& main,
     std::optional<const IFTTable*> extension) {
-  auto main_bytes = Format2PatchMap::Serialize(main);
+  // TODO XXXXX check for CFF/CFF2 and set offset as needed. Only set on the
+  // main table.
+  auto main_bytes =
+      Format2PatchMap::Serialize(main, std::nullopt, std::nullopt);
   if (!main_bytes.ok()) {
     return main_bytes.status();
   }
@@ -107,7 +111,8 @@ absl::StatusOr<common::FontData> IFTTable::AddToFont(
   StatusOr<std::string> ext_bytes;
   std::optional<absl::string_view> ext_view;
   if (extension) {
-    ext_bytes = Format2PatchMap::Serialize(**extension);
+    ext_bytes =
+        Format2PatchMap::Serialize(**extension, std::nullopt, std::nullopt);
     if (!ext_bytes.ok()) {
       return ext_bytes.status();
     }

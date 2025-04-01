@@ -83,7 +83,8 @@ TEST_F(IFTTableTest, AddToFont) {
 
   FontData data(blob.get());
 
-  std::string expected = *Format2PatchMap::Serialize(sample);
+  std::string expected =
+      *Format2PatchMap::Serialize(sample, std::nullopt, std::nullopt);
   FontData expected_data(expected);
 
   ASSERT_EQ(data, expected_data);
@@ -110,8 +111,10 @@ TEST_F(IFTTableTest, AddToFont_WithExtension) {
   FontData iftx_table =
       FontHelper::TableData(face.get(), HB_TAG('I', 'F', 'T', 'X'));
 
-  FontData expected_ift(*Format2PatchMap::Serialize(sample));
-  FontData expected_iftx(*Format2PatchMap::Serialize(sample_with_extensions));
+  FontData expected_ift(
+      *Format2PatchMap::Serialize(sample, std::nullopt, std::nullopt));
+  FontData expected_iftx(*Format2PatchMap::Serialize(
+      sample_with_extensions, std::nullopt, std::nullopt));
   ASSERT_EQ(ift_table, expected_ift);
   ASSERT_EQ(iftx_table, expected_iftx);
 

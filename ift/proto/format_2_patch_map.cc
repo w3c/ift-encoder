@@ -103,7 +103,9 @@ static void EncodeCodepoints(uint8_t bias_bytes,
                              const PatchMap::Coverage& coverage,
                              std::string& out);
 
-StatusOr<std::string> Format2PatchMap::Serialize(const IFTTable& ift_table) {
+StatusOr<std::string> Format2PatchMap::Serialize(
+    const IFTTable& ift_table, std::optional<uint32_t> cff_charstrings_offset,
+    std::optional<uint32_t> cff2_charstrings_offset) {
   // TODO(garretrieger): pre-reserve estimated capacity based on patch_map.
   std::string out;
   const auto& patch_map = ift_table.GetPatchMap();
@@ -129,7 +131,11 @@ StatusOr<std::string> Format2PatchMap::Serialize(const IFTTable& ift_table) {
   // entries offset
   string_view uri_template = ift_table.GetUrlTemplate();
   constexpr int header_min_length = 35;
-  FontHelper::WriteUInt32(header_min_length + uri_template.length(), out);
+  unsigned optional_offsets_size =
+      (cff_charstrings_offset.has_value() ? 4 : 0) +
+      (cff2_charstrings_offset.has_value() ? 4 : 0);
+  FontHelper::WriteUInt32(
+      header_min_length + uri_template.length() + optional_offsets_size, out);
 
   // idStrings
   FontHelper::WriteUInt32(0, out);
@@ -140,6 +146,16 @@ StatusOr<std::string> Format2PatchMap::Serialize(const IFTTable& ift_table) {
 
   // uriTemplate
   out.append(uri_template);
+
+  // CFF charstrings offset (optional)
+  if (cff_charstrings_offset.has_value()) {
+    FontHelper::WriteUInt32(*cff_charstrings_offset, out);
+  }
+
+  // CFF2 charstrings offset (optional)
+  if (cff2_charstrings_offset.has_value()) {
+    FontHelper::WriteUInt32(*cff2_charstrings_offset, out);
+  }
 
   // entries
   auto s = EncodeEntries(patch_map.GetEntries(), default_encoding, out);
