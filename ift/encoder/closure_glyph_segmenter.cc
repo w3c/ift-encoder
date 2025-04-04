@@ -707,12 +707,4 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   return absl::InternalError("unreachable");
 }
 
-void GlyphSegmentation::CopySegments(
-    const std::vector<hb_set_unique_ptr>& segments) {
-  segments_.clear();
-  for (const auto& set : segments) {
-    segments_.push_back(to_btree_set(set.get()));
-  }
-}
-
 }  // namespace ift::encoder
