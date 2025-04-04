@@ -436,4 +436,12 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   return config;
 }
 
+void GlyphSegmentation::CopySegments(
+    const std::vector<common::hb_set_unique_ptr>& segments) {
+  segments_.clear();
+  for (const auto& set : segments) {
+    segments_.push_back(common::to_btree_set(set.get()));
+  }
+}
+
 }  // namespace ift::encoder
