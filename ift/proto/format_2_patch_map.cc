@@ -111,7 +111,11 @@ StatusOr<std::string> Format2PatchMap::Serialize(
   const auto& patch_map = ift_table.GetPatchMap();
 
   FontHelper::WriteUInt8(0x02, out);  // Format = 2
-  FontHelper::WriteUInt32(0x0, out);  // Reserved = 0x00000000
+  FontHelper::WriteUInt24(0, out);    // Reserved = 0x000000
+
+  uint8_t flags = 0 | (cff_charstrings_offset.has_value() ? 0b00000001 : 0) |
+                  (cff2_charstrings_offset.has_value() ? 0b00000010 : 0);
+  FontHelper::WriteUInt8(flags, out);
 
   // id
   ift_table.GetId().WriteTo(out);

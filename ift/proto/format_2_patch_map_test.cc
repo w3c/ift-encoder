@@ -86,7 +86,10 @@ TEST_F(Format2PatchMapTest, Simple_WithCffOffset) {
       0x10,                   // format = 00010000 = Codepoints
       0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
   };
-  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 4), cff_offset, entry_0));
+
+  std::string header = HeaderSimple(1, 4);
+  header[4] = 0b00000001;
+  ASSERT_EQ(*encoded, absl::StrCat(header, cff_offset, entry_0));
 }
 
 TEST_F(Format2PatchMapTest, Simple_WithCff2Offset) {
@@ -109,7 +112,10 @@ TEST_F(Format2PatchMapTest, Simple_WithCff2Offset) {
       0x10,                   // format = 00010000 = Codepoints
       0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
   };
-  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 4), cff2_offset, entry_0));
+
+  std::string header = HeaderSimple(1, 4);
+  header[4] = 0b00000010;
+  ASSERT_EQ(*encoded, absl::StrCat(header, cff2_offset, entry_0));
 }
 
 TEST_F(Format2PatchMapTest, Simple_WithCffAndCff2Offset) {
@@ -134,7 +140,10 @@ TEST_F(Format2PatchMapTest, Simple_WithCffAndCff2Offset) {
       0x10,                   // format = 00010000 = Codepoints
       0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
   };
-  ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(1, 8), offsets, entry_0));
+
+  std::string header = HeaderSimple(1, 8);
+  header[4] = 0b00000011;
+  ASSERT_EQ(*encoded, absl::StrCat(header, offsets, entry_0));
 }
 
 TEST_F(Format2PatchMapTest, IgnoreBit) {
@@ -155,6 +164,7 @@ TEST_F(Format2PatchMapTest, IgnoreBit) {
       0b01010000,             // format = Ignored + Codepoints
       0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
   };
+
   ASSERT_EQ(*encoded, absl::StrCat(HeaderSimple(), entry_0));
 }
 
