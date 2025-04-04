@@ -94,8 +94,36 @@ class IntSet {
     return *this;
   }
 
-  // TODO(garretrieger): add operator==
-  // TODO(garretrieger): add operator< so we can use thse in btree_sets/maps
+  bool operator==(const IntSet& other) const {
+    return hb_set_is_equal(this->set_.get(), other.set_.get());
+  }
+
+  bool operator!=(const IntSet& other) const { return !(*this == other); }
+
+  bool operator<(const IntSet& other) const {
+    auto a = this->begin();
+    auto b = other.begin();
+
+    while (a != this->end() && b != this->end()) {
+      if (*a < *b) {
+        return true;
+      } else if (*a > *b) {
+        return false;
+      }
+      // otherwise elements are equal, check the next
+      ++a;
+      ++b;
+    }
+
+    if (a == b) {
+      // sets are equal
+      return false;
+    }
+
+    // Otherwise only one of a or b is at the end, the shorter set comes first
+    return a == this->end();
+  }
+
   // TODO(garretrieger): add absl hashing support so we can use these in
   // hash_sets/maps
 
