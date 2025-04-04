@@ -78,8 +78,12 @@ class IntSet {
   }
 
   // TODO(garretrieger): construct from hb_set_t* or hb_set_unique_ptr.
+  // TODO(garretrieger): copy assignment operator
 
-  IntSet(const IntSet&) = delete;  // TODO(garretrieger): implement this.
+  IntSet(const IntSet& other) : set_(make_hb_set()) {
+    hb_set_union(set_.get(), other.set_.get());
+  }
+
   IntSet& operator=(const IntSet&) =
       delete;  // TODO(garretrieger): implement this.
 
