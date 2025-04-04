@@ -7,6 +7,28 @@ config_setting(
     ],
 )
 
+cc_binary(
+    name = "hb-shape",
+    srcs = [
+        "util/hb-shape.cc",
+        "util/batch.hh",
+        "util/options.hh",
+        "util/font-options.hh",
+        "util/face-options.hh",
+        "util/main-font-text.hh",
+        "util/shape-consumer.hh",
+        "util/shape-options.hh",
+        "util/shape-output.hh",
+        "util/shape-format.hh",
+        "util/text-options.hh",
+        "util/output-options.hh",
+    ],
+    deps = [
+        ":harfbuzz",
+        "@glib//glib",
+    ],
+)
+
 cc_library(
     name = "harfbuzz",
     srcs = glob(
