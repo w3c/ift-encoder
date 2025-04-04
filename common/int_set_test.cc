@@ -34,6 +34,46 @@ TEST_F(IntSetTest, BasicOperations) {
   ASSERT_FALSE(set.contains(7));
 }
 
+TEST_F(IntSetTest, Equality) {
+  IntSet a{1, 2, 1000};
+  IntSet b{1, 1000, 2};
+  IntSet c{1, 2, 1000, 1001};
+
+  ASSERT_TRUE(a == a);
+  ASSERT_FALSE(a != a);
+
+  ASSERT_TRUE(a == b);
+  ASSERT_FALSE(a != b);
+
+  ASSERT_FALSE(a == c);
+  ASSERT_TRUE(a != c);
+
+  ASSERT_FALSE(b == c);
+  ASSERT_TRUE(b != c);
+}
+
+TEST_F(IntSetTest, LessThan) {
+  // These are in the appropriate sorted order
+  IntSet empty;
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  // Self comparisons
+  ASSERT_FALSE(empty < empty);
+  ASSERT_FALSE(a < a);
+
+  // Ordering
+  ASSERT_TRUE(a < b);
+  ASSERT_TRUE(b < c);
+  ASSERT_TRUE(c < d);
+
+  ASSERT_FALSE(b < a);
+  ASSERT_FALSE(c < b);
+  ASSERT_FALSE(d < c);
+}
+
 TEST_F(IntSetTest, InitList) {
   IntSet set{10, 1000};
   ASSERT_TRUE(set.contains(10));
