@@ -1,0 +1,142 @@
+#ifndef COMMON_INT_SET
+#define COMMON_INT_SET
+
+#include "common/hb_set_unique_ptr.h"
+namespace common {
+
+class IntSet;
+
+class IntSetIterator {
+ public:
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = hb_codepoint_t;
+  using difference_type = std::ptrdiff_t;
+  using pointer = const hb_codepoint_t*;
+  using reference = hb_codepoint_t;
+
+ private:
+  friend class IntSet;
+
+  const hb_set_t* set_ = nullptr;  // nullptr signals we are at the end.
+  hb_codepoint_t current_codepoint_ = HB_SET_VALUE_INVALID;
+
+  IntSetIterator(const hb_set_t* set)
+      : set_(set), current_codepoint_(HB_SET_VALUE_INVALID) {
+    // c++ iterators start on the first element, so advance the iterator one
+    // element.
+    ++(*this);
+  }
+
+ public:
+  IntSetIterator() = default;
+
+  reference operator*() const { return current_codepoint_; }
+
+  IntSetIterator& operator++() {
+    if (set_) {
+      if (!hb_set_next(set_, &current_codepoint_)) {
+        // Reached the end
+        set_ = nullptr;
+        current_codepoint_ = HB_CODEPOINT_INVALID;
+      }
+    }
+    return *this;
+  }
+
+  IntSetIterator operator++(int) {
+    IntSetIterator temp = *this;
+    ++(*this);
+    return temp;
+  }
+
+  friend bool operator==(const IntSetIterator& a, const IntSetIterator& b) {
+    return a.set_ == b.set_ && a.current_codepoint_ == b.current_codepoint_;
+  }
+
+  friend bool operator!=(const IntSetIterator& a, const IntSetIterator& b) {
+    return !(a == b);
+  }
+};
+
+/**
+ * Wrapper around a harfbuzz hb_set_t*.
+ *
+ * Makes it act like a more typical c++ container class and provides
+ * hashing/comparison needed to store the set inside of other container types.
+ */
+class IntSet {
+ public:
+  using iterator = IntSetIterator;
+  using const_iterator = IntSetIterator;
+
+  IntSet() : set_(make_hb_set()) {}
+
+  IntSet(std::initializer_list<hb_codepoint_t> values) : set_(make_hb_set()) {
+    for (auto v : values) {
+      this->add(v);
+    }
+  }
+
+  // TODO(garretrieger): construct from hb_set_t* or hb_set_unique_ptr.
+
+  IntSet(const IntSet&) = delete;  // TODO(garretrieger): implement this.
+  IntSet& operator=(const IntSet&) =
+      delete;  // TODO(garretrieger): implement this.
+
+  IntSet(IntSet&& other) noexcept : set_(make_hb_set()) {
+    // swap pointers so that the moved set is still in a valid state.
+    this->set_.swap(other.set_);
+  }
+
+  IntSet& operator=(IntSet&& other) noexcept {
+    // swap pointers so that the moved set is still in a valid state.
+    this->set_.swap(other.set_);
+    return *this;
+  }
+
+  // TODO(garretrieger): add operator==
+  // TODO(garretrieger): add operator< so we can use thse in btree_sets/maps
+  // TODO(garretrieger): add absl hashing support so we can use these in
+  // hash_sets/maps
+
+  iterator begin() { return iterator(set_.get()); }
+
+  iterator end() { return iterator(); }
+
+  // const versions simply return the same iterator type
+  const_iterator begin() const { return const_iterator(set_.get()); }
+
+  const_iterator end() const { return const_iterator(); }
+
+  // Provide cbegin() and cend() explicitly
+  const_iterator cbegin() const {
+    return begin();  // Calls const begin()
+  }
+
+  const_iterator cend() const {
+    return end();  // Calls const end()
+  }
+
+  void add(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
+
+  bool contains(hb_codepoint_t codepoint) const {
+    return hb_set_has(set_.get(), codepoint);
+  }
+
+  void erase(hb_codepoint_t codepoint) { hb_set_del(set_.get(), codepoint); }
+
+  size_t size() const { return hb_set_get_population(set_.get()); }
+
+  bool empty() const { return hb_set_is_empty(set_.get()); }
+
+  // Remove all elements
+  void clear() { hb_set_clear(set_.get()); }
+
+ private:
+  // Note: set_ must always point to a valid set object. nullptr is not allowed.
+  hb_set_unique_ptr set_;
+};
+
+}  // namespace common
+
+#endif

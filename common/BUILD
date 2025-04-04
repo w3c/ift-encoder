@@ -35,6 +35,7 @@ cc_library(
         "hasher.h",
         "compat_id.h",
         "try.h",
+        "int_set.h",
     ],
     visibility = [
         "//visibility:public",
@@ -101,6 +102,7 @@ cc_test(
         "font_helper_test.cc",
         "sparse_bit_set_test.cc",
         "woff2_test.cc",
+        "int_set_test.cc",
     ],
     data = [
         "//common:testdata",
