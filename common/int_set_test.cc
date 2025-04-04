@@ -103,6 +103,18 @@ TEST_F(IntSetTest, Move) {
   ASSERT_EQ(b.size(), 0);
 }
 
+TEST_F(IntSetTest, CopyConstructor) {
+  IntSet a{13, 47};
+  IntSet b(a);
+
+  ASSERT_EQ(a, b);
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+}
+
 TEST_F(IntSetTest, EmptySetIteration) {
   IntSet empty;
   ASSERT_EQ(empty.begin(), empty.end());
@@ -130,6 +142,24 @@ TEST_F(IntSetTest, ForLoop) {
   for (auto v : set) {
     ASSERT_EQ(v, expected[index++]);
   }
+}
+
+TEST_F(IntSetTest, UseInBtreeSet) {
+  absl::btree_set<IntSet> sets{{7, 8, 11}, {7, 8}, {7, 8, 12}, {}};
+
+  IntSet empty{};
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  ASSERT_TRUE(sets.contains(a));
+  ASSERT_TRUE(sets.contains(b));
+  ASSERT_TRUE(sets.contains(c));
+  ASSERT_FALSE(sets.contains(d));
+
+  auto it = sets.begin();
+  ASSERT_EQ(*it, empty);
 }
 
 // TODO(garretrieger): test use in hash and btree, sets and maps.
