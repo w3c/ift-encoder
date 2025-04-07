@@ -140,10 +140,14 @@ class IntSet {
     return a == this->end();
   }
 
-  // TODO(garretrieger): add union, intersection etc.
+  template <typename H>
+  friend H AbslHashValue(H h, const IntSet& set) {
+    // Utilize the existing harfbuzz hashing function.
+    unsigned harfbuzz_hash = hb_set_hash(set.set_.get());
+    return H::combine(std::move(h), harfbuzz_hash);
+  }
 
-  // TODO(garretrieger): add absl hashing support so we can use these in
-  // hash_sets/maps
+  // TODO(garretrieger): add union, intersection etc.
 
   iterator begin() { return iterator(set_.get()); }
 
