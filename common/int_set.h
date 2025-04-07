@@ -1,6 +1,8 @@
 #ifndef COMMON_INT_SET
 #define COMMON_INT_SET
 
+#include <optional>
+
 #include "common/hb_set_unique_ptr.h"
 namespace common {
 
@@ -78,14 +80,14 @@ class IntSet {
   }
 
   IntSet(const hb_set_t* set) : set_(make_hb_set()) {
-    // We always keep exclusive ownership of the internal set, so copy the contents
-    // of the input set instead of referencing it.
+    // We always keep exclusive ownership of the internal set, so copy the
+    // contents of the input set instead of referencing it.
     hb_set_union(set_.get(), set);
   }
 
   IntSet(const hb_set_unique_ptr& set) : set_(make_hb_set()) {
-    // We always keep exclusive ownership of the internal set, so copy the contents
-    // of the input set instead of referencing it.
+    // We always keep exclusive ownership of the internal set, so copy the
+    // contents of the input set instead of referencing it.
     hb_set_union(set_.get(), set.get());
   }
 
@@ -147,8 +149,6 @@ class IntSet {
     return H::combine(std::move(h), harfbuzz_hash);
   }
 
-  // TODO(garretrieger): add union, intersection etc.
-
   iterator begin() { return iterator(set_.get()); }
 
   iterator end() { return iterator(); }
@@ -169,8 +169,32 @@ class IntSet {
 
   void add(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
 
+  void add_range(hb_codepoint_t start, hb_codepoint_t end) {
+    hb_set_add_range(set_.get(), start, end);
+  }
+
   bool contains(hb_codepoint_t codepoint) const {
     return hb_set_has(set_.get(), codepoint);
+  }
+
+  bool is_subset_of(const IntSet& other) const {
+    return hb_set_is_subset(set_.get(), other.set_.get());
+  }
+
+  std::optional<hb_codepoint_t> min() const {
+    hb_codepoint_t value = hb_set_get_min(set_.get());
+    if (value == HB_SET_VALUE_INVALID) {
+      return std::nullopt;
+    }
+    return value;
+  }
+
+  std::optional<hb_codepoint_t> max() const {
+    hb_codepoint_t value = hb_set_get_max(set_.get());
+    if (value == HB_SET_VALUE_INVALID) {
+      return std::nullopt;
+    }
+    return value;
   }
 
   void erase(hb_codepoint_t codepoint) { hb_set_del(set_.get(), codepoint); }
@@ -179,15 +203,38 @@ class IntSet {
 
   bool empty() const { return hb_set_is_empty(set_.get()); }
 
-  // Remove all elements
+  // Removes all elements
   void clear() { hb_set_clear(set_.get()); }
+
+  // Compute the union of this and other, store the result in this set.
+  void union_set(const IntSet& other) {
+    hb_set_union(set_.get(), other.set_.get());
+  }
+
+  // Compute the intersection of this and other, store the result in this set.
+  void intersect(const IntSet& other) {
+    hb_set_intersect(set_.get(), other.set_.get());
+  }
+
+  // Subtract other from this set.
+  void subtract(const IntSet& other) {
+    hb_set_subtract(set_.get(), other.set_.get());
+  }
+
+  // Compute the symmetric difference of this and other, store the result in
+  // this set.
+  void symmetric_difference(const IntSet& other) {
+    hb_set_symmetric_difference(set_.get(), other.set_.get());
+  }
 
  private:
   // Note: set_ must always point to a valid set object. nullptr is not allowed.
-  // Note: we always retain exclusive ownership over set_. Normally hb_set_t* can be
-  //       shared (via hb_set_reference()), but for this container we don't ever expose
-  //       the underlying hb_set_t* pointer so that we know we're always the only owner.
-  //       This prevents the sets contents from being changed outside of this class.
+  // Note: we always retain exclusive ownership over set_. Normally hb_set_t*
+  // can be
+  //       shared (via hb_set_reference()), but for this container we don't ever
+  //       expose the underlying hb_set_t* pointer so that we know we're always
+  //       the only owner. This prevents the sets contents from being changed
+  //       outside of this class.
   hb_set_unique_ptr set_;
 };
 

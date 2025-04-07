@@ -1,8 +1,10 @@
 #include "common/int_set.h"
 
+#include <optional>
+
+#include "absl/hash/hash_testing.h"
 #include "common/hb_set_unique_ptr.h"
 #include "gtest/gtest.h"
-#include "absl/hash/hash_testing.h"
 
 namespace common {
 
@@ -126,7 +128,7 @@ TEST_F(IntSetTest, CopyHbSet) {
   // Make sure chaing hb_set doesn't cause changes in the IntSet's
   hb_set_add(hb_set.get(), 49);
 
-  IntSet expected {13, 47};
+  IntSet expected{13, 47};
 
   ASSERT_EQ(a, expected);
   ASSERT_EQ(b, expected);
@@ -219,13 +221,95 @@ TEST_F(IntSetTest, UseInHashSet) {
 
 TEST_F(IntSetTest, SupportsAbslHash) {
   EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly({
-      IntSet {},
-      IntSet {7, 8},
-      IntSet {7, 8, 11},
-      IntSet {7, 8, 12},
-      IntSet {8, 11},
-      IntSet {7, 8, 12},
+      IntSet{},
+      IntSet{7, 8},
+      IntSet{7, 8, 11},
+      IntSet{7, 8, 12},
+      IntSet{8, 11},
+      IntSet{7, 8, 12},
   }));
+}
+
+TEST_F(IntSetTest, MinMax) {
+  IntSet empty{};
+  IntSet a{8};
+  IntSet b{7, 8, 11};
+
+  ASSERT_EQ(empty.min(), std::nullopt);
+  ASSERT_EQ(empty.max(), std::nullopt);
+
+  ASSERT_EQ(*a.min(), 8);
+  ASSERT_EQ(*a.max(), 8);
+
+  ASSERT_EQ(*b.min(), 7);
+  ASSERT_EQ(*b.max(), 11);
+}
+
+TEST_F(IntSetTest, AddRange) {
+  IntSet a{7, 8, 11};
+
+  a.add_range(10, 15);
+  IntSet expected{7, 8, 10, 11, 12, 13, 14, 15};
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, IsSubsetOf) {
+  IntSet empty;
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+
+  ASSERT_TRUE(empty.is_subset_of(a));
+  ASSERT_TRUE(empty.is_subset_of(b));
+
+  ASSERT_FALSE(a.is_subset_of(empty));
+  ASSERT_FALSE(b.is_subset_of(empty));
+
+  ASSERT_TRUE(a.is_subset_of(b));
+  ASSERT_FALSE(b.is_subset_of(a));
+
+  ASSERT_TRUE(a.is_subset_of(a));
+  ASSERT_TRUE(b.is_subset_of(b));
+}
+
+TEST_F(IntSetTest, Union) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5, 8, 11};
+
+  a.union_set(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, Intersect) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{8};
+
+  a.intersect(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, Subtract) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5};
+
+  a.subtract(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, SymmetricDifference) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5, 11};
+
+  a.symmetric_difference(b);
+
+  ASSERT_EQ(a, expected);
 }
 
 }  // namespace common
