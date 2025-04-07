@@ -113,5 +113,6 @@ cc_test(
         ":mocks",
         "@googletest//:gtest_main",
         "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/hash:hash_test",
     ],
 )

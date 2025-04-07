@@ -2,6 +2,7 @@
 
 #include "common/hb_set_unique_ptr.h"
 #include "gtest/gtest.h"
+#include "absl/hash/hash_testing.h"
 
 namespace common {
 
@@ -200,6 +201,31 @@ TEST_F(IntSetTest, UseInBtreeSet) {
   ASSERT_EQ(*it, empty);
 }
 
-// TODO(garretrieger): test use in hash and btree, sets and maps.
+TEST_F(IntSetTest, UseInHashSet) {
+  absl::flat_hash_set<IntSet> sets{{7, 8, 11}, {7, 8}, {7, 8, 12}, {}};
+
+  IntSet empty{};
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  ASSERT_TRUE(sets.contains(empty));
+  ASSERT_TRUE(sets.contains(a));
+  ASSERT_TRUE(sets.contains(b));
+  ASSERT_TRUE(sets.contains(c));
+  ASSERT_FALSE(sets.contains(d));
+}
+
+TEST_F(IntSetTest, SupportsAbslHash) {
+  EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly({
+      IntSet {},
+      IntSet {7, 8},
+      IntSet {7, 8, 11},
+      IntSet {7, 8, 12},
+      IntSet {8, 11},
+      IntSet {7, 8, 12},
+  }));
+}
 
 }  // namespace common
