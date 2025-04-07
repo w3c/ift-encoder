@@ -1,5 +1,6 @@
 #include "common/int_set.h"
 
+#include "common/hb_set_unique_ptr.h"
 #include "gtest/gtest.h"
 
 namespace common {
@@ -115,6 +116,43 @@ TEST_F(IntSetTest, CopyConstructor) {
   ASSERT_TRUE(b.contains(47));
 }
 
+TEST_F(IntSetTest, CopyHbSet) {
+  hb_set_unique_ptr hb_set = make_hb_set(2, 13, 47);
+
+  IntSet a(hb_set.get());
+  IntSet b(hb_set);
+
+  // Make sure chaing hb_set doesn't cause changes in the IntSet's
+  hb_set_add(hb_set.get(), 49);
+
+  IntSet expected {13, 47};
+
+  ASSERT_EQ(a, expected);
+  ASSERT_EQ(b, expected);
+
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+  ASSERT_FALSE(a.contains(49));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+  ASSERT_FALSE(b.contains(49));
+}
+
+TEST_F(IntSetTest, Assignment) {
+  IntSet a{13, 47};
+  IntSet b{5, 9};
+
+  b = a;
+
+  ASSERT_EQ(a, b);
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+}
+
 TEST_F(IntSetTest, EmptySetIteration) {
   IntSet empty;
   ASSERT_EQ(empty.begin(), empty.end());
@@ -163,6 +201,5 @@ TEST_F(IntSetTest, UseInBtreeSet) {
 }
 
 // TODO(garretrieger): test use in hash and btree, sets and maps.
-// TODO(garretrieger): test various operators (<, >, ==, !=)
 
 }  // namespace common

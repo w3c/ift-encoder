@@ -77,15 +77,27 @@ class IntSet {
     }
   }
 
-  // TODO(garretrieger): construct from hb_set_t* or hb_set_unique_ptr.
-  // TODO(garretrieger): copy assignment operator
+  IntSet(const hb_set_t* set) : set_(make_hb_set()) {
+    // We always keep exclusive ownership of the internal set, so copy the contents
+    // of the input set instead of referencing it.
+    hb_set_union(set_.get(), set);
+  }
+
+  IntSet(const hb_set_unique_ptr& set) : set_(make_hb_set()) {
+    // We always keep exclusive ownership of the internal set, so copy the contents
+    // of the input set instead of referencing it.
+    hb_set_union(set_.get(), set.get());
+  }
 
   IntSet(const IntSet& other) : set_(make_hb_set()) {
     hb_set_union(set_.get(), other.set_.get());
   }
 
-  IntSet& operator=(const IntSet&) =
-      delete;  // TODO(garretrieger): implement this.
+  IntSet& operator=(const IntSet& other) {
+    hb_set_clear(set_.get());
+    hb_set_union(set_.get(), other.set_.get());
+    return *this;
+  }
 
   IntSet(IntSet&& other) noexcept : set_(make_hb_set()) {
     // swap pointers so that the moved set is still in a valid state.
@@ -128,6 +140,8 @@ class IntSet {
     return a == this->end();
   }
 
+  // TODO(garretrieger): add union, intersection etc.
+
   // TODO(garretrieger): add absl hashing support so we can use these in
   // hash_sets/maps
 
@@ -166,6 +180,10 @@ class IntSet {
 
  private:
   // Note: set_ must always point to a valid set object. nullptr is not allowed.
+  // Note: we always retain exclusive ownership over set_. Normally hb_set_t* can be
+  //       shared (via hb_set_reference()), but for this container we don't ever expose
+  //       the underlying hb_set_t* pointer so that we know we're always the only owner.
+  //       This prevents the sets contents from being changed outside of this class.
   hb_set_unique_ptr set_;
 };
 
