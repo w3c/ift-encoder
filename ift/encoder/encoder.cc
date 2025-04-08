@@ -29,7 +29,6 @@
 
 using absl::btree_set;
 using absl::flat_hash_map;
-using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -104,12 +103,6 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
   all.design_space.clear();
 
   return CutSubset(context, face_.get(), all, false);
-}
-
-bool is_subset(const flat_hash_set<uint32_t>& a,
-               const flat_hash_set<uint32_t>& b) {
-  return std::all_of(b.begin(), b.end(),
-                     [&a](const uint32_t& v) { return a.count(v) > 0; });
 }
 
 std::vector<SubsetDefinition> Encoder::OutgoingEdges(
@@ -303,7 +296,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
     return absl::OkStatus();
   }
 
-  flat_hash_set<uint32_t> reachable_segments;
+  IntSet reachable_segments;
   for (const auto& condition : glyph_patch_conditions_) {
     if (condition.activated_patch_id.has_value()) {
       reachable_segments.insert(*condition.activated_patch_id);

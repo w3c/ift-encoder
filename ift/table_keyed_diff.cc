@@ -136,7 +136,7 @@ Status TableKeyedDiff::Diff(const FontData& font_base,
   return absl::OkStatus();
 }
 
-void TableKeyedDiff::AddAllMatching(const flat_hash_set<uint32_t>& tags,
+void TableKeyedDiff::AddAllMatching(const flat_hash_set<hb_tag_t>& tags,
                                     btree_set<std::string>& result) const {
   for (const uint32_t& t : tags) {
     std::string tag = FontHelper::ToString(t);
@@ -147,8 +147,8 @@ void TableKeyedDiff::AddAllMatching(const flat_hash_set<uint32_t>& tags,
 }
 
 btree_set<std::string> TableKeyedDiff::TagsToDiff(
-    const absl::flat_hash_set<uint32_t>& before,
-    const absl::flat_hash_set<uint32_t>& after) const {
+    const absl::flat_hash_set<hb_tag_t>& before,
+    const absl::flat_hash_set<hb_tag_t>& after) const {
   btree_set<std::string> result;
   AddAllMatching(before, result);
   AddAllMatching(after, result);

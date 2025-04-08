@@ -5,18 +5,18 @@
 #include <string>
 
 #include "absl/container/btree_map.h"
-#include "absl/container/btree_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 #include "hb.h"
 #include "util/encoder_config.pb.h"
 
 using absl::btree_map;
-using absl::btree_set;
 using absl::StatusOr;
 using absl::string_view;
 using common::FontHelper;
+using common::IntSet;
 
 namespace util {
 
@@ -36,8 +36,8 @@ string_view next_token(string_view line, string_view delim, std::string& out) {
   return line.substr(index + delim.size());
 }
 
-btree_set<std::uint32_t> load_chunk_set(string_view line) {
-  btree_set<std::uint32_t> result;
+IntSet load_chunk_set(string_view line) {
+  IntSet result;
 
   std::string next;
   while (!line.empty()) {
@@ -68,7 +68,7 @@ btree_map<std::uint32_t, uint32_t> load_gid_map(string_view line) {
 
 StatusOr<EncoderConfig> create_config(
     const btree_map<std::uint32_t, uint32_t>& gid_map,
-    const btree_set<uint32_t>& loaded_chunks, hb_face_t* face) {
+    const IntSet& loaded_chunks, hb_face_t* face) {
   auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
   EncoderConfig config;
   // Populate segments in the config. chunks are directly analagous to segments.
@@ -95,7 +95,7 @@ StatusOr<EncoderConfig> create_config(
   // Add all non-initial segments to a single non-glyph segment
   // TODO(garretrieger): flag to configure having more than one table keyed
   //                     segment.
-  btree_set<uint32_t> non_initial_segments;
+  IntSet non_initial_segments;
   for (const auto [gid, chunk] : gid_map) {
     if (loaded_chunks.contains(chunk)) {
       continue;
@@ -117,7 +117,7 @@ StatusOr<EncoderConfig> create_config(
 
 StatusOr<EncoderConfig> convert_iftb(string_view iftb_dump, hb_face_t* face) {
   btree_map<std::uint32_t, uint32_t> gid_map;
-  btree_set<uint32_t> loaded_chunks;
+  IntSet loaded_chunks;
 
   while (!iftb_dump.empty()) {
     std::string line;

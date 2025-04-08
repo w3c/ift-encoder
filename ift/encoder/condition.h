@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
@@ -18,7 +19,7 @@ namespace ift::encoder {
  */
 struct Condition {
   SubsetDefinition subset_definition;
-  absl::btree_set<uint32_t> child_conditions;
+  common::IntSet child_conditions;
   bool conjunctive = false;
   std::optional<uint32_t> activated_patch_id = std::nullopt;
 
