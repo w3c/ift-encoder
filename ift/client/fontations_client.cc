@@ -135,9 +135,9 @@ Status ToGraph(const Encoder::Encoding& encoding, graph& out,
 }
 
 StatusOr<FontData> ExtendWithDesignSpace(
-    const Encoder::Encoding& encoding, IntSet codepoints,
-    btree_set<hb_tag_t> feature_tags,
-    flat_hash_map<hb_tag_t, AxisRange> design_space,
+    const Encoder::Encoding& encoding, const IntSet& codepoints,
+    const btree_set<hb_tag_t>& feature_tags,
+    const flat_hash_map<hb_tag_t, AxisRange>& design_space,
     btree_set<std::string>* applied_uris) {
   auto font_path_str = WriteFontToDisk(encoding);
   if (!font_path_str.ok()) {
@@ -203,7 +203,7 @@ StatusOr<FontData> ExtendWithDesignSpace(
 }
 
 StatusOr<FontData> Extend(const Encoder::Encoding& encoding,
-                          IntSet codepoints) {
+                          const IntSet& codepoints) {
   absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
   return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr);
 }
