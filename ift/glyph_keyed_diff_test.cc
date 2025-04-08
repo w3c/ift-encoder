@@ -7,12 +7,12 @@
 #include "common/compat_id.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "hb-subset.h"
 #include "hb.h"
 #include "ift/proto/ift_table.h"
 
-using absl::flat_hash_set;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
@@ -23,6 +23,7 @@ using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::hb_font_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using common::make_hb_font;
@@ -158,7 +159,7 @@ class GlyphKeyedDiffTest : public ::testing::Test {
     return FontData(make_hb_blob(hb_blob_create_from_file(filename)));
   }
 
-  FontData Subset(const FontData& font, flat_hash_set<uint32_t> gids) {
+  FontData Subset(const FontData& font, IntSet gids) {
     hb_face_unique_ptr face = font.face();
     hb_subset_input_t* input = hb_subset_input_create_or_fail();
     for (uint32_t gid : gids) {

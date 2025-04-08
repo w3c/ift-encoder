@@ -58,7 +58,7 @@ class PatchMap {
     // Set of child entry indices
     // (https://w3c.github.io/IFT/Overview.html#mapping-entry-childentrymatchmodeandcount)
     // values are the indices of previous entries.
-    absl::btree_set<uint32_t> child_indices;
+    common::IntSet child_indices;
   };
 
   struct Entry {

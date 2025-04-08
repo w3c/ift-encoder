@@ -11,6 +11,7 @@
 #include "absl/status/status.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "ift/encoder/encoder.h"
 
 namespace ift::client {
@@ -32,15 +33,13 @@ absl::Status ToGraph(const ift::encoder::Encoder::Encoding& encoding,
  * the client ended up fetching and applying.
  */
 absl::StatusOr<common::FontData> ExtendWithDesignSpace(
-    const ift::encoder::Encoder::Encoding& encoding,
-    absl::btree_set<uint32_t> codepoints,
+    const ift::encoder::Encoder::Encoding& encoding, common::IntSet codepoints,
     absl::btree_set<hb_tag_t> feature_tags,
     absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space,
     absl::btree_set<std::string>* applied_uris = nullptr);
 
 absl::StatusOr<common::FontData> Extend(
-    const ift::encoder::Encoder::Encoding& encoding,
-    absl::btree_set<uint32_t> codepoints);
+    const ift::encoder::Encoder::Encoding& encoding, common::IntSet codepoints);
 
 }  // namespace ift::client
 

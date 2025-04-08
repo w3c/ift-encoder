@@ -7,6 +7,7 @@
 #include "absl/status/status.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "ift/encoder/encoder.h"
 
 using absl::btree_set;
@@ -15,6 +16,7 @@ using absl::Status;
 using absl::StatusOr;
 using common::AxisRange;
 using common::FontData;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using ift::encoder::Encoder;
@@ -133,7 +135,7 @@ Status ToGraph(const Encoder::Encoding& encoding, graph& out,
 }
 
 StatusOr<FontData> ExtendWithDesignSpace(
-    const Encoder::Encoding& encoding, btree_set<uint32_t> codepoints,
+    const Encoder::Encoding& encoding, IntSet codepoints,
     btree_set<hb_tag_t> feature_tags,
     flat_hash_map<hb_tag_t, AxisRange> design_space,
     btree_set<std::string>* applied_uris) {
@@ -201,7 +203,7 @@ StatusOr<FontData> ExtendWithDesignSpace(
 }
 
 StatusOr<FontData> Extend(const Encoder::Encoding& encoding,
-                          absl::btree_set<uint32_t> codepoints) {
+                          IntSet codepoints) {
   absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
   return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr);
 }

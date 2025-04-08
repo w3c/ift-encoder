@@ -7,6 +7,7 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 #include "common/sparse_bit_set.h"
 #include "ift/feature_registry/feature_registry.h"
 #include "ift/proto/patch_encoding.h"
@@ -17,6 +18,7 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using common::FontHelper;
+using common::IntSet;
 using common::SparseBitSet;
 using ift::feature_registry::FeatureTagToIndex;
 using ift::feature_registry::IndexToFeatureTag;
@@ -37,9 +39,7 @@ static bool sets_intersect(const S& a, const S& b) {
 }
 
 void PrintTo(const PatchMap::Coverage& coverage, std::ostream* os) {
-  absl::btree_set<uint32_t> sorted_codepoints;
-  std::copy(coverage.codepoints.begin(), coverage.codepoints.end(),
-            std::inserter(sorted_codepoints, sorted_codepoints.begin()));
+  const IntSet& sorted_codepoints = coverage.codepoints;
 
   if (!coverage.features.empty() || !coverage.design_space.empty()) {
     *os << "{";

@@ -45,11 +45,11 @@ class TableKeyedDiff : public common::BinaryDiff {
                     common::FontData* patch /* OUT */) const override;
 
  private:
-  void AddAllMatching(const absl::flat_hash_set<uint32_t>& tags,
+  void AddAllMatching(const absl::flat_hash_set<hb_tag_t>& tags,
                       absl::btree_set<std::string>& result) const;
   absl::btree_set<std::string> TagsToDiff(
-      const absl::flat_hash_set<uint32_t>& before,
-      const absl::flat_hash_set<uint32_t>& after) const;
+      const absl::flat_hash_set<hb_tag_t>& before,
+      const absl::flat_hash_set<hb_tag_t>& after) const;
 
   common::BrotliBinaryDiff binary_diff_;
   common::CompatId base_compat_id_;

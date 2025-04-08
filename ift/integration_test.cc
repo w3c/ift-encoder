@@ -2,7 +2,6 @@
 #include <optional>
 #include <string>
 
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
@@ -21,7 +20,6 @@
 
 using absl::btree_set;
 using absl::flat_hash_map;
-using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -303,11 +301,11 @@ TEST_F(IntegrationTest, TableKeyedOnly) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x45, 0x46, 0x47});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(IntSet{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(IntSet{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -344,11 +342,11 @@ TEST_F(IntegrationTest, TableKeyedMultiple) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x45, 0x46, 0x47});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(IntSet{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(IntSet{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -385,12 +383,12 @@ TEST_F(IntegrationTest, TableKeyedWithOverlaps) {
   auto sc = InitEncoderForTableKeyed(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{0x41, 0x42, 0x43});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{
-      0x45, 0x46, 0x47, 0x48});  // 0x48 is in two subsets
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x48, 0x49, 0x4A});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4B, 0x4C, 0x4D});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{0x4E, 0x4F, 0x50});
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(
+      IntSet{0x45, 0x46, 0x47, 0x48});  // 0x48 is in two subsets
+  encoder.AddNonGlyphDataSegment(IntSet{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -439,8 +437,8 @@ TEST_F(IntegrationTest, TableKeyed_DesignSpaceAugmentation_IgnoresDesignSpace) {
   def.design_space[kWdth] = AxisRange::Point(100.0f);
   sc = encoder.SetBaseSubsetFromDef(def);
 
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'d', 'e', 'f'});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'h', 'i', 'j'});
+  encoder.AddNonGlyphDataSegment(IntSet{'d', 'e', 'f'});
+  encoder.AddNonGlyphDataSegment(IntSet{'h', 'i', 'j'});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -489,8 +487,8 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   def.design_space[kWdth] = AxisRange::Point(100.0f);
   sc = encoder.SetBaseSubsetFromDef(def);
 
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'d', 'e', 'f'});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'h', 'i', 'j'});
+  encoder.AddNonGlyphDataSegment(IntSet{'d', 'e', 'f'});
+  encoder.AddNonGlyphDataSegment(IntSet{'h', 'i', 'j'});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -567,7 +565,7 @@ TEST_F(IntegrationTest, MixedMode) {
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
-  flat_hash_set<uint32_t> base;
+  IntSet base;
   base.insert(segment_0.begin(), segment_0.end());
   base.insert(segment_1.begin(), segment_1.end());
   auto sc = encoder.SetBaseSubset(base);
@@ -749,14 +747,14 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
   auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
   auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
-  flat_hash_set<uint32_t> all;
+  IntSet all;
   all.insert(segment_1.begin(), segment_1.end());
   all.insert(segment_2.begin(), segment_2.end());
   all.insert(segment_3.begin(), segment_3.end());
   all.insert(segment_4.begin(), segment_4.end());
 
   // target paritions: {}, {{1}, {2}, {3, 4}}
-  auto sc = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
+  auto sc = encoder.SetBaseSubset(IntSet{});
   encoder.AddNonGlyphDataSegment(all);
   ASSERT_TRUE(sc.ok()) << sc;
 

@@ -14,13 +14,8 @@ namespace ift::encoder {
 void PrintTo(const SubsetDefinition& def, std::ostream* os) {
   *os << "[{";
 
-  btree_set<uint32_t> sorted;
-  for (uint32_t cp : def.codepoints) {
-    sorted.insert(cp);
-  }
-
   bool first = true;
-  for (uint32_t cp : sorted) {
+  for (uint32_t cp : def.codepoints) {
     if (!first) {
       *os << ", ";
     }

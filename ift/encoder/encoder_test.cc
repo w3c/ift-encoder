@@ -10,7 +10,6 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "common/axis_range.h"
@@ -29,7 +28,6 @@
 using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
-using absl::flat_hash_set;
 using absl::Span;
 using absl::Status;
 using absl::StatusOr;
@@ -171,10 +169,10 @@ StatusOr<bool> PatchHasGvar(const flat_hash_map<std::string, FontData>& patches,
 
 TEST_F(EncoderTest, OutgoingEdges) {
   Encoder encoder;
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{1, 2});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{3, 4});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{5, 6});
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{7, 8});
+  encoder.AddNonGlyphDataSegment(IntSet{1, 2});
+  encoder.AddNonGlyphDataSegment(IntSet{3, 4});
+  encoder.AddNonGlyphDataSegment(IntSet{5, 6});
+  encoder.AddNonGlyphDataSegment(IntSet{7, 8});
 
   SubsetDefinition s1{1, 2};
   SubsetDefinition s2{3, 4};
@@ -244,7 +242,7 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_PointToRange) {
   base.design_space[kWght] = AxisRange::Point(300);
 
   Encoder encoder;
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{3, 4});
+  encoder.AddNonGlyphDataSegment(IntSet{3, 4});
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(300, 400)}});
 
   SubsetDefinition s1{3, 4};
@@ -265,7 +263,7 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_AddAxis_1) {
   base.design_space[kWght] = *AxisRange::Range(200, 500);
 
   Encoder encoder;
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{3, 4});
+  encoder.AddNonGlyphDataSegment(IntSet{3, 4});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(300, 400)}});
 
   SubsetDefinition s1{3, 4};
@@ -286,7 +284,7 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_AddAxis_OverlappingAxisRange) {
   base.design_space[kWght] = *AxisRange::Range(200, 500);
 
   Encoder encoder;
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{3, 4});
+  encoder.AddNonGlyphDataSegment(IntSet{3, 4});
   encoder.AddDesignSpaceSegment({
       {kWght, *AxisRange::Range(300, 700)},
       {kWdth, *AxisRange::Range(300, 400)},
@@ -372,13 +370,13 @@ TEST_F(EncoderTest, DontClobberBaseSubset) {
   auto s = encoder.AddGlyphDataPatch(1, segment_1_gids);
   ASSERT_TRUE(s.ok()) << s;
 
-  s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
+  s = encoder.SetBaseSubset(IntSet{});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{1});
+  s = encoder.SetBaseSubset(IntSet{1});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
+  s = encoder.SetBaseSubset(IntSet{});
   ASSERT_TRUE(absl::IsFailedPrecondition(s)) << s;
 }
 
@@ -387,7 +385,7 @@ TEST_F(EncoderTest, Encode_OneSubset) {
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
 
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a', 'd'});
+  auto s = encoder.SetBaseSubset(IntSet{'a', 'd'});
   ASSERT_TRUE(s.ok()) << s;
   auto encoding = encoder.Encode();
   hb_face_destroy(face);
@@ -403,11 +401,11 @@ TEST_F(EncoderTest, Encode_OneSubset) {
 }
 
 TEST_F(EncoderTest, Encode_TwoSubsets) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'b', 'c'};
+  IntSet s1 = {'b', 'c'};
   Encoder encoder;
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a', 'd'});
+  auto s = encoder.SetBaseSubset(IntSet{'a', 'd'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
 
@@ -425,11 +423,11 @@ TEST_F(EncoderTest, Encode_TwoSubsets) {
 }
 
 TEST_F(EncoderTest, Encode_TwoSubsetsAndOptionalFeature) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'B', 'C'};
+  IntSet s1 = {'B', 'C'};
   Encoder encoder;
   hb_face_t* face = full_font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'A', 'D'});
+  auto s = encoder.SetBaseSubset(IntSet{'A', 'D'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
   encoder.AddFeatureGroupSegment({HB_TAG('c', '2', 's', 'c')});
@@ -453,12 +451,12 @@ TEST_F(EncoderTest, Encode_TwoSubsetsAndOptionalFeature) {
 }
 
 TEST_F(EncoderTest, Encode_ThreeSubsets) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'b'};
-  absl::flat_hash_set<hb_codepoint_t> s2 = {'c'};
+  IntSet s1 = {'b'};
+  IntSet s2 = {'c'};
   Encoder encoder;
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a'});
+  auto s = encoder.SetBaseSubset(IntSet{'a'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
   encoder.AddNonGlyphDataSegment(s2);
@@ -483,12 +481,12 @@ TEST_F(EncoderTest, Encode_ThreeSubsets) {
 }
 
 TEST_F(EncoderTest, Encode_ThreeSubsets_WithOverlaps) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'b', 'c'};
-  absl::flat_hash_set<hb_codepoint_t> s2 = {'b', 'd'};
+  IntSet s1 = {'b', 'c'};
+  IntSet s2 = {'b', 'd'};
   Encoder encoder;
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a'});
+  auto s = encoder.SetBaseSubset(IntSet{'a'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
   encoder.AddNonGlyphDataSegment(s2);
@@ -522,7 +520,7 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_VF) {
   auto s = encoder.SetBaseSubsetFromDef(base_def);
   ASSERT_TRUE(s.ok()) << s;
 
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'b'});
+  encoder.AddNonGlyphDataSegment(IntSet{'b'});
   encoder.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
 
   auto encoding = encoder.Encode();
@@ -565,13 +563,13 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
       SubsetDefinition::Codepoints(segment_4_cps), 4)));
 
-  flat_hash_set<uint32_t> base_subset;
+  IntSet base_subset;
   base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
   base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
   base_subset.insert(segment_2_cps.begin(), segment_2_cps.end());
   s.Update(encoder.SetBaseSubset(base_subset));
 
-  flat_hash_set<uint32_t> extension_segment;
+  IntSet extension_segment;
   extension_segment.insert(segment_3_cps.begin(), segment_3_cps.end());
   extension_segment.insert(segment_4_cps.begin(), segment_4_cps.end());
   encoder.AddNonGlyphDataSegment(extension_segment);
@@ -634,8 +632,7 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
   base_subset.design_space[kWght] = AxisRange::Point(300.0f);
   s.Update(encoder.SetBaseSubsetFromDef(base_subset));
 
-  flat_hash_set<uint32_t> extension_segment = {0x41, 0x42, 0x43, 0x44,
-                                               0x45, 0x46, 0x47, 0x48};
+  IntSet extension_segment = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48};
   encoder.AddNonGlyphDataSegment(extension_segment);
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(200.0f, 700.0f)}});
 
@@ -699,12 +696,12 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   ASSERT_TRUE(s.ok()) << s;
 
   // Partitions {0, 1}, {2, 3, 4}, +ccmp
-  flat_hash_set<uint32_t> base_subset;
+  IntSet base_subset;
   base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
   base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
   s.Update(encoder.SetBaseSubset(base_subset));
 
-  flat_hash_set<uint32_t> extension_segment;
+  IntSet extension_segment;
   extension_segment.insert(segment_2_cps.begin(), segment_2_cps.end());
   extension_segment.insert(segment_3_cps.begin(), segment_3_cps.end());
   extension_segment.insert(segment_4_cps.begin(), segment_4_cps.end());
@@ -726,13 +723,13 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
 }
 
 TEST_F(EncoderTest, Encode_FourSubsets) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'b'};
-  absl::flat_hash_set<hb_codepoint_t> s2 = {'c'};
-  absl::flat_hash_set<hb_codepoint_t> s3 = {'d'};
+  IntSet s1 = {'b'};
+  IntSet s2 = {'c'};
+  IntSet s3 = {'d'};
   Encoder encoder;
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a'});
+  auto s = encoder.SetBaseSubset(IntSet{'a'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
   encoder.AddNonGlyphDataSegment(s2);
@@ -757,13 +754,13 @@ TEST_F(EncoderTest, Encode_FourSubsets) {
 }
 
 TEST_F(EncoderTest, Encode_FourSubsets_WithJumpAhead) {
-  absl::flat_hash_set<hb_codepoint_t> s1 = {'b'};
-  absl::flat_hash_set<hb_codepoint_t> s2 = {'c'};
-  absl::flat_hash_set<hb_codepoint_t> s3 = {'d'};
+  IntSet s1 = {'b'};
+  IntSet s2 = {'c'};
+  IntSet s3 = {'d'};
   Encoder encoder;
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{'a'});
+  auto s = encoder.SetBaseSubset(IntSet{'a'});
   ASSERT_TRUE(s.ok()) << s;
   encoder.AddNonGlyphDataSegment(s1);
   encoder.AddNonGlyphDataSegment(s2);
@@ -804,7 +801,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
   hb_face_t* face = font.reference_face();
   encoder.SetFace(face);
 
-  auto s = encoder.SetBaseSubset(flat_hash_set<uint32_t>{});
+  auto s = encoder.SetBaseSubset(IntSet{});
   s.Update(encoder.AddGlyphDataPatch(1, {69}));  // a
   s.Update(encoder.AddGlyphDataPatch(2, {70}));  // b
   s.Update(encoder.AddGlyphDataPatch(3, {71}));  // c
@@ -812,7 +809,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
   s.Update(encoder.AddGlyphDataPatch(5, {50}));
   s.Update(encoder.AddGlyphDataPatch(6, {60}));
 
-  encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'a', 'b', 'c', 'd'});
+  encoder.AddNonGlyphDataSegment(IntSet{'a', 'b', 'c', 'd'});
 
   // 0
   s.Update(encoder.AddGlyphDataPatchCondition(
