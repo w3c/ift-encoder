@@ -33,13 +33,15 @@ absl::Status ToGraph(const ift::encoder::Encoder::Encoding& encoding,
  * the client ended up fetching and applying.
  */
 absl::StatusOr<common::FontData> ExtendWithDesignSpace(
-    const ift::encoder::Encoder::Encoding& encoding, common::IntSet codepoints,
-    absl::btree_set<hb_tag_t> feature_tags,
-    absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space,
+    const ift::encoder::Encoder::Encoding& encoding,
+    const common::IntSet& codepoints,
+    const absl::btree_set<hb_tag_t>& feature_tags,
+    const absl::flat_hash_map<hb_tag_t, common::AxisRange>& design_space,
     absl::btree_set<std::string>* applied_uris = nullptr);
 
 absl::StatusOr<common::FontData> Extend(
-    const ift::encoder::Encoder::Encoding& encoding, common::IntSet codepoints);
+    const ift::encoder::Encoder::Encoding& encoding,
+    const common::IntSet& codepoints);
 
 }  // namespace ift::client
 
