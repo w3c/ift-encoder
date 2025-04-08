@@ -6,14 +6,14 @@
 #include "brotli/hmtx_differ.h"
 #include "brotli/loca_differ.h"
 #include "brotli/table_range.h"
-#include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 
 namespace brotli {
 
 using absl::Span;
 using absl::Status;
 using common::FontData;
-using common::hb_set_unique_ptr;
+using common::IntSet;
 
 static bool HasTable(hb_face_t* face, hb_tag_t tag) {
   hb_blob_t* table = hb_face_reference_table(face, tag);
@@ -49,7 +49,7 @@ class DiffDriver {
  public:
   DiffDriver(hb_subset_plan_t* base_plan, hb_face_t* base_face,
              hb_subset_plan_t* derived_plan, hb_face_t* derived_face,
-             const hb_set_t* custom_diff_tables, BrotliStream& stream)
+             const IntSet& custom_diff_tables, BrotliStream& stream)
       : out(stream),
         base_new_to_old(hb_subset_plan_new_to_old_glyph_mapping(base_plan)),
         derived_old_to_new(
@@ -77,8 +77,7 @@ class DiffDriver {
     constexpr hb_tag_t LOCA = HB_TAG('l', 'o', 'c', 'a');
     constexpr hb_tag_t GLYF = HB_TAG('g', 'l', 'y', 'f');
 
-    hb_tag_t tag = HB_SET_VALUE_INVALID;
-    while (hb_set_next(custom_diff_tables, &tag)) {
+    for (hb_tag_t tag : custom_diff_tables) {
       switch (tag) {
         case HMTX:
           if (HasTable(base_face, derived_face, HMTX) &&
@@ -229,8 +228,8 @@ class DiffDriver {
   }
 };
 
-void BrotliFontDiff::SortForDiff(const hb_set_t* immutable_tables,
-                                 const hb_set_t* custom_diff_tables,
+void BrotliFontDiff::SortForDiff(const IntSet& immutable_tables,
+                                 const IntSet& custom_diff_tables,
                                  const hb_face_t* original_face,
                                  hb_face_t* face_builder) {
   // Place generic diff tables,
@@ -244,21 +243,19 @@ void BrotliFontDiff::SortForDiff(const hb_set_t* immutable_tables,
           num_tables)) {
     for (unsigned i = 0; i < num_tables; ++i) {
       hb_tag_t tag = table_tags[i];
-      if (!hb_set_has(immutable_tables, tag) &&
-          !hb_set_has(custom_diff_tables, tag)) {
+      if (!immutable_tables.contains(tag) &&
+          !custom_diff_tables.contains(tag)) {
         table_order.push_back(tag);
       }
     }
     offset += num_tables;
   }
 
-  hb_codepoint_t tag = HB_SET_VALUE_INVALID;
-  while (hb_set_next(immutable_tables, &tag)) {
+  for (hb_codepoint_t tag : immutable_tables) {
     table_order.push_back(tag);
   }
 
-  tag = HB_SET_VALUE_INVALID;
-  while (hb_set_next(custom_diff_tables, &tag)) {
+  for (hb_codepoint_t tag : custom_diff_tables) {
     table_order.push_back(tag);
   }
 
@@ -287,15 +284,13 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   unsigned base_end_offset = 0;
 
   DiffDriver diff_driver(base_plan, base_face, derived_plan, derived_face,
-                         custom_diff_tables_.get(), out);
+                         custom_diff_tables_, out);
 
-  const hb_set_t* tag_sets[] = {immutable_tables_.get(),
-                                custom_diff_tables_.get()};
+  const IntSet* tag_sets[] = {&immutable_tables_, &custom_diff_tables_};
   unsigned base_region_sizes[] = {0, 0};
   unsigned i = 0;
-  for (const hb_set_t* set : tag_sets) {
-    hb_tag_t tag = HB_SET_VALUE_INVALID;
-    while (hb_set_next(set, &tag)) {
+  for (const IntSet* set : tag_sets) {
+    for (hb_tag_t tag : *set) {
       if (!HasTable(derived_face, tag)) {
         continue;
       }

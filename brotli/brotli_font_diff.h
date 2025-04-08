@@ -3,7 +3,7 @@
 
 #include "absl/status/status.h"
 #include "common/font_data.h"
-#include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "hb-subset.h"
 
 namespace brotli {
@@ -16,23 +16,23 @@ class BrotliFontDiff {
  public:
   // Sorts the tables in face_builder into the order expected by the font
   // differ.
-  static void SortForDiff(const hb_set_t* immutable_tables,
-                          const hb_set_t* custom_diff_tables,
+  static void SortForDiff(const common::IntSet& immutable_tables,
+                          const common::IntSet& custom_diff_tables,
                           const hb_face_t* original_face,
                           hb_face_t* face_builder /* IN/OUT */);
 
-  BrotliFontDiff(const hb_set_t* immutable_tables,
-                 const hb_set_t* custom_diff_tables)
-      : immutable_tables_(hb_set_copy(immutable_tables), &hb_set_destroy),
-        custom_diff_tables_(hb_set_copy(custom_diff_tables), &hb_set_destroy) {}
+  BrotliFontDiff(const common::IntSet& immutable_tables,
+                 const common::IntSet& custom_diff_tables)
+      : immutable_tables_(immutable_tables),
+        custom_diff_tables_(custom_diff_tables) {}
 
   absl::Status Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
                     hb_subset_plan_t* derived_plan, hb_blob_t* derived,
                     common::FontData* patch) const;
 
  private:
-  common::hb_set_unique_ptr immutable_tables_;
-  common::hb_set_unique_ptr custom_diff_tables_;
+  common::IntSet immutable_tables_;
+  common::IntSet custom_diff_tables_;
 };
 
 }  // namespace brotli

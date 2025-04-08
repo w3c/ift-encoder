@@ -1,7 +1,6 @@
 #include "ift/proto/ift_table.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -12,7 +11,6 @@
 #include "absl/strings/string_view.h"
 #include "common/compat_id.h"
 #include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/sparse_bit_set.h"
 #include "common/try.h"
 #include "hb.h"
@@ -26,8 +24,6 @@ using absl::StrCat;
 using common::CompatId;
 using common::FontData;
 using common::FontHelper;
-using common::hb_set_unique_ptr;
-using common::make_hb_set;
 using common::SparseBitSet;
 
 namespace ift::proto {

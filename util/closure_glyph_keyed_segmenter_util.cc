@@ -13,7 +13,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "common/font_data.h"
-#include "common/hb_set_unique_ptr.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
@@ -71,10 +71,8 @@ using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
-using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
-using common::make_hb_set;
 using google::protobuf::TextFormat;
 using ift::URLTemplate;
 using ift::encoder::ClosureGlyphSegmenter;
@@ -85,21 +83,20 @@ using ift::encoder::SubsetDefinition;
 
 StatusOr<std::vector<uint32_t>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file) {
-  hb_set_unique_ptr font_unicodes = make_hb_set();
-  hb_face_collect_unicodes(font, font_unicodes.get());
+  IntSet font_unicodes = FontHelper::ToCodepointsSet(font);
+
   std::vector<uint32_t> codepoints_filtered;
   if (!codepoints_file.empty()) {
     auto codepoints = TRY(util::LoadCodepointsOrdered(codepoints_file.c_str()));
     for (auto cp : codepoints) {
-      if (hb_set_has(font_unicodes.get(), cp)) {
+      if (font_unicodes.contains(cp)) {
         codepoints_filtered.push_back(cp);
       }
     }
   } else {
     // No codepoints file, just use the full set of codepoints supported by the
     // font.
-    hb_codepoint_t cp = HB_SET_VALUE_INVALID;
-    while (hb_set_next(font_unicodes.get(), &cp)) {
+    for (uint32_t cp : font_unicodes) {
       codepoints_filtered.push_back(cp);
     }
   }

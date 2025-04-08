@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "hb.h"
