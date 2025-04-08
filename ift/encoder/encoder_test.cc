@@ -19,6 +19,7 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/client/fontations_client.h"
 #include "ift/encoder/subset_definition.h"
@@ -41,6 +42,7 @@ using common::BrotliBinaryPatch;
 using common::FontData;
 using common::FontHelper;
 using common::hb_set_unique_ptr;
+using common::IntSet;
 using common::make_hb_set;
 using ift::client::ToGraph;
 using ift::proto::DEFAULT_ENCODING;
@@ -71,19 +73,23 @@ class EncoderTest : public ::testing::Test {
     noto_sans_jp = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
 
     auto face = noto_sans_jp.face();
-    hb_set_unique_ptr init = make_hb_set();
-    hb_set_add_range(init.get(), 0, hb_face_get_glyph_count(face.get()) - 1);
-    hb_set_unique_ptr excluded = make_hb_set();
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_1,
+    IntSet init;
+    init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
+
+    hb_set_unique_ptr excluded_hb = make_hb_set();
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_1,
                             std::size(testdata::TEST_SEGMENT_1));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_2,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_2,
                             std::size(testdata::TEST_SEGMENT_2));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_3,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_3,
                             std::size(testdata::TEST_SEGMENT_3));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_4,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_4,
                             std::size(testdata::TEST_SEGMENT_4));
-    hb_set_subtract(init.get(), excluded.get());
-    segment_0_gids = common::to_btree_set(init.get());
+
+    IntSet excluded(excluded_hb);
+    init.subtract(excluded);
+
+    segment_0_gids = init;
     segment_1_gids = TestSegment1();
     segment_2_gids = TestSegment2();
     segment_3_gids = TestSegment3();
@@ -102,17 +108,17 @@ class EncoderTest : public ::testing::Test {
   FontData vf_font;
   FontData noto_sans_jp;
 
-  btree_set<uint32_t> segment_0_gids;
-  btree_set<uint32_t> segment_1_gids;
-  btree_set<uint32_t> segment_2_gids;
-  btree_set<uint32_t> segment_3_gids;
-  btree_set<uint32_t> segment_4_gids;
+  IntSet segment_0_gids;
+  IntSet segment_1_gids;
+  IntSet segment_2_gids;
+  IntSet segment_3_gids;
+  IntSet segment_4_gids;
 
-  btree_set<uint32_t> segment_0_cps;
-  btree_set<uint32_t> segment_1_cps;
-  btree_set<uint32_t> segment_2_cps;
-  btree_set<uint32_t> segment_3_cps;
-  btree_set<uint32_t> segment_4_cps;
+  IntSet segment_0_cps;
+  IntSet segment_1_cps;
+  IntSet segment_2_cps;
+  IntSet segment_3_cps;
+  IntSet segment_4_cps;
 
   uint32_t chunk0_cp = 0x47;
   uint32_t chunk1_cp = 0xb7;
@@ -640,14 +646,10 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
   s.Update(encoder.AddGlyphDataPatch(1, {41, 42, 43, 44}));
   ASSERT_TRUE(s.ok()) << s;
 
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(
-          flat_hash_set<uint32_t>{0x41, 0x42, 0x43, 0x44}),
-      0)));
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(
-          flat_hash_set<uint32_t>{0x45, 0x46, 0x47, 0x48}),
-      1)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{0x41, 0x42, 0x43, 0x44}, 0)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{0x45, 0x46, 0x47, 0x48}, 1)));
 
   SubsetDefinition base_subset;
   base_subset.design_space[kWdth] = AxisRange::Point(100.0f);
@@ -835,27 +837,25 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
   encoder.AddNonGlyphDataSegment(flat_hash_set<uint32_t>{'a', 'b', 'c', 'd'});
 
   // 0
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(flat_hash_set<uint32_t>{'b'}), 2)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'b'}, 2)));
 
   // 1
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(flat_hash_set<uint32_t>{'c'}), 4)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'c'}, 4)));
 
   {
     // 2
     Condition condition;
     condition.activated_patch_id = std::nullopt;
-    condition.subset_definition =
-        SubsetDefinition::Codepoints(flat_hash_set<uint32_t>{'a'});
+    condition.subset_definition = SubsetDefinition{'a'};
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
   {
     // 3
     Condition condition;
     condition.activated_patch_id = std::nullopt;
-    condition.subset_definition =
-        SubsetDefinition::Codepoints(flat_hash_set<uint32_t>{'d'});
+    condition.subset_definition = SubsetDefinition{'d'};
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
 

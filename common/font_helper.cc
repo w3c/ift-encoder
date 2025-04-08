@@ -215,10 +215,9 @@ StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {
   return *count;
 }
 
-btree_set<uint32_t> FontHelper::GidsToUnicodes(
-    hb_face_t* face, const btree_set<uint32_t>& gids) {
+IntSet FontHelper::GidsToUnicodes(hb_face_t* face, const IntSet& gids) {
   auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
-  btree_set<uint32_t> result;
+  IntSet result;
   for (uint32_t gid : gids) {
     auto unicode = gid_to_unicode.find(gid);
     if (unicode != gid_to_unicode.end()) {
@@ -244,11 +243,11 @@ flat_hash_map<uint32_t, uint32_t> FontHelper::GidToUnicodeMap(hb_face_t* face) {
   return gid_to_unicode;
 }
 
-btree_set<uint32_t> FontHelper::ToCodepointsSet(hb_face_t* face) {
+IntSet FontHelper::ToCodepointsSet(hb_face_t* face) {
   hb_set_unique_ptr codepoints = make_hb_set();
   hb_face_collect_unicodes(face, codepoints.get());
 
-  btree_set<uint32_t> result;
+  IntSet result;
   hb_codepoint_t cp = HB_SET_VALUE_INVALID;
   while (hb_set_next(codepoints.get(), &cp)) {
     result.insert(cp);

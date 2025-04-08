@@ -8,6 +8,7 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -31,6 +32,7 @@ using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::hb_set_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using common::make_hb_set;
@@ -96,26 +98,26 @@ class IntegrationTest : public ::testing::Test {
     roboto_vf_.set(blob.get());
   }
 
-  StatusOr<btree_set<uint32_t>> InitEncoderForMixedMode(Encoder& encoder) {
+  StatusOr<IntSet> InitEncoderForMixedMode(Encoder& encoder) {
     auto face = noto_sans_jp_.face();
 
-    hb_set_unique_ptr init = make_hb_set();
-    hb_set_add_range(init.get(), 0, hb_face_get_glyph_count(face.get()) - 1);
-    hb_set_unique_ptr excluded = make_hb_set();
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_1,
+    IntSet init;
+    init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
+    hb_set_unique_ptr excluded_hb = make_hb_set();
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_1,
                             std::size(testdata::TEST_SEGMENT_1));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_2,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_2,
                             std::size(testdata::TEST_SEGMENT_2));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_3,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_3,
                             std::size(testdata::TEST_SEGMENT_3));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_SEGMENT_4,
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_4,
                             std::size(testdata::TEST_SEGMENT_4));
-    hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_btree_set(init.get());
+    IntSet excluded(excluded_hb);
+    init.subtract(excluded);
 
     encoder.SetFace(face.get());
 
-    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    auto sc = encoder.AddGlyphDataPatch(0, init);
     sc.Update(encoder.AddGlyphDataPatch(1, TestSegment1()));
     sc.Update(encoder.AddGlyphDataPatch(2, TestSegment2()));
     sc.Update(encoder.AddGlyphDataPatch(3, TestSegment3()));
@@ -125,7 +127,7 @@ class IntegrationTest : public ::testing::Test {
       return sc;
     }
 
-    return init_segment;
+    return init;
   }
 
   Status InitEncoderForMixedModeCff(Encoder& encoder) {
@@ -152,63 +154,64 @@ class IntegrationTest : public ::testing::Test {
     return absl::OkStatus();
   }
 
-  StatusOr<btree_set<uint32_t>> InitEncoderForVfMixedMode(Encoder& encoder) {
+  StatusOr<IntSet> InitEncoderForVfMixedMode(Encoder& encoder) {
     auto face = noto_sans_vf_.face();
     encoder.SetFace(face.get());
 
-    hb_set_unique_ptr init = make_hb_set();
-    hb_set_add_range(init.get(), 0, hb_face_get_glyph_count(face.get()) - 1);
-    hb_set_unique_ptr excluded = make_hb_set();
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_VF_SEGMENT_1,
-                            std::size(testdata::TEST_VF_SEGMENT_1));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_VF_SEGMENT_2,
-                            std::size(testdata::TEST_VF_SEGMENT_2));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_VF_SEGMENT_3,
-                            std::size(testdata::TEST_VF_SEGMENT_3));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_VF_SEGMENT_4,
-                            std::size(testdata::TEST_VF_SEGMENT_4));
-    hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_btree_set(init.get());
+    IntSet init;
+    init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    hb_set_unique_ptr excluded_hb = make_hb_set();
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_1,
+                            std::size(testdata::TEST_VF_SEGMENT_1));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_2,
+                            std::size(testdata::TEST_VF_SEGMENT_2));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_3,
+                            std::size(testdata::TEST_VF_SEGMENT_3));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_4,
+                            std::size(testdata::TEST_VF_SEGMENT_4));
+    IntSet excluded(excluded_hb);
+    init.subtract(excluded);
+
+    auto sc = encoder.AddGlyphDataPatch(0, init);
     sc.Update(encoder.AddGlyphDataPatch(1, TestVfSegment1()));
     sc.Update(encoder.AddGlyphDataPatch(2, TestVfSegment2()));
     sc.Update(encoder.AddGlyphDataPatch(3, TestVfSegment3()));
     sc.Update(encoder.AddGlyphDataPatch(4, TestVfSegment4()));
-    return init_segment;
+    return init;
   }
 
-  StatusOr<btree_set<uint32_t>> InitEncoderForMixedModeFeatureTest(
-      Encoder& encoder) {
+  StatusOr<IntSet> InitEncoderForMixedModeFeatureTest(Encoder& encoder) {
     auto face = feature_test_.face();
     encoder.SetFace(face.get());
 
-    hb_set_unique_ptr init = make_hb_set();
-    hb_set_add_range(init.get(), 0, hb_face_get_glyph_count(face.get()) - 1);
-    hb_set_unique_ptr excluded = make_hb_set();
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_1,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_1));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_2,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_2));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_3,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_3));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_4,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_4));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_5,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_5));
-    hb_set_add_sorted_array(excluded.get(), testdata::TEST_FEATURE_SEGMENT_6,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_6));
-    hb_set_subtract(init.get(), excluded.get());
-    auto init_segment = common::to_btree_set(init.get());
+    IntSet init;
+    init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    auto sc = encoder.AddGlyphDataPatch(0, init_segment);
+    hb_set_unique_ptr excluded_hb = make_hb_set();
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_1,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_1));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_2,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_2));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_3,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_3));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_4,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_4));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_5,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_5));
+    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_6,
+                            std::size(testdata::TEST_FEATURE_SEGMENT_6));
+    IntSet excluded(excluded_hb);
+    init.subtract(excluded);
+
+    auto sc = encoder.AddGlyphDataPatch(0, init);
     sc.Update(encoder.AddGlyphDataPatch(1, TestFeatureSegment1()));
     sc.Update(encoder.AddGlyphDataPatch(2, TestFeatureSegment2()));
     sc.Update(encoder.AddGlyphDataPatch(3, TestFeatureSegment3()));
     sc.Update(encoder.AddGlyphDataPatch(4, TestFeatureSegment4()));
     sc.Update(encoder.AddGlyphDataPatch(5, TestFeatureSegment5()));
     sc.Update(encoder.AddGlyphDataPatch(6, TestFeatureSegment6()));
-    return init_segment;
+    return init;
   }
 
   Status InitEncoderForTableKeyed(Encoder& encoder) {
@@ -461,10 +464,12 @@ TEST_F(IntegrationTest, TableKeyed_DesignSpaceAugmentation_IgnoresDesignSpace) {
   auto encoded_face = encoding->init_font.face();
 
   auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
-  ASSERT_THAT(codepoints, IsSupersetOf({'a', 'b', 'c'}));
-  ASSERT_THAT(codepoints, AllOf(Not(Contains('d')), Not(Contains('e')),
-                                Not(Contains('f')), Not(Contains('h')),
-                                Not(Contains('i')), Not(Contains('j'))));
+  btree_set<uint32_t> codepoints_btree;
+  codepoints_btree.insert(codepoints.begin(), codepoints.end());
+  ASSERT_THAT(codepoints_btree, IsSupersetOf({'a', 'b', 'c'}));
+  ASSERT_THAT(codepoints_btree, AllOf(Not(Contains('d')), Not(Contains('e')),
+                                      Not(Contains('f')), Not(Contains('h')),
+                                      Not(Contains('i')), Not(Contains('j'))));
 
   auto ds = FontHelper::GetDesignSpace(encoded_face.get());
   flat_hash_map<hb_tag_t, AxisRange> expected_ds{
@@ -483,9 +488,11 @@ TEST_F(IntegrationTest, TableKeyed_DesignSpaceAugmentation_IgnoresDesignSpace) {
   ASSERT_EQ(*ds, expected_ds);
 
   codepoints = FontHelper::ToCodepointsSet(extended_face.get());
-  ASSERT_THAT(codepoints, IsSupersetOf({'a', 'b', 'c', 'd', 'e', 'f'}));
-  ASSERT_THAT(codepoints, AllOf(Not(Contains('h')), Not(Contains('i')),
-                                Not(Contains('j'))));
+  codepoints_btree.clear();
+  codepoints_btree.insert(codepoints.begin(), codepoints.end());
+  ASSERT_THAT(codepoints_btree, IsSupersetOf({'a', 'b', 'c', 'd', 'e', 'f'}));
+  ASSERT_THAT(codepoints_btree, AllOf(Not(Contains('h')), Not(Contains('i')),
+                                      Not(Contains('j'))));
 }
 
 TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
@@ -507,10 +514,12 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   auto encoded_face = encoding->init_font.face();
 
   auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
-  ASSERT_THAT(codepoints, IsSupersetOf({'a', 'b', 'c'}));
-  ASSERT_THAT(codepoints, AllOf(Not(Contains('d')), Not(Contains('e')),
-                                Not(Contains('f')), Not(Contains('h')),
-                                Not(Contains('i')), Not(Contains('j'))));
+  btree_set<uint32_t> codepoints_btree;
+  codepoints_btree.insert(codepoints.begin(), codepoints.end());
+  ASSERT_THAT(codepoints_btree, IsSupersetOf({'a', 'b', 'c'}));
+  ASSERT_THAT(codepoints_btree, AllOf(Not(Contains('d')), Not(Contains('e')),
+                                      Not(Contains('f')), Not(Contains('h')),
+                                      Not(Contains('i')), Not(Contains('j'))));
 
   auto ds = FontHelper::GetDesignSpace(encoded_face.get());
   flat_hash_map<hb_tag_t, AxisRange> expected_ds{
@@ -532,10 +541,12 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   ASSERT_EQ(*ds, expected_ds);
 
   codepoints = FontHelper::ToCodepointsSet(extended_face.get());
-  ASSERT_THAT(codepoints, IsSupersetOf({'a', 'b', 'c'}));
-  ASSERT_THAT(codepoints, AllOf(Not(Contains('d')), Not(Contains('e')),
-                                Not(Contains('f')), Not(Contains('h')),
-                                Not(Contains('i')), Not(Contains('j'))));
+  codepoints_btree.clear();
+  codepoints_btree.insert(codepoints.begin(), codepoints.end());
+  ASSERT_THAT(codepoints_btree, IsSupersetOf({'a', 'b', 'c'}));
+  ASSERT_THAT(codepoints_btree, AllOf(Not(Contains('d')), Not(Contains('e')),
+                                      Not(Contains('f')), Not(Contains('h')),
+                                      Not(Contains('i')), Not(Contains('j'))));
 
   // Try extending the updated font again.
   encoding->init_font.shallow_copy(*extended);
@@ -544,7 +555,9 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   extended_face = extended->face();
 
   codepoints = FontHelper::ToCodepointsSet(extended_face.get());
-  ASSERT_THAT(codepoints, IsSupersetOf({'a', 'b', 'c', 'd', 'e', 'f'}));
+  codepoints_btree.clear();
+  codepoints_btree.insert(codepoints.begin(), codepoints.end());
+  ASSERT_THAT(codepoints_btree, IsSupersetOf({'a', 'b', 'c', 'd', 'e', 'f'}));
 
   ds = FontHelper::GetDesignSpace(extended_face.get());
   expected_ds = {
@@ -1024,8 +1037,8 @@ TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
   auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
 
   // target paritions: {{0, 1}, {2}, {3}, {4}}
-  btree_set<uint32_t> segment_0_and_1 = segment_0;
-  segment_0_and_1.insert(segment_1.begin(), segment_1.end());
+  IntSet segment_0_and_1 = segment_0;
+  segment_0_and_1.union_set(segment_1);
   auto sc = encoder.SetBaseSubset(segment_0_and_1);
   encoder.AddNonGlyphDataSegment(segment_2);
   encoder.AddNonGlyphDataSegment(segment_3);
@@ -1223,20 +1236,17 @@ TEST_F(IntegrationTest, MixedMode_Cff) {
   auto sc = InitEncoderForMixedModeCff(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ASSERT_TRUE(encoder.SetBaseSubset(btree_set<uint32_t>()).ok());
+  ASSERT_TRUE(encoder.SetBaseSubset(IntSet{}).ok());
 
-  auto all_codepoints =
-      btree_set<uint32_t>{'A', 'B', 'H', 'I', 'J', 'M', 'N', 'Z'};
+  IntSet all_codepoints{'A', 'B', 'H', 'I', 'J', 'M', 'N', 'Z'};
   auto face = noto_sans_jp_cff_.face();
   encoder.AddNonGlyphDataSegment(all_codepoints);
 
   // Setup activations for patches 1 and 2
-  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(btree_set<uint32_t>{'A', 'B', 'M', 'N'}),
-      1)));
-  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(btree_set<uint32_t>{'H', 'I', 'J', 'Z'}),
-      2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'A', 'B', 'M', 'N'}, 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'H', 'I', 'J', 'Z'}, 2)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -1289,18 +1299,17 @@ TEST_F(IntegrationTest, MixedMode_Cff2) {
   auto sc = InitEncoderForMixedModeCff2(encoder);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ASSERT_TRUE(encoder.SetBaseSubset(btree_set<uint32_t>()).ok());
+  ASSERT_TRUE(encoder.SetBaseSubset(IntSet{}).ok());
 
-  auto all_codepoints = btree_set<uint32_t>{'A', 'B', 'C', 'M', 'N', 'P', 'Z'};
+  IntSet all_codepoints{'A', 'B', 'C', 'M', 'N', 'P', 'Z'};
   auto face = noto_sans_jp_cff2_.face();
   encoder.AddNonGlyphDataSegment(all_codepoints);
 
   // Setup activations for patches 1 and 2
-  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(btree_set<uint32_t>{'A', 'B', 'C'}), 1)));
-  sc.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(btree_set<uint32_t>{'M', 'N', 'P', 'Z'}),
-      2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'A', 'B', 'C'}, 1)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition{'M', 'N', 'P', 'Z'}, 2)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -1314,7 +1323,7 @@ TEST_F(IntegrationTest, MixedMode_Cff2) {
   auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
   // Last gid (Z) is always included in initial font to force correct glyph
   // count in CFF/CFF2.
-  ASSERT_EQ(codepoints, btree_set<uint32_t>{'Z'});
+  ASSERT_EQ(codepoints, IntSet{'Z'});
 
   auto extended = Extend(*encoding, {'B'});
   ASSERT_TRUE(extended.ok()) << extended.status();

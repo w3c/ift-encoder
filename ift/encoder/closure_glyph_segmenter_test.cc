@@ -1,12 +1,12 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 
-#include "absl/container/btree_set.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
 
-using absl::btree_set;
 using common::FontData;
 using common::hb_face_unique_ptr;
+using common::IntSet;
 using common::make_hb_face;
 
 namespace ift::encoder {
@@ -41,7 +41,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'b'}, {'c'}};
+  std::vector<IntSet> expected_segments = {{'b'}, {'c'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -58,7 +58,7 @@ TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f'}, {'i'}};
+  std::vector<IntSet> expected_segments = {{'f'}, {'i'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -77,7 +77,7 @@ TEST_F(ClosureGlyphSegmenterTest, OrCondition) {
                                                          {{0xc1}, {0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{0xc1}, {0x106}};
+  std::vector<IntSet> expected_segments = {{0xc1}, {0x106}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -101,7 +101,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBase_ViaConditions) {
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+  std::vector<IntSet> expected_segments = {
       {'a', 'b', 'd'}, {'e', 'f', 'i', 'l'}, {'j', 'k', 'm', 'n'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -124,7 +124,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases) {
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+  std::vector<IntSet> expected_segments = {
       {'a', 'b', 'd'},
       {'e', 'f', 'j', 'k'},
       {},
@@ -153,7 +153,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases_MaxSize) {
       700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {
+  std::vector<IntSet> expected_segments = {
       {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {'m', 'n', 'o', 'p'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -173,8 +173,7 @@ TEST_F(ClosureGlyphSegmenterTest, MixedAndOr) {
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<btree_set<hb_codepoint_t>> expected_segments = {{'f', 0xc1},
-                                                              {'i', 0x106}};
+  std::vector<IntSet> expected_segments = {{'f', 0xc1}, {'i', 0x106}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),

@@ -7,13 +7,13 @@
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/condition.h"
@@ -45,7 +45,6 @@ ABSL_FLAG(std::string, output_font, "out.ttf",
 
 using absl::btree_set;
 using absl::flat_hash_map;
-using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -53,6 +52,7 @@ using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using ift::encoder::Condition;
 using ift::encoder::design_space_t;
@@ -128,8 +128,8 @@ int write_output(const Encoder::Encoding& encoding) {
 }
 
 template <typename T>
-btree_set<uint32_t> values(const T& proto_set) {
-  btree_set<uint32_t> result;
+IntSet values(const T& proto_set) {
+  IntSet result;
   for (uint32_t v : proto_set.values()) {
     result.insert(v);
   }
@@ -159,9 +159,9 @@ GlyphSegmentation::ActivationCondition FromProto(
     const ActivationConditionProto& condition) {
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
-  std::vector<btree_set<uint32_t>> groups;
+  std::vector<IntSet> groups;
   for (const auto& group : condition.required_codepoint_sets()) {
-    btree_set<uint32_t> set;
+    IntSet set;
     set.insert(group.values().begin(), group.values().end());
     groups.push_back(set);
   }
@@ -186,7 +186,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     activation_conditions.push_back(FromProto(c));
   }
 
-  flat_hash_map<uint32_t, flat_hash_set<uint32_t>> codepoint_sets;
+  flat_hash_map<uint32_t, IntSet> codepoint_sets;
   for (const auto& [id, set] : config.codepoint_sets()) {
     codepoint_sets[id].insert(set.values().begin(), set.values().end());
   }
@@ -235,14 +235,14 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   }
 
   for (const auto& sets : config.non_glyph_codepoint_set_groups()) {
-    flat_hash_set<uint32_t> codepoints;
+    IntSet codepoints;
     for (const auto& set_id : sets.values()) {
       auto set = codepoint_sets.find(set_id);
       if (set == codepoint_sets.end()) {
         return absl::InvalidArgumentError(
             StrCat("Codepoint set id, ", set_id, ", not found."));
       }
-      codepoints.insert(set->second.begin(), set->second.end());
+      codepoints.union_set(set->second);
     }
     encoder.AddNonGlyphDataSegment(codepoints);
   }

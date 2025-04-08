@@ -17,6 +17,7 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "common/woff2.h"
 #include "hb-subset.h"
@@ -42,6 +43,7 @@ using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::hb_set_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using common::make_hb_set;
@@ -146,8 +148,7 @@ SubsetDefinition Encoder::Combine(const SubsetDefinition& s1,
   return result;
 }
 
-Status Encoder::AddGlyphDataPatch(uint32_t id,
-                                  const absl::btree_set<uint32_t>& gids) {
+Status Encoder::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }

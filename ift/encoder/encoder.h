@@ -6,11 +6,11 @@
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "common/compat_id.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "hb-subset.h"
 #include "ift/encoder/condition.h"
 #include "ift/encoder/subset_definition.h"
@@ -55,8 +55,7 @@ class Encoder {
    * An id is provided which uniquely identifies this segment and can be used to
    * specify dependencies against this segment.
    */
-  absl::Status AddGlyphDataPatch(uint32_t patch_id,
-                                 const absl::btree_set<uint32_t>& gids);
+  absl::Status AddGlyphDataPatch(uint32_t patch_id, const common::IntSet& gids);
 
   /*
    * Adds a condition which may trigger the inclusion of a glyph data patch.
@@ -239,7 +238,7 @@ class Encoder {
                         common::CompatId& compat_id) const;
 
   common::hb_face_unique_ptr face_;
-  absl::btree_map<uint32_t, absl::btree_set<uint32_t>> glyph_data_patches_;
+  absl::btree_map<uint32_t, common::IntSet> glyph_data_patches_;
   std::vector<Condition> glyph_patch_conditions_;
 
   SubsetDefinition base_subset_;

@@ -6,11 +6,9 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "common/axis_range.h"
+#include "common/int_set.h"
 #include "hb.h"
 #include "ift/proto/patch_encoding.h"
 
@@ -31,7 +29,7 @@ class PatchMap {
     Coverage() {}
     Coverage(std::initializer_list<uint32_t> codepoints_list)
         : codepoints(codepoints_list) {}
-    Coverage(const absl::flat_hash_set<uint32_t>& codepoints_list)
+    Coverage(const common::IntSet& codepoints_list)
         : codepoints(codepoints_list) {}
 
     friend void PrintTo(const Coverage& point, std::ostream* os);
@@ -51,8 +49,7 @@ class PatchMap {
       return min;
     }
 
-    // TODO(garretrieger): use hb sets instead?
-    absl::flat_hash_set<uint32_t> codepoints;
+    common::IntSet codepoints;
     absl::btree_set<hb_tag_t> features;
     absl::btree_map<hb_tag_t, common::AxisRange> design_space;
 

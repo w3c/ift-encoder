@@ -12,6 +12,7 @@
 #include "absl/strings/string_view.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "hb.h"
 
 namespace common {
@@ -192,10 +193,9 @@ class FontHelper {
   static absl::flat_hash_map<uint32_t, uint32_t> GidToUnicodeMap(
       hb_face_t* face);
 
-  static absl::btree_set<uint32_t> GidsToUnicodes(
-      hb_face_t* face, const absl::btree_set<uint32_t>& gids);
+  static IntSet GidsToUnicodes(hb_face_t* face, const IntSet& gids);
 
-  static absl::btree_set<uint32_t> ToCodepointsSet(hb_face_t* face);
+  static IntSet ToCodepointsSet(hb_face_t* face);
 
   static absl::flat_hash_set<hb_tag_t> GetTags(hb_face_t* face);
   static std::vector<hb_tag_t> GetOrderedTags(hb_face_t* face);
