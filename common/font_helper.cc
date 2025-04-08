@@ -9,6 +9,7 @@
 #include "common/font_data.h"
 #include "common/hb_set_unique_ptr.h"
 #include "common/indexed_data_reader.h"
+#include "common/int_set.h"
 #include "hb-ot.h"
 #include "hb-subset.h"
 #include "hb.h"
@@ -215,9 +216,9 @@ StatusOr<uint32_t> FontHelper::GvarSharedTupleCount(const hb_face_t* face) {
   return *count;
 }
 
-IntSet FontHelper::GidsToUnicodes(hb_face_t* face, const IntSet& gids) {
+CodepointSet FontHelper::GidsToUnicodes(hb_face_t* face, const GlyphSet& gids) {
   auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
-  IntSet result;
+  CodepointSet result;
   for (uint32_t gid : gids) {
     auto unicode = gid_to_unicode.find(gid);
     if (unicode != gid_to_unicode.end()) {
@@ -243,10 +244,10 @@ flat_hash_map<uint32_t, uint32_t> FontHelper::GidToUnicodeMap(hb_face_t* face) {
   return gid_to_unicode;
 }
 
-IntSet FontHelper::ToCodepointsSet(hb_face_t* face) {
+CodepointSet FontHelper::ToCodepointsSet(hb_face_t* face) {
   hb_set_unique_ptr codepoints = make_hb_set();
   hb_face_collect_unicodes(face, codepoints.get());
-  return IntSet(codepoints);
+  return CodepointSet(codepoints);
 }
 
 absl::flat_hash_set<hb_tag_t> FontHelper::GetTags(hb_face_t* face) {

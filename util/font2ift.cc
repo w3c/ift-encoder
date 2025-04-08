@@ -48,12 +48,14 @@ using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using common::CodepointSet;
 using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
+using common::SegmentSet;
 using ift::encoder::Condition;
 using ift::encoder::design_space_t;
 using ift::encoder::Encoder;
@@ -159,9 +161,9 @@ GlyphSegmentation::ActivationCondition FromProto(
     const ActivationConditionProto& condition) {
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
-  std::vector<IntSet> groups;
+  std::vector<SegmentSet> groups;
   for (const auto& group : condition.required_codepoint_sets()) {
-    IntSet set;
+    SegmentSet set;
     set.insert(group.values().begin(), group.values().end());
     groups.push_back(set);
   }
@@ -186,7 +188,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     activation_conditions.push_back(FromProto(c));
   }
 
-  flat_hash_map<uint32_t, IntSet> codepoint_sets;
+  flat_hash_map<uint32_t, CodepointSet> codepoint_sets;
   for (const auto& [id, set] : config.codepoint_sets()) {
     codepoint_sets[id].insert(set.values().begin(), set.values().end());
   }

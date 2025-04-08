@@ -24,7 +24,7 @@ struct SubsetDefinition {
     }
   }
 
-  static SubsetDefinition Codepoints(const common::IntSet& codepoints) {
+  static SubsetDefinition Codepoints(const common::CodepointSet& codepoints) {
     SubsetDefinition def;
     def.codepoints = codepoints;
     return def;
@@ -32,8 +32,8 @@ struct SubsetDefinition {
 
   friend void PrintTo(const SubsetDefinition& point, std::ostream* os);
 
-  common::IntSet codepoints;
-  common::IntSet gids;
+  common::CodepointSet codepoints;
+  common::GlyphSet gids;
   absl::btree_set<hb_tag_t> feature_tags;
   design_space_t design_space;
 

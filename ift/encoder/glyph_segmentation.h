@@ -48,16 +48,16 @@ class GlyphSegmentation {
 
     /*
      * Constructs a condition that activates when the input intersects(patch_1)
-     * AND ... AND inersects(patch_n).
+     * AND ... AND inersects(segment_n).
      */
-    static ActivationCondition and_segments(const common::IntSet& ids,
+    static ActivationCondition and_segments(const common::SegmentSet& ids,
                                             patch_id_t activated);
 
     /*
      * Constructs a condition that activates when the input intersects
-     * (patch_1) OR ... OR inersects(patch_n).
+     * (segment_1) OR ... OR inersects(segment_n).
      */
-    static ActivationCondition or_segments(const common::IntSet& ids,
+    static ActivationCondition or_segments(const common::SegmentSet& ids,
                                            patch_id_t activated,
                                            bool is_fallback = false);
 
@@ -66,15 +66,15 @@ class GlyphSegmentation {
      * (s1 OR ..) AND (si OR ...) AND ...
      */
     static ActivationCondition composite_condition(
-        absl::Span<const common::IntSet> groups, patch_id_t activated);
+        absl::Span<const common::SegmentSet> groups, patch_id_t activated);
 
     /*
-     * This condition is activated if every set of patch ids intersects the
-     * input subset definition. ie. input subset def intersects {p_1, p_2} AND
+     * This condition is activated if every set of segments intersects the
+     * input subset definition. ie. input subset def intersects {s_1, s_2} AND
      * input subset def intersects {...} AND ...
-     *     which is effectively: (p_1 OR p_2) AND ...
+     *     which is effectively: (s_1 OR s_2) AND ...
      */
-    const absl::Span<const common::IntSet> conditions() const {
+    const absl::Span<const common::SegmentSet> conditions() const {
       return conditions_;
     }
 
@@ -84,8 +84,8 @@ class GlyphSegmentation {
      * Populates out with the set of patch ids that are part of this condition
      * (excluding the activated patch)
      */
-    common::IntSet TriggeringSegments() const {
-      common::IntSet out;
+    common::SegmentSet TriggeringSegments() const {
+      common::SegmentSet out;
       for (auto g : conditions_) {
         for (auto segment_id : g) {
           out.insert(segment_id);
@@ -123,13 +123,13 @@ class GlyphSegmentation {
 
     bool is_fallback_ = false;
     bool is_exclusive_ = false;
-    std::vector<common::IntSet> conditions_;
+    std::vector<common::SegmentSet> conditions_;
     patch_id_t activated_;
   };
 
-  GlyphSegmentation(common::IntSet init_font_codepoints,
-                    common::IntSet init_font_glyphs,
-                    common::IntSet unmapped_glyphs)
+  GlyphSegmentation(common::CodepointSet init_font_codepoints,
+                    common::GlyphSet init_font_glyphs,
+                    common::GlyphSet unmapped_glyphs)
       : init_font_codepoints_(init_font_codepoints),
         init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
@@ -141,7 +141,8 @@ class GlyphSegmentation {
   static absl::StatusOr<std::vector<Condition>>
   ActivationConditionsToConditionEntries(
       absl::Span<const ActivationCondition> conditions,
-      const absl::flat_hash_map<segment_index_t, common::IntSet>& segments);
+      const absl::flat_hash_map<segment_index_t, common::CodepointSet>&
+          segments);
 
   /*
    * Returns a human readable string representation of this segmentation and
@@ -163,13 +164,15 @@ class GlyphSegmentation {
    *
    * Segment indices in conditions refer to a set of codepoints here.
    */
-  const std::vector<common::IntSet>& Segments() const { return segments_; }
+  const std::vector<common::CodepointSet>& Segments() const {
+    return segments_;
+  }
 
   /*
    * The list of glyphs in each patch. The key in the map is an id used to
    * identify the patch within the activation conditions.
    */
-  const absl::btree_map<patch_id_t, common::IntSet>& GidSegments() const {
+  const absl::btree_map<patch_id_t, common::GlyphSet>& GidSegments() const {
     return patches_;
   }
 
@@ -180,36 +183,41 @@ class GlyphSegmentation {
    * TODO(garretrieger): instead of treating them separately generate a catch
    * all patch that contains the unmapped glyphs.
    */
-  const common::IntSet& UnmappedGlyphs() const { return unmapped_glyphs_; };
+  const common::GlyphSet& UnmappedGlyphs() const { return unmapped_glyphs_; };
 
   /*
    * These glyphs should be included in the initial font.
    */
-  const common::IntSet& InitialFontGlyphs() const { return init_font_glyphs_; };
+  const common::GlyphSet& InitialFontGlyphs() const {
+    return init_font_glyphs_;
+  };
 
   /*
    * These codepoints should be included in the initial font.
    */
-  const common::IntSet& InitialFontCodepoints() const {
+  const common::CodepointSet& InitialFontCodepoints() const {
     return init_font_codepoints_;
   };
 
   EncoderConfig ToConfigProto() const;
 
   static absl::Status GroupsToSegmentation(
-      const absl::btree_map<common::IntSet, common::IntSet>& and_glyph_groups,
-      const absl::btree_map<common::IntSet, common::IntSet>& or_glyph_groups,
-      const common::IntSet& fallback_group, GlyphSegmentation& segmentation);
+      const absl::btree_map<common::SegmentSet, common::GlyphSet>&
+          and_glyph_groups,
+      const absl::btree_map<common::SegmentSet, common::GlyphSet>&
+          or_glyph_groups,
+      const common::SegmentSet& fallback_group,
+      GlyphSegmentation& segmentation);
 
-  void CopySegments(const std::vector<common::IntSet>& segments);
+  void CopySegments(const std::vector<common::CodepointSet>& segments);
 
  private:
-  common::IntSet init_font_codepoints_;
-  common::IntSet init_font_glyphs_;
-  common::IntSet unmapped_glyphs_;
+  common::CodepointSet init_font_codepoints_;
+  common::GlyphSet init_font_glyphs_;
+  common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
-  std::vector<common::IntSet> segments_;
-  absl::btree_map<patch_id_t, common::IntSet> patches_;
+  std::vector<common::CodepointSet> segments_;
+  absl::btree_map<patch_id_t, common::GlyphSet> patches_;
 };
 
 }  // namespace ift::encoder
