@@ -5,6 +5,7 @@
 
 #include "absl/status/status.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "hb.h"
 
@@ -19,38 +20,38 @@ using std::vector;
 
 class SparseBitSetTest : public ::testing::Test {
  protected:
-  static void TestEncodeDecode(hb_set_unique_ptr set, int expected_size) {
-    TestEncodeDecode(set.get(), BF8, expected_size);
+  static void TestEncodeDecode(const IntSet& set, int expected_size) {
+    TestEncodeDecode(set, BF8, expected_size);
   }
 
-  static void TestEncodeDecode(hb_set_unique_ptr set, BranchFactor bf) {
-    TestEncodeDecode(set.get(), bf, 0);
+  static void TestEncodeDecode(const IntSet& set, BranchFactor bf) {
+    TestEncodeDecode(set, bf, 0);
   }
 
-  static void TestEncodeDecode(hb_set_t *set, BranchFactor bf,
+  static void TestEncodeDecode(const IntSet& set, BranchFactor bf,
                                int expected_size) {
-    string encoded_bits = SparseBitSet::Encode(*set, bf);
+    string encoded_bits = SparseBitSet::Encode(set, bf);
     if (expected_size) {
       EXPECT_EQ(encoded_bits.size(), expected_size);
     }
-    hb_set_unique_ptr decoded = make_hb_set();
-    auto sc = SparseBitSet::Decode(encoded_bits, decoded.get());
+    IntSet decoded;
+    auto sc = SparseBitSet::Decode(encoded_bits, decoded);
     if (!sc.ok()) {
       string bits = Bits(encoded_bits, bf);
       EXPECT_EQ("Decode worked", "Unable to decode bits: " + bits);
     }
     EXPECT_EQ(absl::OkStatus(), sc.status());
-    if (!hb_set_is_equal(set, decoded.get())) {
+    if (set != decoded) {
       string set_in = SetContents(set);
       string encoded_bit_str = Bits(encoded_bits, bf);
-      string set_out = SetContents(decoded.get());
+      string set_out = SetContents(decoded);
       printf("In: %s\nBits: %s\nOut: %s\n", encoded_bit_str.c_str(),
              encoded_bit_str.c_str(), set_out.c_str());
     }
-    EXPECT_TRUE(hb_set_is_equal(set, decoded.get()));
+    EXPECT_EQ(set, decoded);
   }
 
-  static string Bits(const string &s, BranchFactor bf) {
+  static string Bits(const string& s, BranchFactor bf) {
     if (s.empty()) {
       return "";
     }
@@ -83,13 +84,13 @@ class SparseBitSetTest : public ::testing::Test {
     return first8_bits + "  " + result;
   }
 
-  static string Bits(hb_set_unique_ptr set, BranchFactor bf) {
-    string bits = SparseBitSet::Encode(*set, bf);
+  static string Bits(const IntSet& set, BranchFactor bf) {
+    string bits = SparseBitSet::Encode(set, bf);
     return Bits(bits, bf);
   }
 
-  static string Bits(hb_set_unique_ptr set) {
-    string bits = SparseBitSet::Encode(*set);
+  static string Bits(const IntSet& set) {
+    string bits = SparseBitSet::Encode(set);
     char bfc = bits[0] & 0b11;
     BranchFactor bf;
     if (bfc == 0) {
@@ -104,7 +105,7 @@ class SparseBitSetTest : public ::testing::Test {
     return Bits(bits, bf);
   }
 
-  static string FromChars(const string &s) {
+  static string FromChars(const string& s) {
     string result;
     if (s.empty()) {
       return result;
@@ -131,9 +132,9 @@ class SparseBitSetTest : public ::testing::Test {
     return result;
   }
 
-  static string SetContents(hb_set_t *set) {
+  static string SetContents(const IntSet& set) {
     std::vector<unsigned int> results;
-    for (hb_codepoint_t cp = HB_SET_VALUE_INVALID; hb_set_next(set, &cp);) {
+    for (hb_codepoint_t cp : set) {
       results.push_back(cp);
     }
     string results_str;
@@ -147,136 +148,130 @@ class SparseBitSetTest : public ::testing::Test {
     return results_str;
   }
 
-  static string FromBits(const string &s) {
-    hb_set_unique_ptr set = make_hb_set();
+  static string FromBits(const string& s) {
+    IntSet set;
     EXPECT_EQ(absl::OkStatus(),
-              SparseBitSet::Decode(FromChars(s), set.get()).status());
-    return SetContents(set.get());
+              SparseBitSet::Decode(FromChars(s), set).status());
+    return SetContents(set);
   }
 
-  static hb_set_unique_ptr Set(const vector<pair<int, int>> &pairs) {
-    hb_set_unique_ptr set = make_hb_set();
+  static IntSet Set(const vector<pair<int, int>>& pairs) {
+    IntSet set;
     for (pair<int, int> pair : pairs) {
       for (int i = pair.first; i <= pair.second; i++) {
-        hb_set_add(set.get(), i);
+        set.insert(i);
       }
     }
     return set;
   }
 };
 
-TEST_F(SparseBitSetTest, DecodeNullSet) {
-  EXPECT_TRUE(absl::IsInvalidArgument(
-      SparseBitSet::Decode(string(), nullptr).status()));
-}
-
 TEST_F(SparseBitSetTest, DecodeAppends) {
-  hb_set_unique_ptr set = make_hb_set(1, 42);
-  ASSERT_EQ(
-      SparseBitSet::Decode(string{0b00000101, 0b00000001}, set.get()).status(),
-      //                          ^ d1 bf8 ^
-      absl::OkStatus());
-  hb_set_unique_ptr expected = make_hb_set(2, 0, 42);
-  EXPECT_TRUE(hb_set_is_equal(expected.get(), set.get()));
+  IntSet set{42};
+  ASSERT_EQ(SparseBitSet::Decode(string{0b00000101, 0b00000001}, set).status(),
+            //                          ^ d1 bf8 ^
+            absl::OkStatus());
+  IntSet expected{0, 42};
+  EXPECT_EQ(expected, set);
 }
 
 TEST_F(SparseBitSetTest, DecodeInvalid) {
   // The encoded set here is truncated and missing 2 bytes.
   string encoded{0b00001010, 0b01010101, 0b00000001, 0b00000001};
   //             ^ d2 bf8 ^
-  hb_set_unique_ptr set = make_hb_set();
-  EXPECT_TRUE(absl::IsInvalidArgument(
-      SparseBitSet::Decode(encoded, set.get()).status()));
+  IntSet set;
+  EXPECT_TRUE(
+      absl::IsInvalidArgument(SparseBitSet::Decode(encoded, set).status()));
 }
 
 TEST_F(SparseBitSetTest, RemainingOnDecode) {
-  auto set = make_hb_set(4, 5, 12, 17, 38);
-  std::string encoded = SparseBitSet::Encode(*set);
+  IntSet set{5, 12, 17, 38};
+  std::string encoded = SparseBitSet::Encode(set);
   encoded.append("abcd");
 
-  auto s = SparseBitSet::Decode(encoded, set.get());
+  auto s = SparseBitSet::Decode(encoded, set);
   ASSERT_TRUE(s.ok()) << s.status();
 
   ASSERT_EQ(*s, "abcd");
 }
 
 TEST_F(SparseBitSetTest, RemainingOnDecode_Empty) {
-  auto set = make_hb_set(4, 5, 12, 17, 38);
-  std::string encoded = SparseBitSet::Encode(*set);
+  IntSet set{5, 12, 17, 38};
+  std::string encoded = SparseBitSet::Encode(set);
 
-  auto s = SparseBitSet::Decode(encoded, set.get());
+  auto s = SparseBitSet::Decode(encoded, set);
   ASSERT_TRUE(s.ok()) << s.status();
 
   ASSERT_EQ(*s, "");
 }
 
-TEST_F(SparseBitSetTest, EncodeEmpty) { TestEncodeDecode(make_hb_set(), 0); }
+TEST_F(SparseBitSetTest, EncodeEmpty) { TestEncodeDecode(IntSet{}, 0); }
 
 TEST_F(SparseBitSetTest, EncodeOneLayer) {
-  TestEncodeDecode(make_hb_set(1, 0), 2);
-  TestEncodeDecode(make_hb_set(1, 7), 2);
-  TestEncodeDecode(make_hb_set(2, 2, 5), 2);
-  TestEncodeDecode(make_hb_set(8, 0, 1, 2, 3, 4, 5, 6, 7), 2);
+  TestEncodeDecode(IntSet{0}, 2);
+  TestEncodeDecode(IntSet{7}, 2);
+  TestEncodeDecode(IntSet{2, 5}, 2);
+  TestEncodeDecode(IntSet{0, 1, 2, 3, 4, 5, 6, 7}, 2);
 }
 
 TEST_F(SparseBitSetTest, EncodeTwoLayers) {
-  TestEncodeDecode(make_hb_set(1, 63), 3);
-  TestEncodeDecode(make_hb_set(2, 0, 63), 4);
-  TestEncodeDecode(make_hb_set(3, 2, 5, 60), 4);
-  TestEncodeDecode(make_hb_set(5, 0, 30, 31, 33, 63), 6);
+  TestEncodeDecode(IntSet{63}, 3);
+  TestEncodeDecode(IntSet{0, 63}, 4);
+  TestEncodeDecode(IntSet{2, 5, 60}, 4);
+  TestEncodeDecode(IntSet{0, 30, 31, 33, 63}, 6);
 }
 
 TEST_F(SparseBitSetTest, EncodeManyLayers) {
-  TestEncodeDecode(make_hb_set(2, 10, 49596), 12);
-  TestEncodeDecode(make_hb_set(3, 10, 49595, 49596), 12);
-  TestEncodeDecode(make_hb_set(3, 10, 49588, 49596), 13);
+  TestEncodeDecode(IntSet{10, 49596}, 12);
+  TestEncodeDecode(IntSet{10, 49595, 49596}, 12);
+  TestEncodeDecode(IntSet{10, 49588, 49596}, 13);
 }
 
 TEST_F(SparseBitSetTest, Encode2BitSingleNode) {
-  EXPECT_EQ("00|100000  10 00 00 00", Bits(make_hb_set(1, 0), BF2));
+  EXPECT_EQ("00|100000  10 00 00 00", Bits(IntSet{0}, BF2));
 }
 
 TEST_F(SparseBitSetTest, Encode2BitMisc) {
   EXPECT_EQ("00|110000  11 01 10 11 11 00 00 00",
-            Bits(make_hb_set(4, 2, 3, 4, 5), BF2));
+            Bits(IntSet{2, 3, 4, 5}, BF2));
 }
 
 TEST_F(SparseBitSetTest, Encode4BitEmpty) {
-  EXPECT_EQ("00|000000  ", Bits(make_hb_set(0, 0), BF4));
+  EXPECT_EQ("00|000000  ", Bits(IntSet{}, BF4));
 }
 
 TEST_F(SparseBitSetTest, Encode4BitSingleNode) {
-  EXPECT_EQ("10|100000  1000 0000", Bits(make_hb_set(1, 0), BF4));
+  EXPECT_EQ("10|100000  1000 0000", Bits(IntSet{0}, BF4));
   //         ^bf4  d1^
-  EXPECT_EQ("10|100000  0100 0000", Bits(make_hb_set(1, 1), BF4));
-  EXPECT_EQ("10|100000  0010 0000", Bits(make_hb_set(1, 2), BF4));
-  EXPECT_EQ("10|100000  0001 0000", Bits(make_hb_set(1, 3), BF4));
+  EXPECT_EQ("10|100000  0100 0000", Bits(IntSet{1}, BF4));
+  EXPECT_EQ("10|100000  0010 0000", Bits(IntSet{2}, BF4));
+  EXPECT_EQ("10|100000  0001 0000", Bits(IntSet{3}, BF4));
 
-  EXPECT_EQ("10|100000  1100 0000", Bits(make_hb_set(2, 0, 1), BF4));
-  EXPECT_EQ("10|100000  0011 0000", Bits(make_hb_set(2, 2, 3), BF4));
+  EXPECT_EQ("10|100000  1100 0000", Bits(IntSet{0, 1}, BF4));
+  EXPECT_EQ("10|100000  0011 0000", Bits(IntSet{2, 3}, BF4));
 
-  EXPECT_EQ("10|100000  1111 0000", Bits(make_hb_set(4, 0, 1, 2, 3), BF4));
+  EXPECT_EQ("10|100000  1111 0000", Bits(IntSet{0, 1, 2, 3}, BF4));
 }
 
 TEST_F(SparseBitSetTest, Encode4BitMultipleNodes) {
-  EXPECT_EQ("10|010000  0100 1000", Bits(make_hb_set(1, 4), BF4));
-  EXPECT_EQ("10|010000  0100 0100", Bits(make_hb_set(1, 5), BF4));
-  EXPECT_EQ("10|010000  0100 0010", Bits(make_hb_set(1, 6), BF4));
-  EXPECT_EQ("10|010000  0100 0001", Bits(make_hb_set(1, 7), BF4));
+  EXPECT_EQ("10|010000  0100 1000", Bits(IntSet{4}, BF4));
+  EXPECT_EQ("10|010000  0100 0100", Bits(IntSet{5}, BF4));
+  EXPECT_EQ("10|010000  0100 0010", Bits(IntSet{6}, BF4));
+  EXPECT_EQ("10|010000  0100 0001", Bits(IntSet{7}, BF4));
   //         ^bf4  d2^
 
-  EXPECT_EQ("10|010000  0010 1000", Bits(make_hb_set(1, 8), BF4));
-  EXPECT_EQ("10|010000  0010 0100", Bits(make_hb_set(1, 9), BF4));
-  EXPECT_EQ("10|010000  0010 0010", Bits(make_hb_set(1, 10), BF4));
-  EXPECT_EQ("10|010000  0010 0001", Bits(make_hb_set(1, 11), BF4));
+  EXPECT_EQ("10|010000  0010 1000", Bits(IntSet{8}, BF4));
+  EXPECT_EQ("10|010000  0010 0100", Bits(IntSet{9}, BF4));
+  EXPECT_EQ("10|010000  0010 0010", Bits(IntSet{10}, BF4));
+  EXPECT_EQ("10|010000  0010 0001", Bits(IntSet{11}, BF4));
 
-  EXPECT_EQ("10|010000  0001 1000", Bits(make_hb_set(1, 12), BF4));
-  EXPECT_EQ("10|010000  0001 0100", Bits(make_hb_set(1, 13), BF4));
-  EXPECT_EQ("10|010000  0001 0010", Bits(make_hb_set(1, 14), BF4));
-  EXPECT_EQ("10|010000  0001 0001", Bits(make_hb_set(1, 15), BF4));
+  EXPECT_EQ("10|010000  0001 1000", Bits(IntSet{12}, BF4));
+  EXPECT_EQ("10|010000  0001 0100", Bits(IntSet{13}, BF4));
+  EXPECT_EQ("10|010000  0001 0010", Bits(IntSet{14}, BF4));
+  EXPECT_EQ("10|010000  0001 0001", Bits(IntSet{15}, BF4));
 
-  EXPECT_EQ("10|010000  1100 1000 1000 0000", Bits(make_hb_set(2, 0, 4), BF4));
-  EXPECT_EQ("10|010000  0011 1000 1000 0000", Bits(make_hb_set(2, 8, 12), BF4));
+  EXPECT_EQ("10|010000  1100 1000 1000 0000", Bits(IntSet{0, 4}, BF4));
+  EXPECT_EQ("10|010000  0011 1000 1000 0000", Bits(IntSet{8, 12}, BF4));
 }
 
 TEST_F(SparseBitSetTest, Encode8) {
@@ -284,7 +279,7 @@ TEST_F(SparseBitSetTest, Encode8) {
       "01|110000  "
       // bf8, d3
       "10000100 10001000 10000000 00100000 01000000 00010000",
-      Bits(make_hb_set(3, 2, 33, 323), BF8));
+      Bits(IntSet{2, 33, 323}, BF8));
 }
 
 TEST_F(SparseBitSetTest, LeafNodesNeverFilled) {
@@ -404,7 +399,7 @@ TEST_F(SparseBitSetTest, DecodeFilledLeaf) {
 
 TEST_F(SparseBitSetTest, MostlyFilledExampleTranscode) {
   string bits =
-      SparseBitSet::Encode(*Set({{0, 115}, {117, 217}, {219, 255}}), BF4);
+      SparseBitSet::Encode(Set({{0, 115}, {117, 217}, {219, 255}}), BF4);
   string bits_str = Bits(bits, BF4);
   EXPECT_EQ(
       "10|001000  "  // BF=4, tree height = 4 (values 0..255).
@@ -419,11 +414,10 @@ TEST_F(SparseBitSetTest, MostlyFilledExampleTranscode) {
       //    ^ missing 116              ^ missing 218
       //                                       padding
       bits_str);
-  hb_set_unique_ptr decoded = make_hb_set();
-  EXPECT_EQ(absl::OkStatus(),
-            SparseBitSet::Decode(bits, decoded.get()).status());
-  hb_set_unique_ptr expected = Set({{0, 115}, {117, 217}, {219, 255}});
-  EXPECT_TRUE(hb_set_is_equal(expected.get(), decoded.get()));
+  IntSet decoded;
+  EXPECT_EQ(absl::OkStatus(), SparseBitSet::Decode(bits, decoded).status());
+  IntSet expected = Set({{0, 115}, {117, 217}, {219, 255}});
+  EXPECT_EQ(expected, decoded);
 }
 
 TEST_F(SparseBitSetTest, OneMissingValue2) {
@@ -465,105 +459,101 @@ TEST_F(SparseBitSetTest, RandomSets) {
   unsigned int seed = 42;
   for (int i = 0; i < 5000; i++) {
     int size = rand_r(&seed) % 6000;
-    hb_set_unique_ptr input = make_hb_set();
+    IntSet input;
     for (int j = 0; j < size; j++) {
-      hb_set_add(input.get(), rand_r(&seed) % 2048);
+      input.insert(rand_r(&seed) % 2048);
     }
     for (BranchFactor bf : {BF2, BF4, BF8, BF32}) {
-      string bit_set = SparseBitSet::Encode(*input, bf);
-      hb_set_unique_ptr output = make_hb_set();
+      string bit_set = SparseBitSet::Encode(input, bf);
+      IntSet output;
       EXPECT_EQ(absl::OkStatus(),
-                SparseBitSet::Decode(bit_set, output.get()).status());
-      EXPECT_TRUE(hb_set_is_equal(input.get(), output.get()));
+                SparseBitSet::Decode(bit_set, output).status());
+      EXPECT_EQ(input, output);
     }
   }
 }
 
 TEST_F(SparseBitSetTest, DepthLimits2) {
-  hb_set_unique_ptr output = make_hb_set();
+  IntSet output;
   // Depth 31 is OK.
-  EXPECT_EQ(
-      absl::OkStatus(),
-      SparseBitSet::Decode(FromChars("00|111110  00"), output.get()).status());
+  EXPECT_EQ(absl::OkStatus(),
+            SparseBitSet::Decode(FromChars("00|111110  00"), output).status());
 }
 
 TEST_F(SparseBitSetTest, DepthLimits4) {
-  hb_set_unique_ptr output = make_hb_set();
+  IntSet output;
   // Depth 16 is OK.
-  EXPECT_EQ(absl::OkStatus(),
-            SparseBitSet::Decode(FromChars("10|000010  00000000"), output.get())
-                .status());
+  EXPECT_EQ(
+      absl::OkStatus(),
+      SparseBitSet::Decode(FromChars("10|000010  00000000"), output).status());
 }
 
 TEST_F(SparseBitSetTest, DepthLimits8) {
-  hb_set_unique_ptr output = make_hb_set();
+  IntSet output;
   // Depth 11 is OK.
-  EXPECT_EQ(absl::OkStatus(),
-            SparseBitSet::Decode(FromChars("01|110100  00000000"), output.get())
-                .status());
+  EXPECT_EQ(
+      absl::OkStatus(),
+      SparseBitSet::Decode(FromChars("01|110100  00000000"), output).status());
   // Depth 12 is too much.
   EXPECT_TRUE(absl::IsInvalidArgument(
-      SparseBitSet::Decode(FromChars("01|001100 00000000"), output.get())
-          .status()));
+      SparseBitSet::Decode(FromChars("01|001100 00000000"), output).status()));
 }
 
 TEST_F(SparseBitSetTest, DepthLimits32) {
-  hb_set_unique_ptr output = make_hb_set();
+  IntSet output;
   // Depth 7 is OK.
-  EXPECT_EQ(absl::OkStatus(),
-            SparseBitSet::Decode(
-                FromChars("11|111000  00000000000000000000000000000000"),
-                output.get())
-                .status());
+  EXPECT_EQ(
+      absl::OkStatus(),
+      SparseBitSet::Decode(
+          FromChars("11|111000  00000000000000000000000000000000"), output)
+          .status());
   // Depth 8 is too much.
   EXPECT_TRUE(absl::IsInvalidArgument(
       SparseBitSet::Decode(
-          FromChars("11|000100  00000000000000000000000000000000"),
-          output.get())
+          FromChars("11|000100  00000000000000000000000000000000"), output)
           .status()));
 }
 
 TEST_F(SparseBitSetTest, Entire32BitRange) {
   for (BranchFactor bf : {BF2, BF4, BF8, BF32}) {
-    TestEncodeDecode(make_hb_set(1, 0xFFFFFFFE), bf);
+    TestEncodeDecode(IntSet{0xFFFFFFFE}, bf);
   }
 
   EXPECT_EQ(
       "10|000010  "
       "0001 0001 0001 0001 0001 0001 0001 0001 0001 0001 0001 0001 0001 0001 "
       "0001 0010",
-      Bits(make_hb_set(1, 0xFFFFFFFE), BF4));
+      Bits(IntSet{0xFFFFFFFE}, BF4));
   EXPECT_EQ(
       "01|110100  "
       "00010000 00000001 00000001 00000001 00000001 00000001 00000001 00000001 "
       "00000001 00000001 00000010",
-      Bits(make_hb_set(1, 0xFFFFFFFE), BF8));
+      Bits(IntSet{0xFFFFFFFE}, BF8));
   EXPECT_EQ(
       "11|111000  "
       "00010000000000000000000000000000 00000000000000000000000000000001 "
       "00000000000000000000000000000001 00000000000000000000000000000001 "
       "00000000000000000000000000000001 00000000000000000000000000000001 "
       "00000000000000000000000000000010",
-      Bits(make_hb_set(1, 0xFFFFFFFE), BF32));
+      Bits(IntSet{0xFFFFFFFE}, BF32));
 }
 
 TEST_F(SparseBitSetTest, ChooseBranchFactor) {
-  EXPECT_EQ("11|100000  10101010101010101010101010101010",
-            Bits(make_hb_set(16, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24,
-                             26, 28, 30)));
+  EXPECT_EQ(
+      "11|100000  10101010101010101010101010101010",
+      Bits(IntSet{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30}));
   EXPECT_EQ(
       "10|110000  1100 1111 1111 1010 1010 1010 1010 1010 1010 1010 1010 0000",
-      Bits(make_hb_set(16, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26,
-                       28, 30),
+      Bits(IntSet{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30},
            BF4));
-  EXPECT_EQ("01|010000  11110000 10101010 10101010 10101010 10101010",
-            Bits(make_hb_set(16, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24,
-                             26, 28, 30),
-                 BF8));
-  EXPECT_EQ("11|100000  10101010101010101010101010101010",
-            Bits(make_hb_set(16, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24,
-                             26, 28, 30),
-                 BF32));
+  EXPECT_EQ(
+      "01|010000  11110000 10101010 10101010 10101010 10101010",
+      Bits(IntSet{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30},
+           BF8));
+  EXPECT_EQ(
+      "11|100000  10101010101010101010101010101010",
+      Bits(IntSet{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30},
+           BF32));
 
   EXPECT_EQ(
       "00|010100  "
@@ -681,10 +671,10 @@ TEST_F(SparseBitSetTest, ChooseBranchFactor) {
 }
 
 TEST_F(SparseBitSetTest, RegressionTest32BitRanges) {
-  TestEncodeDecode(make_hb_set(2, 1, 2546490705), BF2);
-  TestEncodeDecode(make_hb_set(2, 1, 2546490705), BF4);
-  TestEncodeDecode(make_hb_set(2, 1, 2546490705), BF8);
-  TestEncodeDecode(make_hb_set(2, 1, 2546490705), BF32);
+  TestEncodeDecode(IntSet{1, 2546490705}, BF2);
+  TestEncodeDecode(IntSet{1, 2546490705}, BF4);
+  TestEncodeDecode(IntSet{1, 2546490705}, BF8);
+  TestEncodeDecode(IntSet{1, 2546490705}, BF32);
 }
 
 }  // namespace common

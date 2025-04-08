@@ -4,7 +4,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "common/branch_factor.h"
-#include "hb.h"
+#include "common/int_set.h"
 
 namespace common {
 
@@ -49,15 +49,16 @@ class SparseBitSet {
   // items are appended to any existing items in out. Returns a sub string of
   // 'sparse_bit_set' with the consumed bytes removed.
   static absl::StatusOr<absl::string_view> Decode(
-      absl::string_view sparse_bit_set, hb_set_t* out);
+      absl::string_view sparse_bit_set, IntSet& out);
 
   // Encode a set of integers into a sparse bit set binary blob.
-  static std::string Encode(const hb_set_t& set, BranchFactor branch_factor);
+  static std::string Encode(const common::IntSet& set,
+                            BranchFactor branch_factor);
   /*
    * Encode a set of integers into a sparse bit set binary blob.
    * The optimal branch_factor will be estimated and used automatically.
    */
-  static std::string Encode(const hb_set_t& set);
+  static std::string Encode(const common::IntSet& set);
 };
 
 }  // namespace common

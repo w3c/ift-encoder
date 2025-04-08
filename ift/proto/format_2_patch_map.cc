@@ -10,6 +10,7 @@
 #include "common/font_helper.h"
 #include "common/font_helper_macros.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "common/sparse_bit_set.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -24,6 +25,7 @@ using absl::string_view;
 using common::CompatId;
 using common::FontHelper;
 using common::hb_set_unique_ptr;
+using common::IntSet;
 using common::make_hb_set;
 using common::SparseBitSet;
 
@@ -232,12 +234,12 @@ void EncodeCodepoints(uint8_t bias_bytes, const PatchMap::Coverage& coverage,
   uint32_t max_bias = (1 << ((uint32_t)bias_bytes) * 8) - 1;
   uint32_t bias = std::min(coverage.SmallestCodepoint(), max_bias);
 
-  hb_set_unique_ptr biased_set = make_hb_set();
+  IntSet biased_set;
   for (uint32_t cp : coverage.codepoints) {
-    hb_set_add(biased_set.get(), cp - bias);
+    biased_set.insert(cp - bias);
   }
 
-  std::string sparse_bit_set = SparseBitSet::Encode(*biased_set);
+  std::string sparse_bit_set = SparseBitSet::Encode(biased_set);
 
   if (bias_bytes == 2) {
     FontHelper::WriteUInt16(bias, out);

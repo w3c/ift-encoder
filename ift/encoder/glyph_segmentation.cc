@@ -432,8 +432,7 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   return config;
 }
 
-void GlyphSegmentation::CopySegments(
-    const std::vector<IntSet>& segments) {
+void GlyphSegmentation::CopySegments(const std::vector<IntSet>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(set);
