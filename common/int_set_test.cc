@@ -256,6 +256,16 @@ TEST_F(IntSetTest, InsertRange) {
   ASSERT_EQ(a, expected);
 }
 
+TEST_F(IntSetTest, InsertSorted) {
+  IntSet a{7, 8, 11};
+
+  hb_codepoint_t sorted[]{9, 11, 13, 14};
+  a.insert_sorted_array(sorted);
+
+  IntSet expected{7, 8, 9, 11, 13, 14};
+  ASSERT_EQ(a, expected);
+}
+
 TEST_F(IntSetTest, InsertIterator) {
   IntSet a{7, 8, 11};
 
@@ -265,6 +275,15 @@ TEST_F(IntSetTest, InsertIterator) {
   IntSet expected{5, 7, 8, 11, 15, 21};
 
   ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, ToVector) {
+  IntSet empty{};
+  IntSet a{7, 8, 11};
+
+  ASSERT_EQ(empty.to_vector(), std::vector<uint32_t>());
+  std::vector<uint32_t> expected{7, 8, 11};
+  ASSERT_EQ(a.to_vector(), expected);
 }
 
 TEST_F(IntSetTest, IsSubsetOf) {

@@ -142,7 +142,7 @@ class SegmentationContext {
 
     glyph_closure_cache.insert(std::pair(codepoints, IntSet(gids)));
 
-    return gids;
+    return IntSet(gids);
   }
 
   void LogClosureCount(absl::string_view operation) {
@@ -532,7 +532,6 @@ StatusOr<bool> IsPatchTooSmall(SegmentationContext& context,
 StatusOr<std::optional<segment_index_t>> MergeNextBaseSegment(
     SegmentationContext& context,
     const GlyphSegmentation& candidate_segmentation, uint32_t start_segment) {
-  hb_set_unique_ptr triggering_patches = make_hb_set();
   for (auto condition = candidate_segmentation.Conditions().begin();
        condition != candidate_segmentation.Conditions().end(); condition++) {
     if (!condition->IsExclusive()) {

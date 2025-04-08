@@ -16,7 +16,6 @@
 #include "common/compat_id.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "common/woff2.h"
@@ -42,7 +41,6 @@ using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
-using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
@@ -605,7 +603,7 @@ StatusOr<FontData> Encoder::GenerateBaseGvar(
 // Generate a CFF2 CharStrings index that retains glyph ids, but contains
 // glyph data from face only for gids.
 absl::StatusOr<std::string> GenerateCharStringsTable(hb_face_t* face,
-                                                     const hb_set_t* gids) {
+                                                     const IntSet& gids) {
   // Create the per glyph data and offsets
   std::string charstrings_per_glyph;
 
@@ -614,7 +612,7 @@ absl::StatusOr<std::string> GenerateCharStringsTable(hb_face_t* face,
   std::vector<uint32_t> offsets;
   for (uint32_t gid = 0; gid < glyph_count; gid++) {
     offsets.push_back(current_offset);
-    if (!hb_set_has(gids, gid)) {
+    if (!gids.contains(gid)) {
       continue;
     }
 
@@ -697,9 +695,9 @@ StatusOr<FontData> Encoder::GenerateBaseCff2(
   int index = -1;
   uint32_t old_gid = HB_MAP_VALUE_INVALID;
   uint32_t new_gid = HB_MAP_VALUE_INVALID;
-  hb_set_unique_ptr gids = make_hb_set();
+  IntSet gids;
   while (hb_map_next(old_to_new, &index, &old_gid, &new_gid)) {
-    hb_set_add(gids.get(), old_gid);
+    gids.insert(old_gid);
   }
   hb_subset_plan_destroy(plan);
 
@@ -713,7 +711,7 @@ StatusOr<FontData> Encoder::GenerateBaseCff2(
   // This charstring table includes charstring data from "instance_face" for all
   // glyphs in "gids".
   std::string charstrings =
-      TRY(GenerateCharStringsTable(instance_face.get(), gids.get()));
+      TRY(GenerateCharStringsTable(instance_face.get(), gids));
 
   // Step 5: assemble the composite table.
   std::string composite_table = instance_non_charstrings.string() + charstrings;

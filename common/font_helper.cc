@@ -246,14 +246,7 @@ flat_hash_map<uint32_t, uint32_t> FontHelper::GidToUnicodeMap(hb_face_t* face) {
 IntSet FontHelper::ToCodepointsSet(hb_face_t* face) {
   hb_set_unique_ptr codepoints = make_hb_set();
   hb_face_collect_unicodes(face, codepoints.get());
-
-  IntSet result;
-  hb_codepoint_t cp = HB_SET_VALUE_INVALID;
-  while (hb_set_next(codepoints.get(), &cp)) {
-    result.insert(cp);
-  }
-
-  return result;
+  return IntSet(codepoints);
 }
 
 absl::flat_hash_set<hb_tag_t> FontHelper::GetTags(hb_face_t* face) {

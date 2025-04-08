@@ -9,12 +9,14 @@
 #include "common/bit_input_buffer.h"
 #include "common/bit_output_buffer.h"
 #include "common/branch_factor.h"
+#include "common/int_set.h"
 #include "hb.h"
 
 namespace common {
 
 using absl::StatusOr;
 using absl::string_view;
+using common::IntSet;
 using std::string;
 using std::unordered_map;
 using std::vector;
@@ -52,12 +54,8 @@ uint8_t ValuesPerBitLog2ForLayer(uint32_t layer, uint32_t tree_depth,
 }
 
 StatusOr<string_view> SparseBitSet::Decode(string_view sparse_bit_set,
-                                           hb_set_t* out) {
+                                           IntSet& out) {
   // TODO(garretrieger): ignore values beyond unicode max as required by spec.
-
-  if (!out) {
-    return absl::InvalidArgumentError("out is null.");
-  }
   if (sparse_bit_set.empty()) {
     return sparse_bit_set;
   }
@@ -100,8 +98,7 @@ StatusOr<string_view> SparseBitSet::Decode(string_view sparse_bit_set,
         // This is a completely filled node encoded as a zero!
         uint32_t leaf_node_base = node_base * node_base_factor;
         // Add to the set now; range additions are efficient.
-        hb_set_add_range(out, leaf_node_base,
-                         leaf_node_base + leaf_node_size - 1);
+        out.insert_range(leaf_node_base, leaf_node_base + leaf_node_size - 1);
       } else {
         // It's a normally encoded node.
         for (uint32_t bit_index = 0u; bit_index < kBFNodeSize[branch_factor];
@@ -132,8 +129,7 @@ StatusOr<string_view> SparseBitSet::Decode(string_view sparse_bit_set,
     next_level_node_bases.clear();
   }
   if (!pending_codepoints.empty()) {
-    hb_set_add_sorted_array(out, pending_codepoints.data(),
-                            pending_codepoints.size());
+    out.insert_sorted_array(pending_codepoints);
   }
 
   return bits.Remaining();
@@ -688,34 +684,29 @@ string EncodeSet(const vector<uint32_t>& codepoints, BranchFactor branch_factor,
   return bit_buffer.to_string();
 }
 
-string SparseBitSet::Encode(const hb_set_t& set, BranchFactor branch_factor) {
-  uint32_t tree_depth = TreeDepthFor(hb_set_get_max(&set), branch_factor);
+string SparseBitSet::Encode(const IntSet& set, BranchFactor branch_factor) {
+  uint32_t tree_depth =
+      TreeDepthFor(set.max().value_or(HB_SET_VALUE_INVALID), branch_factor);
   if (tree_depth > kBFMaxDepth[branch_factor] && branch_factor == BF2) {
     // It's possible for uint32_t::MAX to exceed the max tree depth on BF2,
     // upgrade to 4 in that case.
     branch_factor = BF4;
   }
 
-  uint32_t size = hb_set_get_population(&set);
-  if (size == 0) {
+  if (set.empty()) {
     return string{0b00000000};
   }
-  vector<hb_codepoint_t> codepoints;
-  codepoints.resize(size);
-  hb_set_next_many(&set, HB_SET_VALUE_INVALID, codepoints.data(), size);
+  vector<hb_codepoint_t> codepoints = set.to_vector();
   vector<uint32_t> filled_twigs;
   FindFilledTwigs(codepoints, branch_factor, filled_twigs);
   return EncodeSet(codepoints, branch_factor, filled_twigs);
 }
 
-string SparseBitSet::Encode(const hb_set_t& set) {
-  uint32_t size = hb_set_get_population(&set);
-  if (size == 0) {
+string SparseBitSet::Encode(const IntSet& set) {
+  if (set.empty()) {
     return "";
   }
-  vector<hb_codepoint_t> codepoints;
-  codepoints.resize(size);
-  hb_set_next_many(&set, HB_SET_VALUE_INVALID, codepoints.data(), size);
+  vector<hb_codepoint_t> codepoints = set.to_vector();
   vector<uint32_t> filled_twigs;
   BranchFactor branch_factor = ChooseBranchFactor(codepoints, filled_twigs);
 

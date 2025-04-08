@@ -3,7 +3,9 @@
 
 #include <cstddef>
 #include <optional>
+#include <vector>
 
+#include "absl/types/span.h"
 #include "common/hb_set_unique_ptr.h"
 namespace common {
 
@@ -80,13 +82,13 @@ class IntSet {
     }
   }
 
-  IntSet(const hb_set_t* set) : set_(make_hb_set()) {
+  explicit IntSet(const hb_set_t* set) : set_(make_hb_set()) {
     // We always keep exclusive ownership of the internal set, so copy the
     // contents of the input set instead of referencing it.
     hb_set_union(set_.get(), set);
   }
 
-  IntSet(const hb_set_unique_ptr& set) : set_(make_hb_set()) {
+  explicit IntSet(const hb_set_unique_ptr& set) : set_(make_hb_set()) {
     // We always keep exclusive ownership of the internal set, so copy the
     // contents of the input set instead of referencing it.
     hb_set_union(set_.get(), set.get());
@@ -172,6 +174,20 @@ class IntSet {
 
   void insert_range(hb_codepoint_t start, hb_codepoint_t end) {
     hb_set_add_range(set_.get(), start, end);
+  }
+
+  // Optimized insert that takes an array of sorted values
+  void insert_sorted_array(absl::Span<const hb_codepoint_t> sorted_values) {
+    hb_set_add_sorted_array(set_.get(), sorted_values.data(),
+                            sorted_values.size());
+  }
+
+  std::vector<hb_codepoint_t> to_vector() const {
+    std::vector<hb_codepoint_t> values;
+    auto size = this->size();
+    values.resize(size);
+    hb_set_next_many(set_.get(), HB_SET_VALUE_INVALID, values.data(), size);
+    return values;
   }
 
   template <typename It>
