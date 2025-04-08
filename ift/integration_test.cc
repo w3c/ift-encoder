@@ -7,7 +7,6 @@
 #include "common/axis_range.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "gmock/gmock.h"
@@ -31,7 +30,6 @@ using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
-using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
@@ -103,16 +101,13 @@ class IntegrationTest : public ::testing::Test {
 
     IntSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
-    hb_set_unique_ptr excluded_hb = make_hb_set();
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_1,
-                            std::size(testdata::TEST_SEGMENT_1));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_2,
-                            std::size(testdata::TEST_SEGMENT_2));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_3,
-                            std::size(testdata::TEST_SEGMENT_3));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_4,
-                            std::size(testdata::TEST_SEGMENT_4));
-    IntSet excluded(excluded_hb);
+
+    IntSet excluded;
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_1);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_2);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_3);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_4);
+
     init.subtract(excluded);
 
     encoder.SetFace(face.get());
@@ -161,16 +156,12 @@ class IntegrationTest : public ::testing::Test {
     IntSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    hb_set_unique_ptr excluded_hb = make_hb_set();
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_1,
-                            std::size(testdata::TEST_VF_SEGMENT_1));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_2,
-                            std::size(testdata::TEST_VF_SEGMENT_2));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_3,
-                            std::size(testdata::TEST_VF_SEGMENT_3));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_VF_SEGMENT_4,
-                            std::size(testdata::TEST_VF_SEGMENT_4));
-    IntSet excluded(excluded_hb);
+    IntSet excluded;
+    excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_1);
+    excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_2);
+    excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_3);
+    excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_4);
+
     init.subtract(excluded);
 
     auto sc = encoder.AddGlyphDataPatch(0, init);
@@ -188,20 +179,14 @@ class IntegrationTest : public ::testing::Test {
     IntSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    hb_set_unique_ptr excluded_hb = make_hb_set();
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_1,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_1));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_2,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_2));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_3,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_3));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_4,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_4));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_5,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_5));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_FEATURE_SEGMENT_6,
-                            std::size(testdata::TEST_FEATURE_SEGMENT_6));
-    IntSet excluded(excluded_hb);
+    IntSet excluded;
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_1);
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_2);
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_3);
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_4);
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_5);
+    excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_6);
+
     init.subtract(excluded);
 
     auto sc = encoder.AddGlyphDataPatch(0, init);

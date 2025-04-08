@@ -11,7 +11,6 @@
 #include "absl/types/span.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/sparse_bit_set.h"
 #include "gtest/gtest.h"
 #include "ift/proto/patch_encoding.h"
@@ -24,8 +23,6 @@ using absl::Status;
 using absl::StrCat;
 using common::FontData;
 using common::FontHelper;
-using common::hb_set_unique_ptr;
-using common::make_hb_set;
 using common::SparseBitSet;
 
 namespace ift::proto {

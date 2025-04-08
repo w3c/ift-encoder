@@ -18,7 +18,6 @@
 #include "common/brotli_binary_patch.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/client/fontations_client.h"
@@ -41,7 +40,6 @@ using common::BinaryPatch;
 using common::BrotliBinaryPatch;
 using common::FontData;
 using common::FontHelper;
-using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_set;
 using ift::client::ToGraph;
@@ -76,17 +74,12 @@ class EncoderTest : public ::testing::Test {
     IntSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    hb_set_unique_ptr excluded_hb = make_hb_set();
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_1,
-                            std::size(testdata::TEST_SEGMENT_1));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_2,
-                            std::size(testdata::TEST_SEGMENT_2));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_3,
-                            std::size(testdata::TEST_SEGMENT_3));
-    hb_set_add_sorted_array(excluded_hb.get(), testdata::TEST_SEGMENT_4,
-                            std::size(testdata::TEST_SEGMENT_4));
+    IntSet excluded;
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_1);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_2);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_3);
+    excluded.insert_sorted_array(testdata::TEST_SEGMENT_4);
 
-    IntSet excluded(excluded_hb);
     init.subtract(excluded);
 
     segment_0_gids = init;
@@ -133,22 +126,6 @@ class EncoderTest : public ::testing::Test {
     }
     FontData result(blob);
     hb_blob_destroy(blob);
-    return result;
-  }
-
-  btree_set<uint32_t> ToCodepointsSet(const FontData& font_data) {
-    hb_face_t* face = font_data.reference_face();
-
-    hb_set_unique_ptr codepoints = make_hb_set();
-    hb_face_collect_unicodes(face, codepoints.get());
-    hb_face_destroy(face);
-
-    btree_set<uint32_t> result;
-    hb_codepoint_t cp = HB_SET_VALUE_INVALID;
-    while (hb_set_next(codepoints.get(), &cp)) {
-      result.insert(cp);
-    }
-
     return result;
   }
 
@@ -604,7 +581,8 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   auto encoding = encoder.Encode();
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
-  auto cps = ToCodepointsSet(encoding->init_font);
+  auto face = encoding->init_font.face();
+  auto cps = FontHelper::ToCodepointsSet(face.get());
   ASSERT_TRUE(cps.contains(chunk0_cp));
   ASSERT_TRUE(cps.contains(chunk1_cp));
   ASSERT_TRUE(cps.contains(chunk2_cp));

@@ -8,7 +8,6 @@
 #include "absl/container/btree_set.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "ift/encoder/condition.h"
 #include "util/encoder_config.pb.h"

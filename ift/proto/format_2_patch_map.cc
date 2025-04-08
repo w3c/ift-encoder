@@ -9,7 +9,6 @@
 #include "common/compat_id.h"
 #include "common/font_helper.h"
 #include "common/font_helper_macros.h"
-#include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/sparse_bit_set.h"
 #include "ift/proto/ift_table.h"
@@ -24,7 +23,6 @@ using absl::StrCat;
 using absl::string_view;
 using common::CompatId;
 using common::FontHelper;
-using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_set;
 using common::SparseBitSet;
