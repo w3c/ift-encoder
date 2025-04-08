@@ -31,8 +31,8 @@ class ClosureGlyphSegmenter {
    * initial ift font.
    */
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
-      hb_face_t* face, common::IntSet initial_segment,
-      std::vector<common::IntSet> codepoint_segments,
+      hb_face_t* face, common::CodepointSet initial_segment,
+      std::vector<common::CodepointSet> codepoint_segments,
       uint32_t patch_size_min_bytes = 0,
       uint32_t patch_size_max_bytes = UINT32_MAX) const;
 };

@@ -67,8 +67,10 @@ using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using common::CodepointSet;
 using common::FontData;
 using common::FontHelper;
+using common::GlyphSet;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::IntSet;
@@ -224,7 +226,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
       remainder_glyphs--;
     }
 
-    IntSet gids;
+    GlyphSet gids;
     gids.insert(begin, glyphs_it);
     auto unicodes = FontHelper::GidsToUnicodes(font, gids);
 
@@ -279,7 +281,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     conditions.push_back(c);
   }
 
-  flat_hash_map<uint32_t, IntSet> segments;
+  flat_hash_map<uint32_t, CodepointSet> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
     segments[i++].insert(s.begin(), s.end());
@@ -296,12 +298,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<IntSet> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                    uint32_t number_of_segments) {
+std::vector<CodepointSet> GroupCodepoints(std::vector<uint32_t> codepoints,
+                                          uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<IntSet> out;
+  std::vector<CodepointSet> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -311,7 +313,7 @@ std::vector<IntSet> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    IntSet group;
+    CodepointSet group;
     group.insert(start, end);
     out.push_back(group);
   }

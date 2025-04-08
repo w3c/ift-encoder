@@ -27,8 +27,8 @@ static uint32_t TEST_SEGMENT_1[] = {
     987,  992,  993,  994,  1001, 1002, 1003, 1004, 1006, 1008, 1010, 1012,
     1013, 1014, 1015, 1016, 1022, 1030, 1033, 1034};
 
-static common::IntSet TestSegment1() {
-  common::IntSet result;
+static common::GlyphSet TestSegment1() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_SEGMENT_1) {
     result.insert(v);
   }
@@ -57,8 +57,8 @@ static uint32_t TEST_SEGMENT_2[] = {
     1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048,
     1049, 1050, 1051, 1052, 1053, 1054, 1055};
 
-static common::IntSet TestSegment2() {
-  common::IntSet result;
+static common::GlyphSet TestSegment2() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_SEGMENT_2) {
     result.insert(v);
   }
@@ -67,8 +67,8 @@ static common::IntSet TestSegment2() {
 
 static uint32_t TEST_SEGMENT_3[] = {169};
 
-static common::IntSet TestSegment3() {
-  common::IntSet result;
+static common::GlyphSet TestSegment3() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_SEGMENT_3) {
     result.insert(v);
   }
@@ -113,8 +113,8 @@ static uint32_t TEST_SEGMENT_4[] = {
     847,  925,  928,  931, 932, 933, 934, 936, 938, 939, 1017, 1019, 1020, 1026,
     1027, 1028, 1029, 1032};
 
-static common::IntSet TestSegment4() {
-  common::IntSet result;
+static common::GlyphSet TestSegment4() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_SEGMENT_4) {
     result.insert(v);
   }
@@ -141,8 +141,8 @@ static uint32_t TEST_VF_SEGMENT_1[] = {
     994,  1001, 1002, 1003, 1004, 1006, 1008, 1010, 1012, 1013, 1014, 1015,
     1016, 1022, 1030};
 
-static common::IntSet TestVfSegment1() {
-  common::IntSet result;
+static common::GlyphSet TestVfSegment1() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_VF_SEGMENT_1) {
     result.insert(v);
   }
@@ -172,8 +172,8 @@ static uint32_t TEST_VF_SEGMENT_2[] = {
     1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1054, 1055,
 };
 
-static common::IntSet TestVfSegment2() {
-  common::IntSet result;
+static common::GlyphSet TestVfSegment2() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_VF_SEGMENT_2) {
     result.insert(v);
   }
@@ -182,8 +182,8 @@ static common::IntSet TestVfSegment2() {
 
 static uint32_t TEST_VF_SEGMENT_3[] = {169};
 
-static common::IntSet TestVfSegment3() {
-  common::IntSet result;
+static common::GlyphSet TestVfSegment3() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_VF_SEGMENT_3) {
     result.insert(v);
   }
@@ -216,8 +216,8 @@ static uint32_t TEST_VF_SEGMENT_4[] = {
     843,  844,  846,  847,  925,  928,  931, 932, 933, 934, 936, 938, 939, 1017,
     1019, 1020, 1026, 1027, 1028, 1029, 1032};
 
-static common::IntSet TestVfSegment4() {
-  common::IntSet result;
+static common::GlyphSet TestVfSegment4() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_VF_SEGMENT_4) {
     result.insert(v);
   }
@@ -235,8 +235,8 @@ static uint32_t TEST_FEATURE_SEGMENT_1[] = {
     461, 462, 463, 469, 477, 478, 801, 802, 803, 804, 805, 806, 807, 808, 809,
     810, 811, 812, 813, 814, 815, 817, 822, 826, 827};
 
-static common::IntSet TestFeatureSegment1() {
-  common::IntSet result;
+static common::GlyphSet TestFeatureSegment1() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_1) {
     result.insert(v);
   }
@@ -254,8 +254,8 @@ static uint32_t TEST_FEATURE_SEGMENT_2[] = {
     465, 468, 470, 471, 472, 479, 816, 818, 819, 820, 821, 823,
 };
 
-static common::IntSet TestFeatureSegment2() {
-  common::IntSet result;
+static common::GlyphSet TestFeatureSegment2() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_2) {
     result.insert(v);
   }
@@ -264,8 +264,8 @@ static common::IntSet TestFeatureSegment2() {
 
 static uint32_t TEST_FEATURE_SEGMENT_3[] = {169};
 
-static common::IntSet TestFeatureSegment3() {
-  common::IntSet result;
+static common::GlyphSet TestFeatureSegment3() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_3) {
     result.insert(v);
   }
@@ -306,8 +306,8 @@ static uint32_t TEST_FEATURE_SEGMENT_4[] = {
     762, 763, 764, 765, 766, 767, 768, 769, 791, 792, 793, 794, 795, 796, 797,
     798, 799, 800};
 
-static common::IntSet TestFeatureSegment4() {
-  common::IntSet result;
+static common::GlyphSet TestFeatureSegment4() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_4) {
     result.insert(v);
   }
@@ -346,8 +346,8 @@ static uint32_t TEST_FEATURE_SEGMENT_6[] = {
     777, 778, 838, 839, 841, 842,  843,  844,  846,  847,  925,  928,  931, 932,
     933, 934, 936, 938, 939, 1017, 1019, 1020, 1026, 1027, 1028, 1029, 1032};
 
-static common::IntSet TestFeatureSegment6() {
-  common::IntSet result;
+static common::GlyphSet TestFeatureSegment6() {
+  common::GlyphSet result;
   for (uint32_t v : TEST_FEATURE_SEGMENT_6) {
     result.insert(v);
   }

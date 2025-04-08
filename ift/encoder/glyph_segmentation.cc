@@ -19,14 +19,17 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using common::CodepointSet;
+using common::GlyphSet;
 using common::IntSet;
+using common::SegmentSet;
 
 namespace ift::encoder {
 
 Status GlyphSegmentation::GroupsToSegmentation(
-    const btree_map<IntSet, IntSet>& and_glyph_groups,
-    const btree_map<IntSet, IntSet>& or_glyph_groups,
-    const IntSet& fallback_group, GlyphSegmentation& segmentation) {
+    const btree_map<SegmentSet, GlyphSet>& and_glyph_groups,
+    const btree_map<SegmentSet, GlyphSet>& or_glyph_groups,
+    const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
 
   // Map segments into patch ids
@@ -90,20 +93,20 @@ GlyphSegmentation::ActivationCondition::exclusive_segment(
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::and_segments(const IntSet& segments,
+GlyphSegmentation::ActivationCondition::and_segments(const SegmentSet& segments,
                                                      patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
 
   for (auto id : segments) {
-    conditions.conditions_.push_back({id});
+    conditions.conditions_.push_back(SegmentSet{id});
   }
 
   return conditions;
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::or_segments(const IntSet& segments,
+GlyphSegmentation::ActivationCondition::or_segments(const SegmentSet& segments,
                                                     patch_id_t activated,
                                                     bool is_fallback) {
   ActivationCondition conditions;
@@ -116,7 +119,7 @@ GlyphSegmentation::ActivationCondition::or_segments(const IntSet& segments,
 
 GlyphSegmentation::ActivationCondition
 GlyphSegmentation::ActivationCondition::composite_condition(
-    absl::Span<const IntSet> groups, patch_id_t activated) {
+    absl::Span<const SegmentSet> groups, patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
   for (const auto& group : groups) {
@@ -241,7 +244,7 @@ bool GlyphSegmentation::ActivationCondition::operator<(
 StatusOr<std::vector<Condition>>
 GlyphSegmentation::ActivationConditionsToConditionEntries(
     Span<const ActivationCondition> conditions,
-    const absl::flat_hash_map<segment_index_t, IntSet>& segments) {
+    const absl::flat_hash_map<segment_index_t, CodepointSet>& segments) {
   // TODO(garretrieger): extend this to work with segments that are
   // SubsetDefinition's instead of just codepoints. This would allow for
   // features and other things to be worked into conditions.
@@ -432,7 +435,8 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   return config;
 }
 
-void GlyphSegmentation::CopySegments(const std::vector<IntSet>& segments) {
+void GlyphSegmentation::CopySegments(
+    const std::vector<CodepointSet>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(set);

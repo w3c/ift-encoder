@@ -26,13 +26,16 @@ using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using common::CodepointSet;
 using common::CompatId;
 using common::FontData;
 using common::FontHelper;
+using common::GlyphSet;
 using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
 using common::make_hb_set;
+using common::SegmentSet;
 using ift::GlyphKeyedDiff;
 
 namespace ift::encoder {
@@ -53,11 +56,11 @@ namespace ift::encoder {
 
 class GlyphConditions {
  public:
-  GlyphConditions() : and_segments(make_hb_set()), or_segments(make_hb_set()) {}
-  IntSet and_segments;
-  IntSet or_segments;
+  GlyphConditions() : and_segments(), or_segments() {}
+  SegmentSet and_segments;
+  SegmentSet or_segments;
 
-  void RemoveSegments(const IntSet& segments) {
+  void RemoveSegments(const SegmentSet& segments) {
     and_segments.subtract(segments);
     or_segments.subtract(segments);
   }
@@ -65,14 +68,14 @@ class GlyphConditions {
 
 class SegmentationContext;
 
-Status AnalyzeSegment(SegmentationContext& context, const IntSet& codepoints,
-                      IntSet& and_gids, IntSet& or_gids,
-                      IntSet& exclusive_gids);
+Status AnalyzeSegment(SegmentationContext& context,
+                      const CodepointSet& codepoints, GlyphSet& and_gids,
+                      GlyphSet& or_gids, GlyphSet& exclusive_gids);
 
 class SegmentationContext {
  public:
-  SegmentationContext(hb_face_t* face, const IntSet& initial_segment,
-                      const std::vector<IntSet>& codepoint_segments)
+  SegmentationContext(hb_face_t* face, const CodepointSet& initial_segment,
+                      const std::vector<CodepointSet>& codepoint_segments)
       : preprocessed_face(make_hb_face(hb_subset_preprocess(face))),
         original_face(make_hb_face(hb_face_reference(face))),
         segments(),
@@ -108,7 +111,7 @@ class SegmentationContext {
     fallback_segments = {};
   }
 
-  StatusOr<IntSet> GlyphClosure(const IntSet& codepoints) {
+  StatusOr<GlyphSet> GlyphClosure(const CodepointSet& codepoints) {
     auto it = glyph_closure_cache.find(codepoints);
     if (it != glyph_closure_cache.end()) {
       glyph_closure_cache_hit++;
@@ -140,9 +143,9 @@ class SegmentationContext {
     hb_map_values(new_to_old, gids.get());
     hb_subset_plan_destroy(plan);
 
-    glyph_closure_cache.insert(std::pair(codepoints, IntSet(gids)));
+    glyph_closure_cache.insert(std::pair(codepoints, GlyphSet(gids)));
 
-    return IntSet(gids);
+    return GlyphSet(gids);
   }
 
   void LogClosureCount(absl::string_view operation) {
@@ -167,7 +170,7 @@ class SegmentationContext {
             << " misses)";
   }
 
-  StatusOr<IntSet> CodepointsToOrGids(const IntSet& codepoints) {
+  StatusOr<GlyphSet> CodepointsToOrGids(const CodepointSet& codepoints) {
     auto it = code_point_set_to_or_gids_cache.find(codepoints);
     if (it != code_point_set_to_or_gids_cache.end()) {
       code_point_set_to_or_gids_cache_hit++;
@@ -175,9 +178,9 @@ class SegmentationContext {
     }
 
     code_point_set_to_or_gids_cache_miss++;
-    IntSet and_gids;
-    IntSet or_gids;
-    IntSet exclusive_gids;
+    GlyphSet and_gids;
+    GlyphSet or_gids;
+    GlyphSet exclusive_gids;
     TRYV(AnalyzeSegment(*this, codepoints, and_gids, or_gids, exclusive_gids));
 
     code_point_set_to_or_gids_cache.insert(std::pair(codepoints, or_gids));
@@ -187,12 +190,12 @@ class SegmentationContext {
   // Init
   common::hb_face_unique_ptr preprocessed_face;
   common::hb_face_unique_ptr original_face;
-  std::vector<IntSet> segments;
+  std::vector<CodepointSet> segments;
 
-  IntSet initial_codepoints;
-  IntSet all_codepoints;
-  IntSet full_closure;
-  IntSet initial_closure;
+  CodepointSet initial_codepoints;
+  CodepointSet all_codepoints;
+  GlyphSet full_closure;
+  GlyphSet initial_closure;
 
   uint32_t patch_size_min_bytes = 0;
   uint32_t patch_size_max_bytes = UINT32_MAX;
@@ -201,17 +204,17 @@ class SegmentationContext {
   std::vector<GlyphConditions> gid_conditions;
 
   // Phase 2
-  IntSet unmapped_glyphs;
-  btree_map<IntSet, IntSet> and_glyph_groups;
-  btree_map<IntSet, IntSet> or_glyph_groups;
-  IntSet fallback_segments;
+  GlyphSet unmapped_glyphs;
+  btree_map<SegmentSet, GlyphSet> and_glyph_groups;
+  btree_map<SegmentSet, GlyphSet> or_glyph_groups;
+  SegmentSet fallback_segments;
 
   // Caches and logging
-  flat_hash_map<IntSet, IntSet> glyph_closure_cache;
+  flat_hash_map<CodepointSet, GlyphSet> glyph_closure_cache;
   uint32_t glyph_closure_cache_hit = 0;
   uint32_t glyph_closure_cache_miss = 0;
 
-  flat_hash_map<IntSet, IntSet> code_point_set_to_or_gids_cache;
+  flat_hash_map<CodepointSet, GlyphSet> code_point_set_to_or_gids_cache;
   uint32_t code_point_set_to_or_gids_cache_hit = 0;
   uint32_t code_point_set_to_or_gids_cache_miss = 0;
 
@@ -219,9 +222,9 @@ class SegmentationContext {
   uint32_t closure_count_delta = 0;
 };
 
-Status AnalyzeSegment(SegmentationContext& context, const IntSet& codepoints,
-                      IntSet& and_gids, IntSet& or_gids,
-                      IntSet& exclusive_gids) {
+Status AnalyzeSegment(SegmentationContext& context,
+                      const CodepointSet& codepoints, GlyphSet& and_gids,
+                      GlyphSet& or_gids, GlyphSet& exclusive_gids) {
   if (codepoints.empty()) {
     // Skip empty sets, they will never contribute any conditions.
     return absl::OkStatus();
@@ -251,16 +254,16 @@ Status AnalyzeSegment(SegmentationContext& context, const IntSet& codepoints,
   // * I - D: the activation conditions for these glyphs is s_i OR …
   //          Where … is one or more additional segments.
   // * D intersection I: the activation conditions for these glyphs is only s_i
-  IntSet except_segment = context.all_codepoints;
+  CodepointSet except_segment = context.all_codepoints;
   except_segment.subtract(codepoints);
   auto B_except_segment_closure = TRY(context.GlyphClosure(except_segment));
 
-  IntSet only_segment = context.initial_codepoints;
+  CodepointSet only_segment = context.initial_codepoints;
   only_segment.union_set(codepoints);
   auto I_only_segment_closure = TRY(context.GlyphClosure(only_segment));
   I_only_segment_closure.subtract(context.initial_closure);
 
-  IntSet D_dropped = context.full_closure;
+  GlyphSet D_dropped = context.full_closure;
   D_dropped.subtract(B_except_segment_closure);
 
   and_gids.union_set(D_dropped);
@@ -276,10 +279,11 @@ Status AnalyzeSegment(SegmentationContext& context, const IntSet& codepoints,
 }
 
 Status AnalyzeSegment(SegmentationContext& context,
-                      segment_index_t segment_index, const IntSet& codepoints) {
-  IntSet and_gids;
-  IntSet or_gids;
-  IntSet exclusive_gids;
+                      segment_index_t segment_index,
+                      const CodepointSet& codepoints) {
+  GlyphSet and_gids;
+  GlyphSet or_gids;
+  GlyphSet exclusive_gids;
   TRYV(AnalyzeSegment(context, codepoints, and_gids, or_gids, exclusive_gids));
 
   for (uint32_t and_gid : exclusive_gids) {
@@ -300,7 +304,7 @@ Status AnalyzeSegment(SegmentationContext& context,
 }
 
 Status GroupGlyphs(SegmentationContext& context) {
-  IntSet fallback_segments_set;
+  SegmentSet fallback_segments_set;
   for (segment_index_t s = 0; s < context.segments.size(); s++) {
     if (context.segments[s].empty()) {
       // Ignore empty segments.
@@ -329,12 +333,12 @@ Status GroupGlyphs(SegmentationContext& context) {
   // conditions that were not detected. Therefore we need to rule out the
   // presence of these additional conditions if an or group is able to be used.
   for (auto& [or_group, glyphs] : context.or_glyph_groups) {
-    IntSet all_other_codepoints = context.all_codepoints;
+    CodepointSet all_other_codepoints = context.all_codepoints;
     for (uint32_t s : or_group) {
       all_other_codepoints.subtract(context.segments[s]);
     }
 
-    IntSet or_gids = TRY(context.CodepointsToOrGids(all_other_codepoints));
+    GlyphSet or_gids = TRY(context.CodepointsToOrGids(all_other_codepoints));
 
     // Any "OR" glyphs associated with all other codepoints have some additional
     // conditions to activate so we can't safely include them into this or
@@ -376,24 +380,24 @@ void MergeSegments(const SegmentationContext& context, const IntSet& segments,
 }
 
 StatusOr<uint32_t> EstimatePatchSize(SegmentationContext& context,
-                                     const IntSet& codepoints) {
-  IntSet and_gids;
-  IntSet or_gids;
-  IntSet exclusive_gids;
+                                     const CodepointSet& codepoints) {
+  GlyphSet and_gids;
+  GlyphSet or_gids;
+  GlyphSet exclusive_gids;
   TRYV(AnalyzeSegment(context, codepoints, and_gids, or_gids, exclusive_gids));
   return PatchSizeBytes(context.original_face.get(), exclusive_gids);
 }
 
 StatusOr<bool> TryMerge(SegmentationContext& context,
                         segment_index_t base_segment_index,
-                        const IntSet& segments) {
+                        const SegmentSet& segments) {
   // Create a merged segment, and remove all of the others
-  IntSet to_merge_segments = segments;
+  SegmentSet to_merge_segments = segments;
   to_merge_segments.erase(base_segment_index);
 
   uint32_t size_before = context.segments[base_segment_index].size();
 
-  IntSet merged_codepoints = context.segments[base_segment_index];
+  CodepointSet merged_codepoints = context.segments[base_segment_index];
   MergeSegments(context, to_merge_segments, merged_codepoints);
 
   uint32_t new_patch_size = TRY(EstimatePatchSize(context, merged_codepoints));
@@ -446,7 +450,7 @@ StatusOr<bool> TryMergingACompositeCondition(
       continue;
     }
 
-    IntSet triggering_segments = next_condition->TriggeringSegments();
+    SegmentSet triggering_segments = next_condition->TriggeringSegments();
     if (!triggering_segments.contains(base_segment_index)) {
       next_condition++;
       continue;
@@ -485,7 +489,7 @@ StatusOr<bool> TryMergingABaseSegment(
       continue;
     }
 
-    IntSet triggering_segments = next_condition->TriggeringSegments();
+    SegmentSet triggering_segments = next_condition->TriggeringSegments();
     if (!TRY(TryMerge(context, base_segment_index, triggering_segments))) {
       next_condition++;
       continue;
@@ -606,8 +610,8 @@ Status ValidateSegmentation(const SegmentationContext& context,
 }
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
-    hb_face_t* face, IntSet initial_segment,
-    std::vector<IntSet> codepoint_segments, uint32_t patch_size_min_bytes,
+    hb_face_t* face, CodepointSet initial_segment,
+    std::vector<CodepointSet> codepoint_segments, uint32_t patch_size_min_bytes,
     uint32_t patch_size_max_bytes) const {
   SegmentationContext context(face, initial_segment, codepoint_segments);
   context.patch_size_min_bytes = patch_size_min_bytes;

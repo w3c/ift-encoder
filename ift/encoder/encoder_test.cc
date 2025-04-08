@@ -36,8 +36,10 @@ using absl::string_view;
 using common::AxisRange;
 using common::BinaryPatch;
 using common::BrotliBinaryPatch;
+using common::CodepointSet;
 using common::FontData;
 using common::FontHelper;
+using common::GlyphSet;
 using common::IntSet;
 using common::make_hb_set;
 using ift::client::ToGraph;
@@ -69,10 +71,10 @@ class EncoderTest : public ::testing::Test {
     noto_sans_jp = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
 
     auto face = noto_sans_jp.face();
-    IntSet init;
+    GlyphSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    IntSet excluded;
+    GlyphSet excluded;
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_1);
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_2);
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_3);
@@ -99,17 +101,17 @@ class EncoderTest : public ::testing::Test {
   FontData vf_font;
   FontData noto_sans_jp;
 
-  IntSet segment_0_gids;
-  IntSet segment_1_gids;
-  IntSet segment_2_gids;
-  IntSet segment_3_gids;
-  IntSet segment_4_gids;
+  GlyphSet segment_0_gids;
+  GlyphSet segment_1_gids;
+  GlyphSet segment_2_gids;
+  GlyphSet segment_3_gids;
+  GlyphSet segment_4_gids;
 
-  IntSet segment_0_cps;
-  IntSet segment_1_cps;
-  IntSet segment_2_cps;
-  IntSet segment_3_cps;
-  IntSet segment_4_cps;
+  CodepointSet segment_0_cps;
+  CodepointSet segment_1_cps;
+  CodepointSet segment_2_cps;
+  CodepointSet segment_3_cps;
+  CodepointSet segment_4_cps;
 
   uint32_t chunk0_cp = 0x47;
   uint32_t chunk1_cp = 0xb7;

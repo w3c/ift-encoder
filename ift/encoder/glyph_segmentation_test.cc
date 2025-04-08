@@ -10,6 +10,7 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/condition.h"
 
+using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;
 using common::IntSet;
@@ -43,7 +44,7 @@ class GlyphSegmentationTest : public ::testing::Test {
 };
 
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
-  absl::flat_hash_map<segment_index_t, IntSet> segments = {
+  absl::flat_hash_map<segment_index_t, CodepointSet> segments = {
       {1, {'a', 'b'}},
       {2, {'c'}},
       {3, {'d', 'e', 'f'}},

@@ -272,6 +272,31 @@ class IntSet {
   hb_set_unique_ptr set_;
 };
 
+// Typed variants
+class GlyphSet : public IntSet {
+ public:
+  GlyphSet() : IntSet(){};
+  GlyphSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
+  explicit GlyphSet(const hb_set_t* set) : IntSet(set) {}
+  explicit GlyphSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+};
+
+class CodepointSet : public IntSet {
+ public:
+  CodepointSet() : IntSet(){};
+  CodepointSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
+  explicit CodepointSet(const hb_set_t* set) : IntSet(set) {}
+  explicit CodepointSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+};
+
+class SegmentSet : public IntSet {
+ public:
+  SegmentSet() : IntSet(){};
+  SegmentSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
+  explicit SegmentSet(const hb_set_t* set) : IntSet(set) {}
+  explicit SegmentSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+};
+
 }  // namespace common
 
 #endif

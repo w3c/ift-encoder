@@ -26,6 +26,7 @@ using absl::StrCat;
 using common::AxisRange;
 using common::FontData;
 using common::FontHelper;
+using common::GlyphSet;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::IntSet;
@@ -94,13 +95,13 @@ class IntegrationTest : public ::testing::Test {
     roboto_vf_.set(blob.get());
   }
 
-  StatusOr<IntSet> InitEncoderForMixedMode(Encoder& encoder) {
+  StatusOr<GlyphSet> InitEncoderForMixedMode(Encoder& encoder) {
     auto face = noto_sans_jp_.face();
 
-    IntSet init;
+    GlyphSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    IntSet excluded;
+    GlyphSet excluded;
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_1);
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_2);
     excluded.insert_sorted_array(testdata::TEST_SEGMENT_3);
@@ -147,14 +148,14 @@ class IntegrationTest : public ::testing::Test {
     return absl::OkStatus();
   }
 
-  StatusOr<IntSet> InitEncoderForVfMixedMode(Encoder& encoder) {
+  StatusOr<GlyphSet> InitEncoderForVfMixedMode(Encoder& encoder) {
     auto face = noto_sans_vf_.face();
     encoder.SetFace(face.get());
 
-    IntSet init;
+    GlyphSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    IntSet excluded;
+    GlyphSet excluded;
     excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_1);
     excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_2);
     excluded.insert_sorted_array(testdata::TEST_VF_SEGMENT_3);
@@ -170,14 +171,14 @@ class IntegrationTest : public ::testing::Test {
     return init;
   }
 
-  StatusOr<IntSet> InitEncoderForMixedModeFeatureTest(Encoder& encoder) {
+  StatusOr<GlyphSet> InitEncoderForMixedModeFeatureTest(Encoder& encoder) {
     auto face = feature_test_.face();
     encoder.SetFace(face.get());
 
-    IntSet init;
+    GlyphSet init;
     init.insert_range(0, hb_face_get_glyph_count(face.get()) - 1);
 
-    IntSet excluded;
+    GlyphSet excluded;
     excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_1);
     excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_2);
     excluded.insert_sorted_array(testdata::TEST_FEATURE_SEGMENT_3);
