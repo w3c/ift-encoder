@@ -3,8 +3,6 @@
 
 #include <memory>
 
-#include "absl/container/btree_set.h"
-#include "absl/container/flat_hash_set.h"
 #include "hb.h"
 
 namespace common {
@@ -16,17 +14,11 @@ hb_set_unique_ptr make_hb_set();
 // Takes ownership of set
 hb_set_unique_ptr make_hb_set(hb_set_t* set);
 
-hb_set_unique_ptr make_hb_set(const absl::flat_hash_set<uint32_t>& int_set);
-
 hb_set_unique_ptr make_hb_set(int length, ...);
 
 hb_set_unique_ptr make_hb_set_from_ranges(int number_of_ranges, ...);
 
 hb_set_unique_ptr make_hb_set(int length, ...);
-
-absl::flat_hash_set<uint32_t> to_hash_set(const hb_set_t* set);
-
-absl::btree_set<uint32_t> to_btree_set(const hb_set_t* set);
 
 }  // namespace common
 

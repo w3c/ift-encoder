@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/hash/hash_testing.h"
 #include "common/hb_set_unique_ptr.h"
 #include "gtest/gtest.h"

@@ -33,8 +33,6 @@ using common::hb_set_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
 using common::make_hb_set;
-using common::to_btree_set;
-using common::to_hash_set;
 using ift::GlyphKeyedDiff;
 
 namespace ift::encoder {
