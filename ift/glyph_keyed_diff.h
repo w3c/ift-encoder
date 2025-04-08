@@ -6,6 +6,7 @@
 #include "common/brotli_binary_diff.h"
 #include "common/compat_id.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 
 namespace ift {
 
@@ -21,11 +22,11 @@ class GlyphKeyedDiff {
         brotli_diff_(quality) {}
 
   absl::StatusOr<common::FontData> CreatePatch(
-      const absl::btree_set<uint32_t>& gids) const;
+      const common::IntSet& gids) const;
 
  private:
-  absl::StatusOr<common::FontData> CreateDataStream(
-      const absl::btree_set<uint32_t>& gids, bool u16_gids) const;
+  absl::StatusOr<common::FontData> CreateDataStream(const common::IntSet& gids,
+                                                    bool u16_gids) const;
 
   const common::FontData& font_;
   common::CompatId base_compat_id_;

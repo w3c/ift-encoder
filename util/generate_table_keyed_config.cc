@@ -4,17 +4,17 @@
 #include <optional>
 #include <vector>
 
-#include "absl/container/btree_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 #include "util/encoder_config.pb.h"
 #include "util/load_codepoints.h"
 
-using absl::btree_set;
 using common::FontData;
 using common::FontHelper;
+using common::IntSet;
 using google::protobuf::TextFormat;
 
 ABSL_FLAG(
@@ -24,7 +24,7 @@ ABSL_FLAG(
     "which are not covered by the input subset files.");
 
 template <typename ProtoType>
-ProtoType ToSetProto(const btree_set<uint32_t>& set) {
+ProtoType ToSetProto(const IntSet& set) {
   ProtoType values;
   for (uint32_t v : set) {
     values.add_values(v);
@@ -70,14 +70,14 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  std::vector<btree_set<uint32_t>> sets;
+  std::vector<IntSet> sets;
   bool first = true;
   for (const char* arg : args) {
     if (first) {
       first = false;
       continue;
     }
-    btree_set<uint32_t> set;
+    IntSet set;
     auto result = util::LoadCodepointsOrdered(arg);
     if (!result.ok()) {
       std::cerr << "Failed to load codepoints from " << arg << ": "

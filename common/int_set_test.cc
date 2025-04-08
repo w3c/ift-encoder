@@ -14,10 +14,10 @@ TEST_F(IntSetTest, BasicOperations) {
   IntSet set;
   ASSERT_TRUE(set.empty());
 
-  set.add(5);
-  set.add(7);
-  set.add(7);
-  set.add(8);
+  set.insert(5);
+  set.insert(7);
+  set.insert(7);
+  set.insert(8);
 
   ASSERT_FALSE(set.contains(4));
   ASSERT_TRUE(set.contains(5));
@@ -245,11 +245,22 @@ TEST_F(IntSetTest, MinMax) {
   ASSERT_EQ(*b.max(), 11);
 }
 
-TEST_F(IntSetTest, AddRange) {
+TEST_F(IntSetTest, InsertRange) {
   IntSet a{7, 8, 11};
 
-  a.add_range(10, 15);
+  a.insert_range(10, 15);
   IntSet expected{7, 8, 10, 11, 12, 13, 14, 15};
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, InsertIterator) {
+  IntSet a{7, 8, 11};
+
+  std::vector b{5, 15, 21};
+
+  a.insert(b.begin(), b.end());
+  IntSet expected{5, 7, 8, 11, 15, 21};
 
   ASSERT_EQ(a, expected);
 }
@@ -280,6 +291,15 @@ TEST_F(IntSetTest, Union) {
   a.union_set(b);
 
   ASSERT_EQ(a, expected);
+
+  hb_set_unique_ptr c = make_hb_set(1, 7);
+
+  b.union_into(c.get());
+
+  ASSERT_TRUE(hb_set_has(c.get(), 7));
+  ASSERT_TRUE(hb_set_has(c.get(), 8));
+  ASSERT_TRUE(hb_set_has(c.get(), 11));
+  ASSERT_EQ(hb_set_get_population(c.get()), 3);
 }
 
 TEST_F(IntSetTest, Intersect) {

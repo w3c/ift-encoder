@@ -2,9 +2,11 @@
 
 #include "absl/container/btree_set.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 
 using absl::btree_set;
 using common::FontHelper;
+using common::IntSet;
 using ift::proto::PatchMap;
 
 namespace ift::encoder {
@@ -85,19 +87,16 @@ design_space_t subtract(const design_space_t& a, const design_space_t& b) {
 }
 
 void SubsetDefinition::Subtract(const SubsetDefinition& other) {
-  codepoints = subtract(codepoints, other.codepoints);
-  gids = subtract(gids, other.gids);
+  codepoints.subtract(other.codepoints);
+  gids.subtract(other.codepoints);
   feature_tags = subtract(feature_tags, other.feature_tags);
   design_space = subtract(design_space, other.design_space);
 }
 
 void SubsetDefinition::Union(const SubsetDefinition& other) {
-  std::copy(other.codepoints.begin(), other.codepoints.end(),
-            std::inserter(codepoints, codepoints.begin()));
-  std::copy(other.gids.begin(), other.gids.end(),
-            std::inserter(gids, gids.begin()));
-  std::copy(other.feature_tags.begin(), other.feature_tags.end(),
-            std::inserter(feature_tags, feature_tags.begin()));
+  codepoints.union_set(other.codepoints);
+  gids.union_set(other.gids);
+  feature_tags.insert(other.feature_tags.begin(), other.feature_tags.end());
 
   for (const auto& [tag, range] : other.design_space) {
     auto existing = design_space.find(tag);
@@ -120,10 +119,7 @@ void SubsetDefinition::Union(const SubsetDefinition& other) {
 
 void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
                                       hb_face_t* face) const {
-  hb_set_t* unicodes = hb_subset_input_unicode_set(input);
-  for (hb_codepoint_t cp : codepoints) {
-    hb_set_add(unicodes, cp);
-  }
+  codepoints.union_into(hb_subset_input_unicode_set(input));
 
   hb_set_t* features =
       hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
@@ -140,11 +136,7 @@ void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
     return;
   }
 
-  hb_set_t* gids_set = hb_subset_input_glyph_set(input);
-  hb_set_add(gids_set, 0);
-  for (hb_codepoint_t gid : gids) {
-    hb_set_add(gids_set, gid);
-  }
+  gids.union_into(hb_subset_input_glyph_set(input));
 }
 
 PatchMap::Coverage SubsetDefinition::ToCoverage() const {

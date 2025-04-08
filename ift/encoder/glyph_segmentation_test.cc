@@ -5,13 +5,14 @@
 #include <optional>
 
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/condition.h"
 
-using absl::btree_set;
 using common::FontData;
 using common::hb_face_unique_ptr;
+using common::IntSet;
 using common::make_hb_face;
 using google::protobuf::TextFormat;
 
@@ -42,13 +43,12 @@ class GlyphSegmentationTest : public ::testing::Test {
 };
 
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
-  absl::flat_hash_map<segment_index_t, absl::flat_hash_set<hb_codepoint_t>>
-      segments = {
-          {1, {'a', 'b'}},
-          {2, {'c'}},
-          {3, {'d', 'e', 'f'}},
-          {4, {'g'}},
-      };
+  absl::flat_hash_map<segment_index_t, IntSet> segments = {
+      {1, {'a', 'b'}},
+      {2, {'c'}},
+      {3, {'d', 'e', 'f'}},
+      {4, {'g'}},
+  };
 
   std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
       GlyphSegmentation::ActivationCondition::exclusive_segment(2, 2),

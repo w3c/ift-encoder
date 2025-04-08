@@ -8,6 +8,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "common/axis_range.h"
+#include "common/int_set.h"
 #include "hb-subset.h"
 #include "ift/proto/patch_map.h"
 
@@ -23,17 +24,16 @@ struct SubsetDefinition {
     }
   }
 
-  template <typename T>
-  static SubsetDefinition Codepoints(const T& codepoints) {
+  static SubsetDefinition Codepoints(const common::IntSet& codepoints) {
     SubsetDefinition def;
-    def.codepoints.insert(codepoints.begin(), codepoints.end());
+    def.codepoints = codepoints;
     return def;
   }
 
   friend void PrintTo(const SubsetDefinition& point, std::ostream* os);
 
-  absl::flat_hash_set<uint32_t> codepoints;
-  absl::flat_hash_set<uint32_t> gids;
+  common::IntSet codepoints;
+  common::IntSet gids;
   absl::btree_set<hb_tag_t> feature_tags;
   design_space_t design_space;
 

@@ -11,6 +11,7 @@
 #include "common/compat_id.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_map.h"
@@ -27,6 +28,7 @@ using common::FontData;
 using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using ift::proto::IFTTable;
@@ -34,8 +36,7 @@ using ift::proto::PatchMap;
 
 namespace ift {
 
-StatusOr<FontData> GlyphKeyedDiff::CreatePatch(
-    const btree_set<uint32_t>& gids) const {
+StatusOr<FontData> GlyphKeyedDiff::CreatePatch(const IntSet& gids) const {
   // TODO(garretrieger): use write macros that check for overflows.
   std::string patch;
   FontHelper::WriteUInt32(HB_TAG('i', 'f', 'g', 'k'), patch);  // Format Tag
@@ -46,7 +47,7 @@ StatusOr<FontData> GlyphKeyedDiff::CreatePatch(
         "There must be at least one gid in the requested patch.");
   }
 
-  uint32_t max_gid = *std::max_element(gids.begin(), gids.end());
+  uint32_t max_gid = *gids.max();
   if (max_gid > (1 << 24) - 1) {
     return absl::InvalidArgumentError("Larger then 24 bit gid requested.");
   }
@@ -122,8 +123,8 @@ struct Cff2DataOperator {
 };
 
 template <typename Operator>
-Status PopulateTableData(const absl::btree_set<uint32_t>& gids,
-                         uint32_t offset_bias, Operator glyph_data_lookup,
+Status PopulateTableData(const IntSet& gids, uint32_t offset_bias,
+                         Operator glyph_data_lookup,
                          std::string& per_glyph_data,
                          std::string& offset_data) {
   for (auto gid : gids) {
@@ -138,8 +139,8 @@ Status PopulateTableData(const absl::btree_set<uint32_t>& gids,
   return absl::OkStatus();
 }
 
-StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(
-    const btree_set<uint32_t>& gids, bool u16_gids) const {
+StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(const IntSet& gids,
+                                                    bool u16_gids) const {
   // check for unsupported tags.
   for (auto tag : tags_) {
     if (tag != FontHelper::kGlyf && tag != FontHelper::kGvar &&

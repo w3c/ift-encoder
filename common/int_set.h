@@ -1,6 +1,7 @@
 #ifndef COMMON_INT_SET
 #define COMMON_INT_SET
 
+#include <cstddef>
 #include <optional>
 
 #include "common/hb_set_unique_ptr.h"
@@ -75,7 +76,7 @@ class IntSet {
 
   IntSet(std::initializer_list<hb_codepoint_t> values) : set_(make_hb_set()) {
     for (auto v : values) {
-      this->add(v);
+      this->insert(v);
     }
   }
 
@@ -167,10 +168,18 @@ class IntSet {
     return end();  // Calls const end()
   }
 
-  void add(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
+  void insert(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
 
-  void add_range(hb_codepoint_t start, hb_codepoint_t end) {
+  void insert_range(hb_codepoint_t start, hb_codepoint_t end) {
     hb_set_add_range(set_.get(), start, end);
+  }
+
+  template <typename It>
+  void insert(It start, It end) {
+    while (start != end) {
+      insert(*start);
+      ++start;
+    }
   }
 
   bool contains(hb_codepoint_t codepoint) const {
@@ -197,7 +206,14 @@ class IntSet {
     return value;
   }
 
-  void erase(hb_codepoint_t codepoint) { hb_set_del(set_.get(), codepoint); }
+  size_t erase(hb_codepoint_t codepoint) {
+    bool has = contains(codepoint);
+    if (has) {
+      hb_set_del(set_.get(), codepoint);
+      return 1;
+    }
+    return 0;
+  }
 
   size_t size() const { return hb_set_get_population(set_.get()); }
 
@@ -210,6 +226,8 @@ class IntSet {
   void union_set(const IntSet& other) {
     hb_set_union(set_.get(), other.set_.get());
   }
+
+  void union_into(hb_set_t* other) const { hb_set_union(other, set_.get()); }
 
   // Compute the intersection of this and other, store the result in this set.
   void intersect(const IntSet& other) {

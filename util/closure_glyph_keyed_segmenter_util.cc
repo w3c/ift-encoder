@@ -2,14 +2,10 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 
 #include "absl/container/btree_map.h"
-#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/globals.h"
@@ -18,6 +14,7 @@
 #include "absl/strings/str_cat.h"
 #include "common/font_data.h"
 #include "common/hb_set_unique_ptr.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
@@ -66,9 +63,7 @@ ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "this amount.");
 
 using absl::btree_map;
-using absl::btree_set;
 using absl::flat_hash_map;
-using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -77,6 +72,7 @@ using common::FontHelper;
 using common::hb_blob_unique_ptr;
 using common::hb_face_unique_ptr;
 using common::hb_set_unique_ptr;
+using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_set;
 using google::protobuf::TextFormat;
@@ -207,9 +203,9 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
                                     const GlyphSegmentation& segmentation,
                                     uint32_t number_input_segments) {
   fprintf(stderr, "IdealSegmentationSize():\n");
-  btree_set<uint32_t> glyphs;
+  IntSet glyphs;
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
-    glyphs.insert(glyph_set.begin(), glyph_set.end());
+    glyphs.union_set(glyph_set);
   }
 
   uint32_t glyphs_per_patch = glyphs.size() / number_input_segments;
@@ -218,9 +214,9 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
   Encoder encoder;
   encoder.SetFace(font);
 
-  flat_hash_set<uint32_t> all_unicodes;
+  IntSet all_unicodes;
 
-  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t>{}));
+  TRYV(encoder.SetBaseSubset(IntSet{}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -231,7 +227,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
       remainder_glyphs--;
     }
 
-    btree_set<uint32_t> gids;
+    IntSet gids;
     gids.insert(begin, glyphs_it);
     auto unicodes = FontHelper::GidsToUnicodes(font, gids);
 
@@ -264,18 +260,18 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   Encoder encoder;
   encoder.SetFace(font);
 
-  flat_hash_set<uint32_t> all_segments;
+  IntSet all_segments;
 
-  TRYV(encoder.SetBaseSubset(flat_hash_set<uint32_t>{}));
+  TRYV(encoder.SetBaseSubset(IntSet{}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
-    btree_set<uint32_t> s;
+    IntSet s;
     s.insert(glyph_set.begin(), glyph_set.end());
     TRYV(encoder.AddGlyphDataPatch(id, s));
     all_segments.insert(id);
   }
 
-  btree_set<uint32_t> all_codepoints;
+  IntSet all_codepoints;
   for (const auto& s : segmentation.Segments()) {
     all_codepoints.insert(s.begin(), s.end());
   }
@@ -286,7 +282,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     conditions.push_back(c);
   }
 
-  flat_hash_map<uint32_t, flat_hash_set<uint32_t>> segments;
+  flat_hash_map<uint32_t, IntSet> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
     segments[i++].insert(s.begin(), s.end());
@@ -303,12 +299,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<flat_hash_set<uint32_t>> GroupCodepoints(
-    std::vector<uint32_t> codepoints, uint32_t number_of_segments) {
+std::vector<IntSet> GroupCodepoints(std::vector<uint32_t> codepoints,
+                                    uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<flat_hash_set<uint32_t>> out;
+  std::vector<IntSet> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -318,8 +314,7 @@ std::vector<flat_hash_set<uint32_t>> GroupCodepoints(
       remainder--;
     }
 
-    flat_hash_set<uint32_t> group;
-    btree_set<uint32_t> sorted_group;
+    IntSet group;
     group.insert(start, end);
     out.push_back(group);
   }

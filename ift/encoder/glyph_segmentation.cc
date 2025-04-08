@@ -10,6 +10,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
+#include "common/int_set.h"
 
 using absl::btree_map;
 using absl::btree_set;
@@ -18,16 +19,14 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
+using common::IntSet;
 
 namespace ift::encoder {
 
 Status GlyphSegmentation::GroupsToSegmentation(
-    const btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>>&
-        and_glyph_groups,
-    const btree_map<btree_set<segment_index_t>, btree_set<glyph_id_t>>&
-        or_glyph_groups,
-    const btree_set<segment_index_t>& fallback_group,
-    GlyphSegmentation& segmentation) {
+    const btree_map<IntSet, IntSet>& and_glyph_groups,
+    const btree_map<IntSet, IntSet>& or_glyph_groups,
+    const IntSet& fallback_group, GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
 
   // Map segments into patch ids
@@ -91,8 +90,8 @@ GlyphSegmentation::ActivationCondition::exclusive_segment(
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::and_segments(
-    const absl::btree_set<segment_index_t>& segments, patch_id_t activated) {
+GlyphSegmentation::ActivationCondition::and_segments(const IntSet& segments,
+                                                     patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
 
@@ -104,9 +103,9 @@ GlyphSegmentation::ActivationCondition::and_segments(
 }
 
 GlyphSegmentation::ActivationCondition
-GlyphSegmentation::ActivationCondition::or_segments(
-    const absl::btree_set<segment_index_t>& segments, patch_id_t activated,
-    bool is_fallback) {
+GlyphSegmentation::ActivationCondition::or_segments(const IntSet& segments,
+                                                    patch_id_t activated,
+                                                    bool is_fallback) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
   conditions.conditions_.push_back(segments);
@@ -117,8 +116,7 @@ GlyphSegmentation::ActivationCondition::or_segments(
 
 GlyphSegmentation::ActivationCondition
 GlyphSegmentation::ActivationCondition::composite_condition(
-    absl::Span<const absl::btree_set<segment_index_t>> groups,
-    patch_id_t activated) {
+    absl::Span<const IntSet> groups, patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = activated;
   for (const auto& group : groups) {
@@ -243,8 +241,7 @@ bool GlyphSegmentation::ActivationCondition::operator<(
 StatusOr<std::vector<Condition>>
 GlyphSegmentation::ActivationConditionsToConditionEntries(
     Span<const ActivationCondition> conditions,
-    const absl::flat_hash_map<segment_index_t,
-                              absl::flat_hash_set<hb_codepoint_t>>& segments) {
+    const absl::flat_hash_map<segment_index_t, IntSet>& segments) {
   // TODO(garretrieger): extend this to work with segments that are
   // SubsetDefinition's instead of just codepoints. This would allow for
   // features and other things to be worked into conditions.
@@ -319,8 +316,7 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
   // written in phase one. When writing an entry if the triggering group is the
   // only one in the condition then that condition can utilize the entry (just
   // like in Phase 1).
-  flat_hash_map<btree_set<segment_index_t>, uint32_t>
-      segment_group_to_entry_index;
+  flat_hash_map<IntSet, uint32_t> segment_group_to_entry_index;
   for (auto condition = remaining_conditions.begin();
        condition != remaining_conditions.end();) {
     bool remove = false;
@@ -388,7 +384,7 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
 }
 
 template <typename ProtoType>
-ProtoType ToSetProto(const btree_set<uint32_t>& set) {
+ProtoType ToSetProto(const IntSet& set) {
   ProtoType values;
   for (uint32_t v : set) {
     values.add_values(v);
@@ -437,10 +433,10 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
 }
 
 void GlyphSegmentation::CopySegments(
-    const std::vector<common::hb_set_unique_ptr>& segments) {
+    const std::vector<IntSet>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
-    segments_.push_back(common::to_btree_set(set.get()));
+    segments_.push_back(set);
   }
 }
 
