@@ -46,13 +46,15 @@ ABSL_FLAG(bool, output_encoder_config, false,
           "will be output to stdout.");
 
 ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
-          "If set the generated encoder config will include the initial codepoint set.");
+          "If set the generated encoder config will include the initial "
+          "codepoint set.");
 
 ABSL_FLAG(bool, output_segmentation_analysis, true,
           "If set an analysis of the segmentation will be output to stderr.");
 
 ABSL_FLAG(std::string, initial_codepoints_file, "",
-          "Path to a file which defines the desired set of codepoints in the initial font.");
+          "Path to a file which defines the desired set of codepoints in the "
+          "initial font.");
 
 ABSL_FLAG(
     std::string, codepoints_file, "",
@@ -91,7 +93,8 @@ using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
 
 StatusOr<std::vector<uint32_t>> TargetCodepoints(
-    hb_face_t* font, const std::string& codepoints_file, const IntSet& init_codepoints) {
+    hb_face_t* font, const std::string& codepoints_file,
+    const IntSet& init_codepoints) {
   IntSet font_unicodes = FontHelper::ToCodepointsSet(font);
 
   std::vector<uint32_t> codepoints_filtered;
@@ -343,7 +346,8 @@ int main(int argc, char** argv) {
 
   std::vector<uint32_t> init_codepoints;
   if (!absl::GetFlag(FLAGS_initial_codepoints_file).empty()) {
-    auto result = util::LoadCodepointsOrdered(absl::GetFlag(FLAGS_initial_codepoints_file).c_str());
+    auto result = util::LoadCodepointsOrdered(
+        absl::GetFlag(FLAGS_initial_codepoints_file).c_str());
     if (!result.ok()) {
       std::cerr << "Failed to load initial codepoints file: " << result.status()
                 << std::endl;
@@ -354,8 +358,8 @@ int main(int argc, char** argv) {
   CodepointSet init_codepoints_set;
   init_codepoints_set.insert(init_codepoints.begin(), init_codepoints.end());
 
-  auto codepoints =
-      TargetCodepoints(font->get(), absl::GetFlag(FLAGS_codepoints_file), init_codepoints_set);
+  auto codepoints = TargetCodepoints(
+      font->get(), absl::GetFlag(FLAGS_codepoints_file), init_codepoints_set);
   if (!codepoints.ok()) {
     std::cerr << "Failed to load codepoints file: " << codepoints.status()
               << std::endl;
@@ -367,7 +371,8 @@ int main(int argc, char** argv) {
 
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(
-      font->get(), init_codepoints_set, groups, absl::GetFlag(FLAGS_min_patch_size_bytes),
+      font->get(), init_codepoints_set, groups,
+      absl::GetFlag(FLAGS_min_patch_size_bytes),
       absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (!result.ok()) {
     std::cerr << result.status() << std::endl;

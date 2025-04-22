@@ -367,7 +367,10 @@ StatusOr<uint32_t> PatchSizeBytes(hb_face_t* original_face,
   CompatId id;
   // Since this is just an estimate and we don't need ultra precise numbers run
   // at a lower brotli quality to improve performance.
-  GlyphKeyedDiff diff(font_data, id, {FontHelper::kGlyf, FontHelper::kGvar}, 9);
+  GlyphKeyedDiff diff(font_data, id,
+                      {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF,
+                       FontHelper::kCFF2},
+                      9);
   auto patch_data = TRY(diff.CreatePatch(gids));
   return patch_data.size();
 }
