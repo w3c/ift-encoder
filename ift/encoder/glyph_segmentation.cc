@@ -31,6 +31,8 @@ Status GlyphSegmentation::GroupsToSegmentation(
     const btree_map<SegmentSet, GlyphSet>& or_glyph_groups,
     const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
+  segmentation.patches_.clear();
+  segmentation.conditions_.clear();
 
   // Map segments into patch ids
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
