@@ -134,8 +134,6 @@ class GlyphSegmentation {
     patch_id_t activated_;
   };
 
-  GlyphSegmentation() {}
-
   GlyphSegmentation(common::CodepointSet init_font_codepoints,
                     common::GlyphSet init_font_glyphs,
                     common::GlyphSet unmapped_glyphs)
@@ -177,8 +175,6 @@ class GlyphSegmentation {
     return segments_;
   }
 
-  std::vector<common::CodepointSet>& Segments() { return segments_; }
-
   /*
    * The list of glyphs in each patch. The key in the map is an id used to
    * identify the patch within the activation conditions.
@@ -196,8 +192,6 @@ class GlyphSegmentation {
    */
   const common::GlyphSet& UnmappedGlyphs() const { return unmapped_glyphs_; };
 
-  common::GlyphSet& UnmappedGlyphs() { return unmapped_glyphs_; };
-
   /*
    * These glyphs should be included in the initial font.
    */
@@ -205,16 +199,10 @@ class GlyphSegmentation {
     return init_font_glyphs_;
   };
 
-  common::GlyphSet& InitialFontGlyphs() { return init_font_glyphs_; };
-
   /*
    * These codepoints should be included in the initial font.
    */
   const common::CodepointSet& InitialFontCodepoints() const {
-    return init_font_codepoints_;
-  };
-
-  common::CodepointSet& InitialFontCodepoints() {
     return init_font_codepoints_;
   };
 
