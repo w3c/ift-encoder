@@ -6,6 +6,7 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -23,6 +24,7 @@ using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
+using absl::node_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -170,11 +172,11 @@ class SegmentationContext {
             << " misses)";
   }
 
-  StatusOr<GlyphSet> CodepointsToOrGids(const CodepointSet& codepoints) {
+  StatusOr<const GlyphSet*> CodepointsToOrGids(const CodepointSet& codepoints) {
     auto it = code_point_set_to_or_gids_cache.find(codepoints);
     if (it != code_point_set_to_or_gids_cache.end()) {
       code_point_set_to_or_gids_cache_hit++;
-      return it->second;
+      return &it->second;
     }
 
     code_point_set_to_or_gids_cache_miss++;
@@ -183,8 +185,8 @@ class SegmentationContext {
     GlyphSet exclusive_gids;
     TRYV(AnalyzeSegment(*this, codepoints, and_gids, or_gids, exclusive_gids));
 
-    code_point_set_to_or_gids_cache.insert(std::pair(codepoints, or_gids));
-    return or_gids;
+    auto [new_value, inserted] = code_point_set_to_or_gids_cache.insert(std::pair(codepoints, or_gids));
+    return &new_value->second;
   }
 
   // Init
@@ -214,7 +216,8 @@ class SegmentationContext {
   uint32_t glyph_closure_cache_hit = 0;
   uint32_t glyph_closure_cache_miss = 0;
 
-  flat_hash_map<CodepointSet, GlyphSet> code_point_set_to_or_gids_cache;
+  // for this cache we return pointers to the sets so need node_hash_map for pointer stability.
+  node_hash_map<CodepointSet, GlyphSet> code_point_set_to_or_gids_cache;
   uint32_t code_point_set_to_or_gids_cache_hit = 0;
   uint32_t code_point_set_to_or_gids_cache_miss = 0;
 
@@ -338,12 +341,12 @@ Status GroupGlyphs(SegmentationContext& context) {
       all_other_codepoints.subtract(context.segments[s]);
     }
 
-    GlyphSet or_gids = TRY(context.CodepointsToOrGids(all_other_codepoints));
+    const GlyphSet* or_gids = TRY(context.CodepointsToOrGids(all_other_codepoints));
 
     // Any "OR" glyphs associated with all other codepoints have some additional
     // conditions to activate so we can't safely include them into this or
     // condition. They are instead moved to the set of unmapped glyphs.
-    for (uint32_t gid : or_gids) {
+    for (uint32_t gid : *or_gids) {
       if (glyphs.erase(gid) > 0) {
         context.unmapped_glyphs.insert(gid);
       }
