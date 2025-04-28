@@ -33,6 +33,7 @@ Status GlyphSegmentation::GroupsToSegmentation(
   patch_id_t next_id = 0;
   segmentation.patches_.clear();
   segmentation.conditions_.clear();
+  segmentation.triggering_segment_to_conditions_.clear();
 
   // Map segments into patch ids
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
@@ -79,6 +80,13 @@ Status GlyphSegmentation::GroupsToSegmentation(
         ActivationCondition::or_segments(or_segments, next_id, is_fallback));
 
     next_id++;
+  }
+
+  // Rebuild indices
+  for (const auto& condition : segmentation.conditions_) {
+    for (uint32_t s : condition.TriggeringSegments()) {
+      segmentation.triggering_segment_to_conditions_[s].push_back(&condition);
+    }
   }
 
   return absl::OkStatus();

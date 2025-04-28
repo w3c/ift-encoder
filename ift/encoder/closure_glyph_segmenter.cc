@@ -461,18 +461,21 @@ StatusOr<bool> TryMerge(SegmentationContext& context,
  *
  * Returns true if one was found and the merge succeeded, false otherwise.
  */
-template <typename ConditionIt>
 StatusOr<bool> TryMergingACompositeCondition(
     SegmentationContext& context, segment_index_t base_segment_index,
     patch_id_t base_patch,  // TODO XXX is base_patch needed?
-    const ConditionIt& condition_it) {
-  auto next_condition = condition_it;
-  next_condition++;
-  while (next_condition != context.segmentation.Conditions().end()) {
+    const GlyphSegmentation::ActivationCondition& base_condition) {
+
+  auto candidate_conditions = context.segmentation.TriggeringSegmentToConditions(base_segment_index);
+  for (const auto* next_condition : candidate_conditions) {
     if (next_condition->IsFallback()) {
       // Merging the fallback will cause all segments to be merged into one,
       // which is undesirable so don't consider the fallback.
-      next_condition++;
+      continue;
+    }
+
+    if (*next_condition < base_condition || *next_condition == base_condition) {
+      // all conditions before base_condition are already processed, so we only want to search after base_condition.
       continue;
     }
 
@@ -507,6 +510,7 @@ StatusOr<bool> TryMergingABaseSegment(SegmentationContext& context,
                                       const ConditionIt& condition_it) {
   auto next_condition = condition_it;
   next_condition++;
+  // TODO XXXXXX use an index to locate potential segments instead of a full scan.
   while (next_condition != context.segmentation.Conditions().end()) {
     if (!next_condition->IsExclusive()) {
       // Only interested in other base patches.
@@ -579,7 +583,7 @@ StatusOr<std::optional<segment_index_t>> MergeNextBaseSegment(
     }
 
     if (TRY(TryMergingACompositeCondition(context, base_segment_index,
-                                          base_patch, condition))) {
+                                          base_patch, *condition))) {
       // Return to the parent method so it can reanalyze and reform groups
       return base_segment_index;
     }
