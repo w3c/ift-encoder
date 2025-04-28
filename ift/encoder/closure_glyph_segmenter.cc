@@ -433,8 +433,8 @@ Status GroupGlyphs(SegmentationContext& context, const GlyphSet& glyphs) {
     context.or_glyph_groups[context.fallback_segments].insert(gid);
   }
 
-  auto condition = GlyphSegmentation::ActivationCondition::or_segments(context.fallback_segments, 0, true);
-  context.AddConditionAndGlyphs(condition, context.or_glyph_groups[context.fallback_segments]);
+  // Note: we don't need to include the fallback segment/condition in context.conditions_and_glyphs since
+  //       all downstream processing which utilizes that map ignores the fallback segment.
 
   return absl::OkStatus();
 }
