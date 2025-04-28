@@ -202,6 +202,7 @@ class SegmentationContext {
   uint32_t patch_size_max_bytes = UINT32_MAX;
 
   // Phase 1
+  flat_hash_map<uint32_t, GlyphSet> segment_to_gid_conditions; // tracks which gid conditions reference a segment.
   std::vector<GlyphConditions> gid_conditions;
 
   // Phase 2
@@ -291,14 +292,17 @@ Status AnalyzeSegment(SegmentationContext& context,
     // TODO(garretrieger): if we are assigning an exclusive gid there should be
     // no other and segments, check and error if this is violated.
     context.gid_conditions[and_gid].and_segments.insert(segment_index);
+    context.segment_to_gid_conditions[segment_index].insert(and_gid);
   }
 
   for (uint32_t and_gid : and_gids) {
     context.gid_conditions[and_gid].and_segments.insert(segment_index);
+    context.segment_to_gid_conditions[segment_index].insert(and_gid);
   }
 
   for (uint32_t or_gid : or_gids) {
     context.gid_conditions[or_gid].or_segments.insert(segment_index);
+    context.segment_to_gid_conditions[segment_index].insert(or_gid);
   }
 
   return absl::OkStatus();
@@ -428,8 +432,21 @@ StatusOr<bool> TryMerge(SegmentationContext& context,
   // Remove all segments we touched here from gid_conditions so they can be
   // recalculated.
   to_merge_segments.insert(base_segment_index);
-  for (auto& condition : context.gid_conditions) {
+  GlyphSet gid_conditions_to_update;
+  for (uint32_t segment_index : to_merge_segments) {
+    auto it = context.segment_to_gid_conditions.find(segment_index);
+    if (it != context.segment_to_gid_conditions.end()) {
+      gid_conditions_to_update.union_set(it->second);
+    }
+  }
+
+  for (uint32_t condition_index : gid_conditions_to_update) {
+    auto& condition = context.gid_conditions[condition_index];
     condition.RemoveSegments(to_merge_segments);
+  }
+
+  for (uint32_t segment_index : to_merge_segments) {
+    context.segment_to_gid_conditions[segment_index].subtract(gid_conditions_to_update);
   }
 
   return true;
@@ -628,16 +645,15 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
   context.LogClosureCount("Inital segment analysis");
 
+  TRYV(GroupGlyphs(context));
+  TRYV(GlyphSegmentation::GroupsToSegmentation(
+    context.and_glyph_groups, context.or_glyph_groups,
+    context.fallback_segments, context.segmentation));
+
+  context.LogClosureCount("Condition grouping");
+
   segment_index_t last_merged_segment_index = 0;
   while (true) {
-    context.ResetGroupings(); // TODO XXXXX don't reset groupings, incrementally update them.
-    TRYV(GroupGlyphs(context));
-
-    TRYV(GlyphSegmentation::GroupsToSegmentation(
-        context.and_glyph_groups, context.or_glyph_groups,
-        context.fallback_segments, context.segmentation));
-    context.LogClosureCount("Condition grouping");
-
     if (patch_size_min_bytes == 0) {
       context.LogCacheStats();
       TRYV(ValidateSegmentation(context));
@@ -658,6 +674,18 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
             << " due to merge.";
     TRYV(AnalyzeSegment(context, last_merged_segment_index,
                         context.segmentation.Segments()[last_merged_segment_index]));
+
+    // TODO XXXXXX
+    // at this point we've updated the segment sets, and gid_conditions, what remains is
+    //  - The work that GroupGlyphs would do: Unmapped Glyphs, and glyph groups, or glyph groups, fallback segments         
+    //  - and the work that GroupsToSegmentation does: patches and conditions.
+    context.ResetGroupings();
+    TRYV(GroupGlyphs(context));
+    TRYV(GlyphSegmentation::GroupsToSegmentation(
+      context.and_glyph_groups, context.or_glyph_groups,
+      context.fallback_segments, context.segmentation));
+                      
+    context.LogClosureCount("Condition grouping");                            
   }
 
   return absl::InternalError("unreachable");
