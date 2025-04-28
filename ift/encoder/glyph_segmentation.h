@@ -177,9 +177,7 @@ class GlyphSegmentation {
     return segments_;
   }
 
-  std::vector<common::CodepointSet>& Segments() {
-    return segments_;
-  }
+  std::vector<common::CodepointSet>& Segments() { return segments_; }
 
   /*
    * The list of glyphs in each patch. The key in the map is an id used to
@@ -207,9 +205,7 @@ class GlyphSegmentation {
     return init_font_glyphs_;
   };
 
-  common::GlyphSet& InitialFontGlyphs() {
-    return init_font_glyphs_;
-  };
+  common::GlyphSet& InitialFontGlyphs() { return init_font_glyphs_; };
 
   /*
    * These codepoints should be included in the initial font.
