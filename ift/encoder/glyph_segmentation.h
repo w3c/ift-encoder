@@ -221,7 +221,8 @@ class GlyphSegmentation {
   /*
    * Index from segment index to the conditions that reference it.
    */
-  const std::vector<const ActivationCondition*>& TriggeringSegmentToConditions(uint32_t segment) const {
+  const std::vector<const ActivationCondition*>& TriggeringSegmentToConditions(
+      uint32_t segment) const {
     static std::vector<const ActivationCondition*> empty;
     auto it = triggering_segment_to_conditions_.find(segment);
     if (it != triggering_segment_to_conditions_.end()) {
@@ -251,7 +252,8 @@ class GlyphSegmentation {
   absl::btree_map<patch_id_t, common::GlyphSet> patches_;
 
   // Indices
-  absl::flat_hash_map<uint32_t, std::vector<const ActivationCondition*>> triggering_segment_to_conditions_;
+  absl::flat_hash_map<uint32_t, std::vector<const ActivationCondition*>>
+      triggering_segment_to_conditions_;
 };
 
 }  // namespace ift::encoder
