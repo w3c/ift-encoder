@@ -1,6 +1,7 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 
 #include "common/font_data.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 
@@ -214,6 +215,34 @@ if ((s0 OR s1)) then p4
 if ((s2 OR s3)) then p6
 if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, FullRoboto) {
+  auto codepoints = common::FontHelper::ToCodepointsSet(roboto.get());
+
+  uint32_t num_segments = 412;
+  uint32_t per_group = codepoints.size() / num_segments;
+  uint32_t remainder = codepoints.size() % num_segments;
+
+  std::vector<CodepointSet> segments;
+  int i = 0;
+  CodepointSet segment;
+  for (uint32_t cp : codepoints) {
+    segment.insert(cp);
+
+    uint32_t group_size = per_group + (remainder > 0 ? 1 : 0);
+    if (++i % group_size == 0) {
+      segments.push_back(segment);
+      segment.clear();
+      if (remainder > 0) {
+        remainder--;
+      }
+    }
+  }
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         segments, 4000, 12000);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 }
 
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
