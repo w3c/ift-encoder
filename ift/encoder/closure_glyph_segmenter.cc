@@ -61,6 +61,11 @@ class GlyphConditions {
   SegmentSet and_segments;
   SegmentSet or_segments;
 
+  bool operator==(const GlyphConditions& other) const {
+    return other.and_segments == and_segments &&
+           other.or_segments == or_segments;
+  }
+
   void RemoveSegments(const SegmentSet& segments) {
     and_segments.subtract(segments);
     or_segments.subtract(segments);
@@ -152,6 +157,30 @@ class SegmentationContext {
     LogCacheStats();
     TRYV(ValidateSegmentation(segmentation));
     return segmentation;
+  }
+
+  /*
+   * Removes all condition and grouping information related to all gids in
+   * glyphs.
+   */
+  void InvalidateGlyphInformation(const GlyphSet& glyphs,
+                                  const SegmentSet& segments) {
+    // Remove all segments we touched here from gid_conditions so they can be
+    // recalculated.
+    for (uint32_t gid : glyphs) {
+      auto& condition = gid_conditions[gid];
+
+      // condition is about to be modified and will be reprocessed later, so
+      // clear out this glyph from any existing 'and/or glyph' groups, and
+      // unmapped glyphs.
+      RemoveGlyphFromAndOrGroups(condition, gid);
+      unmapped_glyphs.erase(gid);
+      condition.RemoveSegments(segments);
+    }
+
+    for (uint32_t segment_index : segments) {
+      segment_to_gid_conditions[segment_index].subtract(glyphs);
+    }
   }
 
   void RemoveGlyphFromAndOrGroups(const GlyphConditions& condition,
@@ -393,13 +422,22 @@ Status AnalyzeSegment(SegmentationContext& context,
   return absl::OkStatus();
 }
 
-Status AnalyzeSegment(SegmentationContext& context,
-                      segment_index_t segment_index,
-                      const CodepointSet& codepoints) {
+StatusOr<GlyphSet> AnalyzeSegment(SegmentationContext& context,
+                                  segment_index_t segment_index,
+                                  const CodepointSet& codepoints) {
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;
   TRYV(AnalyzeSegment(context, codepoints, and_gids, or_gids, exclusive_gids));
+
+  GlyphSet changed_gids;
+  changed_gids.union_set(and_gids);
+  changed_gids.union_set(or_gids);
+  changed_gids.union_set(exclusive_gids);
+  for (uint32_t gid : changed_gids) {
+    context.InvalidateGlyphInformation(GlyphSet{gid},
+                                       SegmentSet{segment_index});
+  }
 
   for (uint32_t and_gid : exclusive_gids) {
     // TODO(garretrieger): if we are assigning an exclusive gid there should be
@@ -418,7 +456,7 @@ Status AnalyzeSegment(SegmentationContext& context,
     context.segment_to_gid_conditions[segment_index].insert(or_gid);
   }
 
-  return absl::OkStatus();
+  return changed_gids;
 }
 
 Status GroupGlyphs(SegmentationContext& context, const GlyphSet& glyphs) {
@@ -482,8 +520,15 @@ Status GroupGlyphs(SegmentationContext& context, const GlyphSet& glyphs) {
       }
     }
 
-    auto condition =
+    GlyphSegmentation::ActivationCondition condition =
         GlyphSegmentation::ActivationCondition::or_segments(or_group, 0);
+    if (glyphs.empty()) {
+      // Group has been emptied out, so it's no longer needed.
+      context.or_glyph_groups.erase(or_group);
+      context.RemoveConditionAndGlyphs(condition);
+      continue;
+    }
+
     context.AddConditionAndGlyphs(condition, glyphs);
   }
 
@@ -556,40 +601,31 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
           << " codepoints for segment " << base_segment_index
           << ". New patch size " << new_patch_size << " bytes.";
 
+  // Remove the fallback segment or group, it will be fully recomputed by
+  // GroupGlyphs
+  context.or_glyph_groups.erase(context.fallback_segments);
+
+  GlyphSet gid_conditions_to_update;
   for (segment_index_t segment_index : to_merge_segments) {
     // To avoid changing the indices of other segments set the ones we're
     // removing to empty sets. That effectively disables them.
     context.segments[segment_index].clear();
     context.fallback_segments.erase(segment_index);
-  }
 
-  // Remove all segments we touched here from gid_conditions so they can be
-  // recalculated.
-  to_merge_segments.insert(base_segment_index);
-  GlyphSet gid_conditions_to_update;
-  for (uint32_t segment_index : to_merge_segments) {
+    // segments which are being removed/changed may appear in gid_conditions, we
+    // need to update those (and the down stream and/or glyph groups) to reflect
+    // the removal/change and allow recalculation during the GroupGlyphs steps
+    //
+    // Changes caused by adding new segments into the base segment will be
+    // handled by the next AnalyzeSegment step.
     auto it = context.segment_to_gid_conditions.find(segment_index);
     if (it != context.segment_to_gid_conditions.end()) {
       gid_conditions_to_update.union_set(it->second);
     }
   }
 
-  for (uint32_t gid : gid_conditions_to_update) {
-    auto& condition = context.gid_conditions[gid];
-
-    // condition is about to be modified and will be reprocessed later, so clear
-    // out this glyph from any existing 'and/or glyph' groups, and unmapped
-    // glyphs.
-    context.RemoveGlyphFromAndOrGroups(condition, gid);
-    context.unmapped_glyphs.erase(gid);
-
-    condition.RemoveSegments(to_merge_segments);
-  }
-
-  for (uint32_t segment_index : to_merge_segments) {
-    context.segment_to_gid_conditions[segment_index].subtract(
-        gid_conditions_to_update);
-  }
+  context.InvalidateGlyphInformation(gid_conditions_to_update,
+                                     to_merge_segments);
 
   return gid_conditions_to_update;
 }
@@ -683,7 +719,7 @@ StatusOr<bool> IsPatchTooSmall(SegmentationContext& context,
     return false;
   }
 
-  VLOG(0) << "Patch for segment " << base_segment_index << ") is too small "
+  VLOG(0) << "Patch for segment " << base_segment_index << " is too small "
           << "(" << patch_size_bytes << " < " << context.patch_size_min_bytes
           << "). Merging...";
 
@@ -703,7 +739,7 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
   auto start_condition =
       GlyphSegmentation::ActivationCondition::exclusive_segment(start_segment,
                                                                 0);
-  for (auto it = context.conditions_and_glyphs.find(start_condition);
+  for (auto it = context.conditions_and_glyphs.lower_bound(start_condition);
        it != context.conditions_and_glyphs.end(); it++) {
     const auto& condition = it->first;
     if (!condition.IsExclusive()) {
@@ -742,6 +778,51 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
   return std::nullopt;
 }
 
+/*
+ * Checks that the incrementally generated groupings in context match what would
+ * have been produced by a non incremental process.
+ */
+Status ValidateIncrementalGroupings(hb_face_t* face,
+                                    const SegmentationContext& context) {
+  SegmentationContext non_incremental_context(
+      face, context.init_font_codepoints, context.segments);
+  non_incremental_context.patch_size_min_bytes = 0;
+  non_incremental_context.patch_size_max_bytes = UINT32_MAX;
+
+  // Compute the glyph groupings/conditions from scratch to compare against the
+  // incrementall produced ones.
+  segment_index_t segment_index = 0;
+  for (const auto& segment : non_incremental_context.segments) {
+    TRY(AnalyzeSegment(non_incremental_context, segment_index, segment));
+    segment_index++;
+  }
+
+  GlyphSet all_glyphs;
+  uint32_t glyph_count = hb_face_get_glyph_count(face);
+  all_glyphs.insert_range(0, glyph_count - 1);
+  TRYV(GroupGlyphs(non_incremental_context, all_glyphs));
+
+  if (non_incremental_context.conditions_and_glyphs !=
+      context.conditions_and_glyphs) {
+    return absl::FailedPreconditionError(
+        "conditions_and_glyphs aren't correct.");
+  }
+
+  if (non_incremental_context.gid_conditions != context.gid_conditions) {
+    return absl::FailedPreconditionError("gid_conditions aren't correct.");
+  }
+
+  if (non_incremental_context.and_glyph_groups != context.and_glyph_groups) {
+    return absl::FailedPreconditionError("and_glyph groups aren't correct.");
+  }
+
+  if (non_incremental_context.or_glyph_groups != context.or_glyph_groups) {
+    return absl::FailedPreconditionError("or_glyph groups aren't correct.");
+  }
+
+  return absl::OkStatus();
+}
+
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, CodepointSet initial_segment,
     std::vector<CodepointSet> codepoint_segments, uint32_t patch_size_min_bytes,
@@ -758,7 +839,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   VLOG(0) << "Forming initial segmentation plan.";
   segment_index_t segment_index = 0;
   for (const auto& segment : context.segments) {
-    TRYV(AnalyzeSegment(context, segment_index, segment));
+    TRY(AnalyzeSegment(context, segment_index, segment));
     segment_index++;
   }
   context.LogClosureCount("Inital segment analysis");
@@ -778,6 +859,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     auto merged = TRY(MergeNextBaseSegment(context, last_merged_segment_index));
     if (!merged.has_value()) {
       // Nothing was merged so we're done.
+      TRYV(ValidateIncrementalGroupings(face, context));
       return context.ToGlyphSegmentation();
     }
 
@@ -785,10 +867,13 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     last_merged_segment_index = merged_segment_index;
     VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
             << " due to merge.";
-    TRYV(AnalyzeSegment(context, last_merged_segment_index,
-                        context.segments[last_merged_segment_index]));
 
-    TRYV(GroupGlyphs(context, modified_gids));
+    GlyphSet analysis_modified_gids =
+        TRY(AnalyzeSegment(context, last_merged_segment_index,
+                           context.segments[last_merged_segment_index]));
+    analysis_modified_gids.union_set(modified_gids);
+
+    TRYV(GroupGlyphs(context, analysis_modified_gids));
 
     context.LogClosureCount("Condition grouping");
   }
