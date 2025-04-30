@@ -50,8 +50,6 @@ namespace ift::encoder {
 // TODO(garretrieger): extensions/improvements that could be made:
 // - Can we reduce # of closures for the additional conditions checks?
 //   - is the full analysis needed to get the or set?
-// - Add logging
-//   - timing info
 // - Use merging and/or duplication to ensure minimum patch size.
 //   - composite patches (NOT STARTED)
 // - Multi segment combination testing with GSUB dep analysis to guide.
@@ -315,7 +313,7 @@ class GlyphConditionSet {
 };
 
 /*
- * Grouping of the glyphs into a font by the associated activation conditions.
+ * Grouping of the glyphs in a font by the associated activation conditions.
  */
 class GlyphGroupings {
  public:
@@ -342,7 +340,7 @@ class GlyphGroupings {
     return or_glyph_groups_;
   }
 
-  // Index from segment index to the conditions that reference it.
+  // Returns a list of conditions which include segment.
   const btree_set<GlyphSegmentation::ActivationCondition>&
   TriggeringSegmentToConditions(segment_index_t segment) const {
     static btree_set<GlyphSegmentation::ActivationCondition> empty;
@@ -389,6 +387,8 @@ class GlyphGroupings {
     unmapped_glyphs_.erase(gid);
   }
 
+  // Remove a set of segments from the fallback segments set.
+  // Invalidates any existing fallback segments or glyph group.
   void RemoveFallbackSegments(const SegmentSet& removed_segments) {
     // Invalidate the existing fallback segment 'or group', it will be fully
     // recomputed by GroupGlyphs
@@ -398,6 +398,8 @@ class GlyphGroupings {
     }
   }
 
+  // Updates this glyph grouping for all glyphs in the 'glyphs' set to match
+  // the associated conditions in 'glyph_condition_set'.
   Status GroupGlyphs(const RequestedSegmentationInformation& segmentation_info,
                      const GlyphConditionSet& glyph_condition_set,
                      GlyphClosureCache& closure_cache, const GlyphSet& glyphs) {
@@ -481,13 +483,13 @@ class GlyphGroupings {
     }
 
     // Note: we don't need to include the fallback segment/condition in
-    // context.conditions_and_glyphs since
-    //       all downstream processing which utilizes that map ignores the
-    //       fallback segment.
+    //       conditions_and_glyphs since all downstream processing which
+    //       utilizes that map ignores the fallback segment.
 
     return absl::OkStatus();
   }
 
+  // Converts this grouping into a finalized GlyphSegmentation.
   StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const {
     GlyphSegmentation segmentation(segmentation_info.InitFontCodepoints(),
@@ -537,8 +539,23 @@ class GlyphGroupings {
   common::GlyphSet unmapped_glyphs_;
 };
 
-class SegmentationContext;
-
+// Stores all of the information used during generating of a glyph segmentation.
+//
+// The following high level information is stored:
+// 1. requested segmentation: the input segmentation in terms of codepoints.
+// 2. glyph closure cache: helper for computing glyph closures that caches the
+// results.
+// 3. glyph condition set: per glyph what conditions activate that glyph.
+// 4. glyph groupings: glyphs grouped by activation conditions.
+//
+// Information flows through these items:
+// 1. Generated from the input.
+// 3. Generated based on #1.
+// 4. Generated based on #1 and #3.
+//
+// These pieces all support incremental update. For example if 1. is updated we
+// can incrementally update the down stream items 3. and 4. Only needing to
+// recompute the parts that change as a result of the changes in 1.
 class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const CodepointSet& initial_segment,
@@ -584,6 +601,8 @@ class SegmentationContext {
     return absl::OkStatus();
   }
 
+  // Convert the information in this context into a finalized GlyphSegmentation
+  // representation.
   StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
     GlyphSegmentation segmentation =
         TRY(glyph_groupings.ToGlyphSegmentation(segmentation_info));
@@ -608,6 +627,8 @@ class SegmentationContext {
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 
+  // Performs a closure analysis on codepoints and returns the associated
+  // and, or, and exclusive glyph sets.
   Status AnalyzeSegment(const CodepointSet& codepoints, GlyphSet& and_gids,
                         GlyphSet& or_gids, GlyphSet& exclusive_gids) {
     return ::ift::encoder::AnalyzeSegment(segmentation_info,
@@ -615,6 +636,46 @@ class SegmentationContext {
                                           and_gids, or_gids, exclusive_gids);
   }
 
+  // Generates updated glyph conditions and glyph groupings for segment_index
+  // which has the provided set of codepoints.
+  StatusOr<GlyphSet> ReprocessSegment(segment_index_t segment_index) {
+    const auto& codepoints = segmentation_info.Segments()[segment_index];
+    GlyphSet and_gids;
+    GlyphSet or_gids;
+    GlyphSet exclusive_gids;
+    TRYV(ift::encoder::AnalyzeSegment(segmentation_info, glyph_closure_cache,
+                                      codepoints, and_gids, or_gids,
+                                      exclusive_gids));
+
+    GlyphSet changed_gids;
+    changed_gids.union_set(and_gids);
+    changed_gids.union_set(or_gids);
+    changed_gids.union_set(exclusive_gids);
+    for (uint32_t gid : changed_gids) {
+      InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
+    }
+
+    for (uint32_t and_gid : exclusive_gids) {
+      // TODO(garretrieger): if we are assigning an exclusive gid there should
+      // be no other and segments, check and error if this is violated.
+      glyph_condition_set.AddAndCondition(and_gid, segment_index);
+    }
+
+    for (uint32_t and_gid : and_gids) {
+      glyph_condition_set.AddAndCondition(and_gid, segment_index);
+    }
+
+    for (uint32_t or_gid : or_gids) {
+      glyph_condition_set.AddOrCondition(or_gid, segment_index);
+    }
+
+    return changed_gids;
+  }
+
+  // Update the glyph groups for 'glyphs'.
+  //
+  // The glyph condition set must be up to date and fully computed prior to
+  // calling this.
   Status GroupGlyphs(const GlyphSet& glyphs) {
     return glyph_groupings.GroupGlyphs(segmentation_info, glyph_condition_set,
                                        glyph_closure_cache, glyphs);
@@ -695,43 +756,14 @@ Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
   return absl::OkStatus();
 }
 
-StatusOr<GlyphSet> AnalyzeSegment(SegmentationContext& context,
-                                  segment_index_t segment_index,
-                                  const CodepointSet& codepoints) {
-  GlyphSet and_gids;
-  GlyphSet or_gids;
-  GlyphSet exclusive_gids;
-  TRYV(AnalyzeSegment(context.segmentation_info, context.glyph_closure_cache,
-                      codepoints, and_gids, or_gids, exclusive_gids));
-
-  GlyphSet changed_gids;
-  changed_gids.union_set(and_gids);
-  changed_gids.union_set(or_gids);
-  changed_gids.union_set(exclusive_gids);
-  for (uint32_t gid : changed_gids) {
-    context.InvalidateGlyphInformation(GlyphSet{gid},
-                                       SegmentSet{segment_index});
-  }
-
-  for (uint32_t and_gid : exclusive_gids) {
-    // TODO(garretrieger): if we are assigning an exclusive gid there should be
-    // no other and segments, check and error if this is violated.
-    context.glyph_condition_set.AddAndCondition(and_gid, segment_index);
-  }
-
-  for (uint32_t and_gid : and_gids) {
-    context.glyph_condition_set.AddAndCondition(and_gid, segment_index);
-  }
-
-  for (uint32_t or_gid : or_gids) {
-    context.glyph_condition_set.AddOrCondition(or_gid, segment_index);
-  }
-
-  return changed_gids;
-}
-
-StatusOr<uint32_t> PatchSizeBytes(hb_face_t* original_face,
-                                  const IntSet& gids) {
+// Calculates the estimated size of a patch for original_face which includes
+// 'gids'.
+//
+// Will typically overestimate the size since we use a faster, but less
+// effective version of brotli (quality 9 instead of 11) to generate the
+// estimate.
+StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
+                                          const GlyphSet& gids) {
   FontData font_data(original_face);
   CompatId id;
   // Since this is just an estimate and we don't need ultra precise numbers run
@@ -752,15 +784,24 @@ void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
   }
 }
 
-StatusOr<uint32_t> EstimatePatchSize(SegmentationContext& context,
-                                     const CodepointSet& codepoints) {
+// Calculates the estimated size of a patch which includes all glyphs exclusive
+// to the listed codepoints. Will typically overestimate the size since we use
+// a faster, but less effective version of brotli to generate the estimate.
+StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
+                                          const CodepointSet& codepoints) {
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;
   TRYV(context.AnalyzeSegment(codepoints, and_gids, or_gids, exclusive_gids));
-  return PatchSizeBytes(context.original_face.get(), exclusive_gids);
+  return EstimatePatchSizeBytes(context.original_face.get(), exclusive_gids);
 }
 
+// Attempt to merge to_merge_semgents into base_segment_index. If maximum
+// patch size would be exceeded does not merge and returns nullopt.
+//
+// Otherwise the segment definitions are merged and any affected downstream info
+// (glyph conditions and glyph groupings) are invalidated. The set of
+// invalidated glyph ids is returned.
 StatusOr<std::optional<GlyphSet>> TryMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& to_merge_segments_) {
@@ -775,7 +816,8 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   MergeSegments(context.segmentation_info, to_merge_segments,
                 merged_codepoints);
 
-  uint32_t new_patch_size = TRY(EstimatePatchSize(context, merged_codepoints));
+  uint32_t new_patch_size =
+      TRY(EstimatePatchSizeBytes(context, merged_codepoints));
   if (new_patch_size > context.patch_size_max_bytes) {
     return std::nullopt;
   }
@@ -811,7 +853,8 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
 /*
  * Search for a composite condition which can be merged into base_segment_index.
  *
- * Returns true if one was found and the merge succeeded, false otherwise.
+ * Returns the set of glyphs invalidated by the merge if found and the merge
+ * suceeded.
  */
 StatusOr<std::optional<GlyphSet>> TryMergingACompositeCondition(
     SegmentationContext& context, segment_index_t base_segment_index,
@@ -855,12 +898,23 @@ StatusOr<std::optional<GlyphSet>> TryMergingACompositeCondition(
  * Search for a base segment after base_segment_index which can be merged into
  * base_segment_index without exceeding the maximum patch size.
  *
- * Returns true if found and the merge suceeded.
+ * Returns the set of glyphs invalidated by the merge if found and the merge
+ * suceeded.
  */
 template <typename ConditionAndGlyphIt>
 StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
     SegmentationContext& context, segment_index_t base_segment_index,
     const ConditionAndGlyphIt& condition_it) {
+  // TODO(garretrieger): this currently merges at most one segment at a time
+  //  into base. we could likely significantly improve performance (ie.
+  //  reducing number of closure and brotli ops) by choosing multiple segments
+  //  at once if it seems likely the new patch size will be within the
+  //  thresholds. A rough estimate of patch size can be generated by summing the
+  //  individual patch sizes of the existing patches for each segment. Finally
+  //  we can run the merge, and check if the actual patch size is within bounds.
+  //
+  //  As part of this we should start caching patch size results so the
+  //  individual patch sizes don't need to be recomputed later on.
   auto next_condition_it = condition_it;
   next_condition_it++;
   while (next_condition_it !=
@@ -889,11 +943,13 @@ StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
   return std::nullopt;
 }
 
+// Computes the estimated size of the patch for a segment and returns true if it
+// is below the minimum.
 StatusOr<bool> IsPatchTooSmall(SegmentationContext& context,
                                segment_index_t base_segment_index,
                                const GlyphSet& glyphs) {
   uint32_t patch_size_bytes =
-      TRY(PatchSizeBytes(context.original_face.get(), glyphs));
+      TRY(EstimatePatchSizeBytes(context.original_face.get(), glyphs));
   if (patch_size_bytes >= context.patch_size_min_bytes) {
     return false;
   }
@@ -959,8 +1015,10 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
 }
 
 /*
- * Checks that the incrementally generated groupings in context match what would
- * have been produced by a non incremental process.
+ * Checks that the incrementally generated glyph conditions and groupings in
+ * context match what would have been produced by a non incremental process.
+ *
+ * Returns OkStatus() if they match.
  */
 Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
@@ -972,11 +1030,10 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
-  segment_index_t segment_index = 0;
-  for (const auto& segment :
-       non_incremental_context.segmentation_info.Segments()) {
-    TRY(AnalyzeSegment(non_incremental_context, segment_index, segment));
-    segment_index++;
+  for (segment_index_t segment_index = 0;
+       segment_index < context.segmentation_info.Segments().size();
+       segment_index++) {
+    TRY(non_incremental_context.ReprocessSegment(segment_index));
   }
 
   GlyphSet all_glyphs;
@@ -1021,11 +1078,13 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   context.patch_size_min_bytes = patch_size_min_bytes;
   context.patch_size_max_bytes = patch_size_max_bytes;
 
+  // ### Generate the initial conditions and groupings by processing all
+  // segments and glyphs. ###
   VLOG(0) << "Forming initial segmentation plan.";
-  segment_index_t segment_index = 0;
-  for (const auto& segment : context.segmentation_info.Segments()) {
-    TRY(AnalyzeSegment(context, segment_index, segment));
-    segment_index++;
+  for (segment_index_t segment_index = 0;
+       segment_index < context.segmentation_info.Segments().size();
+       segment_index++) {
+    TRY(context.ReprocessSegment(segment_index));
   }
   context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
 
@@ -1039,6 +1098,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     return context.ToGlyphSegmentation();
   }
 
+  // ### Iteratively merge segments and incrementally reprocess affected data.
   segment_index_t last_merged_segment_index = 0;
   while (true) {
     auto merged = TRY(MergeNextBaseSegment(context, last_merged_segment_index));
@@ -1053,9 +1113,8 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
             << " due to merge.";
 
-    GlyphSet analysis_modified_gids = TRY(AnalyzeSegment(
-        context, last_merged_segment_index,
-        context.segmentation_info.Segments()[last_merged_segment_index]));
+    GlyphSet analysis_modified_gids =
+        TRY(context.ReprocessSegment(last_merged_segment_index));
     analysis_modified_gids.union_set(modified_gids);
 
     TRYV(context.GroupGlyphs(analysis_modified_gids));
