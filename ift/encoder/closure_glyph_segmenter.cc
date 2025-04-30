@@ -351,7 +351,8 @@ Status GroupGlyphs(SegmentationContext& context) {
   }
 
   // Remove any or_glyph_groups which are now empty.
-  for (auto it = context.or_glyph_groups.cbegin(); it != context.or_glyph_groups.cend();) {
+  for (auto it = context.or_glyph_groups.cbegin();
+       it != context.or_glyph_groups.cend();) {
     if (it->second.empty()) {
       it = context.or_glyph_groups.erase(it);
     } else {

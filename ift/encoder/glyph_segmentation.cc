@@ -237,6 +237,14 @@ bool GlyphSegmentation::ActivationCondition::operator<(
     return activated_ < other.activated_;
   }
 
+  if (is_exclusive_ != other.is_exclusive_) {
+    return is_exclusive_;
+  }
+
+  if (is_fallback_ != other.is_fallback_) {
+    return !is_fallback_;
+  }
+
   // These two are equal
   return false;
 }
