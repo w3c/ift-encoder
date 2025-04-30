@@ -55,6 +55,9 @@ namespace ift::encoder {
 //   - composite patches (NOT STARTED)
 // - Multi segment combination testing with GSUB dep analysis to guide.
 
+/*
+ * A set of conditions which activate a specific single glyph.
+ */
 class GlyphConditions {
  public:
   GlyphConditions() : and_segments(), or_segments() {}
@@ -72,6 +75,70 @@ class GlyphConditions {
   }
 };
 
+/*
+ * Collection of per glyph conditions for all glyphs in a font.
+ */
+class GlyphConditionSet {
+ public:
+  GlyphConditionSet(uint32_t num_glyphs) {
+    gid_conditions_.resize(num_glyphs);
+  }
+
+  const GlyphConditions& ConditionsFor(glyph_id_t gid) const {
+    return gid_conditions_[gid];
+  }
+
+  void AddAndCondition(glyph_id_t gid, segment_index_t segment) {
+    gid_conditions_[gid].and_segments.insert(segment);
+    segment_to_gid_conditions_[segment].insert(gid);
+  }
+
+  void AddOrCondition(glyph_id_t gid, segment_index_t segment) {
+    gid_conditions_[gid].or_segments.insert(segment);
+    segment_to_gid_conditions_[segment].insert(gid);
+  }
+
+  // Returns the set of glyphs that have 'segment' in their conditions.
+  const GlyphSet& GlyphsWithSegment(segment_index_t segment) const {
+    const static GlyphSet empty;
+    auto it = segment_to_gid_conditions_.find(segment);
+    if (it == segment_to_gid_conditions_.end()) {
+      return empty;
+    }
+    return it->second;
+  }
+
+  // Clears out any stored information for glyphs and segments in this condition set.
+  void InvalidateGlyphInformation(const GlyphSet& glyphs, const SegmentSet& segments) {
+    // Remove all segments we touched here from gid_conditions so they can be
+    // recalculated.
+    for (uint32_t gid : glyphs) {
+      gid_conditions_[gid].RemoveSegments(segments);
+    }
+
+    for (uint32_t segment_index : segments) {
+      segment_to_gid_conditions_[segment_index].subtract(glyphs);
+    }
+  }
+
+  bool operator==(const GlyphConditionSet& other) const {
+    return other.gid_conditions_ == gid_conditions_ &&
+      other.segment_to_gid_conditions_ == other.segment_to_gid_conditions_;
+  }
+
+  bool operator!=(const GlyphConditionSet& other) const {
+    return !(*this == other);
+  }
+
+ private:
+  // Index in this vector is the glyph id associated with the condition at that index.
+  std::vector<GlyphConditions> gid_conditions_;
+
+  // Index that tracks for each segment id which set of glyphs include that segment in it's conditions.
+  flat_hash_map<uint32_t, GlyphSet> segment_to_gid_conditions_;
+  
+};
+
 class SegmentationContext;
 
 Status AnalyzeSegment(SegmentationContext& context,
@@ -85,7 +152,8 @@ class SegmentationContext {
       : preprocessed_face(make_hb_face(hb_subset_preprocess(face))),
         original_face(make_hb_face(hb_face_reference(face))),
         all_codepoints(),
-        full_closure() {
+        full_closure(),
+        glyph_condition_set(hb_face_get_glyph_count(original_face.get())) {
     init_font_codepoints.union_set(initial_segment);
     all_codepoints.union_set(initial_segment);
 
@@ -110,8 +178,6 @@ class SegmentationContext {
     if (closure.ok()) {
       full_closure = std::move(*closure);
     }
-
-    gid_conditions.resize(hb_face_get_glyph_count(original_face.get()));
   }
 
   /*
@@ -165,22 +231,15 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const GlyphSet& glyphs,
                                   const SegmentSet& segments) {
-    // Remove all segments we touched here from gid_conditions so they can be
-    // recalculated.
+    // unmapped, and and/or glyph groups are down stream of glyph conditions
+    // so must be invalidated. Do this before modifying the conditions.
     for (uint32_t gid : glyphs) {
-      auto& condition = gid_conditions[gid];
-
-      // condition is about to be modified and will be reprocessed later, so
-      // clear out this glyph from any existing 'and/or glyph' groups, and
-      // unmapped glyphs.
+      const auto& condition = glyph_condition_set.ConditionsFor(gid);
       RemoveGlyphFromAndOrGroups(condition, gid);
       unmapped_glyphs.erase(gid);
-      condition.RemoveSegments(segments);
     }
 
-    for (uint32_t segment_index : segments) {
-      segment_to_gid_conditions[segment_index].subtract(glyphs);
-    }
+    glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 
   void RemoveGlyphFromAndOrGroups(const GlyphConditions& condition,
@@ -335,13 +394,10 @@ class SegmentationContext {
   uint32_t patch_size_min_bytes = 0;
   uint32_t patch_size_max_bytes = UINT32_MAX;
 
-  // Phase 1
-  flat_hash_map<uint32_t, GlyphSet>
-      segment_to_gid_conditions;  // tracks which gid conditions reference a
-                                  // segment.
-  std::vector<GlyphConditions> gid_conditions;
+  // Phase 1 - derived from segments and init information
+  GlyphConditionSet glyph_condition_set;
 
-  // Phase 2
+  // Phase 2 - derived from glyph_condition_set
   btree_map<SegmentSet, GlyphSet> and_glyph_groups;
   btree_map<SegmentSet, GlyphSet> or_glyph_groups;
   btree_map<GlyphSegmentation::ActivationCondition, GlyphSet>
@@ -442,18 +498,15 @@ StatusOr<GlyphSet> AnalyzeSegment(SegmentationContext& context,
   for (uint32_t and_gid : exclusive_gids) {
     // TODO(garretrieger): if we are assigning an exclusive gid there should be
     // no other and segments, check and error if this is violated.
-    context.gid_conditions[and_gid].and_segments.insert(segment_index);
-    context.segment_to_gid_conditions[segment_index].insert(and_gid);
+    context.glyph_condition_set.AddAndCondition(and_gid, segment_index);
   }
 
   for (uint32_t and_gid : and_gids) {
-    context.gid_conditions[and_gid].and_segments.insert(segment_index);
-    context.segment_to_gid_conditions[segment_index].insert(and_gid);
+    context.glyph_condition_set.AddAndCondition(and_gid, segment_index);
   }
 
   for (uint32_t or_gid : or_gids) {
-    context.gid_conditions[or_gid].or_segments.insert(segment_index);
-    context.segment_to_gid_conditions[segment_index].insert(or_gid);
+    context.glyph_condition_set.AddOrCondition(or_gid, segment_index);
   }
 
   return changed_gids;
@@ -466,7 +519,7 @@ Status GroupGlyphs(SegmentationContext& context, const GlyphSet& glyphs) {
   btree_set<SegmentSet> modified_or_groups;
 
   for (glyph_id_t gid : glyphs) {
-    const auto& condition = context.gid_conditions[gid];
+    const auto& condition = context.glyph_condition_set.ConditionsFor(gid);
     if (!condition.and_segments.empty()) {
       context.and_glyph_groups[condition.and_segments].insert(gid);
       modified_and_groups.insert(condition.and_segments);
@@ -618,10 +671,7 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
     //
     // Changes caused by adding new segments into the base segment will be
     // handled by the next AnalyzeSegment step.
-    auto it = context.segment_to_gid_conditions.find(segment_index);
-    if (it != context.segment_to_gid_conditions.end()) {
-      gid_conditions_to_update.union_set(it->second);
-    }
+    gid_conditions_to_update.union_set(context.glyph_condition_set.GlyphsWithSegment(segment_index));
   }
 
   context.InvalidateGlyphInformation(gid_conditions_to_update,
@@ -808,8 +858,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
         "conditions_and_glyphs aren't correct.");
   }
 
-  if (non_incremental_context.gid_conditions != context.gid_conditions) {
-    return absl::FailedPreconditionError("gid_conditions aren't correct.");
+  if (non_incremental_context.glyph_condition_set != context.glyph_condition_set) {
+    return absl::FailedPreconditionError("glyph_condition_set isn't correct.");
   }
 
   if (non_incremental_context.and_glyph_groups != context.and_glyph_groups) {
