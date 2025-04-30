@@ -115,7 +115,14 @@ class GlyphSegmentation {
     bool operator<(const ActivationCondition& other) const;
 
     bool operator==(const ActivationCondition& other) const {
-      return conditions_ == other.conditions_ && activated_ == other.activated_;
+      return conditions_ == other.conditions_ &&
+             activated_ == other.activated_ &&
+             is_fallback_ == other.is_fallback_ &&
+             is_exclusive_ == other.is_exclusive_;
+    }
+
+    bool operator!=(const ActivationCondition& other) const {
+      return !(*this == other);
     }
 
    private:

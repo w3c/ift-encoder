@@ -15,6 +15,7 @@ using common::FontData;
 using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
+using common::SegmentSet;
 using google::protobuf::TextFormat;
 
 namespace ift::encoder {
@@ -373,6 +374,51 @@ glyph_patch_conditions {
 initial_codepoints {
 }
 )");
+}
+
+TEST_F(GlyphSegmentationTest, ActivationConditionOrdering) {
+  auto a = GlyphSegmentation::ActivationCondition::exclusive_segment(4, 8);
+  auto b =
+      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4}, 8);
+  auto c =
+      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4}, 9);
+
+  auto d =
+      GlyphSegmentation::ActivationCondition::or_segments(SegmentSet{4, 5}, 9);
+  auto e =
+      GlyphSegmentation::ActivationCondition::or_segments(SegmentSet{4, 6}, 9);
+
+  auto f =
+      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4, 5}, 9);
+  auto g =
+      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4, 6}, 9);
+
+  ASSERT_EQ(a, a);
+  ASSERT_EQ(b, b);
+  ASSERT_EQ(c, c);
+  ASSERT_EQ(d, d);
+  ASSERT_EQ(e, e);
+  ASSERT_EQ(f, f);
+  ASSERT_EQ(g, g);
+
+  ASSERT_NE(a, b);
+  ASSERT_NE(b, c);
+  ASSERT_NE(d, e);
+  ASSERT_NE(f, g);
+
+  ASSERT_LT(a, b);
+  ASSERT_LT(b, c);
+  ASSERT_LT(c, d);
+  ASSERT_LT(d, e);
+  ASSERT_LT(e, f);
+  ASSERT_LT(f, g);
+
+  ASSERT_FALSE(b < a);
+  ASSERT_FALSE(c < b);
+  ASSERT_FALSE(d < c);
+  ASSERT_FALSE(e < d);
+  ASSERT_FALSE(f < e);
+  ASSERT_FALSE(g < f);
 }
 
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
