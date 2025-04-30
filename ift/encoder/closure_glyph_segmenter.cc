@@ -350,6 +350,15 @@ Status GroupGlyphs(SegmentationContext& context) {
     }
   }
 
+  // Remove any or_glyph_groups which are now empty.
+  for (auto it = context.or_glyph_groups.cbegin(); it != context.or_glyph_groups.cend();) {
+    if (it->second.empty()) {
+      it = context.or_glyph_groups.erase(it);
+    } else {
+      it++;
+    }
+  }
+
   for (uint32_t gid : context.unmapped_glyphs) {
     // this glyph is not activated anywhere but is needed in the full closure
     // so add it to an activation condition of any segment.
