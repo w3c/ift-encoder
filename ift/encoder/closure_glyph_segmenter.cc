@@ -408,8 +408,7 @@ class GlyphGroupings {
     GlyphSegmentation::ActivationCondition condition =
         GlyphSegmentation::ActivationCondition::exclusive_segment(
             exclusive_segment, 0);
-    conditions_and_glyphs_.erase(condition);
-    conditions_and_glyphs_[condition] = and_glyphs;
+    conditions_and_glyphs_[condition].union_set(glyphs);
     // triggering segment to conditions is not affected by this change, so
     // doesn't need an update.
   }
@@ -792,7 +791,7 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
   GlyphKeyedDiff diff(font_data, id,
                       {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF,
                        FontHelper::kCFF2},
-                      9);
+                      8);
 
   auto patch_data = TRY(diff.CreatePatch(gids));
   return patch_data.size();
