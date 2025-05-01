@@ -398,6 +398,22 @@ class GlyphGroupings {
     }
   }
 
+  // Add a set of glyphs to an existing exclusive group (and_group of one
+  // segment).
+  void AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
+                                 const GlyphSet& glyphs) {
+    auto& and_glyphs = and_glyph_groups_[SegmentSet{exclusive_segment}];
+    and_glyphs.union_set(glyphs);
+
+    GlyphSegmentation::ActivationCondition condition =
+        GlyphSegmentation::ActivationCondition::exclusive_segment(
+            exclusive_segment, 0);
+    conditions_and_glyphs_.erase(condition);
+    conditions_and_glyphs_[condition] = and_glyphs;
+    // triggering segment to conditions is not affected by this change, so
+    // doesn't need an update.
+  }
+
   // Updates this glyph grouping for all glyphs in the 'glyphs' set to match
   // the associated conditions in 'glyph_condition_set'.
   Status GroupGlyphs(const RequestedSegmentationInformation& segmentation_info,
@@ -655,6 +671,10 @@ class SegmentationContext {
       InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
     }
 
+    if (and_gids.empty() && or_gids.empty()) {
+      inert_segments.insert(segment_index);
+    }
+
     for (uint32_t and_gid : exclusive_gids) {
       // TODO(garretrieger): if we are assigning an exclusive gid there should
       // be no other and segments, check and error if this is violated.
@@ -693,6 +713,7 @@ class SegmentationContext {
 
   // Phase 1 - derived from segments and init information
   GlyphConditionSet glyph_condition_set;
+  SegmentSet inert_segments;
 
   // Phase 2 - derived from glyph_condition_set and init information.
   GlyphGroupings glyph_groupings;
@@ -809,6 +830,14 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   SegmentSet to_merge_segments = to_merge_segments_;
   to_merge_segments.erase(base_segment_index);
 
+  bool new_segment_is_inert =
+      context.inert_segments.contains(base_segment_index) &&
+      to_merge_segments.is_subset_of(context.inert_segments);
+  if (new_segment_is_inert) {
+    VLOG(0)
+        << "  Merged segment will be inert, closure analysis will be skipped.";
+  }
+
   const auto& segments = context.segmentation_info.Segments();
   uint32_t size_before = segments[base_segment_index].size();
 
@@ -816,8 +845,30 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   MergeSegments(context.segmentation_info, to_merge_segments,
                 merged_codepoints);
 
-  uint32_t new_patch_size =
-      TRY(EstimatePatchSizeBytes(context, merged_codepoints));
+  GlyphSet gid_conditions_to_update;
+  for (segment_index_t segment_index : to_merge_segments) {
+    // segments which are being removed/changed may appear in gid_conditions, we
+    // need to update those (and the down stream and/or glyph groups) to reflect
+    // the removal/change and allow recalculation during the GroupGlyphs steps
+    //
+    // Changes caused by adding new segments into the base segment will be
+    // handled by the next AnalyzeSegment step.
+    gid_conditions_to_update.union_set(
+        context.glyph_condition_set.GlyphsWithSegment(segment_index));
+  }
+
+  uint32_t new_patch_size = 0;
+  if (!new_segment_is_inert) {
+    new_patch_size = TRY(EstimatePatchSizeBytes(context, merged_codepoints));
+  } else {
+    // For inert patches we can precompute the glyph set saving a closure
+    // operation
+    GlyphSet merged_glyphs = gid_conditions_to_update;
+    merged_glyphs.union_set(
+        context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
+    new_patch_size =
+        TRY(EstimatePatchSizeBytes(context.original_face.get(), merged_glyphs));
+  }
   if (new_patch_size > context.patch_size_max_bytes) {
     return std::nullopt;
   }
@@ -832,20 +883,30 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   // GroupGlyphs
   context.glyph_groupings.RemoveFallbackSegments(to_merge_segments);
 
-  GlyphSet gid_conditions_to_update;
-  for (segment_index_t segment_index : to_merge_segments) {
-    // segments which are being removed/changed may appear in gid_conditions, we
-    // need to update those (and the down stream and/or glyph groups) to reflect
-    // the removal/change and allow recalculation during the GroupGlyphs steps
-    //
-    // Changes caused by adding new segments into the base segment will be
-    // handled by the next AnalyzeSegment step.
-    gid_conditions_to_update.union_set(
-        context.glyph_condition_set.GlyphsWithSegment(segment_index));
-  }
-
+  // Regardless of wether the new segment is inert all of the information
+  // associated with the segments removed by the merge should be removed.
   context.InvalidateGlyphInformation(gid_conditions_to_update,
                                      to_merge_segments);
+
+  if (new_segment_is_inert) {
+    // The newly formed segment will be inert which means we can construct the
+    // new condition sets and glyph groupings here instead of using the closure
+    // analysis to do it. The new segment is simply the union of all glyphs
+    // associated with each segment that is part of the merge.
+    // (gid_conditons_to_update)
+    context.inert_segments.insert(base_segment_index);
+    for (glyph_id_t gid : gid_conditions_to_update) {
+      context.glyph_condition_set.AddAndCondition(gid, base_segment_index);
+    }
+    context.glyph_groupings.AddGlyphsToExclusiveGroup(base_segment_index,
+                                                      gid_conditions_to_update);
+
+    // We've now fully updated information for these glyphs so don't need to
+    // return them.
+    gid_conditions_to_update.clear();
+  } else {
+    context.inert_segments.erase(base_segment_index);
+  }
 
   return gid_conditions_to_update;
 }
@@ -1110,11 +1171,14 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
     const auto& [merged_segment_index, modified_gids] = *merged;
     last_merged_segment_index = merged_segment_index;
-    VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
-            << " due to merge.";
 
-    GlyphSet analysis_modified_gids =
-        TRY(context.ReprocessSegment(last_merged_segment_index));
+    GlyphSet analysis_modified_gids;
+    if (!context.inert_segments.contains(last_merged_segment_index)) {
+      VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
+              << " due to merge.";
+      analysis_modified_gids =
+          TRY(context.ReprocessSegment(last_merged_segment_index));
+    }
     analysis_modified_gids.union_set(modified_gids);
 
     TRYV(context.GroupGlyphs(analysis_modified_gids));
