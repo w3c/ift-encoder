@@ -46,6 +46,12 @@ class Encoder {
   void SetJumpAhead(uint32_t count) { this->jump_ahead_ = count; }
 
   /*
+   * If enabled then for jump ahead entries preload lists will be used instead
+   * of a single patch which jumps multiple levels.
+   */
+  void SetUsePreloadLists(bool value) { this->use_preload_lists_ = value; }
+
+  /*
    * Adds a segmentation of glyph data.
    *
    * In the generated encoding there will be one glyph keyed patch (containing
@@ -127,8 +133,37 @@ class Encoder {
     return absl::OkStatus();
   }
 
-  std::vector<SubsetDefinition> OutgoingEdges(const SubsetDefinition& base,
-                                              uint32_t choose) const;
+  /*
+  * An edge in an IFT patch graph, traversing this edge adds one or more subsets
+  * to the font.
+  */
+  class Edge {
+   public:
+    Edge(std::initializer_list<SubsetDefinition> values) : subsets_(values) {
+      for (const auto& s : subsets_) {
+        combined_.Union(s);
+      }
+    }
+
+    void Add(const SubsetDefinition& s) {
+      subsets_.insert(subsets_.begin(), s);
+      combined_.Union(s);
+    }
+
+    bool operator==(const Edge& other) const {
+      return subsets_ == other.subsets_;
+    }
+
+    // Returns the total effective subset definition added by this edge.
+    const auto& Combined() const { return combined_; }
+
+   private:
+    std::vector<SubsetDefinition> subsets_;
+    SubsetDefinition combined_;
+  };
+
+  std::vector<Edge> OutgoingEdges(const SubsetDefinition& base,
+                                  uint32_t choose) const;
 
  private:
   struct ProcessingContext;
@@ -147,10 +182,6 @@ class Encoder {
     // All other ids are for glyph keyed.
     return absl::StrCat(patch_set_id, "_{id}.ift_gk");
   }
-
-  static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
-                              uint32_t number,
-                              std::vector<SubsetDefinition>& out);
 
   SubsetDefinition Combine(const SubsetDefinition& s1,
                            const SubsetDefinition& s2) const;
@@ -245,6 +276,7 @@ class Encoder {
   std::vector<SubsetDefinition> extension_subsets_;
   uint32_t jump_ahead_ = 1;
   uint32_t next_id_ = 0;
+  bool use_preload_lists_ = false;
 
   struct ProcessingContext {
     ProcessingContext(uint32_t next_id)

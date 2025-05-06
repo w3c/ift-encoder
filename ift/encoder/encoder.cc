@@ -55,16 +55,29 @@ using ift::proto::TABLE_KEYED_PARTIAL;
 
 namespace ift::encoder {
 
-void Encoder::AddCombinations(const std::vector<const SubsetDefinition*>& in,
-                              uint32_t choose,
-                              std::vector<SubsetDefinition>& out) {
+struct Jump {
+  SubsetDefinition base;
+  SubsetDefinition target;
+
+  bool operator==(const Jump& other) const {
+    return base == other.base && target == other.target;
+  }
+
+  template <typename H>
+  friend H AbslHashValue(H h, const Jump& s) {
+    return H::combine(std::move(h), s.base, s.target);
+  }
+};
+
+static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
+                            uint32_t choose, std::vector<Encoder::Edge>& out) {
   if (!choose || in.size() < choose) {
     return;
   }
 
   if (choose == 1) {
     for (auto item : in) {
-      out.push_back(*item);
+      out.push_back(Encoder::Edge{*item});
     }
     return;
   }
@@ -74,11 +87,11 @@ void Encoder::AddCombinations(const std::vector<const SubsetDefinition*>& in,
     std::vector<const SubsetDefinition*> remaining;
     std::copy(it_inner, in.end(), std::back_inserter(remaining));
 
-    std::vector<SubsetDefinition> combinations;
+    std::vector<Encoder::Edge> combinations;
     AddCombinations(remaining, choose - 1, combinations);
-    for (auto& s : combinations) {
-      s.Union(**it);
-      out.push_back(std::move(s));
+    for (auto& edge : combinations) {
+      edge.Add(**it);
+      out.push_back(std::move(edge));
     }
   }
 }
@@ -105,7 +118,7 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
   return CutSubset(context, face_.get(), all, false);
 }
 
-std::vector<SubsetDefinition> Encoder::OutgoingEdges(
+std::vector<Encoder::Edge> Encoder::OutgoingEdges(
     const SubsetDefinition& base_subset, uint32_t choose) const {
   std::vector<SubsetDefinition> remaining_subsets;
   for (const auto& s : extension_subsets_) {
@@ -123,7 +136,7 @@ std::vector<SubsetDefinition> Encoder::OutgoingEdges(
     input.push_back(&s);
   }
 
-  std::vector<SubsetDefinition> result;
+  std::vector<Edge> result;
   for (uint32_t i = 1; i <= choose; i++) {
     AddCombinations(input, i, result);
   }
@@ -390,8 +403,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return sc;
   }
 
-  std::vector<SubsetDefinition> subsets =
-      OutgoingEdges(base_subset, jump_ahead_);
+  std::vector<Edge> edges = OutgoingEdges(base_subset, jump_ahead_);
 
   // The first subset forms the base file, the remaining subsets are made
   // reachable via patches.
@@ -401,7 +413,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return base.status();
   }
 
-  if (subsets.empty() && !IsMixedMode()) {
+  if (edges.empty() && !IsMixedMode()) {
     // This is a leaf node, a IFT table isn't needed.
     context.built_subsets_[base_subset].shallow_copy(*base);
     return base;
@@ -424,11 +436,13 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
-  for (const auto& s : subsets) {
+  for (const auto& edge : edges) {
+    // XXXX(grieger): need to cache (base, subset) -> id so we can reuse ids as
+    // needed in preload lists.
     uint32_t id = context.next_id_++;
     ids.push_back(id);
 
-    PatchMap::Coverage coverage = s.ToCoverage();
+    PatchMap::Coverage coverage = edge.Combined().ToCoverage();  // TODO XXXX
     TRYV(table_keyed_patch_map.AddEntry(coverage, id, encoding));
   }
 
@@ -455,9 +469,13 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   context.built_subsets_[base_subset].shallow_copy(*base);
 
   uint32_t i = 0;
-  for (const auto& s : subsets) {
+  for (const auto& edge : edges) {
+    // XXXXX Introduce a cache of (base, subset def) -> patch URL
+    // XXXXX for a preload list case base_subset will change as you go down the
+    // list.
     uint32_t id = ids[i++];
-    SubsetDefinition combined_subset = Combine(base_subset, s);
+    SubsetDefinition combined_subset =
+        Combine(base_subset, edge.Combined());  // TODO XXX
     auto next = Encode(context, combined_subset, false);
     if (!next.ok()) {
       return next.status();
