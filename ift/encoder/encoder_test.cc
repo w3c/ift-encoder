@@ -182,60 +182,60 @@ TEST_F(EncoderTest, OutgoingEdges) {
   SubsetDefinition s4{7, 8};
 
   auto combos = encoder.OutgoingEdges(s2, 1);
-  std::vector<SubsetDefinition> expected = {s1, s3, s4};
+  std::vector<Encoder::Edge> expected = {{s1}, {s3}, {s4}};
   ASSERT_EQ(combos, expected);
 
   combos = encoder.OutgoingEdges({1}, 1);
-  expected = {{2}, s2, s3, s4};
+  expected = {{{2}}, {s2}, {s3}, {s4}};
   ASSERT_EQ(combos, expected);
 
   combos = encoder.OutgoingEdges(s1, 2);
   expected = {// l1
-              {3, 4},
-              {5, 6},
-              {7, 8},
+              {{3, 4}},
+              {{5, 6}},
+              {{7, 8}},
 
               // l2
-              {3, 4, 5, 6},
-              {3, 4, 7, 8},
-              {5, 6, 7, 8}};
+              {{3, 4}, {5, 6}},
+              {{3, 4}, {7, 8}},
+              {{5, 6}, {7, 8}}};
   ASSERT_EQ(combos, expected);
 
   combos = encoder.OutgoingEdges(s1, 3);
   expected = {// l1
-              {3, 4},
-              {5, 6},
-              {7, 8},
+              {{3, 4}},
+              {{5, 6}},
+              {{7, 8}},
 
               // l2
-              {3, 4, 5, 6},
-              {3, 4, 7, 8},
-              {5, 6, 7, 8},
+              {{3, 4}, {5, 6}},
+              {{3, 4}, {7, 8}},
+              {{5, 6}, {7, 8}},
 
               // l3
-              {3, 4, 5, 6, 7, 8}};
+              {{3, 4}, {5, 6}, {7, 8}}};
   ASSERT_EQ(combos, expected);
 
   combos = encoder.OutgoingEdges({1, 3, 5, 7}, 3);
   expected = {// l1
-              {2},
-              {4},
-              {6},
-              {8},
+              {{2}},
+              {{4}},
+              {{6}},
+              {{8}},
 
               // l2
-              {2, 4},
-              {2, 6},
-              {2, 8},
-              {4, 6},
-              {4, 8},
-              {6, 8},
+              {{2}, {4}},
+              {{2}, {6}},
+              {{2}, {8}},
+              {{4}, {6}},
+              {{4}, {8}},
+              {{6}, {8}},
 
               // l3
-              {2, 4, 6},
-              {2, 4, 8},
-              {2, 6, 8},
-              {4, 6, 8}};
+              {{2}, {4}, {6}},
+              {{2}, {4}, {8}},
+              {{2}, {6}, {8}},
+              {{4}, {6}, {8}}};
   ASSERT_EQ(combos, expected);
 }
 
@@ -252,11 +252,8 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_PointToRange) {
   SubsetDefinition s2{};
   s2.design_space[kWght] = *AxisRange::Range(300, 400);
 
-  SubsetDefinition s3{3, 4};
-  s3.design_space[kWght] = *AxisRange::Range(300, 400);
-
   auto combos = encoder.OutgoingEdges(base, 2);
-  std::vector<SubsetDefinition> expected = {s1, s2, s3};
+  std::vector<Encoder::Edge> expected = {{s1}, {s2}, {s1, s2}};
   ASSERT_EQ(combos, expected);
 }
 
@@ -273,11 +270,8 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_AddAxis_1) {
   SubsetDefinition s2{};
   s2.design_space[kWdth] = *AxisRange::Range(300, 400);
 
-  SubsetDefinition s3{3, 4};
-  s3.design_space[kWdth] = *AxisRange::Range(300, 400);
-
   auto combos = encoder.OutgoingEdges(base, 2);
-  std::vector<SubsetDefinition> expected = {s1, s2, s3};
+  std::vector<Encoder::Edge> expected = {{s1}, {s2}, {s1, s2}};
   ASSERT_EQ(combos, expected);
 }
 
@@ -301,11 +295,8 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_AddAxis_OverlappingAxisRange) {
   //   subtracted instead of being ignored.
   s2.design_space[kWdth] = *AxisRange::Range(300, 400);
 
-  SubsetDefinition s3{3, 4};
-  s3.design_space[kWdth] = *AxisRange::Range(300, 400);
-
   auto combos = encoder.OutgoingEdges(base, 2);
-  std::vector<SubsetDefinition> expected = {s1, s2, s3};
+  std::vector<Encoder::Edge> expected = {{s1}, {s2}, {s1, s2}};
   ASSERT_EQ(combos, expected);
 }
 
@@ -331,12 +322,8 @@ TEST_F(EncoderTest, OutgoingEdges_DesignSpace_AddAxis_MergeSpace) {
   SubsetDefinition s2{};
   s2.design_space[kWdth] = *AxisRange::Range(50, 100);
 
-  SubsetDefinition s3{};
-  s3.design_space[kWght] = *AxisRange::Range(300, 700);
-  s3.design_space[kWdth] = *AxisRange::Range(50, 100);
-
   auto combos = encoder.OutgoingEdges(base, 2);
-  std::vector<SubsetDefinition> expected = {s1, s2, s3};
+  std::vector<Encoder::Edge> expected = {{s1}, {s2}, {s1, s2}};
   ASSERT_EQ(combos, expected);
 }
 
