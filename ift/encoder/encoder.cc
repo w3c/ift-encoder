@@ -55,20 +55,6 @@ using ift::proto::TABLE_KEYED_PARTIAL;
 
 namespace ift::encoder {
 
-struct Jump {
-  SubsetDefinition base;
-  SubsetDefinition target;
-
-  bool operator==(const Jump& other) const {
-    return base == other.base && target == other.target;
-  }
-
-  template <typename H>
-  friend H AbslHashValue(H h, const Jump& s) {
-    return H::combine(std::move(h), s.base, s.target);
-  }
-};
-
 static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
                             uint32_t choose, std::vector<Encoder::Edge>& out) {
   if (!choose || in.size() < choose) {
@@ -432,18 +418,26 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return sc;
   }
 
-  std::vector<uint32_t> ids;
+  // TODO(garretrieger): XXXXX extract this to a helper.
+  flat_hash_map<Jump, uint32_t> id_map;
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
   for (const auto& edge : edges) {
-    // XXXX(grieger): need to cache (base, subset) -> id so we can reuse ids as
-    // needed in preload lists.
-    uint32_t id = context.next_id_++;
-    ids.push_back(id);
+    std::vector<uint32_t> edge_patches;
+    for (Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
+      auto [it, did_insert] = id_map.insert(std::pair(std::move(j), context.next_id_));
+      if (did_insert) {
+        context.next_id_++;
+      }
+      edge_patches.push_back(it->second);
+    }
 
-    PatchMap::Coverage coverage = edge.Combined().ToCoverage();  // TODO XXXX
-    TRYV(table_keyed_patch_map.AddEntry(coverage, id, encoding));
+    if (!edge_patches.empty()) {
+      PatchMap::Coverage coverage = edge.Combined().ToCoverage();
+      // TODO XXXXX add multi id patch map entry using edge_ids.
+      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches[0], encoding));
+    }
   }
 
   auto face = base->face();
@@ -467,47 +461,49 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   }
 
   context.built_subsets_[base_subset].shallow_copy(*base);
+  IntSet built_patches;
 
-  uint32_t i = 0;
   for (const auto& edge : edges) {
-    // XXXXX Introduce a cache of (base, subset def) -> patch URL
-    // XXXXX for a preload list case base_subset will change as you go down the
-    // list.
-    uint32_t id = ids[i++];
-    SubsetDefinition combined_subset =
-        Combine(base_subset, edge.Combined());  // TODO XXX
-    auto next = Encode(context, combined_subset, false);
-    if (!next.ok()) {
-      return next.status();
-    }
+    for (const auto& j : edge.Jumps(base_subset, use_preload_lists_)) {
+      uint32_t id = id_map[j];
+      if (built_patches.contains(id)) {
+        continue;
+      }
 
-    // Check if the main table URL will change with this subset
-    std::string next_glyph_keyed_uri_template;
-    CompatId next_glyph_keyed_compat_id;
-    auto sc = EnsureGlyphKeyedPatchesPopulated(
-        context, combined_subset.design_space, next_glyph_keyed_uri_template,
-        next_glyph_keyed_compat_id);
-    if (!sc.ok()) {
-      return sc;
-    }
+      auto next = Encode(context, j.target, false);
+      if (!next.ok()) {
+        return next.status();
+      }
 
-    bool replace_url_template =
-        IsMixedMode() &&
-        (next_glyph_keyed_uri_template != glyph_keyed_uri_template);
+      // Check if the main table URL will change with this subset
+      std::string next_glyph_keyed_uri_template;
+      CompatId next_glyph_keyed_compat_id;
+      auto sc = EnsureGlyphKeyedPatchesPopulated(context, j.target.design_space,
+                                                 next_glyph_keyed_uri_template,
+                                                 next_glyph_keyed_compat_id);
+      if (!sc.ok()) {
+        return sc;
+      }
 
-    FontData patch;
-    auto differ =
-        GetDifferFor(*next, table_keyed_compat_id, replace_url_template);
-    if (!differ.ok()) {
-      return differ.status();
-    }
-    sc = (*differ)->Diff(*base, *next, &patch);
-    if (!sc.ok()) {
-      return sc;
-    }
+      bool replace_url_template =
+          IsMixedMode() &&
+          (next_glyph_keyed_uri_template != glyph_keyed_uri_template);
 
-    std::string url = URLTemplate::PatchToUrl(table_keyed_uri_template, id);
-    context.patches_[url].shallow_copy(patch);
+      FontData patch;
+      auto differ =
+          GetDifferFor(*next, table_keyed_compat_id, replace_url_template);
+      if (!differ.ok()) {
+        return differ.status();
+      }
+      sc = (*differ)->Diff(*base, *next, &patch);
+      if (!sc.ok()) {
+        return sc;
+      }
+
+      std::string url = URLTemplate::PatchToUrl(table_keyed_uri_template, id);
+      context.patches_[url].shallow_copy(patch);
+      built_patches.insert(id);
+    }
   }
 
   return base;
