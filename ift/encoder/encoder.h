@@ -133,10 +133,27 @@ class Encoder {
     return absl::OkStatus();
   }
 
+  struct Jump {
+    Jump(SubsetDefinition base_, SubsetDefinition target_)
+        : base(base_), target(target_) {}
+
+    SubsetDefinition base;
+    SubsetDefinition target;
+
+    bool operator==(const Jump& other) const {
+      return base == other.base && target == other.target;
+    }
+
+    template <typename H>
+    friend H AbslHashValue(H h, const Jump& s) {
+      return H::combine(std::move(h), s.base, s.target);
+    }
+  };
+
   /*
-  * An edge in an IFT patch graph, traversing this edge adds one or more subsets
-  * to the font.
-  */
+   * An edge in an IFT patch graph, traversing this edge adds one or more
+   * subsets to the font.
+   */
   class Edge {
    public:
     Edge(std::initializer_list<SubsetDefinition> values) : subsets_(values) {
@@ -155,7 +172,35 @@ class Encoder {
     }
 
     // Returns the total effective subset definition added by this edge.
-    const auto& Combined() const { return combined_; }
+    const SubsetDefinition& Combined() const { return combined_; }
+
+    std::vector<Jump> Jumps(const SubsetDefinition& base,
+                            bool use_preload_lists) const {
+      std::vector<Jump> result;
+      if (!use_preload_lists) {
+        SubsetDefinition next = base;
+        next.Union(Combined());
+        if (next == base) {
+          // Base does not need to be extended further
+          return result;
+        }
+        result.push_back(Jump(base, next));
+      } else {
+        SubsetDefinition current_base = base;
+        for (const auto& s : subsets_) {
+          SubsetDefinition next = current_base;
+          next.Union(s);
+
+          if (!(next == current_base)) {
+            result.push_back(Jump(current_base, next));
+            current_base = next;
+          }
+        }
+      }
+      return result;
+    }
+
+    const std::vector<SubsetDefinition>& Subsets() const { return subsets_; }
 
    private:
     std::vector<SubsetDefinition> subsets_;
