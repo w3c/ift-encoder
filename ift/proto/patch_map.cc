@@ -92,7 +92,17 @@ void PrintTo(const PatchMap::Coverage& coverage, std::ostream* os) {
 
 void PrintTo(const PatchMap::Entry& entry, std::ostream* os) {
   PrintTo(entry.coverage, os);
-  *os << ", " << entry.patch_index << ", " << entry.encoding;
+  *os << ", {";
+  bool first = true;
+  for (uint32_t p : entry.patch_indices) {
+    if (!first) {
+      *os << ", ";
+    } else {
+      first = false;
+    }
+    *os << p;
+  }
+  *os << "}, " << entry.encoding;
 }
 
 void PrintTo(const PatchMap& map, std::ostream* os) {
@@ -110,6 +120,13 @@ Span<const PatchMap::Entry> PatchMap::GetEntries() const { return entries_; }
 Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
                           uint32_t patch_index, PatchEncoding encoding,
                           bool ignored) {
+  return AddEntry(coverage, std::vector<uint32_t>{patch_index}, encoding,
+                  ignored);
+}
+
+Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
+                          const std::vector<uint32_t>& patch_indices,
+                          PatchEncoding encoding, bool ignored) {
   // If child indices are present ensure they refer only to entries prior to
   // this one.
   if (!coverage.child_indices.empty()) {
@@ -121,9 +138,13 @@ Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
     }
   }
 
+  if (patch_indices.empty()) {
+    return absl::InvalidArgumentError("At least one patch index must be given.");
+  }
+
   Entry e;
   e.coverage = coverage;
-  e.patch_index = patch_index;
+  e.patch_indices = patch_indices;
   e.encoding = encoding;
   e.ignored = ignored;
   entries_.push_back(std::move(e));

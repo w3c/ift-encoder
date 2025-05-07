@@ -67,19 +67,24 @@ class PatchMap {
     Entry() {}
     Entry(std::initializer_list<uint32_t> codepoints, uint32_t patch_idx,
           PatchEncoding enc)
-        : coverage(codepoints), patch_index(patch_idx), encoding(enc) {}
+        : coverage(codepoints), patch_indices{patch_idx}, encoding(enc) {}
+
+    Entry(std::initializer_list<uint32_t> codepoints,
+          const std::vector<uint32_t>& patches, PatchEncoding enc)
+        : coverage(codepoints), patch_indices(patches), encoding(enc) {}
 
     friend void PrintTo(const Entry& point, std::ostream* os);
 
     bool operator==(const Entry& other) const {
-      return other.coverage == coverage && other.patch_index == patch_index &&
+      return other.coverage == coverage &&
+             other.patch_indices == patch_indices &&
              other.encoding == encoding && other.ignored == ignored;
     }
 
     bool IsInvalidating() const { return PatchMap::IsInvalidating(encoding); }
 
     Coverage coverage;
-    uint32_t patch_index;
+    std::vector<uint32_t> patch_indices;
     PatchEncoding encoding;
     bool ignored = false;
   };
@@ -98,7 +103,15 @@ class PatchMap {
 
   absl::Span<const Entry> GetEntries() const;
 
+  // Adds a mapping to this patch map which triggers patch_index for coverage.
   absl::Status AddEntry(const Coverage& coverage, uint32_t patch_index,
+                        ift::proto::PatchEncoding encoding,
+                        bool ignored = false);
+
+  // Adds a mapping to this patch map which triggers the first element of
+  // patch_indices for coverage, and preloads all remaining entries.
+  absl::Status AddEntry(const Coverage& coverage,
+                        const std::vector<uint32_t>& patch_indices,
                         ift::proto::PatchEncoding encoding,
                         bool ignored = false);
 
