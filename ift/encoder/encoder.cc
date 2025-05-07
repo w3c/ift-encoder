@@ -426,7 +426,8 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   for (const auto& edge : edges) {
     std::vector<uint32_t> edge_patches;
     for (Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
-      auto [it, did_insert] = id_map.insert(std::pair(std::move(j), context.next_id_));
+      auto [it, did_insert] =
+          id_map.insert(std::pair(std::move(j), context.next_id_));
       if (did_insert) {
         context.next_id_++;
       }

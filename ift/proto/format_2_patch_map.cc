@@ -200,11 +200,16 @@ Status EncodeEntries(Span<const PatchMap::Entry> entries,
   // TODO(garretrieger): identify and copy existing entries when possible.
   uint32_t last_entry_index = 0;
   for (const auto& entry : entries) {
+    if (entry.patch_indices.empty()) {
+      // No activated patch means this entry does nothing, so skip it.
+      continue;
+    }
+
     auto s = EncodeEntry(entry, last_entry_index, default_encoding, out);
     if (!s.ok()) {
       return s;
     }
-    last_entry_index = entry.patch_index;
+    last_entry_index = entry.patch_indices.back();
   }
 
   return absl::OkStatus();
@@ -268,8 +273,11 @@ Status EncodeEntry(const PatchMap::Entry& entry, uint32_t last_entry_index,
   bool has_design_space = !coverage.design_space.empty();
   bool has_child_indices = !coverage.child_indices.empty();
   bool has_features_or_design_space = has_features || has_design_space;
+
+  // TODO XXXX handle multiple entry indices
+  int64_t entry_index = entry.patch_indices.front();
   int64_t delta =
-      ((int64_t)entry.patch_index) - ((int64_t)last_entry_index + 1);
+      entry_index - ((int64_t)last_entry_index + 1);
   bool has_delta = delta != 0;
   bool has_patch_encoding = entry.encoding != default_encoding;
 
