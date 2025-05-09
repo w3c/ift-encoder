@@ -500,7 +500,7 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
   std::string entry_0 = {
       0x14,                                // format = Codepoints | ID delta
       0x00,       0x00,       0x0D,        // ID delta +6 -> 7 (has more)
-      (char)0xFF, (char)0xFF, (char)0xFB,  // ID delta -3 -> 5 (has more)
+      (char)0xFF, (char)0xFF, (char)0xF9,  // ID delta -3 -> 5 (has more)
       0x00,       0x00,       0x0C,        // ID delta +6 -> 12
       0x05,       0x0e,                    // codepoints = {1, 2, 3}
   };
@@ -512,7 +512,7 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
 
   std::string entry_2 = {
       0x14,                                // format = Codepoints | ID delta
-      (char)0xff, (char)0xff, (char)0xf9,  // ID delta = -4 -> 10 (has more)
+      (char)0xff, (char)0xff, (char)0xf7,  // ID delta = -4 -> 10 (has more)
       0x00,       0x00,       0x00,        // ID delta = 0 -> 11
       0x0d,       0x42,       0x0e,        // codepoints = {25, 26, 27}
   };

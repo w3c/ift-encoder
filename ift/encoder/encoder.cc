@@ -418,16 +418,15 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return sc;
   }
 
-  // TODO(garretrieger): XXXXX extract this to a helper.
-  flat_hash_map<Jump, uint32_t> id_map;
+  // TODO(garretrieger): XXXXX extract this to a helper
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
   for (const auto& edge : edges) {
     std::vector<uint32_t> edge_patches;
     for (Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
-      auto [it, did_insert] =
-          id_map.insert(std::pair(std::move(j), context.next_id_));
+      auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
+          std::pair(std::move(j), context.next_id_));
       if (did_insert) {
         context.next_id_++;
       }
@@ -461,12 +460,11 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   }
 
   context.built_subsets_[base_subset].shallow_copy(*base);
-  IntSet built_patches;
 
   for (const auto& edge : edges) {
     for (const auto& j : edge.Jumps(base_subset, use_preload_lists_)) {
-      uint32_t id = id_map[j];
-      if (built_patches.contains(id)) {
+      uint32_t id = context.table_keyed_patch_id_map_[j];
+      if (context.built_table_keyed_patches_.contains(id)) {
         continue;
       }
 
@@ -502,7 +500,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
 
       std::string url = URLTemplate::PatchToUrl(table_keyed_uri_template, id);
       context.patches_[url].shallow_copy(patch);
-      built_patches.insert(id);
+      context.built_table_keyed_patches_.insert(id);
     }
   }
 
