@@ -139,7 +139,8 @@ Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
   }
 
   if (patch_indices.empty()) {
-    return absl::InvalidArgumentError("At least one patch index must be given.");
+    return absl::InvalidArgumentError(
+        "At least one patch index must be given.");
   }
 
   Entry e;
