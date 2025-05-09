@@ -344,6 +344,9 @@ class Encoder {
 
     absl::flat_hash_map<SubsetDefinition, common::FontData> built_subsets_;
     absl::flat_hash_map<std::string, common::FontData> patches_;
+    absl::flat_hash_map<Jump, uint32_t> table_keyed_patch_id_map_;
+    common::IntSet built_table_keyed_patches_;
+
     SubsetDefinition base_subset_;
 
     common::CompatId GenerateCompatId();

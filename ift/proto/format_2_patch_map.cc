@@ -281,7 +281,14 @@ Status EncodeEntryIds(int64_t last_entry_index,
     next_delta *= 2;
     if (!is_last) {
       // Set the least significant bit to indicate another delta follows.
-      next_delta |= 0b00000001;
+      // since we multiplied by 2 delta will be even, to set the lsb we just
+      // need to make it even by adding 1 (without changing the result of
+      // next_delta/2).
+      if (next_delta > 0) {
+        next_delta++;
+      } else {
+        next_delta--;
+      }
     }
 
     WRITE_INT24(next_delta, out,
