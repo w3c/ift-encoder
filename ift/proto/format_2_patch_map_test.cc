@@ -443,20 +443,78 @@ TEST_F(Format2PatchMapTest, IndexDeltas) {
 
   std::string entry_0 = {
       0x14,              // format = Codepoints | ID delta
-      0x00, 0x00, 0x06,  // ID delta +6 -> 7
+      0x00, 0x00, 0x0C,  // ID delta +6 -> 7
       0x05, 0x0e,        // codepoints = {1, 2, 3}
   };
 
   std::string entry_1 = {
       0x14,                                // format = Codepoints | ID delta
-      (char)0xff, (char)0xff, (char)0xfc,  // ID delta -4 -> 4
+      (char)0xff, (char)0xff, (char)0xf8,  // ID delta -4 -> 4
       0x0d,       (char)0x83, (char)0x81, 0x03,  // codepoints = {15, 16, 17}
   };
 
   std::string entry_2 = {
       0x14,              // format = Codepoints | ID delta
-      0x00, 0x00, 0x05,  // ID delta = +5 -> 10
+      0x00, 0x00, 0x0A,  // ID delta = +5 -> 10
       0x0d, 0x42, 0x0e,  // codepoints = {25, 26, 27}
+  };
+
+  ASSERT_EQ(*encoded, absl::StrCat(header, entry_0, entry_1, entry_2));
+}
+
+TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
+  IFTTable table;
+  PatchMap::Coverage coverage1{1, 2, 3};
+  auto sc =
+      table.GetPatchMap().AddEntry(coverage1, {7, 5, 12}, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  PatchMap::Coverage coverage2{15, 16, 17};
+  sc = table.GetPatchMap().AddEntry(coverage2, 13, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  PatchMap::Coverage coverage3{25, 26, 27};
+  sc = table.GetPatchMap().AddEntry(coverage3, {10, 11}, TABLE_KEYED_FULL);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  std::string uri_template = "foo/$1";
+  table.SetUrlTemplate(uri_template);
+  table.SetId({1, 2, 3, 4});
+
+  auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
+  ASSERT_TRUE(encoded.ok()) << encoded.status();
+
+  std::string header = {
+      0x02,                    // format
+      0x00, 0x00, 0x00, 0x00,  // reserved
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
+      0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04,  // compat id
+
+      0x01,                    // default format (Table Keyed Full)
+      0x00, 0x00, 0x03,        // entry count
+      0x00, 0x00, 0x00, 0x29,  // entries
+      0x00, 0x00, 0x00, 0x00,  // id string data
+      0x00, 0x06, 0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31  // uri template
+  };
+
+  std::string entry_0 = {
+      0x14,                                // format = Codepoints | ID delta
+      0x00,       0x00,       0x0D,        // ID delta +6 -> 7 (has more)
+      (char)0xFF, (char)0xFF, (char)0xFB,  // ID delta -3 -> 5 (has more)
+      0x00,       0x00,       0x0C,        // ID delta +6 -> 12
+      0x05,       0x0e,                    // codepoints = {1, 2, 3}
+  };
+
+  std::string entry_1 = {
+      0x10,                                // format = Codepoints
+      0x0d, (char)0x83, (char)0x81, 0x03,  // codepoints = {15, 16, 17}
+  };
+
+  std::string entry_2 = {
+      0x14,                                // format = Codepoints | ID delta
+      (char)0xff, (char)0xff, (char)0xf9,  // ID delta = -4 -> 10 (has more)
+      0x00,       0x00,       0x00,        // ID delta = 0 -> 11
+      0x0d,       0x42,       0x0e,        // codepoints = {25, 26, 27}
   };
 
   ASSERT_EQ(*encoded, absl::StrCat(header, entry_0, entry_1, entry_2));

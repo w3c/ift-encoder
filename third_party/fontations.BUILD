@@ -6,10 +6,11 @@ rust_binary(
       + ["incremental-font-transfer/src/bin/ift_graph.rs"],
     deps = [
       "@fontations_deps//:clap",
-	    ":incremental_font_transfer",
-	    ":skrifa",
+      ":incremental_font_transfer",
+      ":skrifa",
       ":read_fonts",
       ":font_types",
+      ":shared_brotli_patch_decoder",
     ],
     visibility = ["//visibility:public"],
 )

@@ -11,6 +11,7 @@
 #include "common/font_helper_macros.h"
 #include "common/int_set.h"
 #include "common/sparse_bit_set.h"
+#include "common/try.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -265,6 +266,31 @@ uint8_t BiasFormat(uint8_t bias_bytes) {
   }
 }
 
+Status EncodeEntryIds(int64_t last_entry_index,
+                      const std::vector<uint32_t>& patch_indices,
+                      std::string& out) {
+  for (uint32_t i = 0; i < patch_indices.size(); i++) {
+    bool is_last = (i + 1) == patch_indices.size();
+    int64_t entry_index = patch_indices[i];
+    int64_t next_delta = entry_index - ((int64_t)last_entry_index + 1);
+
+    last_entry_index = entry_index;
+
+    // See: https://w3c.github.io/IFT/Overview.html#mapping-entry-entryiddelta
+    // We store the delta value * 2 and use the lsb to indicate if there is more
+    next_delta *= 2;
+    if (!is_last) {
+      // Set the least significant bit to indicate another delta follows.
+      next_delta |= 0b00000001;
+    }
+
+    WRITE_INT24(next_delta, out,
+                StrCat("Exceed max entry index delta (int24): ", next_delta));
+  }
+
+  return absl::OkStatus();
+}
+
 Status EncodeEntry(const PatchMap::Entry& entry, uint32_t last_entry_index,
                    PatchEncoding default_encoding, std::string& out) {
   const auto& coverage = entry.coverage;
@@ -274,11 +300,9 @@ Status EncodeEntry(const PatchMap::Entry& entry, uint32_t last_entry_index,
   bool has_child_indices = !coverage.child_indices.empty();
   bool has_features_or_design_space = has_features || has_design_space;
 
-  // TODO XXXX handle multiple entry indices
-  int64_t entry_index = entry.patch_indices.front();
-  int64_t delta =
-      entry_index - ((int64_t)last_entry_index + 1);
-  bool has_delta = delta != 0;
+  int64_t first_entry_index = entry.patch_indices.front();
+  int64_t first_delta = first_entry_index - ((int64_t)last_entry_index + 1);
+  bool has_delta = (first_delta != 0) || entry.patch_indices.size() > 1;
   bool has_patch_encoding = entry.encoding != default_encoding;
 
   uint8_t bias_bytes = BiasBytes(entry.coverage);
@@ -332,8 +356,7 @@ Status EncodeEntry(const PatchMap::Entry& entry, uint32_t last_entry_index,
   }
 
   if (has_delta) {
-    WRITE_INT24(delta, out,
-                StrCat("Exceed max entry index delta (int24): ", delta));
+    TRYV(EncodeEntryIds(last_entry_index, entry.patch_indices, out));
   }
 
   if (has_patch_encoding) {

@@ -884,12 +884,12 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
 
       // entry[0] {{2}} -> 2,
       0b00010100,        // format (id delta, code points no bias)
-      0x00, 0x00, 0x01,  // delta +1, id = 2
+      0x00, 0x00, 0x02,  // delta +1, id = 2
       0x11, 0x42, 0x41,  // sparse set {b}
 
       // entry[1] {{3}} -> 4
       0b00010100,        // format (id delta, code points no bias)
-      0x00, 0x00, 0x01,  // delta +1, id = 4
+      0x00, 0x00, 0x02,  // delta +1, id = 4
       0x11, 0x42, 0x81,  // sparse set {c}
 
       // entry[2] {{1}} ignored
@@ -905,7 +905,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0x02,              // copy mode union, count 2
       0x00, 0x00, 0x01,  // copy entry[1] 'c'
       0x00, 0x00, 0x02,  // copy entry[2] 'a'
-      0xff, 0xff, 0xfe,  // delta -2, id = 5
+      0xff, 0xff, 0xfc,  // delta -2, id = 5
 
       // entry[5] {{2 OR 4}} ignored
       0b01000010,        // format (ignored, copy indices)
@@ -918,7 +918,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0x82,              // copy mode append, count 2
       0x00, 0x00, 0x04,  // copy entry[4] {1 OR 3}
       0x00, 0x00, 0x05,  // copy entry[5] {2 OR 4}
-      0xff, 0xff, 0xff   // delta -1, id = 6
+      0xff, 0xff, 0xfe   // delta -1, id = 6
   };
 
   ASSERT_EQ(ift_table.span(), absl::Span<const uint8_t>(expected_format2, 100));
