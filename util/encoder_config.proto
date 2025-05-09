@@ -89,6 +89,10 @@ message EncoderConfig {
   // segments in a single patch. Defaults to 1.
   uint32 jump_ahead = 4;
 
+  // For table keyed patches when jump_ahead is > 1 the multi segment patches will use preload lists
+  // instead of a single patch to make the multi segment jump.
+  bool use_preload_lists = 5;
+
   // For table keyed patches the patch graph will be at most this many levels deep, or in other
   // words at most max depth round trips will ever be needed to reach any content in the font.
   // 
@@ -98,7 +102,7 @@ message EncoderConfig {
   // Defaults to unlimited depth.
   //
   // Note: this is currently UNIMPLEMENTED in the encoder.
-  uint32 max_depth = 5;
+  uint32 max_depth = 6;
 
   // In the generated table keyed patch graph every node (in addition to the usual patches) will
   // have a patch available which adds everything remaining to the font. This makes it possible
@@ -106,7 +110,7 @@ message EncoderConfig {
   // intermediate (or initial) state.
   //
   // Note: this is currently UNIMPLEMENTED in the encoder.
-  bool include_all_segment_patches = 6;
+  bool include_all_segment_patches = 7;
 
   // The initial_* fields defines all of the data that the initial IFT font will include. If these are all
   // left empty then the initial font will be a desiccated font which contains the minimum possible amount of
@@ -114,21 +118,21 @@ message EncoderConfig {
   //
   // init_codepoint_sets contains codepoint set ids referencing "codepoint_sets". Each referenced set will be
   // unioned into initial_codepoints.
-  Codepoints initial_codepoints = 7;
-  CodepointSets initial_codepoint_sets = 8;
-  Features initial_features = 9;
-  DesignSpace initial_design_space = 10;
+  Codepoints initial_codepoints = 8;
+  CodepointSets initial_codepoint_sets = 9;
+  Features initial_features = 10;
+  DesignSpace initial_design_space = 11;
 
   // Groups of codepoints which the non glyph data in the font can be extended in a single
   // jump. These can be specified as either groups of codepoints
   // (via non_glyph_codepoint_segmentation), or by grouping together codepoint sets defined
   // above (via glyph_patch_groupings).
-  repeated Codepoints non_glyph_codepoint_segmentation = 11;
+  repeated Codepoints non_glyph_codepoint_segmentation = 12;
 
   // An alternative way to specify codepoint segmentations. One segment will be formed from
   // the union of all of the codepoints associated with each referenced codepoint set (from EncoderConfig.codepoint_sets).
   // This field can be used in addition to non_glyph_codepoint_segmentation.
-  repeated CodepointSets non_glyph_codepoint_set_groups = 12;
+  repeated CodepointSets non_glyph_codepoint_set_groups = 13;
 
   // Groups of open type layout features which the non glyph data in the font can be extended
   // for in a single jump.
@@ -137,11 +141,11 @@ message EncoderConfig {
   //       in the "default feature list" (https://w3c.github.io/IFT/Overview.html#feature-tag-list)
   //       so this segmentation should be used to provide optional access to features not already
   //       on that list.
-  repeated Features non_glyph_feature_segmentation = 13;
+  repeated Features non_glyph_feature_segmentation = 14;
 
   // Parts of the fonts overall design space which the non glyph data in the font can be extended
   // for in a single jump.
-  repeated DesignSpace non_glyph_design_space_segmentation = 14;
+  repeated DesignSpace non_glyph_design_space_segmentation = 15;
 }
 
 // Activated when at least one set in every group is matched and all required_features match.

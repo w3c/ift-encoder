@@ -938,4 +938,6 @@ TEST_F(EncoderTest, RoundTripWoff2_Fails) {
   ASSERT_TRUE(absl::IsInternal(ttf.status())) << ttf.status();
 }
 
+// TODO XXXXX tests for table keyed w/ preload lists.
+
 }  // namespace ift::encoder
