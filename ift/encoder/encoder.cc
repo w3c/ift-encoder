@@ -436,8 +436,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
 
     if (!edge_patches.empty()) {
       PatchMap::Coverage coverage = edge.Combined().ToCoverage();
-      // TODO XXXXX add multi id patch map entry using edge_ids.
-      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches[0], encoding));
+      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches, encoding));
     }
   }
 
