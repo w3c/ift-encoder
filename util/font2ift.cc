@@ -253,6 +253,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   if (config.jump_ahead() > 1) {
     encoder.SetJumpAhead(config.jump_ahead());
   }
+  encoder.SetUsePreloadLists(config.use_preload_lists());
 
   // Check for unsupported settings
   if (config.include_all_segment_patches()) {
