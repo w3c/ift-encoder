@@ -1,5 +1,6 @@
 #include "ift/client/fontations_client.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <sstream>
@@ -56,7 +57,7 @@ void ParseGraph(const std::string& text, graph& out) {
 
 void ParseFetched(const std::string& text, btree_set<std::string>& uris_out) {
   std::stringstream ss(text);
-  std::string marker("    fetching ");
+  std::string marker("    Fetching ");
 
   std::string line;
   while (getline(ss, line)) {
@@ -138,7 +139,9 @@ StatusOr<FontData> ExtendWithDesignSpace(
     const Encoder::Encoding& encoding, const IntSet& codepoints,
     const btree_set<hb_tag_t>& feature_tags,
     const flat_hash_map<hb_tag_t, AxisRange>& design_space,
-    btree_set<std::string>* applied_uris) {
+    btree_set<std::string>* applied_uris,
+    uint32_t max_round_trips,
+    uint32_t max_fetches) {
   auto font_path_str = WriteFontToDisk(encoding);
   if (!font_path_str.ok()) {
     return font_path_str.status();
@@ -189,7 +192,8 @@ StatusOr<FontData> ExtendWithDesignSpace(
       absl::StrCat("${TEST_SRCDIR}/+_repo_rules+fontations/ift_extend --font=",
                    font_path.string(), " --unicodes=\"", unicodes,
                    "\" --design-space=\"", design_space_str, "\" --features=\"",
-                   features, "\" --output=", output.string());
+                   features, "\" --max-round-trips=", max_round_trips,
+                   " --max-fetches=", max_fetches," --output=", output.string());
   auto r = Exec(command.c_str());
   if (!r.ok()) {
     return r.status();
@@ -203,9 +207,11 @@ StatusOr<FontData> ExtendWithDesignSpace(
 }
 
 StatusOr<FontData> Extend(const Encoder::Encoding& encoding,
-                          const IntSet& codepoints) {
+                          const IntSet& codepoints,
+                          uint32_t max_round_trips,
+                          uint32_t max_fetches) {
   absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
-  return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr);
+  return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr, max_round_trips, max_fetches);
 }
 
 }  // namespace ift::client
