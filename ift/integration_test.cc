@@ -379,6 +379,50 @@ TEST_F(IntegrationTest, TableKeyedMultiple) {
   GlyphDataMatches(original_face.get(), extended_face.get(), 0x4E);
 }
 
+TEST_F(IntegrationTest, TableKeyed_JumpAheadAndPreloadLists) {
+  Encoder encoder;
+  auto sc = InitEncoderForTableKeyed(encoder);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(IntSet{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(IntSet{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
+  encoder.SetJumpAhead(3);
+  encoder.SetUsePreloadLists(true);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  auto encoded_face = encoding->init_font.face();
+  auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_FALSE(codepoints.contains(0x45));
+  ASSERT_FALSE(codepoints.contains(0x48));
+  ASSERT_FALSE(codepoints.contains(0x4B));
+  ASSERT_FALSE(codepoints.contains(0x4E));
+
+  auto extended = Extend(*encoding, {0x49, 0x4C, 0x4F});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_FALSE(codepoints.contains(0x45));
+  ASSERT_TRUE(codepoints.contains(0x48));
+  ASSERT_TRUE(codepoints.contains(0x4B));
+  ASSERT_TRUE(codepoints.contains(0x4E));
+
+  auto original_face = noto_sans_jp_.face();
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x41);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x45);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x48);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x4B);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x4E);
+}
+
 TEST_F(IntegrationTest, TableKeyedWithOverlaps) {
   Encoder encoder;
   auto sc = InitEncoderForTableKeyed(encoder);
