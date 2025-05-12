@@ -37,11 +37,15 @@ absl::StatusOr<common::FontData> ExtendWithDesignSpace(
     const common::IntSet& codepoints,
     const absl::btree_set<hb_tag_t>& feature_tags,
     const absl::flat_hash_map<hb_tag_t, common::AxisRange>& design_space,
-    absl::btree_set<std::string>* applied_uris = nullptr);
+    absl::btree_set<std::string>* applied_uris = nullptr,
+    uint32_t max_round_trips = UINT32_MAX,
+    uint32_t max_fetches = UINT32_MAX);
 
 absl::StatusOr<common::FontData> Extend(
     const ift::encoder::Encoder::Encoding& encoding,
-    const common::IntSet& codepoints);
+    const common::IntSet& codepoints,
+    uint32_t max_round_trips = UINT32_MAX,
+    uint32_t max_fetches = UINT32_MAX);
 
 }  // namespace ift::client
 

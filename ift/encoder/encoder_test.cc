@@ -779,6 +779,41 @@ TEST_F(EncoderTest, Encode_FourSubsets_WithJumpAhead) {
   ASSERT_EQ(g, expected);
 }
 
+TEST_F(EncoderTest, Encode_FourSubsets_WithJumpAhead_AndPreload) {
+  IntSet s1 = {'b'};
+  IntSet s2 = {'c'};
+  IntSet s3 = {'d'};
+  Encoder encoder;
+  hb_face_t* face = font.reference_face();
+  encoder.SetFace(face);
+  auto s = encoder.SetBaseSubset(IntSet{'a'});
+  ASSERT_TRUE(s.ok()) << s;
+  encoder.AddNonGlyphDataSegment(s1);
+  encoder.AddNonGlyphDataSegment(s2);
+  encoder.AddNonGlyphDataSegment(s3);
+  encoder.SetJumpAhead(2);
+  encoder.SetUsePreloadLists(true);
+
+  auto encoding = encoder.Encode();
+  hb_face_destroy(face);
+
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  ASSERT_EQ(encoding->patches.size(), 12);
+
+  graph g;
+  auto sc = ToGraph(*encoding, g);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // When preload lists are used all edges only move one subset at a time
+  // (with the multi subset jumps covered by preloading).
+  graph expected{
+      {"a", {"ab", "ac", "ad"}}, {"ab", {"abc", "abd"}}, {"ac", {"abc", "acd"}},
+      {"ad", {"abd", "acd"}},    {"abc", {"abcd"}},      {"abd", {"abcd"}},
+      {"acd", {"abcd"}},         {"abcd", {}},
+  };
+  ASSERT_EQ(g, expected);
+}
+
 void ClearCompatIdFromFormat2(uint8_t* data) {
   for (uint32_t index = 5; index < (5 + 16); index++) {
     data[index] = 0;
@@ -937,7 +972,5 @@ TEST_F(EncoderTest, RoundTripWoff2_Fails) {
   auto ttf = Encoder::RoundTripWoff2(woff2_font.str());
   ASSERT_TRUE(absl::IsInternal(ttf.status())) << ttf.status();
 }
-
-// TODO XXXXX tests for table keyed w/ preload lists.
 
 }  // namespace ift::encoder
