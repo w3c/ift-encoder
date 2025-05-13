@@ -466,7 +466,7 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
   IFTTable table;
   PatchMap::Coverage coverage1{1, 2, 3};
   auto sc =
-      table.GetPatchMap().AddEntry(coverage1, {7, 5, 12}, TABLE_KEYED_FULL);
+      table.GetPatchMap().AddEntry(coverage1, {7, 5, 6, 12}, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
   PatchMap::Coverage coverage2{15, 16, 17};
@@ -501,7 +501,8 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
       0x14,                                // format = Codepoints | ID delta
       0x00,       0x00,       0x0D,        // ID delta +6 -> 7 (has more)
       (char)0xFF, (char)0xFF, (char)0xF9,  // ID delta -3 -> 5 (has more)
-      0x00,       0x00,       0x0C,        // ID delta +6 -> 12
+      0x00,       0x00,       0x01,        // ID delta 0 -> 6 (has more)
+      0x00,       0x00,       0x0A,        // ID delta +5 -> 12
       0x05,       0x0e,                    // codepoints = {1, 2, 3}
   };
 
