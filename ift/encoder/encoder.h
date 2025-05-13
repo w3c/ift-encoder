@@ -256,6 +256,11 @@ class Encoder {
   absl::Status PopulateGlyphKeyedPatchMap(
       ift::proto::PatchMap& patch_map) const;
 
+  absl::Status PopulateTableKeyedPatchMap(
+      ProcessingContext& context, const SubsetDefinition& base_subset,
+      const std::vector<Encoder::Edge>& edges, proto::PatchEncoding encoding,
+      proto::PatchMap& table_keyed_patch_map) const;
+
   absl::StatusOr<hb_subset_plan_t*> CreateSubsetPlan(
       const ProcessingContext& context, hb_face_t* font,
       const SubsetDefinition& def) const;
