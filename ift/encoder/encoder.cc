@@ -368,6 +368,29 @@ Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
   return absl::OkStatus();
 }
 
+Status Encoder::PopulateTableKeyedPatchMap(
+    ProcessingContext& context, const SubsetDefinition& base_subset,
+    const std::vector<Encoder::Edge>& edges, PatchEncoding encoding,
+    PatchMap& table_keyed_patch_map) const {
+  for (const auto& edge : edges) {
+    std::vector<uint32_t> edge_patches;
+    for (Encoder::Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
+      auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
+          std::pair(std::move(j), context.next_id_));
+      if (did_insert) {
+        context.next_id_++;
+      }
+      edge_patches.push_back(it->second);
+    }
+
+    if (!edge_patches.empty()) {
+      PatchMap::Coverage coverage = edge.Combined().ToCoverage();
+      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches, encoding));
+    }
+  }
+  return absl::OkStatus();
+}
+
 StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
                                    const SubsetDefinition& base_subset,
                                    bool is_root) const {
@@ -418,26 +441,11 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return sc;
   }
 
-  // TODO(garretrieger): XXXXX extract this to a helper
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
-  for (const auto& edge : edges) {
-    std::vector<uint32_t> edge_patches;
-    for (Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
-      auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
-          std::pair(std::move(j), context.next_id_));
-      if (did_insert) {
-        context.next_id_++;
-      }
-      edge_patches.push_back(it->second);
-    }
-
-    if (!edge_patches.empty()) {
-      PatchMap::Coverage coverage = edge.Combined().ToCoverage();
-      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches, encoding));
-    }
-  }
+  TRYV(PopulateTableKeyedPatchMap(context, base_subset, edges, encoding,
+                                  table_keyed_patch_map));
 
   auto face = base->face();
   std::optional<IFTTable*> ext =
