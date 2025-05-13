@@ -139,8 +139,7 @@ StatusOr<FontData> ExtendWithDesignSpace(
     const Encoder::Encoding& encoding, const IntSet& codepoints,
     const btree_set<hb_tag_t>& feature_tags,
     const flat_hash_map<hb_tag_t, AxisRange>& design_space,
-    btree_set<std::string>* applied_uris,
-    uint32_t max_round_trips,
+    btree_set<std::string>* applied_uris, uint32_t max_round_trips,
     uint32_t max_fetches) {
   auto font_path_str = WriteFontToDisk(encoding);
   if (!font_path_str.ok()) {
@@ -188,12 +187,12 @@ StatusOr<FontData> ExtendWithDesignSpace(
   }
 
   // Run the extension
-  std::string command =
-      absl::StrCat("${TEST_SRCDIR}/+_repo_rules+fontations/ift_extend --font=",
-                   font_path.string(), " --unicodes=\"", unicodes,
-                   "\" --design-space=\"", design_space_str, "\" --features=\"",
-                   features, "\" --max-round-trips=", max_round_trips,
-                   " --max-fetches=", max_fetches," --output=", output.string());
+  std::string command = absl::StrCat(
+      "${TEST_SRCDIR}/+_repo_rules+fontations/ift_extend --font=",
+      font_path.string(), " --unicodes=\"", unicodes, "\" --design-space=\"",
+      design_space_str, "\" --features=\"", features,
+      "\" --max-round-trips=", max_round_trips, " --max-fetches=", max_fetches,
+      " --output=", output.string());
   auto r = Exec(command.c_str());
   if (!r.ok()) {
     return r.status();
@@ -207,11 +206,11 @@ StatusOr<FontData> ExtendWithDesignSpace(
 }
 
 StatusOr<FontData> Extend(const Encoder::Encoding& encoding,
-                          const IntSet& codepoints,
-                          uint32_t max_round_trips,
+                          const IntSet& codepoints, uint32_t max_round_trips,
                           uint32_t max_fetches) {
   absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
-  return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr, max_round_trips, max_fetches);
+  return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr,
+                               max_round_trips, max_fetches);
 }
 
 }  // namespace ift::client

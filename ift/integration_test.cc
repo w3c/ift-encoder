@@ -404,7 +404,8 @@ TEST_F(IntegrationTest, TableKeyed_JumpAheadAndPreloadLists) {
   ASSERT_FALSE(codepoints.contains(0x4B));
   ASSERT_FALSE(codepoints.contains(0x4E));
 
-  // With preload lists we will load 3 table keyed patches in parallel in one round trip.
+  // With preload lists we will load 3 table keyed patches in parallel in one
+  // round trip.
   auto extended = Extend(*encoding, {0x49, 0x4C, 0x4F}, 1, 3);
   ASSERT_TRUE(extended.ok()) << extended.status();
   auto extended_face = extended->face();
