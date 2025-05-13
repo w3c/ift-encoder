@@ -13,7 +13,6 @@ The current implementation is capable of producing a spec-compliant encoding, bu
 yet fully support all aspects of the specification. Notably:
 
 *  Format 1 patch maps are not generated.
-*  CFF and CFF2 based fonts are not supported.
 *  Handling of feature and design space extension in an encoding is only partially implemented.
 *  Not all encoder config options are supported yet. These are marked as unimplemented in the schema.
 
