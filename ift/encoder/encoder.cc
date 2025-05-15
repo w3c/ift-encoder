@@ -258,7 +258,20 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
   }
 
   Encoding result;
-  result.init_font.shallow_copy(*init_font);
+
+  if (woff2_encode_) {
+    // Glyph transforms in woff2 encoding aren't safe if we are patching glyf
+    // with a table keyed patch otherwise they are safe to use. See:
+    // https://w3c.github.io/IFT/Overview.html#ift-and-compression
+    hb_face_unique_ptr face = init_font->face();
+    auto tags = FontHelper::GetTags(face.get());
+    bool has_glyf =
+        tags.contains(FontHelper::kGlyf) || tags.contains(FontHelper::kLoca);
+    result.init_font = TRY(common::Woff2::EncodeWoff2(
+        init_font->str(), IsMixedMode() || !has_glyf));
+  } else {
+    result.init_font.shallow_copy(*init_font);
+  }
   result.patches = std::move(context.patches_);
   return result;
 }

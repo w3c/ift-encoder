@@ -51,6 +51,8 @@ class Encoder {
    */
   void SetUsePreloadLists(bool value) { this->use_preload_lists_ = value; }
 
+  void SetWoff2Encode(bool value) { this->woff2_encode_ = value; }
+
   /*
    * Adds a segmentation of glyph data.
    *
@@ -119,8 +121,6 @@ class Encoder {
    */
   absl::StatusOr<Encoding> Encode() const;
 
-  // TODO(garretrieger): update handling of encoding for use in woff2,
-  // see: https://w3c.github.io/IFT/Overview.html#ift-and-compression
   static absl::StatusOr<common::FontData> RoundTripWoff2(
       absl::string_view font, bool glyf_transform = true);
 
@@ -327,6 +327,7 @@ class Encoder {
   uint32_t jump_ahead_ = 1;
   uint32_t next_id_ = 0;
   bool use_preload_lists_ = false;
+  bool woff2_encode_ = false;
 
   struct ProcessingContext {
     ProcessingContext(uint32_t next_id)

@@ -8,6 +8,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "common/woff2.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
@@ -338,6 +339,53 @@ TEST_F(IntegrationTest, TableKeyedOnly) {
   GlyphDataMatches(original_face.get(), extended_face.get(), 0x49);
 }
 
+TEST_F(IntegrationTest, TableKeyedOnly_Woff2Encoded) {
+  Encoder encoder;
+  auto sc = InitEncoderForTableKeyed(encoder);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+  encoder.AddNonGlyphDataSegment(IntSet{0x45, 0x46, 0x47});
+  encoder.AddNonGlyphDataSegment(IntSet{0x48, 0x49, 0x4A});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4B, 0x4C, 0x4D});
+  encoder.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  encoder.SetWoff2Encode(true);
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
+  ASSERT_TRUE(woff2_decoded.ok()) << woff2_decoded.status();
+  encoding->init_font = std::move(*woff2_decoded);
+
+  auto encoded_face = encoding->init_font.face();
+  auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_FALSE(codepoints.contains(0x45));
+  ASSERT_FALSE(codepoints.contains(0x48));
+  ASSERT_FALSE(codepoints.contains(0x4B));
+  ASSERT_FALSE(codepoints.contains(0x4E));
+
+  auto extended = Extend(*encoding, {0x49});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+
+  auto extended_face = extended->face();
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_FALSE(codepoints.contains(0x45));
+  ASSERT_TRUE(codepoints.contains(0x48));
+  ASSERT_TRUE(codepoints.contains(0x49));
+  ASSERT_FALSE(codepoints.contains(0x4B));
+  ASSERT_FALSE(codepoints.contains(0x4E));
+
+  auto original_face = noto_sans_jp_.face();
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x41);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x48);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x49);
+}
+
 TEST_F(IntegrationTest, TableKeyedMultiple) {
   Encoder encoder;
   auto sc = InitEncoderForTableKeyed(encoder);
@@ -634,6 +682,88 @@ TEST_F(IntegrationTest, MixedMode) {
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  ASSERT_TRUE(FontHelper::GlyfData(encoded_face.get(), chunk2_gid_non_cmapped)
+                  ->empty());
+
+  auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
+  ASSERT_TRUE(codepoints.contains(chunk0_cp));
+  ASSERT_TRUE(codepoints.contains(chunk1_cp));
+  ASSERT_FALSE(codepoints.contains(chunk2_cp));
+  ASSERT_FALSE(codepoints.contains(chunk3_cp));
+  ASSERT_FALSE(codepoints.contains(chunk4_cp));
+
+  auto extended = Extend(*encoding, {chunk3_cp, chunk4_cp});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(chunk0_cp));
+  ASSERT_TRUE(codepoints.contains(chunk1_cp));
+  ASSERT_FALSE(codepoints.contains(chunk2_cp));
+  ASSERT_TRUE(codepoints.contains(chunk3_cp));
+  ASSERT_TRUE(codepoints.contains(chunk4_cp));
+
+  ASSERT_TRUE(!FontHelper::GlyfData(extended_face.get(), chunk0_gid)->empty());
+  ASSERT_TRUE(!FontHelper::GlyfData(extended_face.get(), chunk1_gid)->empty());
+  ASSERT_FALSE(!FontHelper::GlyfData(extended_face.get(), chunk2_gid)->empty());
+  ASSERT_FALSE(
+      !FontHelper::GlyfData(extended_face.get(), chunk2_gid_non_cmapped)
+           ->empty());
+  ASSERT_TRUE(!FontHelper::GlyfData(extended_face.get(), chunk3_gid)->empty());
+  ASSERT_TRUE(!FontHelper::GlyfData(extended_face.get(), chunk4_gid)->empty());
+
+  auto original_face = noto_sans_jp_.face();
+  GlyphDataMatches(original_face.get(), extended_face.get(), chunk0_gid);
+  GlyphDataMatches(original_face.get(), extended_face.get(), chunk1_gid);
+  GlyphDataMatches(original_face.get(), extended_face.get(), chunk3_gid);
+  GlyphDataMatches(original_face.get(), extended_face.get(), chunk4_gid);
+}
+
+TEST_F(IntegrationTest, MixedMode_Woff2Encoded) {
+  Encoder encoder;
+  auto init_gids = InitEncoderForMixedMode(encoder);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_jp_.face();
+  auto base_segment = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+
+  // target paritions: {{0, 1}, {2}, {3, 4}}
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestSegment4());
+
+  IntSet base;
+  base.insert(segment_0.begin(), segment_0.end());
+  base.insert(segment_1.begin(), segment_1.end());
+  auto sc = encoder.SetBaseSubset(base);
+
+  encoder.AddNonGlyphDataSegment(segment_2);
+
+  auto segment = segment_3;
+  segment.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Setup activations for 2 through 4 (1 is init)
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+
+  encoder.SetWoff2Encode(true);
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
+  ASSERT_TRUE(woff2_decoded.ok()) << woff2_decoded.status();
+  encoding->init_font = std::move(*woff2_decoded);
   auto encoded_face = encoding->init_font.face();
 
   ASSERT_TRUE(FontHelper::GlyfData(encoded_face.get(), chunk2_gid_non_cmapped)
