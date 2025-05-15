@@ -40,8 +40,14 @@ ABSL_FLAG(std::string, config, "",
 ABSL_FLAG(std::string, output_path, "./",
           "Path to write output files under (base font and patches).");
 
-ABSL_FLAG(std::string, output_font, "out.ttf",
+ABSL_FLAG(std::string, output_font, "out.woff2",
           "Name of the outputted base font.");
+
+ABSL_FLAG(
+    bool, woff2_encode, true,
+    "If enabled the output font will be woff2 encoded. Transformations "
+    "in woff2 will be disabled when necessary to keep the woff2 encoding "
+    "compatible with IFT.");
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -254,6 +260,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     encoder.SetJumpAhead(config.jump_ahead());
   }
   encoder.SetUsePreloadLists(config.use_preload_lists());
+  encoder.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
 
   // Check for unsupported settings
   if (config.include_all_segment_patches()) {
