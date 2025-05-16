@@ -43,11 +43,10 @@ ABSL_FLAG(std::string, output_path, "./",
 ABSL_FLAG(std::string, output_font, "out.woff2",
           "Name of the outputted base font.");
 
-ABSL_FLAG(
-    bool, woff2_encode, true,
-    "If enabled the output font will be woff2 encoded. Transformations "
-    "in woff2 will be disabled when necessary to keep the woff2 encoding "
-    "compatible with IFT.");
+ABSL_FLAG(bool, woff2_encode, true,
+          "If enabled the output font will be woff2 encoded. Transformations "
+          "in woff2 will be disabled when necessary to keep the woff2 encoding "
+          "compatible with IFT.");
 
 using absl::btree_set;
 using absl::flat_hash_map;

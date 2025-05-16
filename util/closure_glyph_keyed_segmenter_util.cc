@@ -22,6 +22,7 @@
 #include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
 #include "util/encoder_config.pb.h"
@@ -32,6 +33,8 @@
  * segmentation and associated activation conditions that maintain the "closure
  * requirement".
  */
+
+// TODO XXXX Add support for feature segments.
 
 // TODO(garretrieger): have option to output the glyph segmentation plan as an
 //                     encoder config proto. Basically two output modes:
@@ -282,9 +285,10 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     all_segments.insert(id);
   }
 
+  // TODO XXXXXX also includes segment features
   IntSet all_codepoints;
   for (const auto& s : segmentation.Segments()) {
-    all_codepoints.insert(s.begin(), s.end());
+    all_codepoints.insert(s.Codepoints().begin(), s.Codepoints().end());
   }
   encoder.AddNonGlyphDataSegment(all_codepoints);
 
@@ -296,7 +300,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   flat_hash_map<uint32_t, CodepointSet> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
-    segments[i++].insert(s.begin(), s.end());
+    segments[i++].union_set(s.Codepoints());
   }
 
   auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
@@ -310,12 +314,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<CodepointSet> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                          uint32_t number_of_segments) {
+std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
+                                     uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<CodepointSet> out;
+  std::vector<Segment> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -325,8 +329,10 @@ std::vector<CodepointSet> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    CodepointSet group;
-    group.insert(start, end);
+    Segment group;
+    for (; start != end; start++) {
+      group.AddCodepoint(*start);
+    }
     out.push_back(group);
   }
 
@@ -355,11 +361,14 @@ int main(int argc, char** argv) {
     }
     init_codepoints = *result;
   }
-  CodepointSet init_codepoints_set;
-  init_codepoints_set.insert(init_codepoints.begin(), init_codepoints.end());
+  Segment init_segment;
+  for (hb_codepoint_t cp : init_codepoints) {
+    init_segment.AddCodepoint(cp);
+  }
 
-  auto codepoints = TargetCodepoints(
-      font->get(), absl::GetFlag(FLAGS_codepoints_file), init_codepoints_set);
+  auto codepoints =
+      TargetCodepoints(font->get(), absl::GetFlag(FLAGS_codepoints_file),
+                       init_segment.Codepoints());
   if (!codepoints.ok()) {
     std::cerr << "Failed to load codepoints file: " << codepoints.status()
               << std::endl;
@@ -371,7 +380,7 @@ int main(int argc, char** argv) {
 
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(
-      font->get(), init_codepoints_set, groups,
+      font->get(), init_segment, groups,
       absl::GetFlag(FLAGS_min_patch_size_bytes),
       absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (!result.ok()) {
