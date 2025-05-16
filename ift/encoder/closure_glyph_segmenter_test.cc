@@ -4,6 +4,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/encoder/segment.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -43,7 +44,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {{'b'}, {'c'}};
+  std::vector<Segment> expected_segments = {{'b'}, {'c'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -60,7 +61,7 @@ TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {{'f'}, {'i'}};
+  std::vector<Segment> expected_segments = {{'f'}, {'i'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -79,7 +80,7 @@ TEST_F(ClosureGlyphSegmenterTest, OrCondition) {
                                                          {{0xc1}, {0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {{0xc1}, {0x106}};
+  std::vector<Segment> expected_segments = {{0xc1}, {0x106}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -103,7 +104,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBase_ViaConditions) {
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {
+  std::vector<Segment> expected_segments = {
       {'a', 'b', 'd'}, {'e', 'f', 'i', 'l'}, {'j', 'k', 'm', 'n'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -126,7 +127,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases) {
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {
+  std::vector<Segment> expected_segments = {
       {'a', 'b', 'd'},
       {'e', 'f', 'j', 'k'},
       {},
@@ -155,7 +156,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases_MaxSize) {
       700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {
+  std::vector<Segment> expected_segments = {
       {'a', 'b', 'd'}, {'e', 'f', 'j', 'k'}, {'m', 'n', 'o', 'p'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -175,7 +176,7 @@ TEST_F(ClosureGlyphSegmenterTest, MixedAndOr) {
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<CodepointSet> expected_segments = {{'f', 0xc1}, {'i', 0x106}};
+  std::vector<Segment> expected_segments = {{'f', 0xc1}, {'i', 0x106}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -224,16 +225,16 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto) {
   uint32_t per_group = codepoints.size() / num_segments;
   uint32_t remainder = codepoints.size() % num_segments;
 
-  std::vector<CodepointSet> segments;
+  std::vector<Segment> segments;
   int i = 0;
-  CodepointSet segment;
+  Segment segment;
   for (uint32_t cp : codepoints) {
-    segment.insert(cp);
+    segment.AddCodepoint(cp);
 
     uint32_t group_size = per_group + (remainder > 0 ? 1 : 0);
     if (++i % group_size == 0) {
       segments.push_back(segment);
-      segment.clear();
+      segment.Clear();
       if (remainder > 0) {
         remainder--;
       }

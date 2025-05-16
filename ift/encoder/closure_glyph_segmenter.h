@@ -3,8 +3,8 @@
 #define IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/segment.h"
 
 namespace ift::encoder {
 
@@ -31,8 +31,7 @@ class ClosureGlyphSegmenter {
    * initial ift font.
    */
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
-      hb_face_t* face, common::CodepointSet initial_segment,
-      std::vector<common::CodepointSet> codepoint_segments,
+      hb_face_t* face, Segment initial_segment, std::vector<Segment> segments,
       uint32_t patch_size_min_bytes = 0,
       uint32_t patch_size_max_bytes = UINT32_MAX) const;
 };

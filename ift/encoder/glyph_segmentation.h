@@ -10,6 +10,7 @@
 #include "absl/types/span.h"
 #include "common/int_set.h"
 #include "ift/encoder/condition.h"
+#include "ift/encoder/segment.h"
 #include "util/encoder_config.pb.h"
 
 namespace ift::encoder {
@@ -134,10 +135,10 @@ class GlyphSegmentation {
     patch_id_t activated_;
   };
 
-  GlyphSegmentation(common::CodepointSet init_font_codepoints,
+  GlyphSegmentation(Segment init_font_segment,
                     common::GlyphSet init_font_glyphs,
                     common::GlyphSet unmapped_glyphs)
-      : init_font_codepoints_(init_font_codepoints),
+      : init_font_segment_(init_font_segment),
         init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
 
@@ -171,9 +172,7 @@ class GlyphSegmentation {
    *
    * Segment indices in conditions refer to a set of codepoints here.
    */
-  const std::vector<common::CodepointSet>& Segments() const {
-    return segments_;
-  }
+  const std::vector<Segment>& Segments() const { return segments_; }
 
   /*
    * The list of glyphs in each patch. The key in the map is an id used to
@@ -202,9 +201,7 @@ class GlyphSegmentation {
   /*
    * These codepoints should be included in the initial font.
    */
-  const common::CodepointSet& InitialFontCodepoints() const {
-    return init_font_codepoints_;
-  };
+  const Segment& InitialFontSegment() const { return init_font_segment_; };
 
   EncoderConfig ToConfigProto() const;
 
@@ -216,14 +213,14 @@ class GlyphSegmentation {
       const common::SegmentSet& fallback_group,
       GlyphSegmentation& segmentation);
 
-  void CopySegments(const std::vector<common::CodepointSet>& segments);
+  void CopySegments(const std::vector<Segment>& segments);
 
  private:
-  common::CodepointSet init_font_codepoints_;
+  Segment init_font_segment_;
   common::GlyphSet init_font_glyphs_;
   common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
-  std::vector<common::CodepointSet> segments_;
+  std::vector<Segment> segments_;
   absl::btree_map<patch_id_t, common::GlyphSet> patches_;
 };
 

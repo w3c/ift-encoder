@@ -420,12 +420,14 @@ ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
 
 EncoderConfig GlyphSegmentation::ToConfigProto() const {
   EncoderConfig config;
+  // TODO(garretrieger) XXXXXXX: include features from the segments in the
+  // generated proto.
 
   uint32_t set_index = 0;
   for (const auto& s : Segments()) {
-    if (!s.empty()) {
+    if (!s.Empty()) {
       (*config.mutable_codepoint_sets())[set_index++] =
-          ToSetProto<Codepoints>(s);
+          ToSetProto<Codepoints>(s.Codepoints());
     } else {
       set_index++;
     }
@@ -440,13 +442,12 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   }
 
   *config.mutable_initial_codepoints() =
-      ToSetProto<Codepoints>(InitialFontCodepoints());
+      ToSetProto<Codepoints>(InitialFontSegment().Codepoints());
 
   return config;
 }
 
-void GlyphSegmentation::CopySegments(
-    const std::vector<CodepointSet>& segments) {
+void GlyphSegmentation::CopySegments(const std::vector<Segment>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(set);
