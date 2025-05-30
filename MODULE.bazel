@@ -73,10 +73,10 @@ http_archive(
 # Fontations
 http_archive(
     name = "fontations",
-    urls = ["https://github.com/googlefonts/fontations/archive/f6fa5765fefec3c579455b3ed9d3ed17174d5f0a.zip"],
-    strip_prefix = "fontations-f6fa5765fefec3c579455b3ed9d3ed17174d5f0a",
+    urls = ["https://github.com/googlefonts/fontations/archive/aacb2e773dbd90f9bbde9fc1454ac1128a401ae6.zip"],
+    strip_prefix = "fontations-aacb2e773dbd90f9bbde9fc1454ac1128a401ae6",
     build_file = "//third_party:fontations.BUILD",
-    integrity = "sha256-svJ2m1lxF9kh4p3cIWOrpF0QG6M9c+pYL8N9hVXlpoc=",
+    integrity = "sha256-rdrkwZ/n9Nv17vhNY3UqcFh0YVJxpFlXguZC9O4S2jY=",
 )
 
 

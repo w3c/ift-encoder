@@ -15,6 +15,8 @@ class Segment {
 
   void AddCodepoint(hb_codepoint_t cp) { codepoints_.insert(cp); }
 
+  void AddFeature(hb_tag_t tag) { features_.insert(tag); }
+
   bool Empty() const { return codepoints_.empty() && features_.empty(); }
 
   void Union(const Segment& other) {
