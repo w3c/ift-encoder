@@ -56,6 +56,32 @@ if (s1) then p1
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
+  Segment smcp;
+  smcp.AddFeature(HB_TAG('s', 'm', 'c', 'p'));
+
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}, smcp});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<Segment> expected_segments = {{'b'}, {'c'}, smcp};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid71 }
+p2: { gid563 }
+p3: { gid562 }
+p4: { gid561 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s0 AND s2) then p3
+if (s1 AND s2) then p4
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
