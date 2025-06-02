@@ -10,7 +10,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
+#include "ift/encoder/segment.h"
 
 using absl::btree_map;
 using absl::btree_set;
@@ -254,7 +256,7 @@ bool GlyphSegmentation::ActivationCondition::operator<(
 StatusOr<std::vector<Condition>>
 GlyphSegmentation::ActivationConditionsToConditionEntries(
     Span<const ActivationCondition> conditions,
-    const absl::flat_hash_map<segment_index_t, CodepointSet>& segments) {
+    const absl::flat_hash_map<segment_index_t, Segment>& segments) {
   // TODO(garretrieger): extend this to work with segments that are
   // SubsetDefinition's instead of just codepoints. This would allow for
   // features and other things to be worked into conditions.
@@ -300,8 +302,41 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
         }
         const auto& original_def = original->second;
 
+        // Segments match on {codepoints} OR {features}, whereas IFT conditions
+        // match on {codepoints} AND {features}. So the codepoint and features
+        // sets need to be placed in separate conditions which are joined by a
+        // disjunctive match if both are present
+        std::optional<Condition> codepoints_condition;
+        if (!original_def.Codepoints().empty()) {
+          Condition condition;
+          condition.subset_definition.codepoints = original_def.Codepoints();
+          condition.activated_patch_id = std::nullopt;
+          codepoints_condition = condition;
+        }
+
+        std::optional<Condition> feature_condition;
+        if (!original_def.Features().empty()) {
+          Condition condition;
+          condition.subset_definition.feature_tags = original_def.Features();
+          condition.activated_patch_id = std::nullopt;
+          feature_condition = condition;
+        }
+
         Condition entry;
-        entry.subset_definition.codepoints = original_def;
+        if (codepoints_condition && feature_condition) {
+          entries.push_back(*codepoints_condition);
+          uint32_t codepoints_entry_index = next_entry_index++;
+          entries.push_back(*feature_condition);
+          uint32_t features_entry_index = next_entry_index++;
+
+          entry.conjunctive = false;
+          entry.child_conditions.insert(codepoints_entry_index);
+          entry.child_conditions.insert(features_entry_index);
+        } else if (codepoints_condition) {
+          entry = *codepoints_condition;
+        } else if (feature_condition) {
+          entry = *feature_condition;
+        }
 
         if (condition->IsUnitary()) {
           // this condition can use this entry to map itself.
@@ -405,13 +440,21 @@ ProtoType ToSetProto(const IntSet& set) {
   return values;
 }
 
+template <typename ProtoType>
+ProtoType TagsToSetProto(const btree_set<hb_tag_t>& set) {
+  ProtoType values;
+  for (uint32_t tag : set) {
+    values.add_values(common::FontHelper::ToString(tag));
+  }
+  return values;
+}
+
 ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
     const {
   ActivationConditionProto proto;
 
-  for (const auto& c : conditions()) {
-    CodepointSets group = *proto.add_required_codepoint_sets() =
-        ToSetProto<CodepointSets>(c);
+  for (const auto& ss : conditions()) {
+    *proto.add_required_segments() = ToSetProto<SegmentsProto>(ss);
   }
   proto.set_activated_patch(activated());
 
@@ -426,8 +469,12 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   uint32_t set_index = 0;
   for (const auto& s : Segments()) {
     if (!s.Empty()) {
-      (*config.mutable_codepoint_sets())[set_index++] =
+      SegmentProto segment_proto;
+      (*segment_proto.mutable_codepoints()) =
           ToSetProto<Codepoints>(s.Codepoints());
+      (*segment_proto.mutable_features()) =
+          TagsToSetProto<Features>(s.Features());
+      (*config.mutable_segments())[set_index++] = segment_proto;
     } else {
       set_index++;
     }

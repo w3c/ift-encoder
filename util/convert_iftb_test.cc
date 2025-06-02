@@ -49,25 +49,31 @@ TEST_F(ConvertIftbTest, BasicConversion) {
   ASSERT_TRUE(config.ok()) << config.status();
 
   std::string expected_config =
-      "codepoint_sets {\n"
+      "segments {\n"
       "  key: 0\n"
       "  value {\n"
-      "    values: 115\n"  // s
+      "    codepoints {\n"
+      "      values: 115\n"  // s
+      "    }\n"
       "  }\n"
       "}\n"
-      "codepoint_sets {\n"
+      "segments {\n"
       "  key: 1\n"
       "  value {\n"
-      "    values: 65\n"   // A
-      "    values: 101\n"  // e
-      "    values: 109\n"  // m
+      "    codepoints {\n"
+      "      values: 65\n"   // A
+      "      values: 101\n"  // e
+      "      values: 109\n"  // m
+      "    }\n"
       "  }\n"
       "}\n"
-      "codepoint_sets {\n"
+      "segments {\n"
       "  key: 2\n"
       "  value {\n"
-      "    values: 111\n"  // o
-      "    values: 119\n"  // w
+      "    codepoints {\n"
+      "      values: 111\n"  // o
+      "      values: 119\n"  // w
+      "    }\n"
       "  }\n"
       "}\n"
       "glyph_patches {\n"
@@ -93,21 +99,21 @@ TEST_F(ConvertIftbTest, BasicConversion) {
       "  }\n"
       "}\n"
       "glyph_patch_conditions {\n"
-      "  required_codepoint_sets {\n"
+      "  required_segments {\n"
       "    values: 1\n"
       "  }\n"
       "  activated_patch: 1\n"
       "}\n"
       "glyph_patch_conditions {\n"
-      "  required_codepoint_sets {\n"
+      "  required_segments {\n"
       "    values: 2\n"
       "  }\n"
       "  activated_patch: 2\n"
       "}\n"
-      "initial_codepoint_sets {\n"
+      "initial_segments {\n"
       "  values: 0\n"
       "}\n"
-      "non_glyph_codepoint_set_groups {\n"
+      "non_glyph_segments {\n"
       "  values: 1\n"
       "  values: 2\n"
       "}\n";

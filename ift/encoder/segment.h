@@ -5,6 +5,11 @@
 #include "common/int_set.h"
 #include "hb-subset.h"
 
+// Represents a division of a font into a set of codepoints and feature tags.
+//
+// Intersected by a subset definition when at least one of the listed codepoints
+// or features tags is present in a subset definition
+// (ie. c1 OR c2 OR ... OR f1 OR f2 ...).
 class Segment {
  public:
   Segment() {}
@@ -12,6 +17,7 @@ class Segment {
       : codepoints_(values), features_() {}
 
   const common::CodepointSet& Codepoints() const { return codepoints_; }
+  const absl::btree_set<hb_tag_t>& Features() const { return features_; }
 
   void AddCodepoint(hb_codepoint_t cp) { codepoints_.insert(cp); }
 

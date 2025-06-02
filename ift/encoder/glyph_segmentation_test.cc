@@ -44,8 +44,13 @@ class GlyphSegmentationTest : public ::testing::Test {
   hb_face_unique_ptr noto_nastaliq_urdu;
 };
 
+// TODO XXXXXX add tests where the input segments include features.
+// 1. segment with only features.
+// 2. segment with features and codepoints.
+// 3. To config proto for case 2 as well.
+
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
-  absl::flat_hash_map<segment_index_t, CodepointSet> segments = {
+  absl::flat_hash_map<segment_index_t, Segment> segments = {
       {1, {'a', 'b'}},
       {2, {'c'}},
       {3, {'d', 'e', 'f'}},
@@ -143,16 +148,24 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
   // p1: { gid71 }
   // if (s0) then p0
   // if (s1) then p1
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 98
+    codepoints {
+      values: 98
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 99
+    codepoints {
+      values: 99
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -168,13 +181,13 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
@@ -204,18 +217,26 @@ TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
   // if (s1) then p1
   // if ((s0 OR s1)) then p3
   // if (s0 AND s1) then p2
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 102
-    values: 193
+    codepoints {
+      values: 102
+      values: 193
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 105
-    values: 262
+    codepoints {
+      values: 105
+      values: 262
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -248,29 +269,29 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
     values: 1
   }
   activated_patch: 3
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 2
@@ -301,30 +322,42 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // if (s0) then p0
   // if (s1) then p1
   // if (s3) then p2
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 97
-    values: 98
-    values: 100
+    codepoints {
+      values: 97
+      values: 98
+      values: 100
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 101
-    values: 102
-    values: 106
-    values: 107
+    codepoints {
+      values: 101
+      values: 102
+      values: 106
+      values: 107
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 3
   value {
-    values: 109
-    values: 110
-    values: 111
-    values: 112
+    codepoints {
+      values: 109
+      values: 110
+      values: 111
+      values: 112
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -354,19 +387,19 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 3
   }
   activated_patch: 2
