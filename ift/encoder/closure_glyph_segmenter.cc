@@ -19,7 +19,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/segment.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
 
 using absl::btree_map;
@@ -59,7 +59,7 @@ class RequestedSegmentationInformation;
 class GlyphClosureCache;
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
-                      GlyphClosureCache& closure_cache, const Segment& segment,
+                      GlyphClosureCache& closure_cache, const SubsetDefinition& segment,
                       GlyphSet& and_gids, GlyphSet& or_gids,
                       GlyphSet& exclusive_gids);
 
@@ -72,7 +72,7 @@ class GlyphClosureCache {
       : preprocessed_face_(make_hb_face(hb_subset_preprocess(face))),
         original_face_(make_hb_face(hb_face_reference(face))) {}
 
-  StatusOr<GlyphSet> GlyphClosure(const Segment& segment) {
+  StatusOr<GlyphSet> GlyphClosure(const SubsetDefinition& segment) {
     auto it = glyph_closure_cache_.find(segment);
     if (it != glyph_closure_cache_.end()) {
       glyph_closure_cache_hit_++;
@@ -90,7 +90,7 @@ class GlyphClosureCache {
 
     // TODO(garretrieger): automatically include IFT default features in input
     // config.
-    segment.AddToSubsetInput(input);
+    segment.ConfigureInput(input, preprocessed_face_.get());
 
     hb_subset_plan_t* plan =
         hb_subset_plan_create_or_fail(preprocessed_face_.get(), input);
@@ -111,7 +111,7 @@ class GlyphClosureCache {
 
   StatusOr<const GlyphSet*> CodepointsToOrGids(
       const RequestedSegmentationInformation& segmentation_info,
-      const Segment& segment) {
+      const SubsetDefinition& segment) {
     auto it = code_point_set_to_or_gids_cache_.find(segment);
     if (it != code_point_set_to_or_gids_cache_.end()) {
       code_point_set_to_or_gids_cache_hit_++;
@@ -156,7 +156,7 @@ class GlyphClosureCache {
  private:
   hb_face_unique_ptr preprocessed_face_;
   hb_face_unique_ptr original_face_;
-  flat_hash_map<Segment, GlyphSet> glyph_closure_cache_;
+  flat_hash_map<SubsetDefinition, GlyphSet> glyph_closure_cache_;
   uint32_t glyph_closure_cache_hit_ = 0;
   uint32_t glyph_closure_cache_miss_ = 0;
   uint32_t closure_count_cumulative_ = 0;
@@ -164,7 +164,7 @@ class GlyphClosureCache {
 
   // for this cache we return pointers to the sets so need node_hash_map for
   // pointer stability.
-  node_hash_map<Segment, GlyphSet> code_point_set_to_or_gids_cache_;
+  node_hash_map<SubsetDefinition, GlyphSet> code_point_set_to_or_gids_cache_;
   uint32_t code_point_set_to_or_gids_cache_hit_ = 0;
   uint32_t code_point_set_to_or_gids_cache_miss_ = 0;
 };
@@ -174,8 +174,8 @@ class GlyphClosureCache {
  */
 class RequestedSegmentationInformation {
  public:
-  RequestedSegmentationInformation(std::vector<Segment> segments,
-                                   Segment init_font_segment,
+  RequestedSegmentationInformation(std::vector<SubsetDefinition> segments,
+                                   SubsetDefinition init_font_segment,
                                    GlyphClosureCache& closure_cache)
       : segments_(std::move(segments)),
         init_font_segment_(std::move(init_font_segment)) {
@@ -187,7 +187,7 @@ class RequestedSegmentationInformation {
     {
       auto closure = closure_cache.GlyphClosure(init_font_segment_);
       if (closure.ok()) {
-        init_font_glyphs_ = std::move(*closure);
+        init_font_segment_.gids = std::move(*closure);
       }
     }
 
@@ -198,31 +198,30 @@ class RequestedSegmentationInformation {
   }
 
   uint32_t MergeSegments(segment_index_t base, const SegmentSet& to_merge,
-                         const Segment& merged_segment) {
+                         const SubsetDefinition& merged_segment) {
     segments_[base].Union(merged_segment);
     for (segment_index_t s : to_merge) {
       // To avoid changing the indices of other segments set the ones we're
       // removing to empty sets. That effectively disables them.
       segments_[s].Clear();
     }
-    return segments_[base].CodepointsSize();
+    return segments_[base].codepoints.size();
   }
 
-  const Segment& InitFontSegment() const { return init_font_segment_; }
+  const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
 
-  const GlyphSet& InitFontGlyphs() const { return init_font_glyphs_; }
+  const GlyphSet& InitFontGlyphs() const { return init_font_segment_.gids; }
 
   const GlyphSet& FullClosure() const { return full_closure_; }
 
-  const Segment& AllSegment() const { return all_; }
+  const SubsetDefinition& AllSegment() const { return all_; }
 
-  const std::vector<Segment>& Segments() const { return segments_; }
+  const std::vector<SubsetDefinition>& Segments() const { return segments_; }
 
  private:
-  std::vector<Segment> segments_;
-  Segment init_font_segment_;
-  GlyphSet init_font_glyphs_;
-  Segment all_;
+  std::vector<SubsetDefinition> segments_;
+  SubsetDefinition init_font_segment_;
+  SubsetDefinition all_;
   GlyphSet full_closure_;
 };
 
@@ -316,7 +315,7 @@ class GlyphConditionSet {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(const std::vector<Segment>& segments) {
+  GlyphGroupings(const std::vector<SubsetDefinition>& segments) {
     uint32_t index = 0;
     for (const auto& s : segments) {
       if (!s.Empty()) {
@@ -460,7 +459,7 @@ class GlyphGroupings {
     // used.
     for (const auto& or_group : modified_or_groups) {
       auto& glyphs = or_glyph_groups_[or_group];
-      Segment all_other_segment = segmentation_info.AllSegment();
+      SubsetDefinition all_other_segment = segmentation_info.AllSegment();
       for (uint32_t s : or_group) {
         all_other_segment.Subtract(segmentation_info.Segments()[s]);
       }
@@ -507,7 +506,6 @@ class GlyphGroupings {
   StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const {
     GlyphSegmentation segmentation(segmentation_info.InitFontSegment(),
-                                   segmentation_info.InitFontGlyphs(),
                                    unmapped_glyphs_);
     segmentation.CopySegments(segmentation_info.Segments());
     TRYV(GlyphSegmentation::GroupsToSegmentation(
@@ -572,8 +570,8 @@ class GlyphGroupings {
 // recompute the parts that change as a result of the changes in 1.
 class SegmentationContext {
  public:
-  SegmentationContext(hb_face_t* face, const Segment& initial_segment,
-                      const std::vector<Segment>& segments)
+  SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
+                      const std::vector<SubsetDefinition>& segments)
       : glyph_closure_cache(face),
         original_face(make_hb_face(hb_face_reference(face))),
         segmentation_info(segments, initial_segment, glyph_closure_cache),
@@ -642,7 +640,7 @@ class SegmentationContext {
 
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
-  Status AnalyzeSegment(const Segment& segment, GlyphSet& and_gids,
+  Status AnalyzeSegment(const SubsetDefinition& segment, GlyphSet& and_gids,
                         GlyphSet& or_gids, GlyphSet& exclusive_gids) {
     return ::ift::encoder::AnalyzeSegment(segmentation_info,
                                           glyph_closure_cache, segment,
@@ -717,7 +715,7 @@ class SegmentationContext {
 };
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
-                      GlyphClosureCache& closure_cache, const Segment& segment,
+                      GlyphClosureCache& closure_cache, const SubsetDefinition& segment,
                       GlyphSet& and_gids, GlyphSet& or_gids,
                       GlyphSet& exclusive_gids) {
   if (segment.Empty()) {
@@ -749,12 +747,12 @@ Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
   // * I - D: the activation conditions for these glyphs is s_i OR …
   //          Where … is one or more additional segments.
   // * D intersection I: the activation conditions for these glyphs is only s_i
-  Segment except_segment = segmentation_info.AllSegment();
+  SubsetDefinition except_segment = segmentation_info.AllSegment();
   except_segment.Subtract(segment);
   auto B_except_segment_closure =
       TRY(closure_cache.GlyphClosure(except_segment));
 
-  Segment only_segment = segmentation_info.InitFontSegment();
+  SubsetDefinition only_segment = segmentation_info.InitFontSegment();
   only_segment.Union(segment);
   auto I_only_segment_closure = TRY(closure_cache.GlyphClosure(only_segment));
   I_only_segment_closure.subtract(segmentation_info.InitFontGlyphs());
@@ -796,7 +794,7 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
 }
 
 void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
-                   const SegmentSet& segments, Segment& base) {
+                   const SegmentSet& segments, SubsetDefinition& base) {
   for (segment_index_t next : segments) {
     base.Union(segmentation_info.Segments()[next]);
   }
@@ -806,7 +804,7 @@ void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
 // to the listed codepoints. Will typically overestimate the size since we use
 // a faster, but less effective version of brotli to generate the estimate.
 StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
-                                          const Segment& segment) {
+                                          const SubsetDefinition& segment) {
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;
@@ -836,9 +834,9 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   }
 
   const auto& segments = context.segmentation_info.Segments();
-  uint32_t size_before = segments[base_segment_index].CodepointsSize();
+  uint32_t size_before = segments[base_segment_index].codepoints.size();
 
-  Segment merged_segment = segments[base_segment_index];
+  SubsetDefinition merged_segment = segments[base_segment_index];
   MergeSegments(context.segmentation_info, to_merge_segments, merged_segment);
 
   GlyphSet gid_conditions_to_update;
@@ -1123,8 +1121,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 }
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
-    hb_face_t* face, Segment initial_segment,
-    std::vector<Segment> codepoint_segments, uint32_t patch_size_min_bytes,
+    hb_face_t* face, SubsetDefinition initial_segment,
+    std::vector<SubsetDefinition> codepoint_segments, uint32_t patch_size_min_bytes,
     uint32_t patch_size_max_bytes) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {

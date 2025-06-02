@@ -10,7 +10,7 @@
 #include "absl/types/span.h"
 #include "common/int_set.h"
 #include "ift/encoder/condition.h"
-#include "ift/encoder/segment.h"
+#include "ift/encoder/subset_definition.h"
 #include "util/encoder_config.pb.h"
 
 namespace ift::encoder {
@@ -137,11 +137,9 @@ class GlyphSegmentation {
     patch_id_t activated_;
   };
 
-  GlyphSegmentation(Segment init_font_segment,
-                    common::GlyphSet init_font_glyphs,
+  GlyphSegmentation(SubsetDefinition init_font_segment,
                     common::GlyphSet unmapped_glyphs)
       : init_font_segment_(init_font_segment),
-        init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
 
   /*
@@ -151,7 +149,7 @@ class GlyphSegmentation {
   static absl::StatusOr<std::vector<Condition>>
   ActivationConditionsToConditionEntries(
       absl::Span<const ActivationCondition> conditions,
-      const absl::flat_hash_map<segment_index_t, Segment>& segments);
+      const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
 
   /*
    * Returns a human readable string representation of this segmentation and
@@ -173,7 +171,7 @@ class GlyphSegmentation {
    *
    * Segment indices in conditions refer to a set of codepoints here.
    */
-  const std::vector<Segment>& Segments() const { return segments_; }
+  const std::vector<SubsetDefinition>& Segments() const { return segments_; }
 
   /*
    * The list of glyphs in each patch. The key in the map is an id used to
@@ -196,13 +194,13 @@ class GlyphSegmentation {
    * These glyphs should be included in the initial font.
    */
   const common::GlyphSet& InitialFontGlyphs() const {
-    return init_font_glyphs_;
+    return init_font_segment_.gids;
   };
 
   /*
    * These codepoints should be included in the initial font.
    */
-  const Segment& InitialFontSegment() const { return init_font_segment_; };
+  const SubsetDefinition& InitialFontSegment() const { return init_font_segment_; };
 
   EncoderConfig ToConfigProto() const;
 
@@ -214,14 +212,13 @@ class GlyphSegmentation {
       const common::SegmentSet& fallback_group,
       GlyphSegmentation& segmentation);
 
-  void CopySegments(const std::vector<Segment>& segments);
+  void CopySegments(const std::vector<SubsetDefinition>& segments);
 
  private:
-  Segment init_font_segment_;
-  common::GlyphSet init_font_glyphs_;
+  SubsetDefinition init_font_segment_;
   common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
-  std::vector<Segment> segments_;
+  std::vector<SubsetDefinition> segments_;
   absl::btree_map<patch_id_t, common::GlyphSet> patches_;
 };
 

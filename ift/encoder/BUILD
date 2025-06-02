@@ -11,7 +11,6 @@ cc_library(
     "condition.cc",
     "closure_glyph_segmenter.h",
     "closure_glyph_segmenter.cc",
-    "segment.h",
   ],
   deps = [
     "//ift/proto",

@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/condition.h"
+#include "ift/encoder/subset_definition.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -50,7 +51,7 @@ class GlyphSegmentationTest : public ::testing::Test {
 // 3. To config proto for case 2 as well.
 
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
-  absl::flat_hash_map<segment_index_t, Segment> segments = {
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, {'a', 'b'}},
       {2, {'c'}},
       {3, {'d', 'e', 'f'}},

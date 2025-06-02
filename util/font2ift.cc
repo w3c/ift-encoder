@@ -20,7 +20,6 @@
 #include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "util/encoder_config.pb.h"
 
@@ -190,14 +189,14 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     activation_conditions.push_back(FromProto(c));
   }
 
-  flat_hash_map<uint32_t, Segment> segments;
+  flat_hash_map<uint32_t, SubsetDefinition> segments;
   for (const auto& [id, set] : config.segments()) {
     auto& segment = segments[id];
     for (hb_codepoint_t cp : set.codepoints().values()) {
-      segment.AddCodepoint(cp);
+      segment.codepoints.insert(cp);
     }
     for (const std::string& tag : set.features().values()) {
-      segment.AddFeature(FontHelper::ToTag(tag));
+      segment.feature_tags.insert(FontHelper::ToTag(tag));
     }
   }
 
@@ -224,9 +223,9 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
           StrCat("Segment id, ", segment_id, ", not found."));
     }
 
-    base_subset.codepoints.union_set(segment->second.Codepoints());
-    base_subset.feature_tags.insert(segment->second.Features().begin(),
-                                    segment->second.Features().end());
+    base_subset.codepoints.union_set(segment->second.codepoints);
+    base_subset.feature_tags.insert(segment->second.feature_tags.begin(),
+                                    segment->second.feature_tags.end());
   }
 
   base_subset.feature_tags = init_features;
@@ -251,7 +250,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   for (const auto& segment_ids : config.non_glyph_segments()) {
     // Because we're using (codepoints or features) we can union up to the
     // combined segment.
-    Segment combined;
+    SubsetDefinition combined;
     for (const auto& segment_id : segment_ids.values()) {
       auto segment = segments.find(segment_id);
       if (segment == segments.end()) {

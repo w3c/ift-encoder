@@ -22,7 +22,6 @@
 #include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/url_template.h"
 #include "util/encoder_config.pb.h"
@@ -288,7 +287,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   // TODO XXXXXX also includes segment features
   IntSet all_codepoints;
   for (const auto& s : segmentation.Segments()) {
-    all_codepoints.insert(s.Codepoints().begin(), s.Codepoints().end());
+    all_codepoints.insert(s.codepoints.begin(), s.codepoints.end());
   }
   encoder.AddNonGlyphDataSegment(all_codepoints);
 
@@ -297,7 +296,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     conditions.push_back(c);
   }
 
-  flat_hash_map<uint32_t, Segment> segments;
+  flat_hash_map<uint32_t, SubsetDefinition> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
     segments[i++] = s;
@@ -314,12 +313,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
+std::vector<SubsetDefinition> GroupCodepoints(std::vector<uint32_t> codepoints,
                                      uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<Segment> out;
+  std::vector<SubsetDefinition> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -329,9 +328,9 @@ std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    Segment group;
+    SubsetDefinition group;
     for (; start != end; start++) {
-      group.AddCodepoint(*start);
+      group.codepoints.insert(*start);
     }
     out.push_back(group);
   }
@@ -361,14 +360,14 @@ int main(int argc, char** argv) {
     }
     init_codepoints = *result;
   }
-  Segment init_segment;
+  SubsetDefinition init_segment;
   for (hb_codepoint_t cp : init_codepoints) {
-    init_segment.AddCodepoint(cp);
+    init_segment.codepoints.insert(cp);
   }
 
   auto codepoints =
       TargetCodepoints(font->get(), absl::GetFlag(FLAGS_codepoints_file),
-                       init_segment.Codepoints());
+                       init_segment.codepoints);
   if (!codepoints.ok()) {
     std::cerr << "Failed to load codepoints file: " << codepoints.status()
               << std::endl;

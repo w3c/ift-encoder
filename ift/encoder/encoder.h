@@ -13,7 +13,6 @@
 #include "common/int_set.h"
 #include "hb-subset.h"
 #include "ift/encoder/condition.h"
-#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
@@ -79,7 +78,7 @@ class Encoder {
    */
   template <typename Set>
   absl::Status SetBaseSubset(const Set& base_codepoints) {
-    if (!base_subset_.empty()) {
+    if (!base_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
     base_subset_.codepoints.insert(base_codepoints.begin(),
@@ -100,11 +99,8 @@ class Encoder {
   /*
    * Adds a segment around which the non glyph data in the font will be split.
    */
-  void AddNonGlyphDataSegment(const Segment& segment) {
-    SubsetDefinition def;
-    def.codepoints = segment.Codepoints();
-    def.feature_tags = segment.Features();
-    extension_subsets_.push_back(def);
+  void AddNonGlyphDataSegment(const SubsetDefinition& segment) {
+    extension_subsets_.push_back(segment);
   }
 
   /*
@@ -137,7 +133,7 @@ class Encoder {
 
  public:
   absl::Status SetBaseSubsetFromDef(const SubsetDefinition& base_subset) {
-    if (!base_subset_.empty()) {
+    if (!base_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
     base_subset_ = base_subset;
