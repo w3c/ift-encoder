@@ -13,12 +13,14 @@
 #include "absl/strings/str_cat.h"
 #include "common/axis_range.h"
 #include "common/font_data.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "util/encoder_config.pb.h"
 
@@ -167,7 +169,7 @@ GlyphSegmentation::ActivationCondition FromProto(
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
   std::vector<SegmentSet> groups;
-  for (const auto& group : condition.required_codepoint_sets()) {
+  for (const auto& group : condition.required_segments()) {
     SegmentSet set;
     set.insert(group.values().begin(), group.values().end());
     groups.push_back(set);
@@ -185,22 +187,23 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
 
   std::vector<GlyphSegmentation::ActivationCondition> activation_conditions;
   for (const auto& c : config.glyph_patch_conditions()) {
-    if (c.required_features().values_size() > 0) {
-      return absl::UnimplementedError(
-          "Conditions with more features aren't supported yet.");
-    }
-
     activation_conditions.push_back(FromProto(c));
   }
 
-  flat_hash_map<uint32_t, CodepointSet> codepoint_sets;
-  for (const auto& [id, set] : config.codepoint_sets()) {
-    codepoint_sets[id].insert(set.values().begin(), set.values().end());
+  flat_hash_map<uint32_t, Segment> segments;
+  for (const auto& [id, set] : config.segments()) {
+    auto& segment = segments[id];
+    for (hb_codepoint_t cp : set.codepoints().values()) {
+      segment.AddCodepoint(cp);
+    }
+    for (const std::string& tag : set.features().values()) {
+      segment.AddFeature(FontHelper::ToTag(tag));
+    }
   }
 
   auto condition_entries =
       TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
-          activation_conditions, codepoint_sets));
+          activation_conditions, segments));
   for (const auto& entry : condition_entries) {
     TRYV(encoder.AddGlyphDataPatchCondition(entry));
   }
@@ -208,20 +211,24 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   // Initial subset definition
   auto init_codepoints = values(config.initial_codepoints());
   auto init_features = tag_values(config.initial_features());
-  auto init_codepoint_sets = values(config.initial_codepoint_sets());
+  auto init_segments = values(config.initial_segments());
   auto init_design_space = TRY(to_design_space(config.initial_design_space()));
 
   SubsetDefinition base_subset;
   base_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
-  for (const auto set_id : init_codepoint_sets) {
-    auto set = codepoint_sets.find(set_id);
-    if (set == codepoint_sets.end()) {
+
+  for (const auto segment_id : init_segments) {
+    auto segment = segments.find(segment_id);
+    if (segment == segments.end()) {
       return absl::InvalidArgumentError(
-          StrCat("Codepoint set id, ", set_id, ", not found."));
+          StrCat("Segment id, ", segment_id, ", not found."));
     }
 
-    base_subset.codepoints.insert(set->second.begin(), set->second.end());
+    base_subset.codepoints.union_set(segment->second.Codepoints());
+    base_subset.feature_tags.insert(segment->second.Features().begin(),
+                                    segment->second.Features().end());
   }
+
   base_subset.feature_tags = init_features;
   base_subset.design_space = init_design_space;
   TRYV(encoder.SetBaseSubsetFromDef(base_subset));
@@ -241,17 +248,20 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
     encoder.AddDesignSpaceSegment(design_space);
   }
 
-  for (const auto& sets : config.non_glyph_codepoint_set_groups()) {
-    IntSet codepoints;
-    for (const auto& set_id : sets.values()) {
-      auto set = codepoint_sets.find(set_id);
-      if (set == codepoint_sets.end()) {
+  for (const auto& segment_ids : config.non_glyph_segments()) {
+    // Because we're using (codepoints or features) we can union up to the
+    // combined segment.
+    Segment combined;
+    for (const auto& segment_id : segment_ids.values()) {
+      auto segment = segments.find(segment_id);
+      if (segment == segments.end()) {
         return absl::InvalidArgumentError(
-            StrCat("Codepoint set id, ", set_id, ", not found."));
+            StrCat("Segment id, ", segment_id, ", not found."));
       }
-      codepoints.union_set(set->second);
+      combined.Union(segment->second);
     }
-    encoder.AddNonGlyphDataSegment(codepoints);
+
+    encoder.AddNonGlyphDataSegment(combined);
   }
 
   // Lastly graph shape parameters

@@ -973,4 +973,7 @@ TEST_F(EncoderTest, RoundTripWoff2_Fails) {
   ASSERT_TRUE(absl::IsInternal(ttf.status())) << ttf.status();
 }
 
+// TODO XXXXX test with non glyph segment that includes codepoints and features
+//            emitted mapping conditions should have disjunctive matching.
+
 }  // namespace ift::encoder

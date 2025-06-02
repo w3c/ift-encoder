@@ -131,6 +131,8 @@ class GlyphSegmentation {
 
     bool is_fallback_ = false;
     bool is_exclusive_ = false;
+    // Represents:
+    // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...
     std::vector<common::SegmentSet> conditions_;
     patch_id_t activated_;
   };
@@ -149,8 +151,7 @@ class GlyphSegmentation {
   static absl::StatusOr<std::vector<Condition>>
   ActivationConditionsToConditionEntries(
       absl::Span<const ActivationCondition> conditions,
-      const absl::flat_hash_map<segment_index_t, common::CodepointSet>&
-          segments);
+      const absl::flat_hash_map<segment_index_t, Segment>& segments);
 
   /*
    * Returns a human readable string representation of this segmentation and
