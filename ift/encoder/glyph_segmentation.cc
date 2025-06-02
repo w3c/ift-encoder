@@ -12,7 +12,7 @@
 #include "absl/status/statusor.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
-#include "ift/encoder/segment.h"
+#include "ift/encoder/subset_definition.h"
 
 using absl::btree_map;
 using absl::btree_set;
@@ -256,7 +256,7 @@ bool GlyphSegmentation::ActivationCondition::operator<(
 StatusOr<std::vector<Condition>>
 GlyphSegmentation::ActivationConditionsToConditionEntries(
     Span<const ActivationCondition> conditions,
-    const absl::flat_hash_map<segment_index_t, Segment>& segments) {
+    const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments) {
   // TODO(garretrieger): extend this to work with segments that are
   // SubsetDefinition's instead of just codepoints. This would allow for
   // features and other things to be worked into conditions.
@@ -307,17 +307,17 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
         // sets need to be placed in separate conditions which are joined by a
         // disjunctive match if both are present
         std::optional<Condition> codepoints_condition;
-        if (!original_def.Codepoints().empty()) {
+        if (!original_def.codepoints.empty()) {
           Condition condition;
-          condition.subset_definition.codepoints = original_def.Codepoints();
+          condition.subset_definition.codepoints = original_def.codepoints;
           condition.activated_patch_id = std::nullopt;
           codepoints_condition = condition;
         }
 
         std::optional<Condition> feature_condition;
-        if (!original_def.Features().empty()) {
+        if (!original_def.feature_tags.empty()) {
           Condition condition;
-          condition.subset_definition.feature_tags = original_def.Features();
+          condition.subset_definition.feature_tags = original_def.feature_tags;
           condition.activated_patch_id = std::nullopt;
           feature_condition = condition;
         }
@@ -471,9 +471,9 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
     if (!s.Empty()) {
       SegmentProto segment_proto;
       (*segment_proto.mutable_codepoints()) =
-          ToSetProto<Codepoints>(s.Codepoints());
+          ToSetProto<Codepoints>(s.codepoints);
       (*segment_proto.mutable_features()) =
-          TagsToSetProto<Features>(s.Features());
+          TagsToSetProto<Features>(s.feature_tags);
       (*config.mutable_segments())[set_index++] = segment_proto;
     } else {
       set_index++;
@@ -489,12 +489,12 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   }
 
   *config.mutable_initial_codepoints() =
-      ToSetProto<Codepoints>(InitialFontSegment().Codepoints());
+      ToSetProto<Codepoints>(InitialFontSegment().codepoints);
 
   return config;
 }
 
-void GlyphSegmentation::CopySegments(const std::vector<Segment>& segments) {
+void GlyphSegmentation::CopySegments(const std::vector<SubsetDefinition>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(set);

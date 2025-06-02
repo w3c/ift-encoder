@@ -18,7 +18,7 @@ namespace ift::encoder {
  * See: https://w3c.github.io/IFT/Overview.html#mapping-entry-childentryindices
  */
 struct Condition {
-  SubsetDefinition subset_definition;
+  SubsetDefinition subset_definition; // TODO XXXX subset_definition implies disjunctive matching which isn't right
   common::IntSet child_conditions;
   bool conjunctive = false;
   std::optional<uint32_t> activated_patch_id = std::nullopt;

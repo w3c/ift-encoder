@@ -16,7 +16,21 @@ namespace ift::encoder {
 
 typedef absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space_t;
 
-struct SubsetDefinition {
+// Describes a subset of a font in terms of the codepoints, feature tags, and
+// design space that the subset will contain data for.
+//
+// Mirrors: https://w3c.github.io/IFT/Overview.html#font-subset-definition
+//
+// When used to describe the condition to activate a patch/subset the target subset
+// definition will intersect the condition when
+//
+// intersects(target.codepoints, condition.codepoints) OR 
+// intersects(target.features, condition.features) OR 
+// intersects(target.design_space, condition.design_space)
+//
+// Each of the sets (codepoints, features, design space) are optional, if empty
+// they do not influence intersection or configuration of a subsetting operation.
+struct SubsetDefinition {  
   SubsetDefinition() {}
   SubsetDefinition(std::initializer_list<uint32_t> codepoints_in) {
     for (uint32_t cp : codepoints_in) {
@@ -46,9 +60,16 @@ struct SubsetDefinition {
     return false;
   }
 
-  bool empty() const {
+  bool Empty() const {
     return codepoints.empty() && gids.empty() && feature_tags.empty() &&
            design_space.empty();
+  }
+
+  void Clear() {
+    codepoints.clear();
+    gids.clear();
+    feature_tags.clear();
+    design_space.clear();
   }
 
   bool operator==(const SubsetDefinition& other) const {
@@ -69,6 +90,8 @@ struct SubsetDefinition {
 
   void ConfigureInput(hb_subset_input_t* input, hb_face_t* face) const;
 
+  // TODO XXXXX in some cases a composite entry (using child indices) will be needed.
+  //            we can't always convert to just a single coverage object.
   ift::proto::PatchMap::Coverage ToCoverage() const;
 };
 

@@ -110,7 +110,7 @@ std::vector<Encoder::Edge> Encoder::OutgoingEdges(
   for (const auto& s : extension_subsets_) {
     SubsetDefinition filtered = s;
     filtered.Subtract(base_subset);
-    if (filtered.empty()) {
+    if (filtered.Empty()) {
       continue;
     }
 
