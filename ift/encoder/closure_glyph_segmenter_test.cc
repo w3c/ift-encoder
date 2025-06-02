@@ -60,8 +60,8 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
   Segment smcp;
   smcp.AddFeature(HB_TAG('s', 'm', 'c', 'p'));
 
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}, smcp});
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+                                                         {{'b'}, {'c'}, smcp});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<Segment> expected_segments = {{'b'}, {'c'}, smcp};

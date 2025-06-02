@@ -297,10 +297,10 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     conditions.push_back(c);
   }
 
-  flat_hash_map<uint32_t, CodepointSet> segments;
+  flat_hash_map<uint32_t, Segment> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
-    segments[i++].union_set(s.Codepoints());
+    segments[i++] = s;
   }
 
   auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(

@@ -13,6 +13,7 @@
 #include "common/int_set.h"
 #include "hb-subset.h"
 #include "ift/encoder/condition.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
@@ -93,6 +94,16 @@ class Encoder {
   void AddNonGlyphDataSegment(const Set& codepoints) {
     SubsetDefinition def;
     def.codepoints.insert(codepoints.begin(), codepoints.end());
+    extension_subsets_.push_back(def);
+  }
+
+  /*
+   * Adds a segment around which the non glyph data in the font will be split.
+   */
+  void AddNonGlyphDataSegment(const Segment& segment) {
+    SubsetDefinition def;
+    def.codepoints = segment.Codepoints();
+    def.feature_tags = segment.Features();
     extension_subsets_.push_back(def);
   }
 

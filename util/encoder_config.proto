@@ -56,10 +56,10 @@ message EncoderConfig {
 
   // ### Codepoint Sets ###
 
-  // Codepoint sets are utilized in the rest of the config to configure things like glyph activation conditions
+  // Segments are utilized in the rest of the config to configure things like glyph activation conditions
   // and non glyph data extensions. Sets are referenced later on in the config utilizing the key in the mapping
-  // (codepoint set id).
-  map<uint32, Codepoints> codepoint_sets = 1;
+  // (segment id).
+  map<uint32, SegmentProto> segments = 1;
 
 
   // ### Glyph Data Extension Configuration ###
@@ -119,7 +119,7 @@ message EncoderConfig {
   // init_codepoint_sets contains codepoint set ids referencing "codepoint_sets". Each referenced set will be
   // unioned into initial_codepoints.
   Codepoints initial_codepoints = 8;
-  CodepointSets initial_codepoint_sets = 9;
+  SegmentsProto initial_segments = 9;
   Features initial_features = 10;
   DesignSpace initial_design_space = 11;
 
@@ -129,10 +129,10 @@ message EncoderConfig {
   // above (via glyph_patch_groupings).
   repeated Codepoints non_glyph_codepoint_segmentation = 12;
 
-  // An alternative way to specify codepoint segmentations. One segment will be formed from
-  // the union of all of the codepoints associated with each referenced codepoint set (from EncoderConfig.codepoint_sets).
-  // This field can be used in addition to non_glyph_codepoint_segmentation.
-  repeated CodepointSets non_glyph_codepoint_set_groups = 13;
+  // An alternative way to specify segmentations. One segment will be formed from
+  // the union of all of the segments associated with each referenced group of segments (from EncoderConfig.segments).
+  // This field can be used in addition to the other non_glyph_* fields.
+  repeated SegmentsProto non_glyph_segments = 13;
 
   // Groups of open type layout features which the non glyph data in the font can be extended
   // for in a single jump.
@@ -154,16 +154,13 @@ message EncoderConfig {
 // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) AND
 // f_1 AND f_2 AND ...
 message ActivationConditionProto {
-  repeated CodepointSets required_codepoint_sets = 1;
-
-  // Note: handling of required_features is currently UNIMPLEMENTED.
-  Features required_features = 2;
+  repeated SegmentsProto required_segments = 1;
   
   uint32 activated_patch = 3;
 }
 
 // A list of codepoint set ids that reference sets in "EncoderConfig.codepoint_sets"
-message CodepointSets {
+message SegmentsProto {
   repeated uint32 values = 1;
 }
 
@@ -175,6 +172,12 @@ message Glyphs {
 // A list of unicode code points.
 message Codepoints {
   repeated uint32 values = 1;
+}
+
+// Matches when the subset definition intersects codepoints OR features.
+message SegmentProto {
+  Codepoints codepoints = 1;
+  Features features = 2;
 }
 
 // A list of open type layout feature tags.
