@@ -46,11 +46,6 @@ class GlyphSegmentationTest : public ::testing::Test {
   hb_face_unique_ptr noto_nastaliq_urdu;
 };
 
-// TODO XXXXXX add tests where the input segments include features.
-// 1. segment with only features.
-// 2. segment with features and codepoints.
-// 3. To config proto for case 2 as well.
-
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
   absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, {'a', 'b'}},
@@ -114,6 +109,81 @@ TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
     condition.coverage.child_indices = {4, 5};  // entry[4], entry[5]
     condition.patch_indices.push_back(6);
     condition.coverage.conjunctive = true;
+    expected.push_back(condition);
+  }
+
+  auto entries = GlyphSegmentation::ActivationConditionsToPatchMapEntries(
+      activation_conditions, segments);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+  ASSERT_EQ(*entries, expected);
+}
+
+TEST_F(GlyphSegmentationTest,
+       ActivationConditionsToEncoderConditions_WithFeatures) {
+  SubsetDefinition smcp;
+  smcp.feature_tags = {HB_TAG('s', 'm', 'c', 'p')};
+
+  SubsetDefinition combined{'d', 'e', 'f'};
+  combined.feature_tags = {HB_TAG('d', 'l', 'i', 'g')};
+
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {1, smcp},
+      {2, combined},
+  };
+
+  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
+      GlyphSegmentation::ActivationCondition::and_segments({1, 2}, 5),
+  };
+
+  std::vector<PatchMap::Entry> expected;
+
+  // entry[0] {{smcp}} -> 1,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.features = {HB_TAG('s', 'm', 'c', 'p')};
+    condition.ignored = true;
+    condition.patch_indices = {1};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[1] {{d, e, f}} -> 2,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.codepoints = {'d', 'e', 'f'};
+    condition.ignored = true;
+    condition.patch_indices = {2};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[2] {{dlig}} -> 3,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
+    condition.ignored = true;
+    condition.patch_indices = {3};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[3] {e1 OR e2} -> 4,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {1, 2};
+    condition.ignored = true;
+    condition.patch_indices = {4};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[2] s1 AND s2 -> 5,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 3};
+    condition.patch_indices = {5};
+    condition.coverage.conjunctive = true;
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
     expected.push_back(condition);
   }
 
@@ -196,11 +266,11 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
-  SubsetDefinition init {'a'};
+  SubsetDefinition init{'a'};
   init.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
 
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}, smcp});
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), init,
+                                                         {{'b'}, {'c'}, smcp});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToConfigProto();
