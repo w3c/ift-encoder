@@ -337,6 +337,64 @@ TEST_F(IntegrationTest, TableKeyedOnly) {
   GlyphDataMatches(original_face.get(), extended_face.get(), 0x49);
 }
 
+TEST_F(IntegrationTest, TableKeyed_CodepointsAndFeatureSegment) {
+  Encoder encoder;
+  auto sc = InitEncoderForVf(encoder);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = encoder.SetBaseSubset(IntSet{0x41, 0x42, 0x43});
+
+  SubsetDefinition s1{0x45, 0x46, 0x47};
+  s1.feature_tags = {HB_TAG('s', 'm', 'c', 'p')};
+  encoder.AddNonGlyphDataSegment(s1);
+
+  SubsetDefinition s2{0x48};
+  s2.feature_tags = {HB_TAG('d', 'l', 'i', 'g')};
+  encoder.AddNonGlyphDataSegment(s2);
+
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  auto encoded_face = encoding->init_font.face();
+  auto codepoints = FontHelper::ToCodepointsSet(encoded_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_FALSE(codepoints.contains(0x45));
+
+  // The entry should trigger on {0x45, 0x46, 0x47} or smcp.
+  auto extended =
+      ExtendWithDesignSpace(*encoding, {}, {HB_TAG('s', 'm', 'c', 'p')}, {});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+
+  auto extended_face = extended->face();
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_TRUE(codepoints.contains(0x45));
+  ASSERT_FALSE(codepoints.contains(0x48));
+  ASSERT_FALSE(codepoints.contains(0x49));
+
+  auto original_face = noto_sans_jp_.face();
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x41);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x45);
+
+  // The entry should trigger on {0x48} or dlig.
+  encoding->init_font.shallow_copy(*extended);
+  extended = ExtendWithDesignSpace(*encoding, {0x48}, {}, {});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+
+  extended_face = extended->face();
+  codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(0x41));
+  ASSERT_TRUE(codepoints.contains(0x45));
+  ASSERT_TRUE(codepoints.contains(0x48));
+  ASSERT_FALSE(codepoints.contains(0x49));
+
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x41);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x45);
+  GlyphDataMatches(original_face.get(), extended_face.get(), 0x48);
+}
+
 TEST_F(IntegrationTest, TableKeyedOnly_Woff2Encoded) {
   Encoder encoder;
   auto sc = InitEncoderForTableKeyed(encoder);
