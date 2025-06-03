@@ -6,11 +6,10 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "common/int_set.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_map.h"
 #include "util/encoder_config.pb.h"
 
 namespace ift::encoder {
@@ -146,8 +145,8 @@ class GlyphSegmentation {
    * Converts a list of activation conditions into a list of condition entries
    * which are used by the encoder to specify conditions.
    */
-  static absl::StatusOr<std::vector<Condition>>
-  ActivationConditionsToConditionEntries(
+  static absl::StatusOr<std::vector<proto::PatchMap::Entry>>
+  ActivationConditionsToPatchMapEntries(
       absl::Span<const ActivationCondition> conditions,
       const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
 
@@ -200,7 +199,9 @@ class GlyphSegmentation {
   /*
    * These codepoints should be included in the initial font.
    */
-  const SubsetDefinition& InitialFontSegment() const { return init_font_segment_; };
+  const SubsetDefinition& InitialFontSegment() const {
+    return init_font_segment_;
+  };
 
   EncoderConfig ToConfigProto() const;
 

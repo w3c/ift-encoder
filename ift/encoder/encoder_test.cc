@@ -6,7 +6,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <optional>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
@@ -22,6 +21,7 @@
 #include "ift/client/fontations_client.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/ift_table.h"
+#include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 #include "ift/testdata/test_segments.h"
 
@@ -547,10 +547,10 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   s.Update(encoder.AddGlyphDataPatch(4, segment_4_gids));
   ASSERT_TRUE(s.ok()) << s;
 
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(segment_3_cps), 3)));
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(segment_4_cps), 4)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_3_cps, 3, PatchEncoding::GLYPH_KEYED)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_4_cps, 4, PatchEncoding::GLYPH_KEYED)));
 
   IntSet base_subset;
   base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
@@ -611,10 +611,10 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
   s.Update(encoder.AddGlyphDataPatch(1, {41, 42, 43, 44}));
   ASSERT_TRUE(s.ok()) << s;
 
-  s.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{0x41, 0x42, 0x43, 0x44}, 0)));
-  s.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{0x45, 0x46, 0x47, 0x48}, 1)));
+  s.Update(encoder.AddGlyphDataPatchCondition(PatchMap::Entry(
+      {0x41, 0x42, 0x43, 0x44}, 0, PatchEncoding::GLYPH_KEYED)));
+  s.Update(encoder.AddGlyphDataPatchCondition(PatchMap::Entry(
+      {0x45, 0x46, 0x47, 0x48}, 1, PatchEncoding::GLYPH_KEYED)));
 
   SubsetDefinition base_subset;
   base_subset.design_space[kWdth] = AxisRange::Point(100.0f);
@@ -670,16 +670,13 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   s.Update(encoder.AddGlyphDataPatch(3, segment_3_gids));
   s.Update(encoder.AddGlyphDataPatch(4, segment_4_gids));
 
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(segment_2_cps), 2)));
-  s.Update(encoder.AddGlyphDataPatchCondition(Condition::SimpleCondition(
-      SubsetDefinition::Codepoints(segment_3_cps), 3)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_2_cps, 2, PatchEncoding::GLYPH_KEYED)));
+  s.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_3_cps, 3, PatchEncoding::GLYPH_KEYED)));
 
-  Condition feature;
-  feature.subset_definition.codepoints.insert(segment_3_cps.begin(),
-                                              segment_3_cps.end());
-  feature.subset_definition.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
-  feature.activated_patch_id = 4;
+  PatchMap::Entry feature(segment_3_cps, 4, PatchEncoding::GLYPH_KEYED);
+  feature.coverage.features = {HB_TAG('c', 'c', 'm', 'p')};
   s.Update(encoder.AddGlyphDataPatchCondition(feature));
 
   ASSERT_TRUE(s.ok()) << s;
@@ -837,49 +834,48 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
 
   // 0
   s.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'b'}, 2)));
+      PatchMap::Entry({'b'}, 2, PatchEncoding::GLYPH_KEYED)));
 
   // 1
   s.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'c'}, 4)));
+      PatchMap::Entry({'c'}, 4, PatchEncoding::GLYPH_KEYED)));
 
   {
     // 2
-    Condition condition;
-    condition.activated_patch_id = std::nullopt;
-    condition.subset_definition = SubsetDefinition{'a'};
+    PatchMap::Entry condition({'a'}, 5, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
   {
     // 3
-    Condition condition;
-    condition.activated_patch_id = std::nullopt;
-    condition.subset_definition = SubsetDefinition{'d'};
+    PatchMap::Entry condition({'d'}, 6, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
 
   {
     // 4
-    Condition condition;
-    condition.activated_patch_id = 5;
-    condition.child_conditions = {1, 2};
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {1, 2};
+    condition.patch_indices = {5};
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
 
   {
     // 5
-    Condition condition;
-    condition.activated_patch_id = std::nullopt;
-    condition.child_conditions = {0, 3};
+    PatchMap::Entry condition;
+    condition.ignored = true;
+    condition.patch_indices = {6};
+    condition.coverage.child_indices = {0, 3};
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
 
   {
     // 5
-    Condition condition;
-    condition.activated_patch_id = 6;
-    condition.child_conditions = {4, 5};
-    condition.conjunctive = true;
+    PatchMap::Entry condition;
+    condition.patch_indices = {6};
+    condition.coverage.child_indices = {4, 5};
+    condition.coverage.conjunctive = true;
     s.Update(encoder.AddGlyphDataPatchCondition(condition));
   }
 

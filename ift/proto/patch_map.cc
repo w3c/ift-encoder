@@ -91,8 +91,9 @@ void PrintTo(const PatchMap::Coverage& coverage, std::ostream* os) {
 }
 
 void PrintTo(const PatchMap::Entry& entry, std::ostream* os) {
+  *os << "{";
   PrintTo(entry.coverage, os);
-  *os << ", {";
+  *os << " => {";
   bool first = true;
   for (uint32_t p : entry.patch_indices) {
     if (!first) {
@@ -102,7 +103,8 @@ void PrintTo(const PatchMap::Entry& entry, std::ostream* os) {
     }
     *os << p;
   }
-  *os << "}, " << entry.encoding;
+  *os << "} f" << entry.encoding;
+  *os << "}";
 }
 
 void PrintTo(const PatchMap& map, std::ostream* os) {
@@ -127,10 +129,20 @@ Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
 Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
                           const std::vector<uint32_t>& patch_indices,
                           PatchEncoding encoding, bool ignored) {
+  Entry e;
+  e.coverage = coverage;
+  e.patch_indices = patch_indices;
+  e.encoding = encoding;
+  e.ignored = ignored;
+
+  return AddEntry(e);
+}
+
+Status PatchMap::AddEntry(const Entry& entry) {
   // If child indices are present ensure they refer only to entries prior to
   // this one.
-  if (!coverage.child_indices.empty()) {
-    for (uint32_t index : coverage.child_indices) {
+  if (!entry.coverage.child_indices.empty()) {
+    for (uint32_t index : entry.coverage.child_indices) {
       if (index >= entries_.size()) {
         return absl::InvalidArgumentError(
             absl::StrCat("Invalid copy index. ", index, " is out of bounds."));
@@ -138,17 +150,13 @@ Status PatchMap::AddEntry(const PatchMap::Coverage& coverage,
     }
   }
 
-  if (patch_indices.empty()) {
+  if (entry.patch_indices.empty()) {
     return absl::InvalidArgumentError(
         "At least one patch index must be given.");
   }
 
-  Entry e;
-  e.coverage = coverage;
-  e.patch_indices = patch_indices;
-  e.encoding = encoding;
-  e.ignored = ignored;
-  entries_.push_back(std::move(e));
+  entries_.push_back(entry);
+
   return absl::OkStatus();
 }
 
