@@ -1,12 +1,18 @@
 #include "ift/encoder/subset_definition.h"
 
+#include <vector>
+
 #include "absl/container/btree_set.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
+#include "ift/encoder/glyph_segmentation.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 
 using absl::btree_set;
 using common::FontHelper;
 using common::IntSet;
+using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
 namespace ift::encoder {
@@ -134,6 +140,8 @@ void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
   gids.union_into(hb_subset_input_glyph_set(input));
 }
 
+/*
+XXXXXX
 PatchMap::Coverage SubsetDefinition::ToCoverage() const {
   PatchMap::Coverage coverage;
   coverage.codepoints = codepoints;
@@ -142,6 +150,56 @@ PatchMap::Coverage SubsetDefinition::ToCoverage() const {
     coverage.design_space[tag] = range;
   }
   return coverage;
+}
+  */
+
+std::vector<PatchMap::Entry> SubsetDefinition::ToEntries(
+    PatchEncoding encoding, uint32_t last_patch_id, uint32_t next_entry_index,
+    std::vector<uint32_t> patch_ids) const {
+  std::vector<PatchMap::Entry> entries;
+
+  if (!codepoints.empty()) {
+    PatchMap::Entry entry;
+    entry.encoding = encoding;
+    entry.coverage.codepoints = codepoints;
+    entries.push_back(entry);
+  }
+
+  if (!feature_tags.empty()) {
+    PatchMap::Entry entry;
+    entry.encoding = encoding;
+    entry.coverage.features = feature_tags;
+    entries.push_back(entry);
+  }
+
+  if (!design_space.empty()) {
+    PatchMap::Entry entry;
+    entry.encoding = encoding;
+    entry.coverage.design_space.insert(design_space.begin(),
+                                       design_space.end());
+    entries.push_back(entry);
+  }
+
+  if (entries.size() > 1) {
+    // Use a new entry to disjuntively match all of the entries from above.
+    PatchMap::Entry entry;
+    entry.coverage.conjunctive = false;
+    entry.encoding = encoding;
+
+    for (auto& e : entries) {
+      entry.coverage.child_indices.insert(next_entry_index++);
+      e.ignored = true;
+      e.patch_indices.push_back(++last_patch_id);
+    }
+    entries.push_back(entry);
+  }
+
+  // Last entry is the one that maps the patch ids
+  auto& e = entries.back();
+  e.patch_indices = patch_ids;
+  e.ignored = false;
+
+  return entries;
 }
 
 }  // namespace ift::encoder

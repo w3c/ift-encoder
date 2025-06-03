@@ -398,8 +398,18 @@ Status Encoder::PopulateTableKeyedPatchMap(
     }
 
     if (!edge_patches.empty()) {
-      PatchMap::Coverage coverage = edge.Combined().ToCoverage();
-      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches, encoding));
+      uint32_t last_patch_id = 0;
+      uint32_t next_entry_index = table_keyed_patch_map.GetEntries().size();
+      if (!table_keyed_patch_map.GetEntries().empty()) {
+        last_patch_id =
+            table_keyed_patch_map.GetEntries().back().patch_indices.back();
+      }
+
+      auto entries = edge.Combined().ToEntries(encoding, last_patch_id,
+                                               next_entry_index, edge_patches);
+      for (const auto& e : entries) {
+        TRYV(table_keyed_patch_map.AddEntry(e));
+      }
     }
   }
   return absl::OkStatus();

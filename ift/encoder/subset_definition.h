@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -10,6 +11,7 @@
 #include "common/axis_range.h"
 #include "common/int_set.h"
 #include "hb-subset.h"
+#include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 namespace ift::encoder {
@@ -91,10 +93,9 @@ struct SubsetDefinition {
 
   void ConfigureInput(hb_subset_input_t* input, hb_face_t* face) const;
 
-  // TODO XXXXX in some cases a composite entry (using child indices) will be
-  // needed.
-  //            we can't always convert to just a single coverage object.
-  ift::proto::PatchMap::Coverage ToCoverage() const;
+  std::vector<ift::proto::PatchMap::Entry> ToEntries(
+      ift::proto::PatchEncoding encoding, uint32_t last_patch_id,
+      uint32_t next_entry_index, std::vector<uint32_t> patch_ids) const;
 };
 
 }  // namespace ift::encoder
