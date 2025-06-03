@@ -61,6 +61,9 @@ class PatchMap {
     common::IntSet child_indices;
   };
 
+  // An entry in an IFT patch mapping.
+  //
+  // See: https://w3c.github.io/IFT/Overview.html#patch-map-dfn
   struct Entry {
     // TODO(garretrieger): move constructors?
 
@@ -72,6 +75,10 @@ class PatchMap {
     Entry(std::initializer_list<uint32_t> codepoints,
           const std::vector<uint32_t>& patches, PatchEncoding enc)
         : coverage(codepoints), patch_indices(patches), encoding(enc) {}
+
+    Entry(common::CodepointSet codepoints, uint32_t patch_idx,
+          PatchEncoding enc)
+        : coverage(codepoints), patch_indices{patch_idx}, encoding(enc) {}
 
     friend void PrintTo(const Entry& point, std::ostream* os);
 
@@ -114,6 +121,8 @@ class PatchMap {
                         const std::vector<uint32_t>& patch_indices,
                         ift::proto::PatchEncoding encoding,
                         bool ignored = false);
+
+  absl::Status AddEntry(const Entry& entry);
 
  private:
   // TODO(garretrieger): keep an index which maps from patch_index to entry

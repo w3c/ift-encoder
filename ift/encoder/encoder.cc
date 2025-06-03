@@ -162,9 +162,22 @@ Status Encoder::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
   return absl::OkStatus();
 }
 
-Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
+Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
+  if (condition.encoding != PatchEncoding::GLYPH_KEYED) {
+    return absl::InvalidArgumentError(
+        "Glyph data patch condition must be glyph keyed.");
+  }
+
+  uint32_t activated_patch_id = 0;
+  if (condition.patch_indices.size() == 1) {
+    activated_patch_id = condition.patch_indices[0];
+  } else {
+    return absl::InvalidArgumentError(
+        "Glyph data patches must have exactly one associated patch id.");
+  }
+
   uint32_t new_index = glyph_patch_conditions_.size();
-  for (uint32_t child_index : condition.child_conditions) {
+  for (uint32_t child_index : condition.coverage.child_indices) {
     if (child_index >= new_index) {
       return absl::InvalidArgumentError(
           StrCat("Child conditions must only references previous conditions: ",
@@ -172,10 +185,9 @@ Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
     }
   }
 
-  if (condition.activated_patch_id.has_value() &&
-      !glyph_data_patches_.contains(*condition.activated_patch_id)) {
+  if (!glyph_data_patches_.contains(activated_patch_id)) {
     return absl::InvalidArgumentError(
-        StrCat("Glyh data patch ", *condition.activated_patch_id,
+        StrCat("Glyh data patch ", activated_patch_id,
                " has not been supplied via AddGlyphDataPatch()"));
   }
 
@@ -310,8 +322,8 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
 
   IntSet reachable_segments;
   for (const auto& condition : glyph_patch_conditions_) {
-    if (condition.activated_patch_id.has_value()) {
-      reachable_segments.insert(*condition.activated_patch_id);
+    if (condition.patch_indices.size() > 0) {
+      reachable_segments.insert(condition.patch_indices[0]);
     }
   }
 
@@ -363,19 +375,8 @@ Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
     return absl::OkStatus();
   }
 
-  uint32_t last_patch_index = 0;
   for (const auto& condition : glyph_patch_conditions_) {
-    auto coverage = condition.subset_definition.ToCoverage();
-    coverage.child_indices.insert(condition.child_conditions.begin(),
-                                  condition.child_conditions.end());
-    coverage.conjunctive = condition.conjunctive;
-
-    if (condition.activated_patch_id.has_value()) {
-      last_patch_index = *condition.activated_patch_id;
-      TRYV(patch_map.AddEntry(coverage, last_patch_index, GLYPH_KEYED));
-    } else {
-      TRYV(patch_map.AddEntry(coverage, ++last_patch_index, GLYPH_KEYED, true));
-    }
+    TRYV(patch_map.AddEntry(condition));
   }
 
   return absl::OkStatus();

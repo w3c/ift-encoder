@@ -19,10 +19,11 @@
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 #include "ift/url_template.h"
 #include "util/encoder_config.pb.h"
 #include "util/load_codepoints.h"
@@ -89,10 +90,11 @@ using common::make_hb_blob;
 using google::protobuf::TextFormat;
 using ift::URLTemplate;
 using ift::encoder::ClosureGlyphSegmenter;
-using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
+using ift::proto::PatchEncoding;
+using ift::proto::PatchMap;
 
 StatusOr<std::vector<uint32_t>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file,
@@ -248,7 +250,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
     all_unicodes.insert(unicodes.begin(), unicodes.end());
 
     TRYV(encoder.AddGlyphDataPatchCondition(
-        Condition::SimpleCondition(SubsetDefinition::Codepoints(unicodes), i)));
+        PatchMap::Entry(unicodes, i, PatchEncoding::GLYPH_KEYED)));
   }
 
   encoder.AddNonGlyphDataSegment(all_unicodes);
@@ -302,7 +304,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     segments[i++] = s;
   }
 
-  auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+  auto entries = TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
       conditions, segments));
   for (const auto& e : entries) {
     TRYV(encoder.AddGlyphDataPatchCondition(e));
@@ -314,7 +316,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
 }
 
 std::vector<SubsetDefinition> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                     uint32_t number_of_segments) {
+                                              uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 

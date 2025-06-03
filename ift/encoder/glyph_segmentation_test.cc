@@ -2,14 +2,13 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <optional>
-
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -18,6 +17,8 @@ using common::IntSet;
 using common::make_hb_face;
 using common::SegmentSet;
 using google::protobuf::TextFormat;
+using ift::proto::PatchEncoding;
+using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
@@ -66,69 +67,57 @@ TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
           {{1, 3}, {2, 4}}, 6),
   };
 
-  std::vector<Condition> expected;
+  std::vector<PatchMap::Entry> expected;
 
   // entry[0] {{2}} -> 2,
-  {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('c');
-    condition.activated_patch_id = 2;
-    expected.push_back(condition);
-  }
+  expected.push_back(
+      PatchMap::Entry({'c'}, 2, proto::PatchEncoding::GLYPH_KEYED));
 
   // entry[1] {{3}} -> 4
-  {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('d');
-    condition.subset_definition.codepoints.insert('e');
-    condition.subset_definition.codepoints.insert('f');
-    condition.activated_patch_id = 4;
-    expected.push_back(condition);
-  }
+  expected.push_back(
+      PatchMap::Entry({'d', 'e', 'f'}, 4, proto::PatchEncoding::GLYPH_KEYED));
 
   // entry[2] {{1}} ignored
   {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('a');
-    condition.subset_definition.codepoints.insert('b');
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition({'a', 'b'}, 5, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[3] {{4}} ignored
   {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('g');
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition({'g'}, 6, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[4] {{1 OR 3}} -> 5
   {
-    Condition condition;
-    condition.child_conditions = {2, 1};  // entry[1], entry[2]
-    condition.activated_patch_id = 5;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {2, 1};
+    condition.patch_indices.push_back(5);
     expected.push_back(condition);
   }
 
   // entry[5] {{2 OR 4}} ignored
   {
-    Condition condition;
-    condition.child_conditions = {0, 3};  // entry[0], entry[3]
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 3};  // entry[0], entry[3]
+    condition.patch_indices.push_back(6);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[6] {{1 OR 3} AND {2 OR 4}} -> 6
   {
-    Condition condition;
-    condition.child_conditions = {4, 5};  // entry[4], entry[5]
-    condition.activated_patch_id = 6;
-    condition.conjunctive = true;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {4, 5};  // entry[4], entry[5]
+    condition.patch_indices.push_back(6);
+    condition.coverage.conjunctive = true;
     expected.push_back(condition);
   }
 
-  auto entries = GlyphSegmentation::ActivationConditionsToConditionEntries(
+  auto entries = GlyphSegmentation::ActivationConditionsToPatchMapEntries(
       activation_conditions, segments);
   ASSERT_TRUE(entries.ok()) << entries.status();
   ASSERT_EQ(*entries, expected);

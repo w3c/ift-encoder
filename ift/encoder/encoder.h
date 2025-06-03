@@ -12,7 +12,6 @@
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "hb-subset.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
@@ -68,7 +67,7 @@ class Encoder {
   /*
    * Adds a condition which may trigger the inclusion of a glyph data patch.
    */
-  absl::Status AddGlyphDataPatchCondition(Condition condition);
+  absl::Status AddGlyphDataPatchCondition(proto::PatchMap::Entry condition);
 
   void SetFace(hb_face_t* face) { face_.reset(hb_face_reference(face)); }
 
@@ -327,7 +326,7 @@ class Encoder {
 
   common::hb_face_unique_ptr face_;
   absl::btree_map<uint32_t, common::IntSet> glyph_data_patches_;
-  std::vector<Condition> glyph_patch_conditions_;
+  std::vector<proto::PatchMap::Entry> glyph_patch_conditions_;
 
   SubsetDefinition base_subset_;
   std::vector<SubsetDefinition> extension_subsets_;

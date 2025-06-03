@@ -17,7 +17,6 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
@@ -62,7 +61,6 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::SegmentSet;
-using ift::encoder::Condition;
 using ift::encoder::design_space_t;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
@@ -201,7 +199,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   }
 
   auto condition_entries =
-      TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+      TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
           activation_conditions, segments));
   for (const auto& entry : condition_entries) {
     TRYV(encoder.AddGlyphDataPatchCondition(entry));
