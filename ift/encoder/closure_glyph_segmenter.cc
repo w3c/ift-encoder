@@ -59,9 +59,9 @@ class RequestedSegmentationInformation;
 class GlyphClosureCache;
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
-                      GlyphClosureCache& closure_cache, const SubsetDefinition& segment,
-                      GlyphSet& and_gids, GlyphSet& or_gids,
-                      GlyphSet& exclusive_gids);
+                      GlyphClosureCache& closure_cache,
+                      const SubsetDefinition& segment, GlyphSet& and_gids,
+                      GlyphSet& or_gids, GlyphSet& exclusive_gids);
 
 /*
  * A cache of the results of glyph closure on a specific font face.
@@ -715,9 +715,9 @@ class SegmentationContext {
 };
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
-                      GlyphClosureCache& closure_cache, const SubsetDefinition& segment,
-                      GlyphSet& and_gids, GlyphSet& or_gids,
-                      GlyphSet& exclusive_gids) {
+                      GlyphClosureCache& closure_cache,
+                      const SubsetDefinition& segment, GlyphSet& and_gids,
+                      GlyphSet& or_gids, GlyphSet& exclusive_gids) {
   if (segment.Empty()) {
     // Skip empty sets, they will never contribute any conditions.
     return absl::OkStatus();
@@ -1122,8 +1122,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<SubsetDefinition> codepoint_segments, uint32_t patch_size_min_bytes,
-    uint32_t patch_size_max_bytes) const {
+    std::vector<SubsetDefinition> codepoint_segments,
+    uint32_t patch_size_min_bytes, uint32_t patch_size_max_bytes) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");

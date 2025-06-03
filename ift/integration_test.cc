@@ -1,5 +1,4 @@
 #include <cstdint>
-#include <optional>
 #include <string>
 
 #include "absl/strings/str_cat.h"
@@ -13,9 +12,9 @@
 #include "gtest/gtest.h"
 #include "hb.h"
 #include "ift/client/fontations_client.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 #include "ift/testdata/test_segments.h"
 
@@ -36,7 +35,6 @@ using common::make_hb_face;
 using common::make_hb_set;
 using ift::client::Extend;
 using ift::client::ExtendWithDesignSpace;
-using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
@@ -674,11 +672,11 @@ TEST_F(IntegrationTest, MixedMode) {
 
   // Setup activations for 2 through 4 (1 is init)
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -750,11 +748,11 @@ TEST_F(IntegrationTest, MixedMode_Woff2Encoded) {
 
   // Setup activations for 2 through 4 (1 is init)
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
 
   encoder.SetWoff2Encode(true);
 
@@ -827,36 +825,39 @@ TEST_F(IntegrationTest, MixedMode_OptionalFeatureTags) {
   encoder.AddNonGlyphDataSegment(segment_4);
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+      PatchMap::Entry(segment_1, 1, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
 
   {
-    Condition condition;
-    condition.child_conditions = {0};
-    condition.subset_definition.feature_tags = {kVrt3};
-    condition.activated_patch_id = 5;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.child_indices = {0};
+    entry.coverage.features = {kVrt3};
+    entry.patch_indices.push_back(5);
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
-    Condition condition;
-    condition.child_conditions = {1};
-    condition.subset_definition.feature_tags = {kVrt3};
-    condition.activated_patch_id = 5;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.child_indices = {1};
+    entry.coverage.features = {kVrt3};
+    entry.patch_indices.push_back(5);
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
-    Condition condition;
-    condition.child_conditions = {3};
-    condition.subset_definition.feature_tags = {kVrt3};
-    condition.activated_patch_id = 6;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.child_indices = {3};
+    entry.coverage.features = {kVrt3};
+    entry.patch_indices.push_back(6);
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   encoder.AddFeatureGroupSegment({kVrt3});
@@ -938,56 +939,74 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
   // Setup some composite activation conditions
   {
     // 0
-    Condition condition;
-    condition.subset_definition = SubsetDefinition::Codepoints(segment_1);
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.codepoints = segment_1;
+    entry.patch_indices.push_back(0);
+    entry.ignored = true;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 1
-    Condition condition;
-    condition.subset_definition = SubsetDefinition::Codepoints(segment_2);
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.codepoints = segment_2;
+    entry.patch_indices.push_back(0);
+    entry.ignored = true;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 2
-    Condition condition;
-    condition.subset_definition = SubsetDefinition::Codepoints(segment_3);
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.codepoints = segment_3;
+    entry.patch_indices.push_back(0);
+    entry.ignored = true;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 3
-    Condition condition;
-    condition.child_conditions = {0, 1};  // (1 OR 2)
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.conjunctive = false;
+    entry.coverage.child_indices = {0, 1};  // (1 OR 2)
+    entry.patch_indices.push_back(0);
+    entry.ignored = true;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 4
-    Condition condition;
-    condition.conjunctive = true;
-    condition.child_conditions = {3, 2};  // (1 OR 2) AND 3
-    condition.activated_patch_id = 4;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.conjunctive = true;
+    entry.coverage.child_indices = {3, 2};  // (1 OR 2) AND 3
+    entry.patch_indices.push_back(4);
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 5
-    Condition condition;
-    condition.child_conditions = {1, 2};  // (2 OR 3)
-    condition.activated_patch_id = std::nullopt;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.conjunctive = false;
+    entry.coverage.child_indices = {1, 2};  // (2 OR 3)
+    entry.patch_indices.push_back(0);
+    entry.ignored = true;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   {
     // 6
-    Condition condition;
-    condition.child_conditions = {0, 5};  // 1 AND (2 OR 3)
-    condition.conjunctive = true;
-    condition.activated_patch_id = 3;
-    sc.Update(encoder.AddGlyphDataPatchCondition(condition));
+    PatchMap::Entry entry;
+    entry.coverage.child_indices = {0, 5};  // 1 AND (2 OR 3)
+    entry.coverage.conjunctive = true;
+    entry.patch_indices.push_back(3);
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    sc.Update(encoder.AddGlyphDataPatchCondition(entry));
   }
 
   auto encoding = encoder.Encode();
@@ -1063,13 +1082,14 @@ TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
   encoder.AddNonGlyphDataSegment(segment_4);
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+      PatchMap::Entry(segment_1, 1, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
+
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -1145,13 +1165,13 @@ TEST_F(IntegrationTest, MixedMode_Complex) {
   encoder.AddNonGlyphDataSegment(segment_3_and_4);
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_1), 1)));
+      PatchMap::Entry(segment_1, 1, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -1205,11 +1225,11 @@ TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
   encoder.AddNonGlyphDataSegment(segment_4);
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -1255,11 +1275,11 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
   auto encoding = encoder.Encode();
@@ -1333,11 +1353,11 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
 
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_2), 2)));
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_3), 3)));
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition::Codepoints(segment_4), 4)));
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
 
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -1404,9 +1424,9 @@ TEST_F(IntegrationTest, MixedMode_Cff) {
 
   // Setup activations for patches 1 and 2
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'A', 'B', 'M', 'N'}, 1)));
+      PatchMap::Entry({'A', 'B', 'M', 'N'}, 1, PatchEncoding::GLYPH_KEYED)));
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'H', 'I', 'J', 'Z'}, 2)));
+      PatchMap::Entry({'H', 'I', 'J', 'Z'}, 2, PatchEncoding::GLYPH_KEYED)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -1467,9 +1487,10 @@ TEST_F(IntegrationTest, MixedMode_Cff2) {
 
   // Setup activations for patches 1 and 2
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'A', 'B', 'C'}, 1)));
+      PatchMap::Entry({'A', 'B', 'C'}, 1, PatchEncoding::GLYPH_KEYED)));
+
   sc.Update(encoder.AddGlyphDataPatchCondition(
-      Condition::SimpleCondition(SubsetDefinition{'M', 'N', 'P', 'Z'}, 2)));
+      PatchMap::Entry({'M', 'N', 'P', 'Z'}, 2, PatchEncoding::GLYPH_KEYED)));
 
   auto encoding = encoder.Encode();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
