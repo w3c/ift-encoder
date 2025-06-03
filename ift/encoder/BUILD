@@ -53,6 +53,18 @@ cc_test(
 )
 
 cc_test(
+    name = "subset_definition_test",
+    size = "small",
+    srcs = [
+        "subset_definition_test.cc",
+    ],
+    deps = [
+        ":encoder",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "glyph_segmentation_test",
     size = "small",
     srcs = [
