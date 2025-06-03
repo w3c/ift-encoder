@@ -492,9 +492,7 @@ ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
 
 EncoderConfig GlyphSegmentation::ToConfigProto() const {
   EncoderConfig config;
-  // TODO(garretrieger) XXXXXXX: include features from the segments in the
-  // generated proto.
-
+  
   uint32_t set_index = 0;
   for (const auto& s : Segments()) {
     if (!s.Empty()) {
@@ -519,6 +517,7 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
 
   *config.mutable_initial_codepoints() =
       ToSetProto<Codepoints>(InitialFontSegment().codepoints);
+  *config.mutable_initial_features() = TagsToSetProto<Features>(InitialFontSegment().feature_tags);
 
   return config;
 }

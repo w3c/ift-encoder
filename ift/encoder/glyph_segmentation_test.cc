@@ -185,6 +185,141 @@ glyph_patch_conditions {
 initial_codepoints {
   values: 97
 }
+initial_features {
+}
+)");
+}
+
+TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
+  ClosureGlyphSegmenter segmenter;
+
+  SubsetDefinition smcp;
+  smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+
+  SubsetDefinition init {'a'};
+  init.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
+
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}, smcp});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  auto config = segmentation->ToConfigProto();
+  std::string config_string;
+  TextFormat::PrintToString(config, &config_string);
+
+  // initial font: { gid0, gid69 }
+  // p0: { gid70 }
+  // p1: { gid71 }
+  // p2: { gid563 }
+  // p3: { gid562 }
+  // p4: { gid561 }
+  // if (s0) then p0
+  // if (s1) then p1
+  // if (s2) then p2
+  // if (s0 AND s2) then p3
+  // if (s1 AND s2) then p4
+  ASSERT_EQ(config_string, R"(segments {
+  key: 0
+  value {
+    codepoints {
+      values: 98
+    }
+    features {
+    }
+  }
+}
+segments {
+  key: 1
+  value {
+    codepoints {
+      values: 99
+    }
+    features {
+    }
+  }
+}
+segments {
+  key: 2
+  value {
+    codepoints {
+    }
+    features {
+      values: "smcp"
+    }
+  }
+}
+glyph_patches {
+  key: 0
+  value {
+    values: 70
+  }
+}
+glyph_patches {
+  key: 1
+  value {
+    values: 71
+  }
+}
+glyph_patches {
+  key: 2
+  value {
+    values: 563
+  }
+}
+glyph_patches {
+  key: 3
+  value {
+    values: 562
+  }
+}
+glyph_patches {
+  key: 4
+  value {
+    values: 561
+  }
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 0
+  }
+  activated_patch: 0
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 1
+  }
+  activated_patch: 1
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 2
+  }
+  activated_patch: 2
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 0
+  }
+  required_segments {
+    values: 2
+  }
+  activated_patch: 3
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 1
+  }
+  required_segments {
+    values: 2
+  }
+  activated_patch: 4
+}
+initial_codepoints {
+  values: 97
+}
+initial_features {
+  values: "dlig"
+}
 )");
 }
 
@@ -288,6 +423,8 @@ glyph_patch_conditions {
 }
 initial_codepoints {
   values: 97
+}
+initial_features {
 }
 )");
 }
@@ -395,6 +532,8 @@ glyph_patch_conditions {
   activated_patch: 2
 }
 initial_codepoints {
+}
+initial_features {
 }
 )");
 }
