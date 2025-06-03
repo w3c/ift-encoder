@@ -34,13 +34,6 @@
  * requirement".
  */
 
-// TODO XXXX Add support for feature segments.
-
-// TODO(garretrieger): have option to output the glyph segmentation plan as an
-//                     encoder config proto. Basically two output modes:
-//                     - Report
-//                     - Config
-
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
 
@@ -73,6 +66,10 @@ ABSL_FLAG(uint32_t, min_patch_size_bytes, 0,
 ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "The segmenter will avoid merges which result in patches larger than "
           "this amount.");
+
+ABSL_FLAG(std::vector<std::string>, optional_feature_tags, {},
+          "A list of feature tags which can be optionally added to the font "
+          "via patch.");
 
 using absl::btree_map;
 using absl::flat_hash_map;
@@ -286,12 +283,11 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     all_segments.insert(id);
   }
 
-  // TODO XXXXXX also includes segment features
-  IntSet all_codepoints;
+  SubsetDefinition all;
   for (const auto& s : segmentation.Segments()) {
-    all_codepoints.insert(s.codepoints.begin(), s.codepoints.end());
+    all.Union(s);
   }
-  encoder.AddNonGlyphDataSegment(all_codepoints);
+  encoder.AddNonGlyphDataSegment(all);
 
   std::vector<GlyphSegmentation::ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
@@ -378,6 +374,13 @@ int main(int argc, char** argv) {
 
   auto groups =
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
+
+  for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
+    SubsetDefinition s;
+    hb_tag_t tag_value = FontHelper::ToTag(tag);
+    s.feature_tags = {tag_value};
+    groups.push_back(s);
+  }
 
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(
