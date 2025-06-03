@@ -140,19 +140,6 @@ void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
   gids.union_into(hb_subset_input_glyph_set(input));
 }
 
-/*
-XXXXXX
-PatchMap::Coverage SubsetDefinition::ToCoverage() const {
-  PatchMap::Coverage coverage;
-  coverage.codepoints = codepoints;
-  coverage.features = feature_tags;
-  for (const auto& [tag, range] : design_space) {
-    coverage.design_space[tag] = range;
-  }
-  return coverage;
-}
-  */
-
 std::vector<PatchMap::Entry> SubsetDefinition::ToEntries(
     PatchEncoding encoding, uint32_t last_patch_id, uint32_t next_entry_index,
     std::vector<uint32_t> patch_ids) const {
