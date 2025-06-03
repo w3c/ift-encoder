@@ -596,7 +596,7 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed) {
   // - segment 3 (glyph keyed)
   // - segment 4 (glyph keyed)
   // - shared brotli to (segment 3 + 4)
-  // TODO XXXXX Check graph instead
+  // TODO(garretrieger): Check graph instead
 }
 
 TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_VF) {
@@ -705,7 +705,7 @@ TEST_F(EncoderTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   // - segment 3 (glyph keyed)
   // - segment 4 (glyph keyed), triggered by ccmap + segment 3
   // - table keyed patches...
-  // TODO XXXXX Check graph instead
+  // TODO(garretrieger): Check graph instead
 }
 
 TEST_F(EncoderTest, Encode_FourSubsets) {
