@@ -137,8 +137,10 @@ class GlyphSegmentation {
   };
 
   GlyphSegmentation(SubsetDefinition init_font_segment,
+                    common::GlyphSet init_font_glyphs,
                     common::GlyphSet unmapped_glyphs)
       : init_font_segment_(init_font_segment),
+        init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
 
   /*
@@ -193,7 +195,7 @@ class GlyphSegmentation {
    * These glyphs should be included in the initial font.
    */
   const common::GlyphSet& InitialFontGlyphs() const {
-    return init_font_segment_.gids;
+    return init_font_glyphs_;
   };
 
   /*
@@ -217,6 +219,7 @@ class GlyphSegmentation {
 
  private:
   SubsetDefinition init_font_segment_;
+  common::GlyphSet init_font_glyphs_;
   common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
   std::vector<SubsetDefinition> segments_;

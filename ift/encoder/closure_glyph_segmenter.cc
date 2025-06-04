@@ -187,7 +187,7 @@ class RequestedSegmentationInformation {
     {
       auto closure = closure_cache.GlyphClosure(init_font_segment_);
       if (closure.ok()) {
-        init_font_segment_.gids = std::move(*closure);
+        init_font_glyphs_ = std::move(*closure);
       }
     }
 
@@ -210,7 +210,7 @@ class RequestedSegmentationInformation {
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
 
-  const GlyphSet& InitFontGlyphs() const { return init_font_segment_.gids; }
+  const GlyphSet& InitFontGlyphs() const { return init_font_glyphs_; }
 
   const GlyphSet& FullClosure() const { return full_closure_; }
 
@@ -221,6 +221,7 @@ class RequestedSegmentationInformation {
  private:
   std::vector<SubsetDefinition> segments_;
   SubsetDefinition init_font_segment_;
+  GlyphSet init_font_glyphs_;
   SubsetDefinition all_;
   GlyphSet full_closure_;
 };
@@ -506,6 +507,7 @@ class GlyphGroupings {
   StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const {
     GlyphSegmentation segmentation(segmentation_info.InitFontSegment(),
+                                   segmentation_info.InitFontGlyphs(),
                                    unmapped_glyphs_);
     segmentation.CopySegments(segmentation_info.Segments());
     TRYV(GlyphSegmentation::GroupsToSegmentation(
