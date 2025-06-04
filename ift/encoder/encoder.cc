@@ -185,9 +185,9 @@ Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
     }
   }
 
-  if (!condition.ignored && !glyph_data_patches_.contains(activated_patch_id) ) {
-    // All entries have an associated patch ids, but on ignored entries the id isn't used
-    // so only check for a associated patch on non-ignored entries.
+  if (!condition.ignored && !glyph_data_patches_.contains(activated_patch_id)) {
+    // All entries have an associated patch ids, but on ignored entries the id
+    // isn't used so only check for a associated patch on non-ignored entries.
     return absl::InvalidArgumentError(
         StrCat("Glyh data patch ", activated_patch_id,
                " has not been supplied via AddGlyphDataPatch()"));
