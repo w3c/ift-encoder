@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <sstream>
 #include <vector>
 
 #include "absl/types/span.h"
@@ -259,6 +260,24 @@ class IntSet {
   // this set.
   void symmetric_difference(const IntSet& other) {
     hb_set_symmetric_difference(set_.get(), other.set_.get());
+  }
+
+  std::string ToString() const {
+    std::stringstream out;
+
+    out << "{";
+
+    bool first = true;
+    for (uint32_t v : *this) {
+      if (!first) {
+        out << ", ";
+      }
+      first = false;
+      out << v;
+    }
+
+    out << "}";
+    return out.str();
   }
 
  private:
