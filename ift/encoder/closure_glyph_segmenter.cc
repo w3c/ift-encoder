@@ -60,7 +60,8 @@ class GlyphClosureCache;
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
                       GlyphClosureCache& closure_cache,
-                      const SubsetDefinition& segment, GlyphSet& and_gids,
+                      const SubsetDefinition& segment, // TODO XXXX can we drop this and use just segment ids?
+                      const SegmentSet& segment_ids, GlyphSet& and_gids,
                       GlyphSet& or_gids, GlyphSet& exclusive_gids);
 
 /*
@@ -111,7 +112,9 @@ class GlyphClosureCache {
 
   StatusOr<const GlyphSet*> CodepointsToOrGids(
       const RequestedSegmentationInformation& segmentation_info,
-      const SubsetDefinition& segment) {
+      const SubsetDefinition& segment, const SegmentSet& segment_ids) {
+    // TODO XXXXX the cache needs to take into account segment_ids (including invalidation) when we change them.
+    // maybe it's better to not cache here and just rely on the underlying glyph closure cache instead.
     auto it = code_point_set_to_or_gids_cache_.find(segment);
     if (it != code_point_set_to_or_gids_cache_.end()) {
       code_point_set_to_or_gids_cache_hit_++;
@@ -122,8 +125,8 @@ class GlyphClosureCache {
     GlyphSet and_gids;
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
-    TRYV(AnalyzeSegment(segmentation_info, *this, segment, and_gids, or_gids,
-                        exclusive_gids));
+    TRYV(AnalyzeSegment(segmentation_info, *this, segment, segment_ids,
+                        and_gids, or_gids, exclusive_gids));
 
     auto [new_value, inserted] =
         code_point_set_to_or_gids_cache_.insert(std::pair(segment, or_gids));
@@ -179,9 +182,10 @@ class RequestedSegmentationInformation {
                                    GlyphClosureCache& closure_cache)
       : segments_(std::move(segments)),
         init_font_segment_(std::move(init_font_segment)) {
-    all_.Union(init_font_segment_);
+    SubsetDefinition all;
+    all.Union(init_font_segment_);
     for (const auto& s : segments_) {
-      all_.Union(s);
+      all.Union(s);
     }
 
     {
@@ -191,7 +195,7 @@ class RequestedSegmentationInformation {
       }
     }
 
-    auto closure = closure_cache.GlyphClosure(all_);
+    auto closure = closure_cache.GlyphClosure(all);
     if (closure.ok()) {
       full_closure_ = std::move(*closure);
     }
@@ -214,15 +218,12 @@ class RequestedSegmentationInformation {
 
   const GlyphSet& FullClosure() const { return full_closure_; }
 
-  const SubsetDefinition& AllSegment() const { return all_; }
-
   const std::vector<SubsetDefinition>& Segments() const { return segments_; }
 
  private:
   std::vector<SubsetDefinition> segments_;
   SubsetDefinition init_font_segment_;
   GlyphSet init_font_glyphs_;
-  SubsetDefinition all_;
   GlyphSet full_closure_;
 };
 
@@ -460,13 +461,19 @@ class GlyphGroupings {
     // used.
     for (const auto& or_group : modified_or_groups) {
       auto& glyphs = or_glyph_groups_[or_group];
-      SubsetDefinition all_other_segment = segmentation_info.AllSegment();
-      for (uint32_t s : or_group) {
-        all_other_segment.Subtract(segmentation_info.Segments()[s]);
+
+      SegmentSet all_other_segment_ids;
+      SubsetDefinition all_other_segment = segmentation_info.InitFontSegment();
+      for (uint32_t s = 0; s < segmentation_info.Segments().size(); s++) {
+        if (or_group.contains(s)) {
+          continue;
+        }
+        all_other_segment.Union(segmentation_info.Segments()[s]);
+        all_other_segment_ids.insert(s);
       }
 
       const GlyphSet* or_gids = TRY(closure_cache.CodepointsToOrGids(
-          segmentation_info, all_other_segment));
+          segmentation_info, all_other_segment, all_other_segment_ids));
 
       // Any "OR" glyphs associated with all other codepoints have some
       // additional conditions to activate so we can't safely include them into
@@ -642,11 +649,12 @@ class SegmentationContext {
 
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
-  Status AnalyzeSegment(const SubsetDefinition& segment, GlyphSet& and_gids,
+  Status AnalyzeSegment(const SubsetDefinition& segment,
+                        const SegmentSet& segment_ids, GlyphSet& and_gids,
                         GlyphSet& or_gids, GlyphSet& exclusive_gids) {
-    return ::ift::encoder::AnalyzeSegment(segmentation_info,
-                                          glyph_closure_cache, segment,
-                                          and_gids, or_gids, exclusive_gids);
+    return ::ift::encoder::AnalyzeSegment(
+        segmentation_info, glyph_closure_cache, segment, segment_ids, and_gids,
+        or_gids, exclusive_gids);
   }
 
   // Generates updated glyph conditions and glyph groupings for segment_index
@@ -657,8 +665,8 @@ class SegmentationContext {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
     TRYV(ift::encoder::AnalyzeSegment(segmentation_info, glyph_closure_cache,
-                                      segment, and_gids, or_gids,
-                                      exclusive_gids));
+                                      segment, {segment_index}, and_gids,
+                                      or_gids, exclusive_gids));
 
     GlyphSet changed_gids;
     changed_gids.union_set(and_gids);
@@ -718,7 +726,8 @@ class SegmentationContext {
 
 Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
                       GlyphClosureCache& closure_cache,
-                      const SubsetDefinition& segment, GlyphSet& and_gids,
+                      const SubsetDefinition& segment,
+                      const SegmentSet& segment_ids, GlyphSet& and_gids,
                       GlyphSet& or_gids, GlyphSet& exclusive_gids) {
   if (segment.Empty()) {
     // Skip empty sets, they will never contribute any conditions.
@@ -749,8 +758,14 @@ Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
   // * I - D: the activation conditions for these glyphs is s_i OR …
   //          Where … is one or more additional segments.
   // * D intersection I: the activation conditions for these glyphs is only s_i
-  SubsetDefinition except_segment = segmentation_info.AllSegment();
-  except_segment.Subtract(segment);
+  SubsetDefinition except_segment = segmentation_info.InitFontSegment();
+  for (uint32_t s = 0; s < segmentation_info.Segments().size(); s++) {
+    if (segment_ids.contains(s)) {
+      continue;
+    }
+    except_segment.Union(segmentation_info.Segments()[s]);
+  }
+
   auto B_except_segment_closure =
       TRY(closure_cache.GlyphClosure(except_segment));
 
@@ -806,11 +821,13 @@ void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
 // to the listed codepoints. Will typically overestimate the size since we use
 // a faster, but less effective version of brotli to generate the estimate.
 StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
-                                          const SubsetDefinition& segment) {
+                                          const SubsetDefinition& segment,
+                                          const SegmentSet& segment_ids) {
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;
-  TRYV(context.AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids));
+  TRYV(context.AnalyzeSegment(segment, segment_ids, and_gids, or_gids,
+                              exclusive_gids));
   return EstimatePatchSizeBytes(context.original_face.get(), exclusive_gids);
 }
 
@@ -825,7 +842,9 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
     const SegmentSet& to_merge_segments_) {
   // Create a merged segment, and remove all of the others
   SegmentSet to_merge_segments = to_merge_segments_;
+  SegmentSet to_merge_segments_with_base = to_merge_segments_;
   to_merge_segments.erase(base_segment_index);
+  to_merge_segments_with_base.insert(base_segment_index);
 
   bool new_segment_is_inert =
       context.inert_segments.contains(base_segment_index) &&
@@ -855,7 +874,8 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
 
   uint32_t new_patch_size = 0;
   if (!new_segment_is_inert) {
-    new_patch_size = TRY(EstimatePatchSizeBytes(context, merged_segment));
+    new_patch_size = TRY(EstimatePatchSizeBytes(context, merged_segment,
+                                                to_merge_segments_with_base));
   } else {
     // For inert patches we can precompute the glyph set saving a closure
     // operation
