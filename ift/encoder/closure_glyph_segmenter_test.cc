@@ -56,6 +56,62 @@ if (s1) then p1
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, SegmentationWithPartialOverlap) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{'b', 'c'}, {'c', 'd'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'b', 'c'}, {'c', 'd'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid72 }
+p2: { gid71 }
+if (s0) then p0
+if (s1) then p1
+if ((s0 OR s1)) then p2
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFullOverlap) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{'b', 'c'}, {'b', 'c'}, {'d'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {'b', 'c'}, {'b', 'c'}, {'d'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid72 }
+p1: { gid70, gid71 }
+if (s2) then p0
+if ((s0 OR s1)) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SegmentationWithAdditionalConditionOverlap) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'f'}, {'i'}, {'f', 'i'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid444, gid446 }
+p1: { gid74 }
+p2: { gid77 }
+if ((s0 OR s2)) then p1
+if ((s1 OR s2)) then p2
+if ((s0 OR s1 OR s2)) then p0
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
