@@ -185,7 +185,9 @@ Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
     }
   }
 
-  if (!glyph_data_patches_.contains(activated_patch_id)) {
+  if (!condition.ignored && !glyph_data_patches_.contains(activated_patch_id) ) {
+    // All entries have an associated patch ids, but on ignored entries the id isn't used
+    // so only check for a associated patch on non-ignored entries.
     return absl::InvalidArgumentError(
         StrCat("Glyh data patch ", activated_patch_id,
                " has not been supplied via AddGlyphDataPatch()"));
@@ -322,7 +324,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
 
   IntSet reachable_segments;
   for (const auto& condition : glyph_patch_conditions_) {
-    if (condition.patch_indices.size() > 0) {
+    if (!condition.ignored && condition.patch_indices.size() > 0) {
       reachable_segments.insert(condition.patch_indices[0]);
     }
   }
