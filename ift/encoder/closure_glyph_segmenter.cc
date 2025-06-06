@@ -804,6 +804,34 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
   return EstimatePatchSizeBytes(context.original_face.get(), exclusive_gids);
 }
 
+// Check a proposed merger to see if it would result in mixing codepoint only
+// and feature only segments.
+bool WouldMixFeaturesAndCodepoints(
+    const RequestedSegmentationInformation& segment_info,
+    segment_index_t base_segment_index, const SegmentSet& segments) {
+  const auto& base = segment_info.Segments()[base_segment_index];
+  bool base_codepoints_only =
+      !base.codepoints.empty() && base.feature_tags.empty();
+  bool base_features_only =
+      base.codepoints.empty() && !base.feature_tags.empty();
+
+  if (!base_codepoints_only && !base_features_only) {
+    return false;
+  }
+
+  for (segment_index_t id : segments) {
+    const auto& s = segment_info.Segments()[id];
+
+    if (base_codepoints_only && !s.feature_tags.empty()) {
+      return true;
+    } else if (base_features_only && !s.codepoints.empty()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Attempt to merge to_merge_semgents into base_segment_index. If maximum
 // patch size would be exceeded does not merge and returns nullopt.
 //
@@ -813,6 +841,22 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
 StatusOr<std::optional<GlyphSet>> TryMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& to_merge_segments_) {
+  if (WouldMixFeaturesAndCodepoints(context.segmentation_info,
+                                    base_segment_index, to_merge_segments_)) {
+    // Because we don't yet have a good cost function for evaluating potential
+    // mergers: the merger if it doesn't find a previous merge candidate will
+    // try to merge together segments that are composed of codepoints with a
+    // segment that adds an optional feature. Since this feature segments are
+    // likely rarely used this will inflate the size of the patches for those
+    // codepoint segments unnecessarily.
+    //
+    // So for now just don't merge cases where we would be combining codepoint
+    // only segments with feature only segments.
+    VLOG(0) << "  Merge would mix features into a codepoint only segment, "
+               "skipping.";
+    return std::nullopt;
+  }
+
   // Create a merged segment, and remove all of the others
   SegmentSet to_merge_segments = to_merge_segments_;
   SegmentSet to_merge_segments_with_base = to_merge_segments_;
