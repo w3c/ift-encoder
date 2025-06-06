@@ -300,7 +300,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, FullRoboto) {
+TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   auto codepoints = common::FontHelper::ToCodepointsSet(roboto.get());
 
   uint32_t num_segments = 412;
@@ -322,6 +322,10 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto) {
       }
     }
   }
+
+  SubsetDefinition smcp;
+  smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  segments.push_back(smcp);
 
   auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                                          segments, 4000, 12000);

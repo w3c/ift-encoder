@@ -83,7 +83,7 @@ cc_test(
 
 cc_test(
     name = "closure_glyph_segmenter_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "closure_glyph_segmenter_test.cc",
     ],
