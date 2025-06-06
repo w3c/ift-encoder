@@ -31,6 +31,19 @@ void PrintTo(const SubsetDefinition& def, std::ostream* os) {
 
   *os << "}";
 
+  if (!def.feature_tags.empty()) {
+    *os << ", {";
+    bool first = true;
+    for (hb_tag_t tag : def.feature_tags) {
+      if (!first) {
+        *os << ", ";
+      }
+      first = false;
+      *os << FontHelper::ToString(tag);
+    }
+    *os << "}";
+  }
+
   if (!def.design_space.empty()) {
     *os << ", {";
     bool first = true;
