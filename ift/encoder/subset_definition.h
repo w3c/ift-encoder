@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -10,12 +11,28 @@
 #include "common/axis_range.h"
 #include "common/int_set.h"
 #include "hb-subset.h"
+#include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 namespace ift::encoder {
 
 typedef absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space_t;
 
+// Describes a subset of a font in terms of the codepoints, feature tags, and
+// design space that the subset will contain data for.
+//
+// Mirrors: https://w3c.github.io/IFT/Overview.html#font-subset-definition
+//
+// When used to describe the condition to activate a patch/subset the target
+// subset definition will intersect the condition when
+//
+// intersects(target.codepoints, condition.codepoints) OR
+// intersects(target.features, condition.features) OR
+// intersects(target.design_space, condition.design_space)
+//
+// Each of the sets (codepoints, features, design space) are optional, if empty
+// they do not influence intersection or configuration of a subsetting
+// operation.
 struct SubsetDefinition {
   SubsetDefinition() {}
   SubsetDefinition(std::initializer_list<uint32_t> codepoints_in) {
@@ -46,9 +63,16 @@ struct SubsetDefinition {
     return false;
   }
 
-  bool empty() const {
+  bool Empty() const {
     return codepoints.empty() && gids.empty() && feature_tags.empty() &&
            design_space.empty();
+  }
+
+  void Clear() {
+    codepoints.clear();
+    gids.clear();
+    feature_tags.clear();
+    design_space.clear();
   }
 
   bool operator==(const SubsetDefinition& other) const {
@@ -69,7 +93,9 @@ struct SubsetDefinition {
 
   void ConfigureInput(hb_subset_input_t* input, hb_face_t* face) const;
 
-  ift::proto::PatchMap::Coverage ToCoverage() const;
+  std::vector<ift::proto::PatchMap::Entry> ToEntries(
+      ift::proto::PatchEncoding encoding, uint32_t last_patch_id,
+      uint32_t next_entry_index, std::vector<uint32_t> patch_ids) const;
 };
 
 }  // namespace ift::encoder

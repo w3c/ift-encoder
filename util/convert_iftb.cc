@@ -76,10 +76,10 @@ StatusOr<EncoderConfig> create_config(
   for (const auto [gid, chunk] : gid_map) {
     auto cp = gid_to_unicode.find(gid);
     if (cp != gid_to_unicode.end()) {
-      Codepoints codepoints;
+      SegmentProto segment;
       auto [it, added] =
-          config.mutable_codepoint_sets()->insert(std::pair(chunk, codepoints));
-      it->second.add_values(cp->second);
+          config.mutable_segments()->insert(std::pair(chunk, segment));
+      it->second.mutable_codepoints()->add_values(cp->second);
     }
 
     Glyphs glyphs;
@@ -89,7 +89,7 @@ StatusOr<EncoderConfig> create_config(
 
   // Set up the initial subset, which is specified by loaded_chunks
   for (auto chunk : loaded_chunks) {
-    config.mutable_initial_codepoint_sets()->add_values(chunk);
+    config.mutable_initial_segments()->add_values(chunk);
   }
 
   // Add all non-initial segments to a single non-glyph segment
@@ -103,13 +103,13 @@ StatusOr<EncoderConfig> create_config(
     non_initial_segments.insert(chunk);
   }
 
-  CodepointSets* codepoint_sets = config.add_non_glyph_codepoint_set_groups();
+  SegmentsProto* segments_proto = config.add_non_glyph_segments();
   for (auto chunk : non_initial_segments) {
-    codepoint_sets->add_values(chunk);
+    segments_proto->add_values(chunk);
+
     ActivationConditionProto* condition = config.add_glyph_patch_conditions();
     condition->set_activated_patch(chunk);
-    condition->mutable_required_codepoint_sets()->Add()->mutable_values()->Add(
-        chunk);
+    condition->add_required_segments()->add_values(chunk);
   }
 
   return config;

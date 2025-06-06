@@ -19,10 +19,11 @@
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/condition.h"
 #include "ift/encoder/encoder.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 #include "ift/url_template.h"
 #include "util/encoder_config.pb.h"
 #include "util/load_codepoints.h"
@@ -32,11 +33,6 @@
  * segmentation and associated activation conditions that maintain the "closure
  * requirement".
  */
-
-// TODO(garretrieger): have option to output the glyph segmentation plan as an
-//                     encoder config proto. Basically two output modes:
-//                     - Report
-//                     - Config
 
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
@@ -71,6 +67,10 @@ ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "The segmenter will avoid merges which result in patches larger than "
           "this amount.");
 
+ABSL_FLAG(std::vector<std::string>, optional_feature_tags, {},
+          "A list of feature tags which can be optionally added to the font "
+          "via patch.");
+
 using absl::btree_map;
 using absl::flat_hash_map;
 using absl::Status;
@@ -87,10 +87,11 @@ using common::make_hb_blob;
 using google::protobuf::TextFormat;
 using ift::URLTemplate;
 using ift::encoder::ClosureGlyphSegmenter;
-using ift::encoder::Condition;
 using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
+using ift::proto::PatchEncoding;
+using ift::proto::PatchMap;
 
 StatusOr<std::vector<uint32_t>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file,
@@ -246,7 +247,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
     all_unicodes.insert(unicodes.begin(), unicodes.end());
 
     TRYV(encoder.AddGlyphDataPatchCondition(
-        Condition::SimpleCondition(SubsetDefinition::Codepoints(unicodes), i)));
+        PatchMap::Entry(unicodes, i, PatchEncoding::GLYPH_KEYED)));
   }
 
   encoder.AddNonGlyphDataSegment(all_unicodes);
@@ -282,24 +283,24 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     all_segments.insert(id);
   }
 
-  IntSet all_codepoints;
+  SubsetDefinition all;
   for (const auto& s : segmentation.Segments()) {
-    all_codepoints.insert(s.begin(), s.end());
+    all.Union(s);
   }
-  encoder.AddNonGlyphDataSegment(all_codepoints);
+  encoder.AddNonGlyphDataSegment(all);
 
   std::vector<GlyphSegmentation::ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
     conditions.push_back(c);
   }
 
-  flat_hash_map<uint32_t, CodepointSet> segments;
+  flat_hash_map<uint32_t, SubsetDefinition> segments;
   uint32_t i = 0;
   for (const auto& s : segmentation.Segments()) {
-    segments[i++].insert(s.begin(), s.end());
+    segments[i++] = s;
   }
 
-  auto entries = TRY(GlyphSegmentation::ActivationConditionsToConditionEntries(
+  auto entries = TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
       conditions, segments));
   for (const auto& e : entries) {
     TRYV(encoder.AddGlyphDataPatchCondition(e));
@@ -310,12 +311,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<CodepointSet> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                          uint32_t number_of_segments) {
+std::vector<SubsetDefinition> GroupCodepoints(std::vector<uint32_t> codepoints,
+                                              uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<CodepointSet> out;
+  std::vector<SubsetDefinition> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -325,8 +326,10 @@ std::vector<CodepointSet> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    CodepointSet group;
-    group.insert(start, end);
+    SubsetDefinition group;
+    for (; start != end; start++) {
+      group.codepoints.insert(*start);
+    }
     out.push_back(group);
   }
 
@@ -355,11 +358,14 @@ int main(int argc, char** argv) {
     }
     init_codepoints = *result;
   }
-  CodepointSet init_codepoints_set;
-  init_codepoints_set.insert(init_codepoints.begin(), init_codepoints.end());
+  SubsetDefinition init_segment;
+  for (hb_codepoint_t cp : init_codepoints) {
+    init_segment.codepoints.insert(cp);
+  }
 
-  auto codepoints = TargetCodepoints(
-      font->get(), absl::GetFlag(FLAGS_codepoints_file), init_codepoints_set);
+  auto codepoints =
+      TargetCodepoints(font->get(), absl::GetFlag(FLAGS_codepoints_file),
+                       init_segment.codepoints);
   if (!codepoints.ok()) {
     std::cerr << "Failed to load codepoints file: " << codepoints.status()
               << std::endl;
@@ -369,9 +375,16 @@ int main(int argc, char** argv) {
   auto groups =
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
 
+  for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
+    SubsetDefinition s;
+    hb_tag_t tag_value = FontHelper::ToTag(tag);
+    s.feature_tags = {tag_value};
+    groups.push_back(s);
+  }
+
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(
-      font->get(), init_codepoints_set, groups,
+      font->get(), init_segment, groups,
       absl::GetFlag(FLAGS_min_patch_size_bytes),
       absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (!result.ok()) {

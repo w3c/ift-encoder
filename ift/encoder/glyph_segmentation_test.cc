@@ -2,13 +2,13 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <optional>
-
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/condition.h"
+#include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -17,6 +17,8 @@ using common::IntSet;
 using common::make_hb_face;
 using common::SegmentSet;
 using google::protobuf::TextFormat;
+using ift::proto::PatchEncoding;
+using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
@@ -45,7 +47,7 @@ class GlyphSegmentationTest : public ::testing::Test {
 };
 
 TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
-  absl::flat_hash_map<segment_index_t, CodepointSet> segments = {
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, {'a', 'b'}},
       {2, {'c'}},
       {3, {'d', 'e', 'f'}},
@@ -60,69 +62,132 @@ TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
           {{1, 3}, {2, 4}}, 6),
   };
 
-  std::vector<Condition> expected;
+  std::vector<PatchMap::Entry> expected;
 
   // entry[0] {{2}} -> 2,
-  {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('c');
-    condition.activated_patch_id = 2;
-    expected.push_back(condition);
-  }
+  expected.push_back(
+      PatchMap::Entry({'c'}, 2, proto::PatchEncoding::GLYPH_KEYED));
 
   // entry[1] {{3}} -> 4
-  {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('d');
-    condition.subset_definition.codepoints.insert('e');
-    condition.subset_definition.codepoints.insert('f');
-    condition.activated_patch_id = 4;
-    expected.push_back(condition);
-  }
+  expected.push_back(
+      PatchMap::Entry({'d', 'e', 'f'}, 4, proto::PatchEncoding::GLYPH_KEYED));
 
   // entry[2] {{1}} ignored
   {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('a');
-    condition.subset_definition.codepoints.insert('b');
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition({'a', 'b'}, 5, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[3] {{4}} ignored
   {
-    Condition condition;
-    condition.subset_definition.codepoints.insert('g');
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition({'g'}, 6, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[4] {{1 OR 3}} -> 5
   {
-    Condition condition;
-    condition.child_conditions = {2, 1};  // entry[1], entry[2]
-    condition.activated_patch_id = 5;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {2, 1};
+    condition.patch_indices.push_back(5);
     expected.push_back(condition);
   }
 
   // entry[5] {{2 OR 4}} ignored
   {
-    Condition condition;
-    condition.child_conditions = {0, 3};  // entry[0], entry[3]
-    condition.activated_patch_id = std::nullopt;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 3};  // entry[0], entry[3]
+    condition.patch_indices.push_back(6);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
   // entry[6] {{1 OR 3} AND {2 OR 4}} -> 6
   {
-    Condition condition;
-    condition.child_conditions = {4, 5};  // entry[4], entry[5]
-    condition.activated_patch_id = 6;
-    condition.conjunctive = true;
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {4, 5};  // entry[4], entry[5]
+    condition.patch_indices.push_back(6);
+    condition.coverage.conjunctive = true;
     expected.push_back(condition);
   }
 
-  auto entries = GlyphSegmentation::ActivationConditionsToConditionEntries(
+  auto entries = GlyphSegmentation::ActivationConditionsToPatchMapEntries(
+      activation_conditions, segments);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+  ASSERT_EQ(*entries, expected);
+}
+
+TEST_F(GlyphSegmentationTest,
+       ActivationConditionsToEncoderConditions_WithFeatures) {
+  SubsetDefinition smcp;
+  smcp.feature_tags = {HB_TAG('s', 'm', 'c', 'p')};
+
+  SubsetDefinition combined{'d', 'e', 'f'};
+  combined.feature_tags = {HB_TAG('d', 'l', 'i', 'g')};
+
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {1, smcp},
+      {2, combined},
+  };
+
+  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
+      GlyphSegmentation::ActivationCondition::and_segments({1, 2}, 5),
+  };
+
+  std::vector<PatchMap::Entry> expected;
+
+  // entry[0] {{smcp}} -> 1,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.features = {HB_TAG('s', 'm', 'c', 'p')};
+    condition.ignored = true;
+    condition.patch_indices = {1};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[1] {{d, e, f}} -> 2,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.codepoints = {'d', 'e', 'f'};
+    condition.ignored = true;
+    condition.patch_indices = {2};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[2] {{dlig}} -> 3,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
+    condition.ignored = true;
+    condition.patch_indices = {3};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[3] {e1 OR e2} -> 4,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {1, 2};
+    condition.ignored = true;
+    condition.patch_indices = {4};
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  // entry[2] s1 AND s2 -> 5,
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 3};
+    condition.patch_indices = {5};
+    condition.coverage.conjunctive = true;
+    condition.encoding = PatchEncoding::GLYPH_KEYED;
+    expected.push_back(condition);
+  }
+
+  auto entries = GlyphSegmentation::ActivationConditionsToPatchMapEntries(
       activation_conditions, segments);
   ASSERT_TRUE(entries.ok()) << entries.status();
   ASSERT_EQ(*entries, expected);
@@ -143,16 +208,24 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
   // p1: { gid71 }
   // if (s0) then p0
   // if (s1) then p1
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 98
+    codepoints {
+      values: 98
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 99
+    codepoints {
+      values: 99
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -168,19 +241,154 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
 }
 initial_codepoints {
   values: 97
+}
+initial_features {
+}
+)");
+}
+
+TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
+  ClosureGlyphSegmenter segmenter;
+
+  SubsetDefinition smcp;
+  smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+
+  SubsetDefinition init{'a'};
+  init.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), init,
+                                                         {{'b'}, {'c'}, smcp});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  auto config = segmentation->ToConfigProto();
+  std::string config_string;
+  TextFormat::PrintToString(config, &config_string);
+
+  // initial font: { gid0, gid69 }
+  // p0: { gid70 }
+  // p1: { gid71 }
+  // p2: { gid563 }
+  // p3: { gid562 }
+  // p4: { gid561 }
+  // if (s0) then p0
+  // if (s1) then p1
+  // if (s2) then p2
+  // if (s0 AND s2) then p3
+  // if (s1 AND s2) then p4
+  ASSERT_EQ(config_string, R"(segments {
+  key: 0
+  value {
+    codepoints {
+      values: 98
+    }
+    features {
+    }
+  }
+}
+segments {
+  key: 1
+  value {
+    codepoints {
+      values: 99
+    }
+    features {
+    }
+  }
+}
+segments {
+  key: 2
+  value {
+    codepoints {
+    }
+    features {
+      values: "smcp"
+    }
+  }
+}
+glyph_patches {
+  key: 0
+  value {
+    values: 70
+  }
+}
+glyph_patches {
+  key: 1
+  value {
+    values: 71
+  }
+}
+glyph_patches {
+  key: 2
+  value {
+    values: 563
+  }
+}
+glyph_patches {
+  key: 3
+  value {
+    values: 562
+  }
+}
+glyph_patches {
+  key: 4
+  value {
+    values: 561
+  }
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 0
+  }
+  activated_patch: 0
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 1
+  }
+  activated_patch: 1
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 2
+  }
+  activated_patch: 2
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 0
+  }
+  required_segments {
+    values: 2
+  }
+  activated_patch: 3
+}
+glyph_patch_conditions {
+  required_segments {
+    values: 1
+  }
+  required_segments {
+    values: 2
+  }
+  activated_patch: 4
+}
+initial_codepoints {
+  values: 97
+}
+initial_features {
+  values: "dlig"
 }
 )");
 }
@@ -204,18 +412,26 @@ TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
   // if (s1) then p1
   // if ((s0 OR s1)) then p3
   // if (s0 AND s1) then p2
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 102
-    values: 193
+    codepoints {
+      values: 102
+      values: 193
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 105
-    values: 262
+    codepoints {
+      values: 105
+      values: 262
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -248,35 +464,37 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
     values: 1
   }
   activated_patch: 3
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 2
 }
 initial_codepoints {
   values: 97
+}
+initial_features {
 }
 )");
 }
@@ -301,30 +519,42 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // if (s0) then p0
   // if (s1) then p1
   // if (s3) then p2
-  ASSERT_EQ(config_string, R"(codepoint_sets {
+  ASSERT_EQ(config_string, R"(segments {
   key: 0
   value {
-    values: 97
-    values: 98
-    values: 100
+    codepoints {
+      values: 97
+      values: 98
+      values: 100
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 1
   value {
-    values: 101
-    values: 102
-    values: 106
-    values: 107
+    codepoints {
+      values: 101
+      values: 102
+      values: 106
+      values: 107
+    }
+    features {
+    }
   }
 }
-codepoint_sets {
+segments {
   key: 3
   value {
-    values: 109
-    values: 110
-    values: 111
-    values: 112
+    codepoints {
+      values: 109
+      values: 110
+      values: 111
+      values: 112
+    }
+    features {
+    }
   }
 }
 glyph_patches {
@@ -354,24 +584,26 @@ glyph_patches {
   }
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 0
   }
   activated_patch: 0
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 1
   }
   activated_patch: 1
 }
 glyph_patch_conditions {
-  required_codepoint_sets {
+  required_segments {
     values: 3
   }
   activated_patch: 2
 }
 initial_codepoints {
+}
+initial_features {
 }
 )");
 }

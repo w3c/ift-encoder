@@ -10,7 +10,11 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
+#include "ift/encoder/subset_definition.h"
+#include "ift/proto/patch_encoding.h"
+#include "ift/proto/patch_map.h"
 
 using absl::btree_map;
 using absl::btree_set;
@@ -23,6 +27,8 @@ using common::CodepointSet;
 using common::GlyphSet;
 using common::IntSet;
 using common::SegmentSet;
+using ift::proto::PatchEncoding;
+using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
@@ -251,14 +257,29 @@ bool GlyphSegmentation::ActivationCondition::operator<(
   return false;
 }
 
-StatusOr<std::vector<Condition>>
-GlyphSegmentation::ActivationConditionsToConditionEntries(
+void MakeIgnored(PatchMap::Entry& entry, patch_id_t& last_patch_id) {
+  entry.ignored = true;
+  // patch id for ignored entries doesn't matter, use last + 1 to minimize
+  // encoding size.
+  entry.patch_indices.clear();
+  entry.patch_indices.push_back(++last_patch_id);
+}
+
+patch_id_t MapTo(PatchMap::Entry& entry, patch_id_t new_patch_id) {
+  entry.ignored = false;
+  entry.patch_indices.clear();
+  entry.patch_indices.push_back(new_patch_id);
+  return new_patch_id;
+}
+
+StatusOr<std::vector<PatchMap::Entry>>
+GlyphSegmentation::ActivationConditionsToPatchMapEntries(
     Span<const ActivationCondition> conditions,
-    const absl::flat_hash_map<segment_index_t, CodepointSet>& segments) {
+    const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments) {
   // TODO(garretrieger): extend this to work with segments that are
   // SubsetDefinition's instead of just codepoints. This would allow for
   // features and other things to be worked into conditions.
-  std::vector<Condition> entries;
+  std::vector<PatchMap::Entry> entries;
   if (conditions.empty()) {
     return entries;
   }
@@ -284,6 +305,7 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
   // Each base entry can be used to map one condition as well.
   flat_hash_map<uint32_t, uint32_t> segment_id_to_entry_index;
   uint32_t next_entry_index = 0;
+  patch_id_t last_patch_id = 0;
   for (auto condition = remaining_conditions.begin();
        condition != remaining_conditions.end();) {
     bool remove = false;
@@ -300,17 +322,57 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
         }
         const auto& original_def = original->second;
 
-        Condition entry;
-        entry.subset_definition.codepoints = original_def;
+        // Segments match on {codepoints} OR {features}, whereas IFT conditions
+        // match on {codepoints} AND {features}. So the codepoint and features
+        // sets need to be placed in separate conditions which are joined by a
+        // disjunctive match if both are present
+        std::optional<PatchMap::Entry> codepoints_entry;
+        if (!original_def.codepoints.empty()) {
+          PatchMap::Entry entry;
+          entry.coverage.codepoints = original_def.codepoints;
+          entry.encoding = PatchEncoding::GLYPH_KEYED;
+          codepoints_entry = entry;
+        }
+
+        std::optional<PatchMap::Entry> feature_entry;
+        if (!original_def.feature_tags.empty()) {
+          PatchMap::Entry entry;
+          entry.coverage.features = original_def.feature_tags;
+          entry.encoding = PatchEncoding::GLYPH_KEYED;
+          feature_entry = entry;
+        }
+
+        PatchMap::Entry entry;
+        if (codepoints_entry && feature_entry) {
+          // The codepoints and feature entries are going to be child entries
+          // which don't directly include an activated patch id, so set them to
+          // be ignored
+          MakeIgnored(*codepoints_entry, last_patch_id);
+          entries.push_back(*codepoints_entry);
+          uint32_t codepoints_entry_index = next_entry_index++;
+
+          MakeIgnored(*feature_entry, last_patch_id);
+          entries.push_back(*feature_entry);
+          uint32_t features_entry_index = next_entry_index++;
+
+          entry.coverage.conjunctive = false;
+          entry.coverage.child_indices.insert(codepoints_entry_index);
+          entry.coverage.child_indices.insert(features_entry_index);
+          entry.encoding = PatchEncoding::GLYPH_KEYED;
+        } else if (codepoints_entry) {
+          entry = *codepoints_entry;
+        } else if (feature_entry) {
+          entry = *feature_entry;
+        }
 
         if (condition->IsUnitary()) {
           // this condition can use this entry to map itself.
-          entry.activated_patch_id = condition->activated();
+          last_patch_id = MapTo(entry, condition->activated());
           remove = true;
         } else {
           // Otherwise this entry does nothing (ignored = true), but will be
-          // referenced by later entries, so don't assign an activated id.
-          entry.activated_patch_id = std::nullopt;
+          // referenced by later entries.
+          MakeIgnored(entry, last_patch_id);
         }
 
         entries.push_back(entry);
@@ -341,8 +403,9 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
         continue;
       }
 
-      Condition entry;
-      entry.conjunctive = false;  // ... OR ...
+      PatchMap::Entry entry;
+      entry.encoding = PatchEncoding::GLYPH_KEYED;
+      entry.coverage.conjunctive = false;  // ... OR ...
 
       for (uint32_t segment_id : group) {
         auto entry_index = segment_id_to_entry_index.find(segment_id);
@@ -351,14 +414,14 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
               StrCat("entry for segment_id = ", segment_id,
                      " was not previously created."));
         }
-        entry.child_conditions.insert(entry_index->second);
+        entry.coverage.child_indices.insert(entry_index->second);
       }
 
       if (condition->conditions().size() == 1) {
-        entry.activated_patch_id = condition->activated();
+        last_patch_id = MapTo(entry, condition->activated());
         remove = true;
       } else {
-        entry.activated_patch_id = std::nullopt;
+        MakeIgnored(entry, last_patch_id);
       }
 
       entries.push_back(entry);
@@ -376,20 +439,21 @@ GlyphSegmentation::ActivationConditionsToConditionEntries(
   // the groups (phase 2) and base entries (phase 1) as needed
   for (auto condition = remaining_conditions.begin();
        condition != remaining_conditions.end(); condition++) {
-    Condition entry;
-    entry.conjunctive = true;  // ... AND ...
+    PatchMap::Entry entry;
+    entry.encoding = PatchEncoding::GLYPH_KEYED;
+    entry.coverage.conjunctive = true;  // ... AND ...
 
     for (const auto& group : condition->conditions()) {
       if (group.size() == 1) {
-        entry.child_conditions.insert(
+        entry.coverage.child_indices.insert(
             segment_id_to_entry_index[*group.begin()]);
         continue;
       }
 
-      entry.child_conditions.insert(segment_group_to_entry_index[group]);
+      entry.coverage.child_indices.insert(segment_group_to_entry_index[group]);
     }
 
-    entry.activated_patch_id = condition->activated();
+    last_patch_id = MapTo(entry, condition->activated());
     entries.push_back(entry);
   }
 
@@ -405,13 +469,21 @@ ProtoType ToSetProto(const IntSet& set) {
   return values;
 }
 
+template <typename ProtoType>
+ProtoType TagsToSetProto(const btree_set<hb_tag_t>& set) {
+  ProtoType values;
+  for (uint32_t tag : set) {
+    values.add_values(common::FontHelper::ToString(tag));
+  }
+  return values;
+}
+
 ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
     const {
   ActivationConditionProto proto;
 
-  for (const auto& c : conditions()) {
-    CodepointSets group = *proto.add_required_codepoint_sets() =
-        ToSetProto<CodepointSets>(c);
+  for (const auto& ss : conditions()) {
+    *proto.add_required_segments() = ToSetProto<SegmentsProto>(ss);
   }
   proto.set_activated_patch(activated());
 
@@ -423,9 +495,13 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
 
   uint32_t set_index = 0;
   for (const auto& s : Segments()) {
-    if (!s.empty()) {
-      (*config.mutable_codepoint_sets())[set_index++] =
-          ToSetProto<Codepoints>(s);
+    if (!s.Empty()) {
+      SegmentProto segment_proto;
+      (*segment_proto.mutable_codepoints()) =
+          ToSetProto<Codepoints>(s.codepoints);
+      (*segment_proto.mutable_features()) =
+          TagsToSetProto<Features>(s.feature_tags);
+      (*config.mutable_segments())[set_index++] = segment_proto;
     } else {
       set_index++;
     }
@@ -440,13 +516,15 @@ EncoderConfig GlyphSegmentation::ToConfigProto() const {
   }
 
   *config.mutable_initial_codepoints() =
-      ToSetProto<Codepoints>(InitialFontCodepoints());
+      ToSetProto<Codepoints>(InitialFontSegment().codepoints);
+  *config.mutable_initial_features() =
+      TagsToSetProto<Features>(InitialFontSegment().feature_tags);
 
   return config;
 }
 
 void GlyphSegmentation::CopySegments(
-    const std::vector<CodepointSet>& segments) {
+    const std::vector<SubsetDefinition>& segments) {
   segments_.clear();
   for (const auto& set : segments) {
     segments_.push_back(set);

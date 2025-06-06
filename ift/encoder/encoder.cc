@@ -110,7 +110,7 @@ std::vector<Encoder::Edge> Encoder::OutgoingEdges(
   for (const auto& s : extension_subsets_) {
     SubsetDefinition filtered = s;
     filtered.Subtract(base_subset);
-    if (filtered.empty()) {
+    if (filtered.Empty()) {
       continue;
     }
 
@@ -162,9 +162,22 @@ Status Encoder::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
   return absl::OkStatus();
 }
 
-Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
+Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
+  if (condition.encoding != PatchEncoding::GLYPH_KEYED) {
+    return absl::InvalidArgumentError(
+        "Glyph data patch condition must be glyph keyed.");
+  }
+
+  uint32_t activated_patch_id = 0;
+  if (condition.patch_indices.size() == 1) {
+    activated_patch_id = condition.patch_indices[0];
+  } else {
+    return absl::InvalidArgumentError(
+        "Glyph data patches must have exactly one associated patch id.");
+  }
+
   uint32_t new_index = glyph_patch_conditions_.size();
-  for (uint32_t child_index : condition.child_conditions) {
+  for (uint32_t child_index : condition.coverage.child_indices) {
     if (child_index >= new_index) {
       return absl::InvalidArgumentError(
           StrCat("Child conditions must only references previous conditions: ",
@@ -172,10 +185,11 @@ Status Encoder::AddGlyphDataPatchCondition(Condition condition) {
     }
   }
 
-  if (condition.activated_patch_id.has_value() &&
-      !glyph_data_patches_.contains(*condition.activated_patch_id)) {
+  if (!condition.ignored && !glyph_data_patches_.contains(activated_patch_id)) {
+    // All entries have an associated patch ids, but on ignored entries the id
+    // isn't used so only check for a associated patch on non-ignored entries.
     return absl::InvalidArgumentError(
-        StrCat("Glyh data patch ", *condition.activated_patch_id,
+        StrCat("Glyh data patch ", activated_patch_id,
                " has not been supplied via AddGlyphDataPatch()"));
   }
 
@@ -310,8 +324,8 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
 
   IntSet reachable_segments;
   for (const auto& condition : glyph_patch_conditions_) {
-    if (condition.activated_patch_id.has_value()) {
-      reachable_segments.insert(*condition.activated_patch_id);
+    if (!condition.ignored && condition.patch_indices.size() > 0) {
+      reachable_segments.insert(condition.patch_indices[0]);
     }
   }
 
@@ -363,19 +377,8 @@ Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
     return absl::OkStatus();
   }
 
-  uint32_t last_patch_index = 0;
   for (const auto& condition : glyph_patch_conditions_) {
-    auto coverage = condition.subset_definition.ToCoverage();
-    coverage.child_indices.insert(condition.child_conditions.begin(),
-                                  condition.child_conditions.end());
-    coverage.conjunctive = condition.conjunctive;
-
-    if (condition.activated_patch_id.has_value()) {
-      last_patch_index = *condition.activated_patch_id;
-      TRYV(patch_map.AddEntry(coverage, last_patch_index, GLYPH_KEYED));
-    } else {
-      TRYV(patch_map.AddEntry(coverage, ++last_patch_index, GLYPH_KEYED, true));
-    }
+    TRYV(patch_map.AddEntry(condition));
   }
 
   return absl::OkStatus();
@@ -397,8 +400,18 @@ Status Encoder::PopulateTableKeyedPatchMap(
     }
 
     if (!edge_patches.empty()) {
-      PatchMap::Coverage coverage = edge.Combined().ToCoverage();
-      TRYV(table_keyed_patch_map.AddEntry(coverage, edge_patches, encoding));
+      uint32_t last_patch_id = 0;
+      uint32_t next_entry_index = table_keyed_patch_map.GetEntries().size();
+      if (!table_keyed_patch_map.GetEntries().empty()) {
+        last_patch_id =
+            table_keyed_patch_map.GetEntries().back().patch_indices.back();
+      }
+
+      auto entries = edge.Combined().ToEntries(encoding, last_patch_id,
+                                               next_entry_index, edge_patches);
+      for (const auto& e : entries) {
+        TRYV(table_keyed_patch_map.AddEntry(e));
+      }
     }
   }
   return absl::OkStatus();
