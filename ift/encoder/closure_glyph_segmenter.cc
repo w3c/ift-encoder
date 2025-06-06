@@ -112,38 +112,19 @@ class GlyphClosureCache {
     return GlyphSet(gids);
   }
 
-  StatusOr<const GlyphSet*> CodepointsToOrGids(
+  StatusOr<GlyphSet> CodepointsToOrGids(
       const RequestedSegmentationInformation& segmentation_info,
       const SubsetDefinition& segment, const SegmentSet& segment_ids) {
-    // TODO XXXXX the cache needs to take into account segment_ids (including
-    // invalidation) when we change them. maybe it's better to not cache here
-    // and just rely on the underlying glyph closure cache instead.
-    auto it = code_point_set_to_or_gids_cache_.find(segment);
-    if (it != code_point_set_to_or_gids_cache_.end()) {
-      code_point_set_to_or_gids_cache_hit_++;
-      return &it->second;
-    }
-
-    code_point_set_to_or_gids_cache_miss_++;
     GlyphSet and_gids;
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
     TRYV(AnalyzeSegment(segmentation_info, *this, segment, segment_ids,
                         and_gids, or_gids, exclusive_gids));
 
-    auto [new_value, inserted] =
-        code_point_set_to_or_gids_cache_.insert(std::pair(segment, or_gids));
-    return &new_value->second;
+    return or_gids;
   }
 
   void LogCacheStats() const {
-    double hit_rate = 100.0 * ((double)code_point_set_to_or_gids_cache_hit_) /
-                      ((double)(code_point_set_to_or_gids_cache_hit_ +
-                                code_point_set_to_or_gids_cache_miss_));
-    VLOG(0) << "Codepoints to or_gids cache hit rate: " << hit_rate << "% ("
-            << code_point_set_to_or_gids_cache_hit_ << " hits, "
-            << code_point_set_to_or_gids_cache_miss_ << " misses)";
-
     double closure_hit_rate =
         100.0 * ((double)glyph_closure_cache_hit_) /
         ((double)(glyph_closure_cache_hit_ + glyph_closure_cache_miss_));
@@ -167,12 +148,6 @@ class GlyphClosureCache {
   uint32_t glyph_closure_cache_miss_ = 0;
   uint32_t closure_count_cumulative_ = 0;
   uint32_t closure_count_delta_ = 0;
-
-  // for this cache we return pointers to the sets so need node_hash_map for
-  // pointer stability.
-  node_hash_map<SubsetDefinition, GlyphSet> code_point_set_to_or_gids_cache_;
-  uint32_t code_point_set_to_or_gids_cache_hit_ = 0;
-  uint32_t code_point_set_to_or_gids_cache_miss_ = 0;
 };
 
 /*
@@ -479,14 +454,14 @@ class GlyphGroupings {
         all_other_segment_ids.insert(s);
       }
 
-      const GlyphSet* or_gids = TRY(closure_cache.CodepointsToOrGids(
+      GlyphSet or_gids = TRY(closure_cache.CodepointsToOrGids(
           segmentation_info, all_other_segment, all_other_segment_ids));
 
       // Any "OR" glyphs associated with all other codepoints have some
       // additional conditions to activate so we can't safely include them into
       // this or condition. They are instead moved to the set of unmapped
       // glyphs.
-      for (uint32_t gid : *or_gids) {
+      for (uint32_t gid : or_gids) {
         if (glyphs.erase(gid) > 0) {
           unmapped_glyphs_.insert(gid);
         }
