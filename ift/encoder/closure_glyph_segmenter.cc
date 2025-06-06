@@ -58,11 +58,13 @@ namespace ift::encoder {
 class RequestedSegmentationInformation;
 class GlyphClosureCache;
 
-Status AnalyzeSegment(const RequestedSegmentationInformation& segmentation_info,
-                      GlyphClosureCache& closure_cache,
-                      const SubsetDefinition& segment, // TODO XXXX can we drop this and use just segment ids?
-                      const SegmentSet& segment_ids, GlyphSet& and_gids,
-                      GlyphSet& or_gids, GlyphSet& exclusive_gids);
+Status AnalyzeSegment(
+    const RequestedSegmentationInformation& segmentation_info,
+    GlyphClosureCache& closure_cache,
+    const SubsetDefinition&
+        segment,  // TODO XXXX can we drop this and use just segment ids?
+    const SegmentSet& segment_ids, GlyphSet& and_gids, GlyphSet& or_gids,
+    GlyphSet& exclusive_gids);
 
 /*
  * A cache of the results of glyph closure on a specific font face.
@@ -113,8 +115,9 @@ class GlyphClosureCache {
   StatusOr<const GlyphSet*> CodepointsToOrGids(
       const RequestedSegmentationInformation& segmentation_info,
       const SubsetDefinition& segment, const SegmentSet& segment_ids) {
-    // TODO XXXXX the cache needs to take into account segment_ids (including invalidation) when we change them.
-    // maybe it's better to not cache here and just rely on the underlying glyph closure cache instead.
+    // TODO XXXXX the cache needs to take into account segment_ids (including
+    // invalidation) when we change them. maybe it's better to not cache here
+    // and just rely on the underlying glyph closure cache instead.
     auto it = code_point_set_to_or_gids_cache_.find(segment);
     if (it != code_point_set_to_or_gids_cache_.end()) {
       code_point_set_to_or_gids_cache_hit_++;
@@ -358,16 +361,18 @@ class GlyphGroupings {
     auto it = and_glyph_groups_.find(condition.and_segments);
     if (it != and_glyph_groups_.end()) {
       it->second.erase(gid);
+      GlyphSegmentation::ActivationCondition activation_condition =
+          GlyphSegmentation::ActivationCondition::and_segments(
+              condition.and_segments, 0);
+      if (condition.and_segments.size() == 1) {
+        activation_condition =
+            GlyphSegmentation::ActivationCondition::exclusive_segment(
+                *condition.and_segments.begin(), 0);
+      }
+      conditions_and_glyphs_[activation_condition].erase(gid);
+
       if (it->second.empty()) {
         and_glyph_groups_.erase(it);
-        GlyphSegmentation::ActivationCondition activation_condition =
-            GlyphSegmentation::ActivationCondition::and_segments(
-                condition.and_segments, 0);
-        if (condition.and_segments.size() == 1) {
-          activation_condition =
-              GlyphSegmentation::ActivationCondition::exclusive_segment(
-                  *condition.and_segments.begin(), 0);
-        }
         RemoveConditionAndGlyphs(activation_condition);
       }
     }
@@ -375,11 +380,13 @@ class GlyphGroupings {
     it = or_glyph_groups_.find(condition.or_segments);
     if (it != or_glyph_groups_.end()) {
       it->second.erase(gid);
+      GlyphSegmentation::ActivationCondition activation_condition =
+          GlyphSegmentation::ActivationCondition::or_segments(
+              condition.or_segments, 0);
+      conditions_and_glyphs_[activation_condition].erase(gid);
+
       if (it->second.empty()) {
         or_glyph_groups_.erase(it);
-        GlyphSegmentation::ActivationCondition activation_condition =
-            GlyphSegmentation::ActivationCondition::or_segments(
-                condition.or_segments, 0);
         RemoveConditionAndGlyphs(activation_condition);
       }
     }
@@ -422,9 +429,9 @@ class GlyphGroupings {
 
     btree_set<SegmentSet> modified_and_groups;
     btree_set<SegmentSet> modified_or_groups;
-
     for (glyph_id_t gid : glyphs) {
       const auto& condition = glyph_condition_set.ConditionsFor(gid);
+
       if (!condition.and_segments.empty()) {
         and_glyph_groups_[condition.and_segments].insert(gid);
         modified_and_groups.insert(condition.and_segments);
