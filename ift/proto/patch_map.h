@@ -92,7 +92,7 @@ class PatchMap {
 
     Coverage coverage;
     std::vector<uint32_t> patch_indices;
-    PatchEncoding encoding;
+    PatchEncoding encoding = PatchEncoding::GLYPH_KEYED;
     bool ignored = false;
   };
 
