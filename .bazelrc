@@ -1,3 +1,9 @@
+# Needed to get osx build working:
+common --enable_platform_specific_config
+build:macos --copt='-mmacosx-version-min=10.15'
+build:macos --linkopt='-mmacosx-version-min=10.15'
+
+
 # Address sanitizer
 # To use it:
 # bazel build --config asan
