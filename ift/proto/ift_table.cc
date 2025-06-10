@@ -124,7 +124,8 @@ CompatId IFTTable::GetId() const { return id_; }
 
 void PrintTo(const IFTTable& table, std::ostream* os) {
   *os << "{" << std::endl;
-  *os << "  url_template = " << table.GetUrlTemplate() << std::endl;
+  // TODO XXXXXX
+  // *os << "  url_template = " << table.GetUrlTemplate() << std::endl;
   *os << "  id = ";
   PrintTo(table.id_, os);
   *os << std::endl;

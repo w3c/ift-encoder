@@ -2,16 +2,28 @@
 
 #include <cstdint>
 
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "base32_hex.hpp"
-#include "uritemplate.hpp"
 
+using absl::Span;
+using absl::StatusOr;
 using cppcodec::base32_hex;
-using uritemplatecpp::UriTemplate;
 
 namespace ift {
 
-std::string URLTemplate::PatchToUrl(absl::string_view url_template,
-                                    uint32_t patch_idx) {
+constexpr uint8_t OPCODES_START = 128;
+constexpr uint8_t ID32 = 0;
+constexpr uint8_t D1 = 1;
+constexpr uint8_t D2 = 2;
+constexpr uint8_t D3 = 3;
+constexpr uint8_t D4 = 4;
+constexpr uint8_t ID64 = 5;
+constexpr uint8_t OPCODE_COUNT = 6;
+constexpr uint8_t OPCODES_END = OPCODES_START + OPCODE_COUNT - 1;
+
+void PopulateExpansions(uint32_t patch_idx,
+                        std::string expansions[OPCODE_COUNT]) {
   uint8_t bytes[4];
   bytes[0] = (patch_idx >> 24) & 0x000000FFu;
   bytes[1] = (patch_idx >> 16) & 0x000000FFu;
@@ -28,38 +40,67 @@ std::string URLTemplate::PatchToUrl(absl::string_view url_template,
                             [](unsigned char ch) { return ch != '='; })
                    .base(),
                result.end());
-
-  std::string url_template_copy{url_template};
-  UriTemplate uri(url_template_copy);
-  uri.set("id", result);
-
+  expansions[ID32] = result;
   if (result.size() >= 1) {
-    uri.set("d1", result.substr(result.size() - 1, 1));
+    expansions[D1] = result.substr(result.size() - 1, 1);
   } else {
-    uri.set("d1", "_");
+    expansions[D1] = "_";
   }
 
   if (result.size() >= 2) {
-    uri.set("d2", result.substr(result.size() - 2, 1));
+    expansions[D2] = result.substr(result.size() - 2, 1);
   } else {
-    uri.set("d2", "_");
+    expansions[D2] = "_";
   }
 
   if (result.size() >= 3) {
-    uri.set("d3", result.substr(result.size() - 3, 1));
+    expansions[D3] = result.substr(result.size() - 3, 1);
   } else {
-    uri.set("d3", "_");
+    expansions[D3] = "_";
   }
 
   if (result.size() >= 4) {
-    uri.set("d4", result.substr(result.size() - 4, 1));
+    expansions[D4] = result.substr(result.size() - 4, 1);
   } else {
-    uri.set("d4", "_");
+    expansions[D4] = "_";
   }
 
   // TODO(garretrieger): add additional variable id64
+}
 
-  return uri.build();
+StatusOr<std::string> URLTemplate::PatchToUrl(Span<const uint8_t> url_template,
+                                              uint32_t patch_idx) {
+  std::string expansions[OPCODE_COUNT];
+  PopulateExpansions(patch_idx, expansions);
+
+  std::string out;
+  uint32_t index = 0;
+  while (index < url_template.size()) {
+    uint8_t op_code = url_template[index++];
+    if (!(op_code & 0b10000000)) {
+      uint8_t num_literals = op_code & 0b01111111;
+      if (index + num_literals > url_template.size()) {
+        return absl::InvalidArgumentError(
+            "Unexpected end of bytes expanding the url template.");
+      }
+      if (!num_literals) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("invalid opcode: ", op_code));
+      }
+      out.insert(out.end(), url_template.begin() + index,
+                 url_template.begin() + index + num_literals);
+      index += num_literals;
+    } else {
+      if (op_code < OPCODES_START || op_code > OPCODES_END) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("invalid opcode: ", op_code));
+      }
+
+      const auto& value = expansions[op_code - OPCODES_START];
+      out.insert(out.end(), value.begin(), value.end());
+    }
+  }
+  return out;
 }
 
 }  // namespace ift

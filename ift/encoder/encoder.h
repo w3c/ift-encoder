@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <random>
+#include <string>
+#include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -224,14 +226,28 @@ class Encoder {
   absl::StatusOr<common::FontData> FullyExpandedSubset(
       const ProcessingContext& context) const;
 
-  std::string UrlTemplate(uint32_t patch_set_id) const {
+  static void AppendLiteralToTemplate(absl::string_view value,
+                                      std::vector<uint8_t>& out) {
+    out.push_back(value.length());
+    out.insert(out.end(), value.begin(), value.end());
+  }
+
+  std::vector<uint8_t> UrlTemplate(uint32_t patch_set_id) const {
+    constexpr uint8_t insert_id_op_code = 128;
+
+    std::vector<uint8_t> out;
     if (patch_set_id == 0) {
       // patch_set_id 0 is always used for table keyed patches
-      return "{id}.ift_tk";
+      out.push_back(insert_id_op_code);
+      AppendLiteralToTemplate(".ift_tk", out);
+      return out;
     }
 
     // All other ids are for glyph keyed.
-    return absl::StrCat(patch_set_id, "_{id}.ift_gk");
+    AppendLiteralToTemplate(absl::StrCat(patch_set_id, "_"), out);
+    out.push_back(insert_id_op_code);
+    AppendLiteralToTemplate(".ift_gk", out);
+    return out;
   }
 
   SubsetDefinition Combine(const SubsetDefinition& s1,
@@ -257,7 +273,7 @@ class Encoder {
 
   absl::Status EnsureGlyphKeyedPatchesPopulated(
       ProcessingContext& context, const design_space_t& design_space,
-      std::string& uri_template, common::CompatId& compat_id) const;
+      std::vector<uint8_t>& url_template, common::CompatId& compat_id) const;
 
   absl::Status PopulateGlyphKeyedPatchMap(
       ift::proto::PatchMap& patch_map) const;
@@ -321,7 +337,7 @@ class Encoder {
 
   bool AllocatePatchSet(ProcessingContext& context,
                         const design_space_t& design_space,
-                        std::string& uri_template,
+                        std::vector<uint8_t>& url_template,
                         common::CompatId& compat_id) const;
 
   common::hb_face_unique_ptr face_;
@@ -350,7 +366,8 @@ class Encoder {
     uint32_t next_id_ = 0;
     uint32_t next_patch_set_id_ =
         1;  // id 0 is reserved for table keyed patches.
-    absl::flat_hash_map<design_space_t, std::string> patch_set_uri_templates_;
+    absl::flat_hash_map<design_space_t, std::vector<uint8_t>>
+        patch_set_url_templates_;
     absl::flat_hash_map<design_space_t, common::CompatId>
         glyph_keyed_compat_ids_;
 

@@ -26,13 +26,12 @@ class IFTTable {
   const PatchMap& GetPatchMap() const { return patch_map_; }
   PatchMap& GetPatchMap() { return patch_map_; }
 
-  const std::string& GetUrlTemplate() const { return url_template_; }
+  const absl::Span<const uint8_t> GetUrlTemplate() const {
+    return url_template_;
+  }
 
-  void SetUrlTemplate(absl::string_view value) { url_template_ = value; }
-
-  void SetUrlTemplate(absl::string_view value,
-                      absl::string_view extension_value) {
-    url_template_ = value;
+  void SetUrlTemplate(absl::Span<const uint8_t> value) {
+    url_template_.insert(url_template_.begin(), value.begin(), value.end());
   }
 
   void SetId(common::CompatId compat_id) { id_ = compat_id; }
@@ -67,7 +66,7 @@ class IFTTable {
    */
   absl::StatusOr<std::string> Serialize() const;
 
-  std::string url_template_;
+  std::vector<uint8_t> url_template_;
   common::CompatId id_;
   PatchMap patch_map_;
 };

@@ -148,8 +148,9 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
     btree_map<ift::encoder::patch_id_t, std::pair<std::string, int>>
         patch_id_to_url;
     for (const auto& condition : segmentation->Conditions()) {
-      std::string url =
-          URLTemplate::PatchToUrl("1_{id}.gk", condition.activated());
+      std::string url = *URLTemplate::PatchToUrl(
+          std::vector<uint8_t>{2, '1', '_', 128, '.', 'g', 'k'},
+          condition.activated());
 
       int type =
           condition.IsExclusive() ? 0 : (!condition.IsFallback() ? 1 : 2);

@@ -3,7 +3,8 @@
 
 #include <cstdint>
 
-#include "absl/strings/string_view.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 
 namespace ift {
 
@@ -12,8 +13,8 @@ namespace ift {
  */
 class URLTemplate {
  public:
-  static std::string PatchToUrl(absl::string_view url_template,
-                                uint32_t patch_idx);
+  static absl::StatusOr<std::string> PatchToUrl(
+      absl::Span<const uint8_t> url_template, uint32_t patch_idx);
 };
 
 }  // namespace ift
