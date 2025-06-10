@@ -35,9 +35,9 @@ static std::string HeaderSimple(uint8_t entry_count = 1,
 
   std::string part2{
       0x00, 0x00, 0x00,
-      0x00,        // entry id string data offset
-      0x00, 0x06,  // uri template length
-      0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31,
+      0x00,                                  // entry id string data offset
+      0x00, 0x06,                            // uri template length
+      4,    'f',  'o',  'o', '/', (char)129  // uri template
   };
 
   part1 += (char)((uint8_t)0x29 + offset_delta);
@@ -52,7 +52,7 @@ TEST_F(Format2PatchMapTest, Simple) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -73,7 +73,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCffOffset) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, 0x7856, std::nullopt);
@@ -99,7 +99,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCff2Offset) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, 0x127856);
@@ -125,7 +125,7 @@ TEST_F(Format2PatchMapTest, Simple_WithCffAndCff2Offset) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, 0x123, 0x456);
@@ -153,7 +153,7 @@ TEST_F(Format2PatchMapTest, IgnoreBit) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL, true);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -188,7 +188,7 @@ TEST_F(Format2PatchMapTest, CopyIndices) {
   sc = map.AddEntry(append_cov, 4, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -226,7 +226,7 @@ TEST_F(Format2PatchMapTest, TwoByteBias) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -249,7 +249,7 @@ TEST_F(Format2PatchMapTest, ThreeByteBias) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  table.SetUrlTemplate("foo/$1");
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -272,8 +272,7 @@ TEST_F(Format2PatchMapTest, ComplexSet) {
   auto sc = map.AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -297,8 +296,7 @@ TEST_F(Format2PatchMapTest, Features) {
   auto sc = table.GetPatchMap().AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -327,8 +325,7 @@ TEST_F(Format2PatchMapTest, DesignSpace) {
   auto sc = table.GetPatchMap().AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -365,8 +362,7 @@ TEST_F(Format2PatchMapTest, NonDefaultPatchFormat) {
   sc = table.GetPatchMap().AddEntry(coverage3, 3, GLYPH_KEYED);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({2, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -375,14 +371,15 @@ TEST_F(Format2PatchMapTest, NonDefaultPatchFormat) {
   std::string header = {
       0x02,                    // format
       0x00, 0x00, 0x00, 0x00,  // reserved
-      0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
-      0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04,  // compat id
+      0x00, 0x00, 0x00, 0x02, 0x00, 0x00,     0x00, 0x02,
+      0x00, 0x00, 0x00, 0x03, 0x00, 0x00,     0x00, 0x04,  // compat id
 
       0x02,                    // default format (Table Keyed Partial)
       0x00, 0x00, 0x03,        // entry count
       0x00, 0x00, 0x00, 0x29,  // entries
       0x00, 0x00, 0x00, 0x00,  // id string data
-      0x00, 0x06, 0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31  // uri template
+      0x00, 0x06,              // url template length
+      4,    'f',  'o',  'o',  '/',  (char)129  // uri template
   };
 
   std::string entry_0 = {
@@ -421,8 +418,7 @@ TEST_F(Format2PatchMapTest, IndexDeltas) {
   sc = table.GetPatchMap().AddEntry(coverage3, 10, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -431,14 +427,15 @@ TEST_F(Format2PatchMapTest, IndexDeltas) {
   std::string header = {
       0x02,                    // format
       0x00, 0x00, 0x00, 0x00,  // reserved
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02,
-      0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04,  // compat id
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00,     0x00, 0x02,
+      0x00, 0x00, 0x00, 0x03, 0x00, 0x00,     0x00, 0x04,  // compat id
 
       0x01,                    // default format (Table Keyed Full)
       0x00, 0x00, 0x03,        // entry count
       0x00, 0x00, 0x00, 0x29,  // entries
       0x00, 0x00, 0x00, 0x00,  // id string data
-      0x00, 0x06, 0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31  // uri template
+      0x00, 0x06,              // url template length
+      4,    'f',  'o',  'o',  '/',  (char)129  // uri template
   };
 
   std::string entry_0 = {
@@ -477,8 +474,7 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
   sc = table.GetPatchMap().AddEntry(coverage3, {10, 11}, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  std::string uri_template = "foo/$1";
-  table.SetUrlTemplate(uri_template);
+  table.SetUrlTemplate(std::vector<uint8_t>{4, 'f', 'o', 'o', '/', 129});
   table.SetId({1, 2, 3, 4});
 
   auto encoded = Format2PatchMap::Serialize(table, std::nullopt, std::nullopt);
@@ -494,7 +490,7 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
       0x00, 0x00, 0x03,        // entry count
       0x00, 0x00, 0x00, 0x29,  // entries
       0x00, 0x00, 0x00, 0x00,  // id string data
-      0x00, 0x06, 0x66, 0x6f, 0x6f, 0x2f, 0x24, 0x31  // uri template
+      0x00, 0x06, 4,    'f',  'o',  'o',  '/',  (char)129  // uri template
   };
 
   std::string entry_0 = {

@@ -43,15 +43,6 @@ http_archive(
     urls = ["https://github.com/harfbuzz/harfbuzz/archive/87bbb9fadf45ee04c7425d7e8f22072fdd827edb.zip"],
 )
 
-# URI Templates
-http_archive(
-    name = "uritemplate-cpp",
-    build_file = "//third_party:uritemplate-cpp.BUILD",
-    strip_prefix = "uritemplate-cpp-1.0.1",
-    integrity = "sha256-XwiP9k9mGukrqab4M1IfVKPEE55FmPOeLiTN3kxZfaw=",
-    urls = ["https://github.com/returnzero23/uritemplate-cpp/archive/v1.0.1.zip"],
-)
-
 # Base 32 Hex
 http_archive(
     name = "cppcodec",

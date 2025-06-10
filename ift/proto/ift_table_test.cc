@@ -35,7 +35,7 @@ class IFTTableTest : public ::testing::Test {
  protected:
   IFTTableTest()
       : roboto_ab(make_hb_face(nullptr)), noto_sans_jp(make_hb_face(nullptr)) {
-    sample.SetUrlTemplate("fonts/go/here");
+    sample.SetUrlTemplate(std::vector<uint8_t>{3, 'f', 'o', 'o'});
     sample.SetId({1, 2, 3, 4});
     auto sc = sample.GetPatchMap().AddEntry({30, 32}, 1, TABLE_KEYED_PARTIAL);
     sc.Update(sample.GetPatchMap().AddEntry({55, 56, 57}, 2, GLYPH_KEYED));
@@ -51,7 +51,7 @@ class IFTTableTest : public ::testing::Test {
     sc.Update(
         overlap_sample.GetPatchMap().AddEntry({55}, 3, TABLE_KEYED_PARTIAL));
 
-    complex_ids.SetUrlTemplate("fonts/go/here");
+    sample.SetUrlTemplate(std::vector<uint8_t>{3, 'f', 'o', 'o'});
     sc.Update(complex_ids.GetPatchMap().AddEntry({0}, 0, TABLE_KEYED_PARTIAL));
     sc.Update(complex_ids.GetPatchMap().AddEntry({5}, 5, TABLE_KEYED_PARTIAL));
     sc.Update(complex_ids.GetPatchMap().AddEntry({2}, 2, TABLE_KEYED_PARTIAL));

@@ -134,23 +134,23 @@ StatusOr<std::string> Format2PatchMap::Serialize(
                "Exceeded maximum number of entries (0xFFFFFF).");
 
   // entries offset
-  string_view uri_template = ift_table.GetUrlTemplate();
+  auto url_template = ift_table.GetUrlTemplate();
   constexpr int header_min_length = 35;
   unsigned optional_offsets_size =
       (cff_charstrings_offset.has_value() ? 4 : 0) +
       (cff2_charstrings_offset.has_value() ? 4 : 0);
   FontHelper::WriteUInt32(
-      header_min_length + uri_template.length() + optional_offsets_size, out);
+      header_min_length + url_template.length() + optional_offsets_size, out);
 
   // idStrings
   FontHelper::WriteUInt32(0, out);
 
   // uriTemplateLength
-  WRITE_UINT16(uri_template.length(), out,
+  WRITE_UINT16(url_template.length(), out,
                "Exceeded maximum uri template size (0xFFFF)");
 
   // uriTemplate
-  out.append(uri_template);
+  out.insert(out.end(), url_template.begin(), url_template.end());
 
   // CFF charstrings offset (optional)
   if (cff_charstrings_offset.has_value()) {

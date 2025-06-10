@@ -292,32 +292,32 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
 
 bool Encoder::AllocatePatchSet(ProcessingContext& context,
                                const design_space_t& design_space,
-                               std::string& uri_template,
+                               std::vector<uint8_t>& url_template,
                                CompatId& compat_id) const {
-  auto uri_it = context.patch_set_uri_templates_.find(design_space);
+  auto uri_it = context.patch_set_url_templates_.find(design_space);
   auto compat_id_it = context.glyph_keyed_compat_ids_.find(design_space);
 
-  bool has_uri = (uri_it != context.patch_set_uri_templates_.end());
+  bool has_uri = (uri_it != context.patch_set_url_templates_.end());
   bool has_compat_id = (compat_id_it != context.glyph_keyed_compat_ids_.end());
 
   if (has_uri && has_compat_id) {
     // already created, return existing.
-    uri_template = uri_it->second;
+    url_template = uri_it->second;
     compat_id = compat_id_it->second;
     return false;
   }
 
-  uri_template = UrlTemplate(context.next_patch_set_id_++);
+  url_template = UrlTemplate(context.next_patch_set_id_++);
   compat_id = context.GenerateCompatId();
 
-  context.patch_set_uri_templates_[design_space] = uri_template;
+  context.patch_set_url_templates_[design_space] = url_template;
   context.glyph_keyed_compat_ids_[design_space] = compat_id;
   return true;
 }
 
 Status Encoder::EnsureGlyphKeyedPatchesPopulated(
     ProcessingContext& context, const design_space_t& design_space,
-    std::string& uri_template, CompatId& compat_id) const {
+    std::vector<uint8_t>& url_template, CompatId& compat_id) const {
   if (glyph_data_patches_.empty()) {
     return absl::OkStatus();
   }
@@ -329,7 +329,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
     }
   }
 
-  if (!AllocatePatchSet(context, design_space, uri_template, compat_id)) {
+  if (!AllocatePatchSet(context, design_space, url_template, compat_id)) {
     // Patches have already been populated for this design space.
     return absl::OkStatus();
   }
@@ -358,7 +358,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
           StrCat("Glyph data segment ", index, " was not provided."));
     }
 
-    std::string url = URLTemplate::PatchToUrl(uri_template, index);
+    std::string url = TRY(URLTemplate::PatchToUrl(url_template, index));
 
     const auto& gids = e->second;
     auto patch = differ.CreatePatch(gids);
@@ -427,12 +427,12 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     return copy;
   }
 
-  std::string table_keyed_uri_template = UrlTemplate(0);
+  std::vector<uint8_t> table_keyed_url_template = UrlTemplate(0);
   CompatId table_keyed_compat_id = context.GenerateCompatId();
-  std::string glyph_keyed_uri_template;
+  std::vector<uint8_t> glyph_keyed_url_template;
   CompatId glyph_keyed_compat_id;
   auto sc = EnsureGlyphKeyedPatchesPopulated(context, base_subset.design_space,
-                                             glyph_keyed_uri_template,
+                                             glyph_keyed_url_template,
                                              glyph_keyed_compat_id);
   if (!sc.ok()) {
     return sc;
@@ -457,9 +457,9 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   IFTTable table_keyed;
   IFTTable glyph_keyed;
   table_keyed.SetId(table_keyed_compat_id);
-  table_keyed.SetUrlTemplate(table_keyed_uri_template);
+  table_keyed.SetUrlTemplate(table_keyed_url_template);
   glyph_keyed.SetId(glyph_keyed_compat_id);
-  glyph_keyed.SetUrlTemplate(glyph_keyed_uri_template);
+  glyph_keyed.SetUrlTemplate(glyph_keyed_url_template);
 
   PatchMap& glyph_keyed_patch_map = glyph_keyed.GetPatchMap();
   sc = PopulateGlyphKeyedPatchMap(glyph_keyed_patch_map);
@@ -508,10 +508,10 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
       }
 
       // Check if the main table URL will change with this subset
-      std::string next_glyph_keyed_uri_template;
+      std::vector<uint8_t> next_glyph_keyed_url_template;
       CompatId next_glyph_keyed_compat_id;
       auto sc = EnsureGlyphKeyedPatchesPopulated(context, j.target.design_space,
-                                                 next_glyph_keyed_uri_template,
+                                                 next_glyph_keyed_url_template,
                                                  next_glyph_keyed_compat_id);
       if (!sc.ok()) {
         return sc;
@@ -519,7 +519,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
 
       bool replace_url_template =
           IsMixedMode() &&
-          (next_glyph_keyed_uri_template != glyph_keyed_uri_template);
+          (next_glyph_keyed_url_template != glyph_keyed_url_template);
 
       FontData patch;
       auto differ =
@@ -532,7 +532,8 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
         return sc;
       }
 
-      std::string url = URLTemplate::PatchToUrl(table_keyed_uri_template, id);
+      std::string url =
+          TRY(URLTemplate::PatchToUrl(table_keyed_url_template, id));
       context.patches_[url].shallow_copy(patch);
       context.built_table_keyed_patches_.insert(id);
     }
