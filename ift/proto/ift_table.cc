@@ -1,7 +1,9 @@
 #include "ift/proto/ift_table.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
+#include <ostream>
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
@@ -18,6 +20,7 @@
 
 using absl::flat_hash_map;
 using absl::flat_hash_set;
+using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -122,10 +125,51 @@ absl::StatusOr<common::FontData> IFTTable::AddToFont(
 
 CompatId IFTTable::GetId() const { return id_; }
 
+void PrintUrlTemplate(Span<const uint8_t> url_template, std::ostream* os) {
+  uint8_t literal_count = 0;
+  for (uint8_t byte : url_template) {
+    if (literal_count > 0) {
+      *os << (char)byte;
+      literal_count--;
+      break;
+    }
+
+    if (byte < 128) {
+      literal_count = byte;
+      break;
+    }
+
+    switch (byte) {
+      case 128:
+        *os << "{id32}";
+        break;
+      case 129:
+        *os << "{d1}";
+        break;
+
+      case 130:
+        *os << "{d2}";
+        break;
+      case 131:
+        *os << "{d3}";
+        break;
+      case 132:
+        *os << "{d4}";
+        break;
+      case 133:
+        *os << "{id64}";
+        break;
+      default:
+        *os << "{unknown}";
+    }
+  }
+}
+
 void PrintTo(const IFTTable& table, std::ostream* os) {
   *os << "{" << std::endl;
-  // TODO XXXXXX
-  // *os << "  url_template = " << table.GetUrlTemplate() << std::endl;
+  *os << "  url_template = ";
+  PrintUrlTemplate(table.GetUrlTemplate(), os);
+  *os << std::endl;
   *os << "  id = ";
   PrintTo(table.id_, os);
   *os << std::endl;
