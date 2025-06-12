@@ -905,13 +905,11 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0x0, 0x0, 0x0, 0x0,      // compat id[3]
       0x03,                    // default patch format = glyph keyed
       0x00, 0x00, 0x07,        // entry count = 7
-      0x00, 0x00, 0x00, 0x30,  // entries offset
+      0x00, 0x00, 0x00, 0x2F,  // entries offset
       0x00, 0x00, 0x00, 0x00,  // string data offset (NULL)
-      0x00, 0x0D,              // uri template length
-      0x31, 0x5f, 0x7b, 0x69,  // uri template
-      0x64, 0x7d, 0x2e, 0x69,  // uri template
-      0x66, 0x74, 0x5f, 0x67,  // uri template
-      0x6b,                    // uri template
+
+      0x00, 0x0C,  // uri template length
+      2, '1', '_', 128, 7, '.', 'i', 'f', 't', '_', 'g', 'k',  // uri template
 
       // entry[0] {{2}} -> 2,
       0b00010100,        // format (id delta, code points no bias)
@@ -952,7 +950,7 @@ TEST_F(EncoderTest, Encode_ComplicatedActivationConditions) {
       0xff, 0xff, 0xfe   // delta -1, id = 6
   };
 
-  ASSERT_EQ(ift_table.span(), absl::Span<const uint8_t>(expected_format2, 100));
+  ASSERT_EQ(ift_table.span(), absl::Span<const uint8_t>(expected_format2, 99));
 }
 
 TEST_F(EncoderTest, RoundTripWoff2) {
