@@ -1386,6 +1386,144 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
   ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
 }
 
+TEST_F(IntegrationTest,
+       MixedMode_DesignSpaceAugmentation_UsesFullInvalidation) {
+  Encoder encoder;
+  auto init_gids = InitEncoderForVfMixedMode(encoder);
+  encoder.SetJumpAhead(2);
+  encoder.SetUsePreloadLists(false);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_vf_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1_gids = TestVfSegment1();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), segment_1_gids);
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
+
+  // target paritions: {0, 1}, {2}, {3, 4} + add wght axis
+  SubsetDefinition base_def;
+  base_def.codepoints.insert(segment_0.begin(), segment_0.end());
+  base_def.codepoints.insert(segment_1.begin(), segment_1.end());
+  base_def.design_space = {{kWght, AxisRange::Point(100)}};
+  auto sc = encoder.SetBaseSubsetFromDef(base_def);
+
+  encoder.AddNonGlyphDataSegment(segment_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment_3_and_4);
+  encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
+
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  // Request codepoint + axis augmentation
+  btree_set<std::string> fetched_uris;
+  auto extended = ExtendWithDesignSpace(
+      *encoding, {chunk3_cp}, {}, {{kWght, *AxisRange::Range(100, 900)}},
+      // only two patches and round trips should be needed: one to extend the
+      // design space and a second to add glyph data
+      &fetched_uris, 2, 2);
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  auto expected_uris = btree_set<std::string>{"18.ift_tk", "2_0C.ift_gk"};
+  ASSERT_EQ(fetched_uris, expected_uris);
+
+  ASSERT_TRUE(GvarHasLongOffsets(*extended));
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk0_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk1_gid)->size(), 0);
+  ASSERT_EQ(FontHelper::GvarData(extended_face.get(), chunk2_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk3_gid)->size(), 0);
+  ASSERT_EQ(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
+
+  auto orig_face = noto_sans_vf_.face();
+  // The instancing processes changes some of the flags on the gvar data section
+  // so ignore diffs in the first 7 bytes
+  ASSERT_TRUE(
+      GvarDataMatches(orig_face.get(), extended_face.get(), chunk3_cp, 7));
+}
+
+TEST_F(IntegrationTest,
+       MixedMode_DesignSpaceAugmentation_UsesFullInvalidationWithPreloadLists) {
+  Encoder encoder;
+  auto init_gids = InitEncoderForVfMixedMode(encoder);
+  encoder.SetJumpAhead(2);
+  encoder.SetUsePreloadLists(true);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_vf_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1_gids = TestVfSegment1();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), segment_1_gids);
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
+
+  // target paritions: {0, 1}, {2}, {3, 4} + add wght axis
+  SubsetDefinition base_def;
+  base_def.codepoints.insert(segment_0.begin(), segment_0.end());
+  base_def.codepoints.insert(segment_1.begin(), segment_1.end());
+  base_def.design_space = {{kWght, AxisRange::Point(100)}};
+  auto sc = encoder.SetBaseSubsetFromDef(base_def);
+
+  encoder.AddNonGlyphDataSegment(segment_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  encoder.AddNonGlyphDataSegment(segment_3_and_4);
+  encoder.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
+
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(encoder.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  auto encoding = encoder.Encode();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  // Request codepoint + axis augmentation
+  btree_set<std::string> fetched_uris;
+  auto extended = ExtendWithDesignSpace(
+      *encoding, {chunk3_cp}, {}, {{kWght, *AxisRange::Range(100, 900)}},
+      // only three patches and round two trips should be needed:
+      // one trip to extend the design space (split into 2 patches w/ preload)
+      // and a second to add glyph data
+      &fetched_uris, 2, 3);
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  auto expected_uris =
+      btree_set<std::string>{"0O.ift_tk", "18.ift_tk", "2_0C.ift_gk"};
+  ASSERT_EQ(fetched_uris, expected_uris);
+
+  ASSERT_TRUE(GvarHasLongOffsets(*extended));
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk0_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk1_gid)->size(), 0);
+  ASSERT_EQ(FontHelper::GvarData(extended_face.get(), chunk2_gid)->size(), 0);
+  ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk3_gid)->size(), 0);
+  ASSERT_EQ(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
+
+  auto orig_face = noto_sans_vf_.face();
+  // The instancing processes changes some of the flags on the gvar data section
+  // so ignore diffs in the first 7 bytes
+  ASSERT_TRUE(
+      GvarDataMatches(orig_face.get(), extended_face.get(), chunk3_cp, 7));
+}
+
 TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   Encoder encoder;
   auto init_gids = InitEncoderForVfMixedMode(encoder);
@@ -1429,9 +1567,8 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
                                         &fetched_uris);
 
   // correspond to ids 3, 4, 6, d
-  btree_set<std::string> expected_uris{"0O.ift_tk",   "1K.ift_tk",
-                                       "1_0C.ift_gk", "1_0G.ift_gk",
-                                       "2_0C.ift_gk", "2_0G.ift_gk"};
+  btree_set<std::string> expected_uris{"0S.ift_tk", "20.ift_tk", "2_0C.ift_gk",
+                                       "2_0G.ift_gk"};
 
   ASSERT_EQ(fetched_uris, expected_uris);
 
