@@ -182,6 +182,12 @@ class Encoder {
     // Returns the total effective subset definition added by this edge.
     const SubsetDefinition& Combined() const { return combined_; }
 
+    bool ChangesDesignSpace(const SubsetDefinition& base) const {
+      SubsetDefinition combined_and_base = Combined();
+      combined_and_base.Union(base);
+      return combined_and_base.design_space != base.design_space;
+    }
+
     std::vector<Jump> Jumps(const SubsetDefinition& base,
                             bool use_preload_lists) const {
       std::vector<Jump> result;

@@ -389,6 +389,15 @@ Status Encoder::PopulateTableKeyedPatchMap(
     const std::vector<Encoder::Edge>& edges, PatchEncoding encoding,
     PatchMap& table_keyed_patch_map) const {
   for (const auto& edge : edges) {
+    PatchEncoding edge_encoding = encoding;
+    if (edge_encoding == TABLE_KEYED_PARTIAL &&
+        edge.ChangesDesignSpace(base_subset)) {
+      // This edge will result in a change to design space which requires the
+      // glyph keyed patch mapping to be updated with a new compat id, which
+      // means this patch will need to be fully invalidating.
+      edge_encoding = TABLE_KEYED_FULL;
+    }
+
     std::vector<uint32_t> edge_patches;
     for (Encoder::Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
       auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
@@ -407,7 +416,7 @@ Status Encoder::PopulateTableKeyedPatchMap(
             table_keyed_patch_map.GetEntries().back().patch_indices.back();
       }
 
-      auto entries = edge.Combined().ToEntries(encoding, last_patch_id,
+      auto entries = edge.Combined().ToEntries(edge_encoding, last_patch_id,
                                                next_entry_index, edge_patches);
       for (const auto& e : entries) {
         TRYV(table_keyed_patch_map.AddEntry(e));
