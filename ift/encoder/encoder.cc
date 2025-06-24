@@ -85,7 +85,7 @@ static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
 StatusOr<FontData> Encoder::FullyExpandedSubset(
     const ProcessingContext& context) const {
   SubsetDefinition all;
-  all.Union(context.base_subset_);
+  all.Union(context.init_subset_);
 
   for (const auto& s : extension_subsets_) {
     all.Union(s);
@@ -105,11 +105,11 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
 }
 
 std::vector<Encoder::Edge> Encoder::OutgoingEdges(
-    const SubsetDefinition& base_subset, uint32_t choose) const {
+    const SubsetDefinition& node_subset, uint32_t choose) const {
   std::vector<SubsetDefinition> remaining_subsets;
   for (const auto& s : extension_subsets_) {
     SubsetDefinition filtered = s;
-    filtered.Subtract(base_subset);
+    filtered.Subtract(node_subset);
     if (filtered.Empty()) {
       continue;
     }
@@ -215,10 +215,10 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
   }
 
   ProcessingContext context(next_id_);
-  context.base_subset_ = base_subset_;
+  context.init_subset_ = init_subset_;
   if (IsMixedMode()) {
     // Glyph keyed patches can't change the glyph count in the font (and hence
-    // loca len) so always include the last gid in the base subset to force the
+    // loca len) so always include the last gid in the init subset to force the
     // loca table to remain at the full length from the start.
     //
     // TODO(garretrieger): this unnecessarily includes the last gid in the
@@ -240,7 +240,7 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
     //                     expanded subset instead. this will at least prune
     //                     glyphs not used at any extension level.
     uint32_t gid_count = hb_face_get_glyph_count(face_.get());
-    if (gid_count > 0) context.base_subset_.gids.insert(gid_count - 1);
+    if (gid_count > 0) context.init_subset_.gids.insert(gid_count - 1);
   }
 
   // TODO(garretrieger): when generating the fully expanded subset don't use
@@ -266,7 +266,7 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
       FontHelper::HasLongLoca(expanded_face.get()) ||
       FontHelper::HasWideGvar(expanded_face.get());
 
-  auto init_font = Encode(context, context.base_subset_, true);
+  auto init_font = Encode(context, context.init_subset_, true);
   if (!init_font.ok()) {
     return init_font.status();
   }
@@ -385,13 +385,13 @@ Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
 }
 
 Status Encoder::PopulateTableKeyedPatchMap(
-    ProcessingContext& context, const SubsetDefinition& base_subset,
+    ProcessingContext& context, const SubsetDefinition& node_subset,
     const std::vector<Encoder::Edge>& edges, PatchEncoding encoding,
     PatchMap& table_keyed_patch_map) const {
   for (const auto& edge : edges) {
     PatchEncoding edge_encoding = encoding;
     if (edge_encoding == TABLE_KEYED_PARTIAL &&
-        edge.ChangesDesignSpace(base_subset)) {
+        edge.ChangesDesignSpace(node_subset)) {
       // This edge will result in a change to design space which requires the
       // glyph keyed patch mapping to be updated with a new compat id, which
       // means this patch will need to be fully invalidating.
@@ -399,7 +399,7 @@ Status Encoder::PopulateTableKeyedPatchMap(
     }
 
     std::vector<uint32_t> edge_patches;
-    for (Encoder::Jump& j : edge.Jumps(base_subset, use_preload_lists_)) {
+    for (Encoder::Jump& j : edge.Jumps(node_subset, use_preload_lists_)) {
       auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
           std::pair(std::move(j), context.next_id_));
       if (did_insert) {
@@ -427,9 +427,9 @@ Status Encoder::PopulateTableKeyedPatchMap(
 }
 
 StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
-                                   const SubsetDefinition& base_subset,
+                                   const SubsetDefinition& node_subset,
                                    bool is_root) const {
-  auto it = context.built_subsets_.find(base_subset);
+  auto it = context.built_subsets_.find(node_subset);
   if (it != context.built_subsets_.end()) {
     FontData copy;
     copy.shallow_copy(it->second);
@@ -440,22 +440,22 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   CompatId table_keyed_compat_id = context.GenerateCompatId();
   std::vector<uint8_t> glyph_keyed_url_template;
   CompatId glyph_keyed_compat_id;
-  TRYV(EnsureGlyphKeyedPatchesPopulated(context, base_subset.design_space,
+  TRYV(EnsureGlyphKeyedPatchesPopulated(context, node_subset.design_space,
                                         glyph_keyed_url_template,
                                         glyph_keyed_compat_id));
 
-  std::vector<Edge> edges = OutgoingEdges(base_subset, jump_ahead_);
+  std::vector<Edge> edges = OutgoingEdges(node_subset, jump_ahead_);
 
   // The first subset forms the base file, the remaining subsets are made
   // reachable via patches.
   auto full_face = context.fully_expanded_subset_.face();
-  auto base =
-      TRY(CutSubset(context, full_face.get(), base_subset, IsMixedMode()));
+  auto node_data =
+      TRY(CutSubset(context, full_face.get(), node_subset, IsMixedMode()));
 
   if (edges.empty() && !IsMixedMode()) {
     // This is a leaf node, a IFT table isn't needed.
-    context.built_subsets_[base_subset].shallow_copy(base);
-    return base;
+    context.built_subsets_[node_subset].shallow_copy(node_data);
+    return node_data;
   }
 
   IFTTable table_keyed;
@@ -471,47 +471,47 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
-  TRYV(PopulateTableKeyedPatchMap(context, base_subset, edges, encoding,
+  TRYV(PopulateTableKeyedPatchMap(context, node_subset, edges, encoding,
                                   table_keyed_patch_map));
 
-  auto face = base.face();
+  auto face = node_data.face();
   std::optional<IFTTable*> ext =
       IsMixedMode() ? std::optional(&glyph_keyed) : std::nullopt;
-  auto new_base = TRY(IFTTable::AddToFont(face.get(), table_keyed, ext));
+  auto new_node_data = TRY(IFTTable::AddToFont(face.get(), table_keyed, ext));
 
   if (is_root) {
     // For the root node round trip the font through woff2 so that the base for
     // patching can be a decoded woff2 font file.
-    base = TRY(RoundTripWoff2(new_base.str(), false));
+    node_data = TRY(RoundTripWoff2(new_node_data.str(), false));
   } else {
-    base.shallow_copy(new_base);
+    node_data.shallow_copy(new_node_data);
   }
 
-  context.built_subsets_[base_subset].shallow_copy(base);
+  context.built_subsets_[node_subset].shallow_copy(node_data);
 
   for (const auto& edge : edges) {
-    SubsetDefinition current_base = base_subset;
-    FontData current_base_data;
-    current_base_data.shallow_copy(base);
+    SubsetDefinition current_node_subset = node_subset;
+    FontData current_node_data;
+    current_node_data.shallow_copy(node_data);
 
-    for (const auto& j : edge.Jumps(base_subset, use_preload_lists_)) {
+    for (const auto& j : edge.Jumps(node_subset, use_preload_lists_)) {
       uint32_t id = context.table_keyed_patch_id_map_[j];
 
-      if (j.base != current_base) {
+      if (j.start != current_node_subset) {
         return absl::InternalError("Base mismatch with the current jump.");
       }
 
-      auto next = TRY(Encode(context, j.target, false));
+      auto next = TRY(Encode(context, j.end, false));
       if (context.built_table_keyed_patches_.contains(id)) {
-        current_base = j.target;
-        current_base_data = std::move(next);
+        current_node_subset = j.end;
+        current_node_data = std::move(next);
         continue;
       }
 
       // Check if the main table URL will change with this subset
       std::vector<uint8_t> next_glyph_keyed_url_template;
       CompatId next_glyph_keyed_compat_id;
-      TRYV(EnsureGlyphKeyedPatchesPopulated(context, j.target.design_space,
+      TRYV(EnsureGlyphKeyedPatchesPopulated(context, j.end.design_space,
                                             next_glyph_keyed_url_template,
                                             next_glyph_keyed_compat_id));
 
@@ -523,19 +523,19 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
       auto differ =
           TRY(GetDifferFor(next, table_keyed_compat_id, replace_url_template));
 
-      TRYV((*differ).Diff(current_base_data, next, &patch));
+      TRYV((*differ).Diff(current_node_data, next, &patch));
 
       std::string url =
           TRY(URLTemplate::PatchToUrl(table_keyed_url_template, id));
       context.patches_[url].shallow_copy(patch);
       context.built_table_keyed_patches_.insert(id);
 
-      current_base_data = std::move(next);
-      current_base = j.target;
+      current_node_data = std::move(next);
+      current_node_subset = j.end;
     }
   }
 
-  return base;
+  return node_data;
 }
 
 StatusOr<std::unique_ptr<const BinaryDiff>> Encoder::GetDifferFor(
@@ -617,7 +617,7 @@ StatusOr<FontData> Encoder::GenerateBaseGvar(
   }
 
   // Step 2: glyph subsetting
-  SubsetDefinition subset = context.base_subset_;
+  SubsetDefinition subset = context.init_subset_;
   // We don't want to apply any instancing here as it was done in step 1
   // so clear out the design space.
   subset.design_space = {};
@@ -724,7 +724,7 @@ StatusOr<FontData> Encoder::GenerateBaseCff2(
   auto instance_face = instance->face();
 
   // Step 2: find the glyph closure for the base subset.
-  SubsetDefinition subset = context.base_subset_;
+  SubsetDefinition subset = context.init_subset_;
   hb_subset_plan_t* plan = TRY(CreateSubsetPlan(context, font, subset));
   hb_map_t* old_to_new = hb_subset_plan_old_to_new_glyph_mapping(plan);
 
