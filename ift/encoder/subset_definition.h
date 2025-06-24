@@ -81,6 +81,12 @@ struct SubsetDefinition {
            design_space == other.design_space;
   }
 
+  bool operator!=(const SubsetDefinition& other) const {
+    return codepoints != other.codepoints || gids != other.gids ||
+           feature_tags != other.feature_tags ||
+           design_space != other.design_space;
+  }
+
   template <typename H>
   friend H AbslHashValue(H h, const SubsetDefinition& s) {
     return H::combine(std::move(h), s.codepoints, s.gids, s.feature_tags,

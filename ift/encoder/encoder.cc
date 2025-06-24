@@ -440,26 +440,21 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   CompatId table_keyed_compat_id = context.GenerateCompatId();
   std::vector<uint8_t> glyph_keyed_url_template;
   CompatId glyph_keyed_compat_id;
-  auto sc = EnsureGlyphKeyedPatchesPopulated(context, base_subset.design_space,
-                                             glyph_keyed_url_template,
-                                             glyph_keyed_compat_id);
-  if (!sc.ok()) {
-    return sc;
-  }
+  TRYV(EnsureGlyphKeyedPatchesPopulated(context, base_subset.design_space,
+                                        glyph_keyed_url_template,
+                                        glyph_keyed_compat_id));
 
   std::vector<Edge> edges = OutgoingEdges(base_subset, jump_ahead_);
 
   // The first subset forms the base file, the remaining subsets are made
   // reachable via patches.
   auto full_face = context.fully_expanded_subset_.face();
-  auto base = CutSubset(context, full_face.get(), base_subset, IsMixedMode());
-  if (!base.ok()) {
-    return base.status();
-  }
+  auto base =
+      TRY(CutSubset(context, full_face.get(), base_subset, IsMixedMode()));
 
   if (edges.empty() && !IsMixedMode()) {
     // This is a leaf node, a IFT table isn't needed.
-    context.built_subsets_[base_subset].shallow_copy(*base);
+    context.built_subsets_[base_subset].shallow_copy(base);
     return base;
   }
 
@@ -471,10 +466,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   glyph_keyed.SetUrlTemplate(glyph_keyed_url_template);
 
   PatchMap& glyph_keyed_patch_map = glyph_keyed.GetPatchMap();
-  sc = PopulateGlyphKeyedPatchMap(glyph_keyed_patch_map);
-  if (!sc.ok()) {
-    return sc;
-  }
+  TRYV(PopulateGlyphKeyedPatchMap(glyph_keyed_patch_map));
 
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
@@ -482,49 +474,46 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   TRYV(PopulateTableKeyedPatchMap(context, base_subset, edges, encoding,
                                   table_keyed_patch_map));
 
-  auto face = base->face();
+  auto face = base.face();
   std::optional<IFTTable*> ext =
       IsMixedMode() ? std::optional(&glyph_keyed) : std::nullopt;
-  auto new_base = IFTTable::AddToFont(face.get(), table_keyed, ext);
-
-  if (!new_base.ok()) {
-    return new_base.status();
-  }
+  auto new_base = TRY(IFTTable::AddToFont(face.get(), table_keyed, ext));
 
   if (is_root) {
     // For the root node round trip the font through woff2 so that the base for
     // patching can be a decoded woff2 font file.
-    base = RoundTripWoff2(new_base->str(), false);
-    if (!base.ok()) {
-      return base.status();
-    }
+    base = TRY(RoundTripWoff2(new_base.str(), false));
   } else {
-    base->shallow_copy(*new_base);
+    base.shallow_copy(new_base);
   }
 
-  context.built_subsets_[base_subset].shallow_copy(*base);
+  context.built_subsets_[base_subset].shallow_copy(base);
 
   for (const auto& edge : edges) {
+    SubsetDefinition current_base = base_subset;
+    FontData current_base_data;
+    current_base_data.shallow_copy(base);
+
     for (const auto& j : edge.Jumps(base_subset, use_preload_lists_)) {
       uint32_t id = context.table_keyed_patch_id_map_[j];
-      if (context.built_table_keyed_patches_.contains(id)) {
-        continue;
+
+      if (j.base != current_base) {
+        return absl::InternalError("Base mismatch with the current jump.");
       }
 
-      auto next = Encode(context, j.target, false);
-      if (!next.ok()) {
-        return next.status();
+      auto next = TRY(Encode(context, j.target, false));
+      if (context.built_table_keyed_patches_.contains(id)) {
+        current_base = j.target;
+        current_base_data = std::move(next);
+        continue;
       }
 
       // Check if the main table URL will change with this subset
       std::vector<uint8_t> next_glyph_keyed_url_template;
       CompatId next_glyph_keyed_compat_id;
-      auto sc = EnsureGlyphKeyedPatchesPopulated(context, j.target.design_space,
-                                                 next_glyph_keyed_url_template,
-                                                 next_glyph_keyed_compat_id);
-      if (!sc.ok()) {
-        return sc;
-      }
+      TRYV(EnsureGlyphKeyedPatchesPopulated(context, j.target.design_space,
+                                            next_glyph_keyed_url_template,
+                                            next_glyph_keyed_compat_id));
 
       bool replace_url_template =
           IsMixedMode() &&
@@ -532,19 +521,17 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
 
       FontData patch;
       auto differ =
-          GetDifferFor(*next, table_keyed_compat_id, replace_url_template);
-      if (!differ.ok()) {
-        return differ.status();
-      }
-      sc = (*differ)->Diff(*base, *next, &patch);
-      if (!sc.ok()) {
-        return sc;
-      }
+          TRY(GetDifferFor(next, table_keyed_compat_id, replace_url_template));
+
+      TRYV((*differ).Diff(current_base_data, next, &patch));
 
       std::string url =
           TRY(URLTemplate::PatchToUrl(table_keyed_url_template, id));
       context.patches_[url].shallow_copy(patch);
       context.built_table_keyed_patches_.insert(id);
+
+      current_base_data = std::move(next);
+      current_base = j.target;
     }
   }
 
