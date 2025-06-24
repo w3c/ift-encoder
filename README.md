@@ -13,7 +13,6 @@ The current implementation is capable of producing a spec-compliant encoding, bu
 yet fully support all aspects of the specification. Notably:
 
 *  Format 1 patch maps are not generated.
-*  Handling of feature and design space extension in an encoding is only partially implemented.
 *  Not all encoder config options are supported yet. These are marked as unimplemented in the schema.
 
 Additionally, the produced encodings may not be fully optimized for minimal size yet.
