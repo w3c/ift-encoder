@@ -211,8 +211,8 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
   auto init_segments = values(config.initial_segments());
   auto init_design_space = TRY(to_design_space(config.initial_design_space()));
 
-  SubsetDefinition base_subset;
-  base_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
+  SubsetDefinition init_subset;
+  init_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
 
   for (const auto segment_id : init_segments) {
     auto segment = segments.find(segment_id);
@@ -221,14 +221,14 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
           StrCat("Segment id, ", segment_id, ", not found."));
     }
 
-    base_subset.codepoints.union_set(segment->second.codepoints);
-    base_subset.feature_tags.insert(segment->second.feature_tags.begin(),
+    init_subset.codepoints.union_set(segment->second.codepoints);
+    init_subset.feature_tags.insert(segment->second.feature_tags.begin(),
                                     segment->second.feature_tags.end());
   }
 
-  base_subset.feature_tags = init_features;
-  base_subset.design_space = init_design_space;
-  TRYV(encoder.SetBaseSubsetFromDef(base_subset));
+  init_subset.feature_tags = init_features;
+  init_subset.design_space = init_design_space;
+  TRYV(encoder.SetInitSubsetFromDef(init_subset));
 
   // Next configure the table keyed segments
   for (const auto& codepoints : config.non_glyph_codepoint_segmentation()) {

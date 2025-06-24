@@ -78,11 +78,11 @@ class Encoder {
    * layout features retained by default in the harfbuzz subsetter.
    */
   template <typename Set>
-  absl::Status SetBaseSubset(const Set& base_codepoints) {
-    if (!base_subset_.Empty()) {
+  absl::Status SetInitSubset(const Set& base_codepoints) {
+    if (!init_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    base_subset_.codepoints.insert(base_codepoints.begin(),
+    init_subset_.codepoints.insert(base_codepoints.begin(),
                                    base_codepoints.end());
     return absl::OkStatus();
   }
@@ -133,28 +133,28 @@ class Encoder {
       absl::string_view font, bool glyf_transform = true);
 
  public:
-  absl::Status SetBaseSubsetFromDef(const SubsetDefinition& base_subset) {
-    if (!base_subset_.Empty()) {
+  absl::Status SetInitSubsetFromDef(const SubsetDefinition& init_subset) {
+    if (!init_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    base_subset_ = base_subset;
+    init_subset_ = init_subset;
     return absl::OkStatus();
   }
 
   struct Jump {
-    Jump(SubsetDefinition base_, SubsetDefinition target_)
-        : base(base_), target(target_) {}
+    Jump(SubsetDefinition start_, SubsetDefinition end_)
+        : start(start_), end(end_) {}
 
-    SubsetDefinition base;
-    SubsetDefinition target;
+    SubsetDefinition start;
+    SubsetDefinition end;
 
     bool operator==(const Jump& other) const {
-      return base == other.base && target == other.target;
+      return start == other.start && end == other.end;
     }
 
     template <typename H>
     friend H AbslHashValue(H h, const Jump& s) {
-      return H::combine(std::move(h), s.base, s.target);
+      return H::combine(std::move(h), s.start, s.end);
     }
   };
 
@@ -350,7 +350,7 @@ class Encoder {
   absl::btree_map<uint32_t, common::IntSet> glyph_data_patches_;
   std::vector<proto::PatchMap::Entry> glyph_patch_conditions_;
 
-  SubsetDefinition base_subset_;
+  SubsetDefinition init_subset_;
   std::vector<SubsetDefinition> extension_subsets_;
   uint32_t jump_ahead_ = 1;
   uint32_t next_id_ = 0;
@@ -382,7 +382,7 @@ class Encoder {
     absl::flat_hash_map<Jump, uint32_t> table_keyed_patch_id_map_;
     common::IntSet built_table_keyed_patches_;
 
-    SubsetDefinition base_subset_;
+    SubsetDefinition init_subset_;
 
     common::CompatId GenerateCompatId();
   };
