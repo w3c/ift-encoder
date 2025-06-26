@@ -253,7 +253,7 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
 
   compiler.AddNonGlyphDataSegment(all_unicodes);
 
-  auto encoding = TRY(compiler.Encode());
+  auto encoding = TRY(compiler.Compile());
   return EncodingSize(nullptr, encoding);
 }
 
@@ -307,7 +307,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     TRYV(compiler.AddGlyphDataPatchCondition(e));
   }
 
-  auto encoding = TRY(compiler.Encode());
+  auto encoding = TRY(compiler.Compile());
 
   return EncodingSize(&segmentation, encoding);
 }

@@ -130,7 +130,7 @@ class Compiler {
    * Returns: the IFT encoded initial font. Patches() will be populated with the
    * set of associated patch files.
    */
-  absl::StatusOr<Encoding> Encode() const;
+  absl::StatusOr<Encoding> Compile() const;
 
   static absl::StatusOr<common::FontData> RoundTripWoff2(
       absl::string_view font, bool glyf_transform = true);
@@ -270,9 +270,9 @@ class Compiler {
    * Returns: the IFT encoded initial font. Patches() will be populated with the
    * set of associated patch files.
    */
-  absl::StatusOr<common::FontData> Encode(ProcessingContext& context,
-                                          const SubsetDefinition& base_subset,
-                                          bool is_root = true) const;
+  absl::StatusOr<common::FontData> Compile(ProcessingContext& context,
+                                           const SubsetDefinition& base_subset,
+                                           bool is_root = true) const;
 
   /*
    * Returns true if this encoding will contain both glyph keyed and table keyed

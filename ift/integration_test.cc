@@ -308,7 +308,7 @@ TEST_F(IntegrationTest, TableKeyedOnly) {
   compiler.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto encoded_face = encoding->init_font.face();
@@ -354,7 +354,7 @@ TEST_F(IntegrationTest, TableKeyed_CodepointsAndFeatureSegment) {
 
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto encoded_face = encoding->init_font.face();
@@ -409,7 +409,7 @@ TEST_F(IntegrationTest, TableKeyedOnly_Woff2Encoded) {
 
   compiler.SetWoff2Encode(true);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
@@ -454,7 +454,7 @@ TEST_F(IntegrationTest, TableKeyedMultiple) {
   compiler.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto encoded_face = encoding->init_font.face();
@@ -497,7 +497,7 @@ TEST_F(IntegrationTest, TableKeyed_JumpAheadAndPreloadLists) {
   compiler.SetUsePrefetchLists(true);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto encoded_face = encoding->init_font.face();
@@ -542,7 +542,7 @@ TEST_F(IntegrationTest, TableKeyedWithOverlaps) {
   compiler.AddNonGlyphDataSegment(IntSet{0x4E, 0x4F, 0x50});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto encoded_face = encoding->init_font.face();
@@ -593,7 +593,7 @@ TEST_F(IntegrationTest, TableKeyed_DesignSpaceAugmentation_IgnoresDesignSpace) {
   compiler.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -643,7 +643,7 @@ TEST_F(IntegrationTest, SharedBrotli_DesignSpaceAugmentation) {
   compiler.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -736,7 +736,7 @@ TEST_F(IntegrationTest, MixedMode) {
   sc.Update(compiler.AddGlyphDataPatchCondition(
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -814,7 +814,7 @@ TEST_F(IntegrationTest, MixedMode_Woff2Encoded) {
 
   compiler.SetWoff2Encode(true);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
@@ -921,7 +921,7 @@ TEST_F(IntegrationTest, MixedMode_OptionalFeatureTags) {
   compiler.AddFeatureGroupSegment({kVrt3});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1067,7 +1067,7 @@ TEST_F(IntegrationTest, MixedMode_CompositeConditions) {
     sc.Update(compiler.AddGlyphDataPatchCondition(entry));
   }
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1150,7 +1150,7 @@ TEST_F(IntegrationTest, MixedMode_LocaLenChange) {
 
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1232,7 +1232,7 @@ TEST_F(IntegrationTest, MixedMode_Complex) {
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1290,7 +1290,7 @@ TEST_F(IntegrationTest, MixedMode_SequentialDependentPatches) {
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1340,7 +1340,7 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation) {
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1423,7 +1423,7 @@ TEST_F(IntegrationTest,
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1491,7 +1491,7 @@ TEST_F(IntegrationTest,
       PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1557,7 +1557,7 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
 
   ASSERT_TRUE(sc.ok()) << sc;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1623,7 +1623,7 @@ TEST_F(IntegrationTest, MixedMode_Cff) {
   sc.Update(compiler.AddGlyphDataPatchCondition(
       PatchMap::Entry({'H', 'I', 'J', 'Z'}, 2, PatchEncoding::GLYPH_KEYED)));
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
@@ -1687,7 +1687,7 @@ TEST_F(IntegrationTest, MixedMode_Cff2) {
   sc.Update(compiler.AddGlyphDataPatchCondition(
       PatchMap::Entry({'M', 'N', 'P', 'Z'}, 2, PatchEncoding::GLYPH_KEYED)));
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto encoded_face = encoding->init_font.face();
 
