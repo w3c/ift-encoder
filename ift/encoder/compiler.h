@@ -1,5 +1,5 @@
-#ifndef IFT_ENCODER_ENCODER_H_
-#define IFT_ENCODER_ENCODER_H_
+#ifndef IFT_ENCODER_COMPILER_H_
+#define IFT_ENCODER_COMPILER_H_
 
 #include <cstdint>
 #include <random>
@@ -21,24 +21,27 @@
 namespace ift::encoder {
 
 /*
- * Implementation of an encoder which can convert non-IFT fonts to an IFT
- * font and a set of patches.
+ * IFT font compiler.
+ *
+ * The compiler is configured with a description of a desired segmentation
+ * of an IFT font and then compiles an original non IFT font into an
+ * IFT font following the configured segmentation.
  */
-class Encoder {
+class Compiler {
  public:
   // TODO(garretrieger): add api to configure brotli quality level (for glyph
-  // and table keyed).
-  //                     Default to 11 but in tests run lower quality.
+  //                     and table keyed). Default to 11 but in tests run
+  //                     lower quality.
 
-  Encoder()
+  Compiler()
       : face_(common::make_hb_face(nullptr))
 
   {}
 
-  Encoder(const Encoder&) = delete;
-  Encoder(Encoder&& other) = delete;
-  Encoder& operator=(const Encoder&) = delete;
-  Encoder& operator=(Encoder&& other) = delete;
+  Compiler(const Compiler&) = delete;
+  Compiler(Compiler&& other) = delete;
+  Compiler& operator=(const Compiler&) = delete;
+  Compiler& operator=(Compiler&& other) = delete;
 
   /*
    * Configures how many graph levels can be reached from each node in the
@@ -50,7 +53,7 @@ class Encoder {
    * If enabled then for jump ahead entries preload lists will be used instead
    * of a single patch which jumps multiple levels.
    */
-  void SetUsePreloadLists(bool value) { this->use_preload_lists_ = value; }
+  void SetUsePrefetchLists(bool value) { this->use_prefetch_lists_ = value; }
 
   void SetWoff2Encode(bool value) { this->woff2_encode_ = value; }
 
@@ -78,12 +81,12 @@ class Encoder {
    * layout features retained by default in the harfbuzz subsetter.
    */
   template <typename Set>
-  absl::Status SetInitSubset(const Set& base_codepoints) {
+  absl::Status SetInitSubset(const Set& init_codepoints) {
     if (!init_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
     }
-    init_subset_.codepoints.insert(base_codepoints.begin(),
-                                   base_codepoints.end());
+    init_subset_.codepoints.insert(init_codepoints.begin(),
+                                   init_codepoints.end());
     return absl::OkStatus();
   }
 
@@ -189,9 +192,9 @@ class Encoder {
     }
 
     std::vector<Jump> Jumps(const SubsetDefinition& base,
-                            bool use_preload_lists) const {
+                            bool use_prefetch_lists) const {
       std::vector<Jump> result;
-      if (!use_preload_lists) {
+      if (!use_prefetch_lists) {
         SubsetDefinition next = base;
         next.Union(Combined());
         if (next == base) {
@@ -286,7 +289,7 @@ class Encoder {
 
   absl::Status PopulateTableKeyedPatchMap(
       ProcessingContext& context, const SubsetDefinition& base_subset,
-      const std::vector<Encoder::Edge>& edges, proto::PatchEncoding encoding,
+      const std::vector<Compiler::Edge>& edges, proto::PatchEncoding encoding,
       proto::PatchMap& table_keyed_patch_map) const;
 
   absl::StatusOr<hb_subset_plan_t*> CreateSubsetPlan(
@@ -354,7 +357,7 @@ class Encoder {
   std::vector<SubsetDefinition> extension_subsets_;
   uint32_t jump_ahead_ = 1;
   uint32_t next_id_ = 0;
-  bool use_preload_lists_ = false;
+  bool use_prefetch_lists_ = false;
   bool woff2_encode_ = false;
 
   struct ProcessingContext {
@@ -390,4 +393,4 @@ class Encoder {
 
 }  // namespace ift::encoder
 
-#endif  // IFT_ENCODER_ENCODER_H_
+#endif  // IFT_ENCODER_COMPILER_H_

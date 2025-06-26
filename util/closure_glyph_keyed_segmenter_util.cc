@@ -19,7 +19,7 @@
 #include "common/try.h"
 #include "hb.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/encoder.h"
+#include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
@@ -87,7 +87,7 @@ using common::make_hb_blob;
 using google::protobuf::TextFormat;
 using ift::URLTemplate;
 using ift::encoder::ClosureGlyphSegmenter;
-using ift::encoder::Encoder;
+using ift::encoder::Compiler;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
@@ -125,7 +125,7 @@ StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
 constexpr uint32_t NETWORK_REQUEST_BYTE_OVERHEAD = 75;
 
 StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
-                           const Encoder::Encoding& encoding) {
+                           const Compiler::Encoding& encoding) {
   // There are three parts to the cost of a segmentation:
   // - Size of the glyph keyed mapping table.
   // - Total size of all glyph keyed patches
@@ -224,12 +224,12 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
   uint32_t glyphs_per_patch = glyphs.size() / number_input_segments;
   uint32_t remainder_glyphs = glyphs.size() % number_input_segments;
 
-  Encoder encoder;
-  encoder.SetFace(font);
+  Compiler compiler;
+  compiler.SetFace(font);
 
   IntSet all_unicodes;
 
-  TRYV(encoder.SetInitSubset(IntSet{}));
+  TRYV(compiler.SetInitSubset(IntSet{}));
 
   auto glyphs_it = glyphs.begin();
   for (uint32_t i = 0; i < number_input_segments; i++) {
@@ -244,16 +244,16 @@ StatusOr<int> IdealSegmentationSize(hb_face_t* font,
     gids.insert(begin, glyphs_it);
     auto unicodes = FontHelper::GidsToUnicodes(font, gids);
 
-    TRYV(encoder.AddGlyphDataPatch(i, gids));
+    TRYV(compiler.AddGlyphDataPatch(i, gids));
     all_unicodes.insert(unicodes.begin(), unicodes.end());
 
-    TRYV(encoder.AddGlyphDataPatchCondition(
+    TRYV(compiler.AddGlyphDataPatchCondition(
         PatchMap::Entry(unicodes, i, PatchEncoding::GLYPH_KEYED)));
   }
 
-  encoder.AddNonGlyphDataSegment(all_unicodes);
+  compiler.AddNonGlyphDataSegment(all_unicodes);
 
-  auto encoding = TRY(encoder.Encode());
+  auto encoding = TRY(compiler.Encode());
   return EncodingSize(nullptr, encoding);
 }
 
@@ -270,17 +270,17 @@ uint32_t NumExclusivePatches(const GlyphSegmentation& segmentation) {
 StatusOr<int> SegmentationSize(hb_face_t* font,
                                const GlyphSegmentation& segmentation) {
   fprintf(stderr, "SegmentationSize():\n");
-  Encoder encoder;
-  encoder.SetFace(font);
+  Compiler compiler;
+  compiler.SetFace(font);
 
   IntSet all_segments;
 
-  TRYV(encoder.SetInitSubset(IntSet{}));
+  TRYV(compiler.SetInitSubset(IntSet{}));
 
   for (const auto& [id, glyph_set] : segmentation.GidSegments()) {
     IntSet s;
     s.insert(glyph_set.begin(), glyph_set.end());
-    TRYV(encoder.AddGlyphDataPatch(id, s));
+    TRYV(compiler.AddGlyphDataPatch(id, s));
     all_segments.insert(id);
   }
 
@@ -288,7 +288,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   for (const auto& s : segmentation.Segments()) {
     all.Union(s);
   }
-  encoder.AddNonGlyphDataSegment(all);
+  compiler.AddNonGlyphDataSegment(all);
 
   std::vector<GlyphSegmentation::ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
@@ -304,10 +304,10 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   auto entries = TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
       conditions, segments));
   for (const auto& e : entries) {
-    TRYV(encoder.AddGlyphDataPatchCondition(e));
+    TRYV(compiler.AddGlyphDataPatchCondition(e));
   }
 
-  auto encoding = TRY(encoder.Encode());
+  auto encoding = TRY(compiler.Encode());
 
   return EncodingSize(&segmentation, encoding);
 }

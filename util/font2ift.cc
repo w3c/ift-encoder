@@ -17,7 +17,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
-#include "ift/encoder/encoder.h"
+#include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "util/encoder_config.pb.h"
@@ -61,8 +61,8 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::SegmentSet;
+using ift::encoder::Compiler;
 using ift::encoder::design_space_t;
-using ift::encoder::Encoder;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
 
@@ -113,7 +113,7 @@ void write_patch(const std::string& url, const FontData& patch) {
   }
 }
 
-int write_output(const Encoder::Encoding& encoding) {
+int write_output(const Compiler::Encoding& encoding) {
   std::string output_path = absl::GetFlag(FLAGS_output_path);
   std::string output_font = absl::GetFlag(FLAGS_output_font);
 
@@ -176,10 +176,10 @@ GlyphSegmentation::ActivationCondition FromProto(
       groups, condition.activated_patch());
 }
 
-Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
+Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
   // First configure the glyph keyed segments, including features deps
   for (const auto& [id, gids] : config.glyph_patches()) {
-    TRYV(encoder.AddGlyphDataPatch(id, values(gids)));
+    TRYV(compiler.AddGlyphDataPatch(id, values(gids)));
   }
 
   std::vector<GlyphSegmentation::ActivationCondition> activation_conditions;
@@ -202,7 +202,7 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
       TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
           activation_conditions, segments));
   for (const auto& entry : condition_entries) {
-    TRYV(encoder.AddGlyphDataPatchCondition(entry));
+    TRYV(compiler.AddGlyphDataPatchCondition(entry));
   }
 
   // Initial subset definition
@@ -228,21 +228,21 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
 
   init_subset.feature_tags = init_features;
   init_subset.design_space = init_design_space;
-  TRYV(encoder.SetInitSubsetFromDef(init_subset));
+  TRYV(compiler.SetInitSubsetFromDef(init_subset));
 
   // Next configure the table keyed segments
   for (const auto& codepoints : config.non_glyph_codepoint_segmentation()) {
-    encoder.AddNonGlyphDataSegment(values(codepoints));
+    compiler.AddNonGlyphDataSegment(values(codepoints));
   }
 
   for (const auto& features : config.non_glyph_feature_segmentation()) {
-    encoder.AddFeatureGroupSegment(tag_values(features));
+    compiler.AddFeatureGroupSegment(tag_values(features));
   }
 
   for (const auto& design_space_proto :
        config.non_glyph_design_space_segmentation()) {
     auto design_space = TRY(to_design_space(design_space_proto));
-    encoder.AddDesignSpaceSegment(design_space);
+    compiler.AddDesignSpaceSegment(design_space);
   }
 
   for (const auto& segment_ids : config.non_glyph_segments()) {
@@ -258,15 +258,15 @@ Status ConfigureEncoder(EncoderConfig config, Encoder& encoder) {
       combined.Union(segment->second);
     }
 
-    encoder.AddNonGlyphDataSegment(combined);
+    compiler.AddNonGlyphDataSegment(combined);
   }
 
   // Lastly graph shape parameters
   if (config.jump_ahead() > 1) {
-    encoder.SetJumpAhead(config.jump_ahead());
+    compiler.SetJumpAhead(config.jump_ahead());
   }
-  encoder.SetUsePreloadLists(config.use_preload_lists());
-  encoder.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
+  compiler.SetUsePrefetchLists(config.use_preload_lists());
+  compiler.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
 
   // Check for unsupported settings
   if (config.include_all_segment_patches()) {
@@ -304,10 +304,10 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  Encoder encoder;
-  encoder.SetFace(font->get());
+  Compiler compiler;
+  compiler.SetFace(font->get());
 
-  auto sc = ConfigureEncoder(config, encoder);
+  auto sc = ConfigureEncoder(config, compiler);
   if (!sc.ok()) {
     std::cerr << "Failed to apply configuration to the encoder: " << sc
               << std::endl;
@@ -315,7 +315,7 @@ int main(int argc, char** argv) {
   }
 
   std::cout << ">> encoding:" << std::endl;
-  auto encoding = encoder.Encode();
+  auto encoding = compiler.Encode();
   if (!encoding.ok()) {
     std::cerr << "Encoding failed: " << encoding.status() << std::endl;
     return -1;

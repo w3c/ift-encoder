@@ -12,7 +12,7 @@
 #include "common/axis_range.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
-#include "ift/encoder/encoder.h"
+#include "ift/encoder/compiler.h"
 
 namespace ift::client {
 
@@ -22,7 +22,7 @@ typedef absl::btree_map<std::string, absl::btree_set<std::string>> graph;
  * Runs 'ift_graph' on the IFT font created by encoder and writes a
  * representation of the graph into 'out'.
  */
-absl::Status ToGraph(const ift::encoder::Encoder::Encoding& encoding,
+absl::Status ToGraph(const ift::encoder::Compiler::Encoding& encoding,
                      graph& out, bool include_patch_paths = false);
 
 /**
@@ -33,7 +33,7 @@ absl::Status ToGraph(const ift::encoder::Encoder::Encoding& encoding,
  * the client ended up fetching and applying.
  */
 absl::StatusOr<common::FontData> ExtendWithDesignSpace(
-    const ift::encoder::Encoder::Encoding& encoding,
+    const ift::encoder::Compiler::Encoding& encoding,
     const common::IntSet& codepoints,
     const absl::btree_set<hb_tag_t>& feature_tags,
     const absl::flat_hash_map<hb_tag_t, common::AxisRange>& design_space,
@@ -41,7 +41,7 @@ absl::StatusOr<common::FontData> ExtendWithDesignSpace(
     uint32_t max_round_trips = UINT32_MAX, uint32_t max_fetches = UINT32_MAX);
 
 absl::StatusOr<common::FontData> Extend(
-    const ift::encoder::Encoder::Encoding& encoding,
+    const ift::encoder::Compiler::Encoding& encoding,
     const common::IntSet& codepoints, uint32_t max_round_trips = UINT32_MAX,
     uint32_t max_fetches = UINT32_MAX);
 
