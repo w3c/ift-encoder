@@ -52,6 +52,10 @@ Mixed mode is used when an encoding configuration contains glyph data (outline) 
 IFT font will include both glyph keyed and table keyed patches. When no glyph data segments are configured then the
 encoder will instead generate a font which uses only table keyed patches.
 
+Note: there's a possible third type of IFT font, glyph keyed only, that makes use of only glyph keyed patches and non outline
+data is not extended. However, the current compiler implementation does not yet support generating IFT fonts in this style.
+It is something we'd like to add support for.
+
 ### Table Keyed Patch Graph
 
 Table keyed patches are binary diffs which are relative to a specific base. As a result the set of table keyed patches for
@@ -247,6 +251,8 @@ should be possible to test for this.
 
 The compiler implementation is a work in progress and there are lots of opportunities for future improvements. Here's a
 non-exhaustive list of some possibilities:
+
+* Add support for producing "glyph keyed only" IFT fonts that make use of only glyph keyed patches.
 
 * Add the default feature list to encodings, see: https://w3c.github.io/IFT/Overview.html#feature-tag-list. The default
   feature list should be imported from the spec and applied to generated font subsets. That is all generated subsets
