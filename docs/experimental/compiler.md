@@ -1,23 +1,22 @@
-# Overview of Encoder Implementation
+# Overview of Compiler Implementation
 
-Author: Garret Rieger  
+Author: Garret Rieger
 Date: Jun 20, 2025
 
 ## Overview
 
-The role of the IFT [encoder library](https://github.com/w3c/ift-encoder/blob/main/ift/encoder/encoder.h) and command
-line utility (font2ift) is to take an [encoder config](../../util/encoder_config.proto) and font, then generate an IFT
-font and associated patches based on the segmentations and settings specified in the config. This document describes how
-the encoder implementation in this library works.
+The compiler API and command line utility (font2ift) is a sub module in the overall IFT encoder. It's role is to take a
+[segmentation plan](../../util/segmentation_plan.proto) and font, then generate an IFT font and associated patches based on
+the segmentations and settings specified in the plan. This document describes how the compiler implementation in this
+library works.
 
-The encoder library is a low level process that just executes the provided encoder configuration. Most of the interesting
-encoding decisions (for example how to segment a font) are made upstream during the preparation of the configuration.
-The encoder can be thought of as the compiler that takes the configuration and turns it into the actual IFT encoded
-font and patch bytes.
+The compiler library is a low level process that just executes the provided segmentation plan. Most of the interesting
+encoding decisions (for example how to segment a font, and how those segments are activated) are made upstream during
+the preparation of the plan.
 
 ## Concepts
 
-Before diving into the details of the encoding process this section defines some concepts and terminology used
+Before diving into the details of the compilation process this section defines some concepts and terminology used
 in the description of the encoding process.
 
 ### Initial Subset
@@ -34,10 +33,10 @@ tables are considered non-outline data.
 
 ### Segments
 
-A segment is the smallest unit of extension in the IFT font. The IFT font is extended by added one or more segments at a
-time. A segment is specified as a set of code points, layout feature tags, and/or design space that will be added to the
-font. Otherwise know as a [subset definition](https://w3c.github.io/IFT/Overview.html#font-subset-dfn) in the terminology
-of the IFT specification.
+A segment is the smallest unit of extension in the IFT font. The IFT font is extended in the client by adding one or
+more segments at a time. A segment is specified as a set of code points, layout feature tags, and/or design space that
+will be added to the font. Otherwise know as a [subset
+definition](https://w3c.github.io/IFT/Overview.html#font-subset-dfn) in the terminology of the IFT specification.
 
 ### Table Keyed vs Glyph Keyed
 
@@ -74,20 +73,20 @@ added by a client. As an optimization the encoder supports a setting called jump
 then additional edges are added that add 'jump ahead' or more segments at once. This allows single round trip extensions
 that add multiple segments at the cost of more total patches in the encoding.
 
-### Preload Lists
+### Prefetch Lists
 
-Preload lists are an optional feature in the IFT spec. The typical patch map entry will list a single patch which is
+Prefetch lists are an optional feature in the IFT spec. The typical patch map entry will list a single patch which is
 to be applied when that entry is matched. However, the entry can also optionally list additional patches which should
-be preloaded. For table keyed patch graphs this allows us to instruct the client to fetch in one round trip multiple
+be prefetched. For table keyed patch graphs this allows us to instruct the client to fetch in one round trip multiple
 edges of the graph. Concretely this can reduce the total number of patches needed by encoding multi segment edges
-using a preload list of existing single segment patches instead of adding a new unique patch for that edge.
+using a prefetch list of existing single segment patches instead of adding a new unique patch for that edge.
 
 ### Edges and Jumps
 
 In the table keyed patch graph patches may add more than one segment at a time (eg. for jump ahead). For each edge the
-encoder tracks one or more jumps, where each jump is the application of a single patch. When preload lists are in use an
+encoder tracks one or more jumps, where each jump is the application of a single patch. When prefetch lists are in use an
 edge may be reached by applying multiple patches sequentially, hence that edge would have multiple associated jumps.  In
-the no preload list case each jump adds exactly one segment at a time.
+the no-prefetch-list case each jump adds exactly one segment at a time.
 
 A jump is described as a base subset definition and a target subset definition. Where the base is the starting point and
 target subset definition is the subset definition reached by following the jump (union of base plus the segment(s) being
@@ -101,21 +100,21 @@ be included in the encoding:
 *  <code>Edge A -> A+C: contains jump +C (base = A, target = A + C).</code>
 *  <code>Edge A -> A+B+C: contains jump +B (base = A, target = A + B), followed by jump +C (base = A + B, target = A + B + C).</code>
 
-When preload lists aren't in use each edge has exactly one jump:
+When prefetch lists aren't in use each edge has exactly one jump:
 
 *  <code>Edge A -> A+B: contains jump +B (base = A, target = A + B).</code>
 *  <code>Edge A -> A+C: contains jump +C (base = A, target = A + C).</code>
 *  <code>Edge A -> A+B+C: contains jump +B+C (base = A, target = A + B + C).</code>
 
-## Encoding Generation Overview
+## Compilation Process Overview
 
-The encoding process is a recursive algorithm that walks the table keyed graph described by the encoding config and
+The compilation process is a recursive algorithm that walks the table keyed graph described by the segmentation plan and
 generates the required table and glyph keyed patches along the way. Due to the differences in how they operate table
 keyed and glyph keyed patches are generated by two fairly independent processes.
 
-First a high level description of encoder algorithm is provided. The process is described in terms of the operations
+First a high level description of the algorithm is provided. The process is described in terms of the operations
 performed for an arbitrary node in the table keyed graph. The process describes the implementation of
-[Encode(...)](https://github.com/w3c/ift-encoder/blob/main/ift/encoder/encoder.cc#L429)
+[Compile(...)](https://github.com/w3c/ift-encoder/blob/main/ift/encoder/compiler.cc#L429)
 
 
 Inputs:
@@ -123,7 +122,7 @@ Inputs:
 *  Base subset definition: describes the coverage of the font at the current node.
 *  Non outline segmentation: a list of segments along which the non outline data of the font is extended.
 *  Outline segmentation: a list of segments along which the outline data of the font is extended. This would typically
-   be generated prior to encoding by a segmenter.
+   be generated prior to compiling by a segmenter.
 
 Process:
 
@@ -139,7 +138,7 @@ Process:
    
 3. Generate the list of outgoing edges and jumps. Find the set of segments that are not included in the current node and
    generate an edge for each. Additionally generate any multi segment edges required by the encoder config jump ahead
-   and use preload list settings. Each edge is described by a subset definition that it adds plus one or more jumps as
+   and use prefetch list settings. Each edge is described by a subset definition that it adds plus one or more jumps as
    described in the concepts section.
    
 4. If in mixed mode, then generate the glyph keyed patch map using the list of patches from step 1. The encoder config
@@ -161,12 +160,12 @@ Process:
    recreating the same patch multiple times. ID's are assigned sequentially as new patches are encountered during
    recursion.
     
-With this recursive process the complete encoding can then be generated by invoking the process on the initial font
-subset definition.
+With this recursive process the complete encoding can then be generated by invoking the algorithm on the initial font
+subset definition. From there the complete graph will be traversed and all required patches will be generated.
 
 ### Special Handling, Optimizations
 
-There are a number of interesting special casing and optimizations used by the encoding procedure that are not described
+There are a number of interesting special casing and optimizations used by the compiler that are not described
 in the high level description given above. This section describes those.
 
 #### Retain Glyph IDs
@@ -227,7 +226,7 @@ encoding/decoding. Following spec recommendations we disable glyf/loca transform
 
 ### Integration Tests
 
-Due to the complex nature of the encoder we use [integration
+Due to the complex nature of the compiler we use [integration
 tests](https://github.com/w3c/ift-encoder/blob/main/ift/integration_test.cc) to test encoder functionality. In these
 tests an input font is encoded using the encoder library and test specific configurations. Next, it is extended using
 the [fontations IFT client](https://github.com/googlefonts/fontations/tree/main/incremental-font-transfer). After
@@ -246,7 +245,7 @@ should be possible to test for this.
 
 ## Future Improvements
 
-The encoder implementation is a work in progress and there are lots of opportunities for future improvements. Here's a
+The compiler implementation is a work in progress and there are lots of opportunities for future improvements. Here's a
 non-exhaustive list of some possibilities:
 
 * Add the default feature list to encodings, see: https://w3c.github.io/IFT/Overview.html#feature-tag-list. The default
@@ -274,8 +273,13 @@ non-exhaustive list of some possibilities:
   better to use conjunctive matching as the multi segment entries should only ever be selected when all included
   segments are needed.
 
-
 * Profiling and performance optimizations. The current encoder implementation does include some performance optimizations
   (for example caching expensive operations). However, there are likely some remaining performance improvement
   opportunities. Some time should be taken to profile the current execution and identify if there are any easy
   performance wins.
+  
+* At a higher level, we currently have a two step process for getting an IFT font. 1. Generate segmentation
+  plan, 2. Compile the plan into a font. Ultimately, we would like to have a single tool that would automatically
+  execute these two steps to produce an IFT font given nothing more than an input font. This would include automatically
+  configuring the segmenter so that little to no configuration needs to be provided.
+  
