@@ -199,7 +199,7 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  auto config = segmentation->ToConfigProto();
+  auto config = segmentation->ToSegmentationPlanProto();
   std::string config_string;
   TextFormat::PrintToString(config, &config_string);
 
@@ -273,7 +273,7 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
                                                          {{'b'}, {'c'}, smcp});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  auto config = segmentation->ToConfigProto();
+  auto config = segmentation->ToSegmentationPlanProto();
   std::string config_string;
   TextFormat::PrintToString(config, &config_string);
 
@@ -399,7 +399,7 @@ TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  auto config = segmentation->ToConfigProto();
+  auto config = segmentation->ToSegmentationPlanProto();
   std::string config_string;
   TextFormat::PrintToString(config, &config_string);
 
@@ -508,7 +508,7 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  auto config = segmentation->ToConfigProto();
+  auto config = segmentation->ToSegmentationPlanProto();
   std::string config_string;
   TextFormat::PrintToString(config, &config_string);
 

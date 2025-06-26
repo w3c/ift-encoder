@@ -22,7 +22,7 @@ cc_library(
     deps = [
         "//ift",
         "//ift/proto",
-        "//util:encoder_config_cc_proto",
+        "//util:segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

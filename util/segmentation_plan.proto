@@ -1,6 +1,6 @@
 edition = "2023";
 
-// This message is used to configure an IFT encoder to generate and IFT encoding of some input font.
+// This message is used to configure an IFT compiler to generate and IFT encoding of some input font.
 //
 // Note: this is still a work in progress. Final naming and the specific structure is still being finalized.
 //
@@ -8,10 +8,10 @@ edition = "2023";
 // patches to extend non-glyph data (everything other than glyf, gvar, CFF, and CFF2) and glyph keyed patches
 // to extend the glyph data tables (glyf, gvar, CFF, CFF2).
 //
-// The configuration has three distinct parts, the first "Codepoint Sets" defines a list of unicode codepoint
+// The plan has three distinct parts, the first "Codepoint Sets" defines a list of unicode codepoint
 // sets which will be reused in the remainder of the configuration.
 //
-// Next, "Glyph Data Extension Configuration" section configures how the font will be split into a set of
+// Next, "Glyph Data Extension Configuration" section specifies how the font will be split into a set of
 // glyph keyed patches. The generated encoding will contain one glyph keyed patch per specified glyph id set
 // and unique configuration of the design space reachable via the non glyph table keyed patches.
 //
@@ -19,7 +19,7 @@ edition = "2023";
 // the conditions under which the activated patch should be loaded into the font. Patches which are not assigned
 // conditions will not be reachable.
 //
-// The last section of the configuration is the "Non Glyph Extension Configuration" which describes how to
+// The last section of the plan is the "Non Glyph Extension Configuration" which describes how to
 // segment the data in all non-glyph tables (everything but glyf, gvar, CFF, and CFF2). These tables will be
 // extended by table keyed patches. Since table keyed patches are invalidating
 // (see: https://w3c.github.io/IFT/Overview.html#font-patch-invalidations) a graph of patches will be
@@ -48,7 +48,7 @@ edition = "2023";
 //                                segments to the font. This makes it possible for the client to reach any
 //                                combination of coverage in at most one round trip from any intermediate
 //                                (or initial) state.
-message EncoderConfig {
+message SegmentationPlan {
 
   // TODO validation criteria for the configuration:
   // - check that fully expanded font meets closure requirement.
@@ -89,9 +89,9 @@ message EncoderConfig {
   // segments in a single patch. Defaults to 1.
   uint32 jump_ahead = 4;
 
-  // For table keyed patches when jump_ahead is > 1 the multi segment patches will use preload lists
+  // For table keyed patches when jump_ahead is > 1 the multi segment patches will use prefetch lists
   // instead of a single patch to make the multi segment jump.
-  bool use_preload_lists = 5;
+  bool use_prefetch_lists = 5;
 
   // For table keyed patches the patch graph will be at most this many levels deep, or in other
   // words at most max depth round trips will ever be needed to reach any content in the font.

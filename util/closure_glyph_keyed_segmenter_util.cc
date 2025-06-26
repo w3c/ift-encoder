@@ -25,8 +25,8 @@
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 #include "ift/url_template.h"
-#include "util/encoder_config.pb.h"
 #include "util/load_codepoints.h"
+#include "util/segmentation_plan.pb.h"
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -37,8 +37,8 @@
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
 
-ABSL_FLAG(bool, output_encoder_config, false,
-          "If set an encoder config representing the determined segmentation "
+ABSL_FLAG(bool, output_segmentation_plan, false,
+          "If set a segmentation plan representing the determined segmentation "
           "will be output to stdout.");
 
 ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
@@ -393,11 +393,11 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  if (absl::GetFlag(FLAGS_output_encoder_config)) {
-    EncoderConfig config = result->ToConfigProto();
+  if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
+    SegmentationPlan plan = result->ToSegmentationPlanProto();
     if (!absl::GetFlag(FLAGS_include_initial_codepoints_in_config)) {
       // Requested to not include init codepoints in the generated config.
-      config.clear_initial_codepoints();
+      plan.clear_initial_codepoints();
     }
 
     // TODO(garretrieger): assign a basic (single segment) table keyed config.
@@ -405,7 +405,7 @@ int main(int argc, char** argv) {
     // segments should be grouped together for the table keyed portion of the
     // font.
     std::string config_string;
-    TextFormat::PrintToString(config, &config_string);
+    TextFormat::PrintToString(plan, &config_string);
     std::cout << config_string;
   } else {
     // No config requested, just output a simplified plain text representation

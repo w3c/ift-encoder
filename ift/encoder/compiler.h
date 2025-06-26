@@ -124,7 +124,7 @@ class Compiler {
 
   /*
    * Create an IFT encoded version of 'font' that initially supports
-   * the configured base subset but can be extended via patches to support any
+   * the configured init subset but can be extended via patches to support any
    * combination of of extension subsets.
    *
    * Returns: the IFT encoded initial font. Patches() will be populated with the

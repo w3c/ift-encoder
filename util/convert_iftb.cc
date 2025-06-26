@@ -10,7 +10,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "hb.h"
-#include "util/encoder_config.pb.h"
+#include "util/segmentation_plan.pb.h"
 
 using absl::btree_map;
 using absl::StatusOr;
@@ -66,11 +66,11 @@ btree_map<std::uint32_t, uint32_t> load_gid_map(string_view line) {
   return result;
 }
 
-StatusOr<EncoderConfig> create_config(
+StatusOr<SegmentationPlan> create_config(
     const btree_map<std::uint32_t, uint32_t>& gid_map,
     const IntSet& loaded_chunks, hb_face_t* face) {
   auto gid_to_unicode = FontHelper::GidToUnicodeMap(face);
-  EncoderConfig config;
+  SegmentationPlan config;
   // Populate segments in the config. chunks are directly analagous to segments.
   auto segments = config.mutable_glyph_patches();
   for (const auto [gid, chunk] : gid_map) {
@@ -115,7 +115,8 @@ StatusOr<EncoderConfig> create_config(
   return config;
 }
 
-StatusOr<EncoderConfig> convert_iftb(string_view iftb_dump, hb_face_t* face) {
+StatusOr<SegmentationPlan> convert_iftb(string_view iftb_dump,
+                                        hb_face_t* face) {
   btree_map<std::uint32_t, uint32_t> gid_map;
   IntSet loaded_chunks;
 

@@ -490,8 +490,8 @@ ActivationConditionProto GlyphSegmentation::ActivationCondition::ToConfigProto()
   return proto;
 }
 
-EncoderConfig GlyphSegmentation::ToConfigProto() const {
-  EncoderConfig config;
+SegmentationPlan GlyphSegmentation::ToSegmentationPlanProto() const {
+  SegmentationPlan config;
 
   uint32_t set_index = 0;
   for (const auto& s : Segments()) {
