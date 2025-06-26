@@ -58,21 +58,21 @@ Will generate a compile_commands.json file.
 ## Producing IFT Encoded Fonts
 
 IFT encoded fonts are produced in two steps:
-1. An encoding config is generated which specifies how the font file should be split up in the IFT encoding.
-2. The IFT encoded font and patches are generated using the encoding config.
+1. A segmentation plan is generated which specifies how the font file should be split up in the IFT encoding.
+2. The IFT encoded font and patches are compiled by the Compiler sub module using the segmentation plan.
 
-### Generating Encoding Configs
+### Generating Segmentation Plan
 
-Encoder configs are in a [textproto format](https://protobuf.dev/reference/protobuf/textformat-spec/) using the
-[encoder_config.proto](util/encoder_config.proto) schema. See the comments in the schema file for more information.
+Segmentation plans are in a [textproto format](https://protobuf.dev/reference/protobuf/textformat-spec/) using the
+[segmentation_plan.proto](util/segmentation_plan.proto) schema. See the comments in the schema file for more information.
 
-This repo currently provides a few experimental utilities that can generate encoding configs for you. It is also
-possible to write configs by hand, or develop new utilities to generate configuration files.
+This repo currently provides a few experimental utilities that can generate segmentation plans for you. It is also
+possible to write plans by hand, or develop new utilities to generate plans.
 
 In this repo 3 options are currently provided:
 
 1.  `util/generate_table_keyed_config`: this utility generates the table keyed (extension segments that augment non
-    glyph data in the font) portion of a configuraton. Example execution:
+    glyph data in the font) portion of a plan. Example execution:
 
     ```sh
     bazel run -c opt util:generate_table_keyed_config -- \
@@ -81,14 +81,14 @@ In this repo 3 options are currently provided:
     ```
 
 2.  `util/closure_glyph_keyed_segmenter_util`: this utility uses a subsetting closure based approach to generate a glyph
-    keyed segmentation config (extension segments that augment glyph data). Example execution:
+    keyed segmentation plan (extension segments that augment glyph data). Example execution:
 
     ```sh
     bazel run -c opt util:closure_glyph_keyed_segmenter_util  -- \
       --input_font=$(pwd)/myfont.ttf \
       --number_of_segments=20 \
       --codepoints_file=$(pwd)/all_cps.txt \
-      --output_encoder_config > glyph_keyed.txtpb
+      --output_segmentation_plan > glyph_keyed.txtpb
     ```
 
     Note: this utility is under active development and still very experimental. See
@@ -96,30 +96,30 @@ In this repo 3 options are currently provided:
 
 3.  `util/iftb2config`: this utility converts a segmentation obtained from the
     [binned incremental font transfer prototype](https://github.com/adobe/binned-ift-reference)
-    into and equivalent encoding config. Example execution:
+    into and equivalent segmentation plan. Example execution:
 
     ```sh
     iftb -VV info my_iftb_font.ttf 2>&1 | \
-      bazel run util:iftb2config > encoder_config.txtpb
+      bazel run util:iftb2config > segmentation_plan.txtpb
     ```
 
 If seperate glyph keyed and table keyed configs were generated using #1 and #2 they can then be combined into one
-complete encoder config by concatenating them:
+complete plan by concatenating them:
 
 ```sh
-cat glyph_keyed.txtpb table_keyed.txtpb > encoder_config.txtpb
+cat glyph_keyed.txtpb table_keyed.txtpb > segmentation_plan.txtpb
 ```
 
 Additional tools for generating encoder configs are planned to be added in the future.
 
-### Generating the IFT Encoding
+### Generating an IFT Encoding
 
-Once an encoding has been created it can be combined with the target font to produce and incremental font and collection
-of associated patches. Example execution:
+Once an segmentation plan has been created it can be combined with the target font to produce and incremental font and collection
+of associated patches using the font2ift utility which is a wrapper around the compiler. Example execution:
 
 ```sh
 bazel -c opt run util:font2ift  -- \
   --input_font=$(pwd)/myfont.ttf \
-  --config=$(pwd)/encoder_config.txtpb \
+  --plan=$(pwd)/segmentation_plan.txtpb \
   --output_path=$(pwd)/out/ --output_font="myfont.ift.ttf"
 ```
