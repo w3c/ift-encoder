@@ -1,4 +1,4 @@
-#include "ift/encoder/encoder.h"
+#include "ift/encoder/compiler.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -56,14 +56,14 @@ using ift::proto::TABLE_KEYED_PARTIAL;
 namespace ift::encoder {
 
 static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
-                            uint32_t choose, std::vector<Encoder::Edge>& out) {
+                            uint32_t choose, std::vector<Compiler::Edge>& out) {
   if (!choose || in.size() < choose) {
     return;
   }
 
   if (choose == 1) {
     for (auto item : in) {
-      out.push_back(Encoder::Edge{*item});
+      out.push_back(Compiler::Edge{*item});
     }
     return;
   }
@@ -73,7 +73,7 @@ static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
     std::vector<const SubsetDefinition*> remaining;
     std::copy(it_inner, in.end(), std::back_inserter(remaining));
 
-    std::vector<Encoder::Edge> combinations;
+    std::vector<Compiler::Edge> combinations;
     AddCombinations(remaining, choose - 1, combinations);
     for (auto& edge : combinations) {
       edge.Add(**it);
@@ -82,7 +82,7 @@ static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
   }
 }
 
-StatusOr<FontData> Encoder::FullyExpandedSubset(
+StatusOr<FontData> Compiler::FullyExpandedSubset(
     const ProcessingContext& context) const {
   SubsetDefinition all;
   all.Union(context.init_subset_);
@@ -104,7 +104,7 @@ StatusOr<FontData> Encoder::FullyExpandedSubset(
   return CutSubset(context, face_.get(), all, false);
 }
 
-std::vector<Encoder::Edge> Encoder::OutgoingEdges(
+std::vector<Compiler::Edge> Compiler::OutgoingEdges(
     const SubsetDefinition& node_subset, uint32_t choose) const {
   std::vector<SubsetDefinition> remaining_subsets;
   for (const auto& s : extension_subsets_) {
@@ -130,15 +130,15 @@ std::vector<Encoder::Edge> Encoder::OutgoingEdges(
   return result;
 }
 
-SubsetDefinition Encoder::Combine(const SubsetDefinition& s1,
-                                  const SubsetDefinition& s2) const {
+SubsetDefinition Compiler::Combine(const SubsetDefinition& s1,
+                                   const SubsetDefinition& s2) const {
   SubsetDefinition result;
   result.Union(s1);
   result.Union(s2);
   return result;
 }
 
-Status Encoder::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
+Status Compiler::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }
@@ -162,7 +162,7 @@ Status Encoder::AddGlyphDataPatch(uint32_t id, const IntSet& gids) {
   return absl::OkStatus();
 }
 
-Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
+Status Compiler::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
   if (condition.encoding != PatchEncoding::GLYPH_KEYED) {
     return absl::InvalidArgumentError(
         "Glyph data patch condition must be glyph keyed.");
@@ -197,19 +197,19 @@ Status Encoder::AddGlyphDataPatchCondition(PatchMap::Entry condition) {
   return absl::OkStatus();
 }
 
-void Encoder::AddFeatureGroupSegment(const btree_set<hb_tag_t>& feature_tags) {
+void Compiler::AddFeatureGroupSegment(const btree_set<hb_tag_t>& feature_tags) {
   SubsetDefinition def;
   def.feature_tags = feature_tags;
   extension_subsets_.push_back(def);
 }
 
-void Encoder::AddDesignSpaceSegment(const design_space_t& space) {
+void Compiler::AddDesignSpaceSegment(const design_space_t& space) {
   SubsetDefinition def;
   def.design_space = space;
   extension_subsets_.push_back(def);
 }
 
-StatusOr<Encoder::Encoding> Encoder::Encode() const {
+StatusOr<Compiler::Encoding> Compiler::Encode() const {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }
@@ -290,10 +290,10 @@ StatusOr<Encoder::Encoding> Encoder::Encode() const {
   return result;
 }
 
-bool Encoder::AllocatePatchSet(ProcessingContext& context,
-                               const design_space_t& design_space,
-                               std::vector<uint8_t>& url_template,
-                               CompatId& compat_id) const {
+bool Compiler::AllocatePatchSet(ProcessingContext& context,
+                                const design_space_t& design_space,
+                                std::vector<uint8_t>& url_template,
+                                CompatId& compat_id) const {
   auto uri_it = context.patch_set_url_templates_.find(design_space);
   auto compat_id_it = context.glyph_keyed_compat_ids_.find(design_space);
 
@@ -315,7 +315,7 @@ bool Encoder::AllocatePatchSet(ProcessingContext& context,
   return true;
 }
 
-Status Encoder::EnsureGlyphKeyedPatchesPopulated(
+Status Compiler::EnsureGlyphKeyedPatchesPopulated(
     ProcessingContext& context, const design_space_t& design_space,
     std::vector<uint8_t>& url_template, CompatId& compat_id) const {
   if (glyph_data_patches_.empty()) {
@@ -372,7 +372,7 @@ Status Encoder::EnsureGlyphKeyedPatchesPopulated(
   return absl::OkStatus();
 }
 
-Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
+Status Compiler::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
   if (glyph_data_patches_.empty()) {
     return absl::OkStatus();
   }
@@ -384,9 +384,9 @@ Status Encoder::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
   return absl::OkStatus();
 }
 
-Status Encoder::PopulateTableKeyedPatchMap(
+Status Compiler::PopulateTableKeyedPatchMap(
     ProcessingContext& context, const SubsetDefinition& node_subset,
-    const std::vector<Encoder::Edge>& edges, PatchEncoding encoding,
+    const std::vector<Compiler::Edge>& edges, PatchEncoding encoding,
     PatchMap& table_keyed_patch_map) const {
   for (const auto& edge : edges) {
     PatchEncoding edge_encoding = encoding;
@@ -399,7 +399,7 @@ Status Encoder::PopulateTableKeyedPatchMap(
     }
 
     std::vector<uint32_t> edge_patches;
-    for (Encoder::Jump& j : edge.Jumps(node_subset, use_preload_lists_)) {
+    for (Compiler::Jump& j : edge.Jumps(node_subset, use_prefetch_lists_)) {
       auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
           std::pair(std::move(j), context.next_id_));
       if (did_insert) {
@@ -426,9 +426,9 @@ Status Encoder::PopulateTableKeyedPatchMap(
   return absl::OkStatus();
 }
 
-StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
-                                   const SubsetDefinition& node_subset,
-                                   bool is_root) const {
+StatusOr<FontData> Compiler::Encode(ProcessingContext& context,
+                                    const SubsetDefinition& node_subset,
+                                    bool is_root) const {
   auto it = context.built_subsets_.find(node_subset);
   if (it != context.built_subsets_.end()) {
     FontData copy;
@@ -494,7 +494,7 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
     FontData current_node_data;
     current_node_data.shallow_copy(node_data);
 
-    for (const auto& j : edge.Jumps(node_subset, use_preload_lists_)) {
+    for (const auto& j : edge.Jumps(node_subset, use_prefetch_lists_)) {
       uint32_t id = context.table_keyed_patch_id_map_[j];
 
       if (j.start != current_node_subset) {
@@ -538,24 +538,24 @@ StatusOr<FontData> Encoder::Encode(ProcessingContext& context,
   return node_data;
 }
 
-StatusOr<std::unique_ptr<const BinaryDiff>> Encoder::GetDifferFor(
+StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetDifferFor(
     const FontData& font_data, CompatId compat_id,
     bool replace_url_template) const {
   if (!IsMixedMode()) {
     return std::unique_ptr<const BinaryDiff>(
-        Encoder::FullFontTableKeyedDiff(compat_id));
+        Compiler::FullFontTableKeyedDiff(compat_id));
   }
 
   if (replace_url_template) {
     return std::unique_ptr<const BinaryDiff>(
-        Encoder::ReplaceIftMapTableKeyedDiff(compat_id));
+        Compiler::ReplaceIftMapTableKeyedDiff(compat_id));
   }
 
   return std::unique_ptr<const BinaryDiff>(
-      Encoder::MixedModeTableKeyedDiff(compat_id));
+      Compiler::MixedModeTableKeyedDiff(compat_id));
 }
 
-StatusOr<hb_subset_plan_t*> Encoder::CreateSubsetPlan(
+StatusOr<hb_subset_plan_t*> Compiler::CreateSubsetPlan(
     const ProcessingContext& context, hb_face_t* font,
     const SubsetDefinition& def) const {
   hb_subset_input_t* input = hb_subset_input_create_or_fail();
@@ -575,7 +575,7 @@ StatusOr<hb_subset_plan_t*> Encoder::CreateSubsetPlan(
   return plan;
 }
 
-StatusOr<hb_face_unique_ptr> Encoder::CutSubsetFaceBuilder(
+StatusOr<hb_face_unique_ptr> Compiler::CutSubsetFaceBuilder(
     const ProcessingContext& context, hb_face_t* font,
     const SubsetDefinition& def) const {
   hb_subset_plan_t* plan = TRY(CreateSubsetPlan(context, font, def));
@@ -590,7 +590,7 @@ StatusOr<hb_face_unique_ptr> Encoder::CutSubsetFaceBuilder(
   return result;
 }
 
-StatusOr<FontData> Encoder::GenerateBaseGvar(
+StatusOr<FontData> Compiler::GenerateBaseGvar(
     const ProcessingContext& context, hb_face_t* font,
     const design_space_t& design_space) const {
   // When generating a gvar table for use with glyph keyed patches care
@@ -704,7 +704,7 @@ absl::StatusOr<std::string> GenerateCharStringsTable(hb_face_t* face,
   return charstrings;
 }
 
-StatusOr<FontData> Encoder::GenerateBaseCff2(
+StatusOr<FontData> Compiler::GenerateBaseCff2(
     const ProcessingContext& context, hb_face_t* font,
     const design_space_t& design_space) const {
   // The base CFF2 table is made by combining all of the non charstrings data
@@ -757,7 +757,7 @@ StatusOr<FontData> Encoder::GenerateBaseCff2(
   return result;
 }
 
-void Encoder::SetMixedModeSubsettingFlagsIfNeeded(
+void Compiler::SetMixedModeSubsettingFlagsIfNeeded(
     const ProcessingContext& context, hb_subset_input_t* input) const {
   if (IsMixedMode()) {
     // Mixed mode requires stable gids set flags accordingly.
@@ -798,10 +798,10 @@ void Encoder::SetMixedModeSubsettingFlagsIfNeeded(
 // Special casing isn't needed for glyf or CFF since those are never patched
 // by table keyed patches and don't have common data (CFF is desubroutinized)
 // so we can just ignore them here.
-StatusOr<FontData> Encoder::CutSubset(const ProcessingContext& context,
-                                      hb_face_t* font,
-                                      const SubsetDefinition& def,
-                                      bool generate_glyph_keyed_bases) const {
+StatusOr<FontData> Compiler::CutSubset(const ProcessingContext& context,
+                                       hb_face_t* font,
+                                       const SubsetDefinition& def,
+                                       bool generate_glyph_keyed_bases) const {
   auto result = CutSubsetFaceBuilder(context, font, def);
   if (!result.ok()) {
     return result.status();
@@ -841,9 +841,9 @@ StatusOr<FontData> Encoder::CutSubset(const ProcessingContext& context,
   return subset;
 }
 
-StatusOr<FontData> Encoder::Instance(const ProcessingContext& context,
-                                     hb_face_t* face,
-                                     const design_space_t& design_space) const {
+StatusOr<FontData> Compiler::Instance(
+    const ProcessingContext& context, hb_face_t* face,
+    const design_space_t& design_space) const {
   hb_subset_input_t* input = hb_subset_input_create_or_fail();
 
   // Keep everything in this subset, except for applying the design space.
@@ -868,8 +868,8 @@ StatusOr<FontData> Encoder::Instance(const ProcessingContext& context,
   return result;
 }
 
-StatusOr<FontData> Encoder::RoundTripWoff2(string_view font,
-                                           bool glyf_transform) {
+StatusOr<FontData> Compiler::RoundTripWoff2(string_view font,
+                                            bool glyf_transform) {
   auto r = Woff2::EncodeWoff2(font, glyf_transform);
   if (!r.ok()) {
     return r.status();
@@ -878,7 +878,7 @@ StatusOr<FontData> Encoder::RoundTripWoff2(string_view font,
   return Woff2::DecodeWoff2(r->str());
 }
 
-CompatId Encoder::ProcessingContext::GenerateCompatId() {
+CompatId Compiler::ProcessingContext::GenerateCompatId() {
   return CompatId(
       this->random_values_(this->gen_), this->random_values_(this->gen_),
       this->random_values_(this->gen_), this->random_values_(this->gen_));

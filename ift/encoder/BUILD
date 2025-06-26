@@ -3,8 +3,8 @@ cc_library(
     srcs = [
         "closure_glyph_segmenter.cc",
         "closure_glyph_segmenter.h",
-        "encoder.cc",
-        "encoder.h",
+        "compiler.cc",
+        "compiler.h",
         "glyph_segmentation.cc",
         "glyph_segmentation.h",
         "subset_definition.cc",
@@ -34,10 +34,10 @@ cc_library(
 )
 
 cc_test(
-    name = "encoder_test",
+    name = "compiler_test",
     size = "small",
     srcs = [
-        "encoder_test.cc",
+        "compiler_test.cc",
     ],
     data = [
         "//common:testdata",

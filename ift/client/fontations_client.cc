@@ -9,7 +9,7 @@
 #include "common/axis_range.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
-#include "ift/encoder/encoder.h"
+#include "ift/encoder/compiler.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -20,7 +20,7 @@ using common::FontData;
 using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
-using ift::encoder::Encoder;
+using ift::encoder::Compiler;
 
 namespace ift::client {
 
@@ -68,7 +68,7 @@ void ParseFetched(const std::string& text, btree_set<std::string>& uris_out) {
   }
 }
 
-StatusOr<std::string> WriteFontToDisk(const Encoder::Encoding& encoding) {
+StatusOr<std::string> WriteFontToDisk(const Compiler::Encoding& encoding) {
   char template_str[] = "fontations_client_XXXXXX";
   const char* temp_dir = mkdtemp(template_str);
 
@@ -112,7 +112,7 @@ StatusOr<std::string> Exec(const char* cmd) {
   return result;
 }
 
-Status ToGraph(const Encoder::Encoding& encoding, graph& out,
+Status ToGraph(const Compiler::Encoding& encoding, graph& out,
                bool include_patch_paths) {
   auto font_path = WriteFontToDisk(encoding);
   if (!font_path.ok()) {
@@ -136,7 +136,7 @@ Status ToGraph(const Encoder::Encoding& encoding, graph& out,
 }
 
 StatusOr<FontData> ExtendWithDesignSpace(
-    const Encoder::Encoding& encoding, const IntSet& codepoints,
+    const Compiler::Encoding& encoding, const IntSet& codepoints,
     const btree_set<hb_tag_t>& feature_tags,
     const flat_hash_map<hb_tag_t, AxisRange>& design_space,
     btree_set<std::string>* applied_uris, uint32_t max_round_trips,
@@ -205,7 +205,7 @@ StatusOr<FontData> ExtendWithDesignSpace(
   return FontData(make_hb_blob(hb_blob_create_from_file(output.c_str())));
 }
 
-StatusOr<FontData> Extend(const Encoder::Encoding& encoding,
+StatusOr<FontData> Extend(const Compiler::Encoding& encoding,
                           const IntSet& codepoints, uint32_t max_round_trips,
                           uint32_t max_fetches) {
   absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
