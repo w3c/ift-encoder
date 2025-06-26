@@ -209,7 +209,7 @@ void Compiler::AddDesignSpaceSegment(const design_space_t& space) {
   extension_subsets_.push_back(def);
 }
 
-StatusOr<Compiler::Encoding> Compiler::Encode() const {
+StatusOr<Compiler::Encoding> Compiler::Compile() const {
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
   }
@@ -266,7 +266,7 @@ StatusOr<Compiler::Encoding> Compiler::Encode() const {
       FontHelper::HasLongLoca(expanded_face.get()) ||
       FontHelper::HasWideGvar(expanded_face.get());
 
-  auto init_font = Encode(context, context.init_subset_, true);
+  auto init_font = Compile(context, context.init_subset_, true);
   if (!init_font.ok()) {
     return init_font.status();
   }
@@ -426,9 +426,9 @@ Status Compiler::PopulateTableKeyedPatchMap(
   return absl::OkStatus();
 }
 
-StatusOr<FontData> Compiler::Encode(ProcessingContext& context,
-                                    const SubsetDefinition& node_subset,
-                                    bool is_root) const {
+StatusOr<FontData> Compiler::Compile(ProcessingContext& context,
+                                     const SubsetDefinition& node_subset,
+                                     bool is_root) const {
   auto it = context.built_subsets_.find(node_subset);
   if (it != context.built_subsets_.end()) {
     FontData copy;
@@ -501,7 +501,7 @@ StatusOr<FontData> Compiler::Encode(ProcessingContext& context,
         return absl::InternalError("Base mismatch with the current jump.");
       }
 
-      auto next = TRY(Encode(context, j.end, false));
+      auto next = TRY(Compile(context, j.end, false));
       if (context.built_table_keyed_patches_.contains(id)) {
         current_node_subset = j.end;
         current_node_data = std::move(next);

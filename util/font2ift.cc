@@ -315,7 +315,7 @@ int main(int argc, char** argv) {
   }
 
   std::cout << ">> encoding:" << std::endl;
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   if (!encoding.ok()) {
     std::cerr << "Encoding failed: " << encoding.status() << std::endl;
     return -1;

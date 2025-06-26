@@ -332,7 +332,7 @@ TEST_F(CompilerTest, MissingFace) {
   auto s1 = compiler.AddGlyphDataPatch(1, segment_1_gids);
   ASSERT_TRUE(absl::IsFailedPrecondition(s1)) << s1;
 
-  auto s3 = compiler.Encode();
+  auto s3 = compiler.Compile();
   ASSERT_TRUE(absl::IsFailedPrecondition(s3.status())) << s3.status();
 }
 
@@ -376,7 +376,7 @@ TEST_F(CompilerTest, Encode_OneSubset) {
 
   auto s = compiler.SetInitSubset(IntSet{'a', 'd'});
   ASSERT_TRUE(s.ok()) << s;
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -398,7 +398,7 @@ TEST_F(CompilerTest, Encode_TwoSubsets) {
   ASSERT_TRUE(s.ok()) << s;
   compiler.AddNonGlyphDataSegment(s1);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -421,7 +421,7 @@ TEST_F(CompilerTest, Encode_TwoSubsetsAndOptionalFeature) {
   compiler.AddNonGlyphDataSegment(s1);
   compiler.AddFeatureGroupSegment({HB_TAG('c', '2', 's', 'c')});
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -450,7 +450,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets) {
   compiler.AddNonGlyphDataSegment(s1);
   compiler.AddNonGlyphDataSegment(s2);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -480,7 +480,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_WithOverlaps) {
   compiler.AddNonGlyphDataSegment(s1);
   compiler.AddNonGlyphDataSegment(s2);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -512,7 +512,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_VF) {
   compiler.AddNonGlyphDataSegment(IntSet{'b'});
   compiler.AddDesignSpaceSegment({{kWdth, *AxisRange::Range(75.0f, 100.0f)}});
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -565,7 +565,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed) {
 
   ASSERT_TRUE(s.ok()) << s;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
   auto face = encoding->init_font.face();
@@ -627,7 +627,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_VF) {
 
   ASSERT_TRUE(s.ok()) << s;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
 
   graph g;
   auto sc = ToGraph(*encoding, g, true);
@@ -695,7 +695,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   compiler.AddFeatureGroupSegment({HB_TAG('c', 'c', 'm', 'p')});
   ASSERT_TRUE(s.ok()) << s;
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
   ASSERT_EQ(encoding->patches.size(), 7);
@@ -721,7 +721,7 @@ TEST_F(CompilerTest, Encode_FourSubsets) {
   compiler.AddNonGlyphDataSegment(s2);
   compiler.AddNonGlyphDataSegment(s3);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -753,7 +753,7 @@ TEST_F(CompilerTest, Encode_FourSubsets_WithJumpAhead) {
   compiler.AddNonGlyphDataSegment(s3);
   compiler.SetJumpAhead(2);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -791,7 +791,7 @@ TEST_F(CompilerTest, Encode_FourSubsets_WithJumpAhead_AndPreload) {
   compiler.SetJumpAhead(2);
   compiler.SetUsePrefetchLists(true);
 
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
@@ -880,7 +880,7 @@ TEST_F(CompilerTest, Encode_ComplicatedActivationConditions) {
   }
 
   ASSERT_TRUE(s.ok()) << s;
-  auto encoding = compiler.Encode();
+  auto encoding = compiler.Compile();
   hb_face_destroy(face);
 
   ASSERT_TRUE(encoding.ok()) << encoding.status();
