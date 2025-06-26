@@ -9,8 +9,8 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
-#include "util/encoder_config.pb.h"
 #include "util/load_codepoints.h"
+#include "util/segmentation_plan.pb.h"
 
 using common::FontData;
 using common::FontHelper;
@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  EncoderConfig config;
+  SegmentationPlan config;
 
   bool initial = true;
   for (const auto& set : sets) {

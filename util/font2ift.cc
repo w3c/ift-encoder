@@ -20,22 +20,22 @@
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
-#include "util/encoder_config.pb.h"
+#include "util/segmentation_plan.pb.h"
 
 /*
  * Utility that converts a standard font file into an IFT font file following a
- * supplied config.
+ * supplied segmentation plan.
  *
  * Configuration is provided as a textproto file following the
- * encoder_config.proto schema.
+ * segmentation_plan.proto schema.
  */
 
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
 
-ABSL_FLAG(std::string, config, "",
-          "Path to a config file which is a textproto following the "
-          "encoder_config.proto schema.");
+ABSL_FLAG(std::string, plan, "",
+          "Path to a plan file which is a textproto following the "
+          "segmentation_plan.proto schema.");
 
 ABSL_FLAG(std::string, output_path, "./",
           "Path to write output files under (base font and patches).");
@@ -176,19 +176,19 @@ GlyphSegmentation::ActivationCondition FromProto(
       groups, condition.activated_patch());
 }
 
-Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
+Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   // First configure the glyph keyed segments, including features deps
-  for (const auto& [id, gids] : config.glyph_patches()) {
+  for (const auto& [id, gids] : plan.glyph_patches()) {
     TRYV(compiler.AddGlyphDataPatch(id, values(gids)));
   }
 
   std::vector<GlyphSegmentation::ActivationCondition> activation_conditions;
-  for (const auto& c : config.glyph_patch_conditions()) {
+  for (const auto& c : plan.glyph_patch_conditions()) {
     activation_conditions.push_back(FromProto(c));
   }
 
   flat_hash_map<uint32_t, SubsetDefinition> segments;
-  for (const auto& [id, set] : config.segments()) {
+  for (const auto& [id, set] : plan.segments()) {
     auto& segment = segments[id];
     for (hb_codepoint_t cp : set.codepoints().values()) {
       segment.codepoints.insert(cp);
@@ -206,10 +206,10 @@ Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
   }
 
   // Initial subset definition
-  auto init_codepoints = values(config.initial_codepoints());
-  auto init_features = tag_values(config.initial_features());
-  auto init_segments = values(config.initial_segments());
-  auto init_design_space = TRY(to_design_space(config.initial_design_space()));
+  auto init_codepoints = values(plan.initial_codepoints());
+  auto init_features = tag_values(plan.initial_features());
+  auto init_segments = values(plan.initial_segments());
+  auto init_design_space = TRY(to_design_space(plan.initial_design_space()));
 
   SubsetDefinition init_subset;
   init_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
@@ -231,21 +231,21 @@ Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
   TRYV(compiler.SetInitSubsetFromDef(init_subset));
 
   // Next configure the table keyed segments
-  for (const auto& codepoints : config.non_glyph_codepoint_segmentation()) {
+  for (const auto& codepoints : plan.non_glyph_codepoint_segmentation()) {
     compiler.AddNonGlyphDataSegment(values(codepoints));
   }
 
-  for (const auto& features : config.non_glyph_feature_segmentation()) {
+  for (const auto& features : plan.non_glyph_feature_segmentation()) {
     compiler.AddFeatureGroupSegment(tag_values(features));
   }
 
   for (const auto& design_space_proto :
-       config.non_glyph_design_space_segmentation()) {
+       plan.non_glyph_design_space_segmentation()) {
     auto design_space = TRY(to_design_space(design_space_proto));
     compiler.AddDesignSpaceSegment(design_space);
   }
 
-  for (const auto& segment_ids : config.non_glyph_segments()) {
+  for (const auto& segment_ids : plan.non_glyph_segments()) {
     // Because we're using (codepoints or features) we can union up to the
     // combined segment.
     SubsetDefinition combined;
@@ -262,19 +262,19 @@ Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
   }
 
   // Lastly graph shape parameters
-  if (config.jump_ahead() > 1) {
-    compiler.SetJumpAhead(config.jump_ahead());
+  if (plan.jump_ahead() > 1) {
+    compiler.SetJumpAhead(plan.jump_ahead());
   }
-  compiler.SetUsePrefetchLists(config.use_preload_lists());
+  compiler.SetUsePrefetchLists(plan.use_prefetch_lists());
   compiler.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
 
   // Check for unsupported settings
-  if (config.include_all_segment_patches()) {
+  if (plan.include_all_segment_patches()) {
     return absl::UnimplementedError(
         "include_all_segment_patches is not yet supported.");
   }
 
-  if (config.max_depth() > 0) {
+  if (plan.max_depth() > 0) {
     return absl::UnimplementedError("max_depth is not yet supported.");
   }
 
@@ -284,16 +284,16 @@ Status ConfigureEncoder(EncoderConfig config, Compiler& compiler) {
 int main(int argc, char** argv) {
   auto args = absl::ParseCommandLine(argc, argv);
 
-  auto config_text = load_file(absl::GetFlag(FLAGS_config).c_str());
+  auto config_text = load_file(absl::GetFlag(FLAGS_plan).c_str());
   if (!config_text.ok()) {
     std::cerr << "Failed to load config file: " << config_text.status()
               << std::endl;
     return -1;
   }
 
-  EncoderConfig config;
+  SegmentationPlan plan;
   if (!google::protobuf::TextFormat::ParseFromString(config_text->str(),
-                                                     &config)) {
+                                                     &plan)) {
     std::cerr << "Failed to parse input config." << std::endl;
     return -1;
   }
@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
   Compiler compiler;
   compiler.SetFace(font->get());
 
-  auto sc = ConfigureEncoder(config, compiler);
+  auto sc = ConfigureCompiler(plan, compiler);
   if (!sc.ok()) {
     std::cerr << "Failed to apply configuration to the encoder: " << sc
               << std::endl;

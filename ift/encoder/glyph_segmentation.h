@@ -10,7 +10,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_map.h"
-#include "util/encoder_config.pb.h"
+#include "util/segmentation_plan.pb.h"
 
 namespace ift::encoder {
 
@@ -205,7 +205,7 @@ class GlyphSegmentation {
     return init_font_segment_;
   };
 
-  EncoderConfig ToConfigProto() const;
+  SegmentationPlan ToSegmentationPlanProto() const;
 
   static absl::Status GroupsToSegmentation(
       const absl::btree_map<common::SegmentSet, common::GlyphSet>&

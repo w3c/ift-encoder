@@ -1,11 +1,11 @@
 proto_library(
-    name = "encoder_config_proto",
-    srcs = ["encoder_config.proto"],
+    name = "segmentation_plan_proto",
+    srcs = ["segmentation_plan.proto"],
 )
 
 cc_proto_library(
-    name = "encoder_config_cc_proto",
-    deps = [":encoder_config_proto"],
+    name = "segmentation_plan_cc_proto",
+    deps = [":segmentation_plan_proto"],
     visibility = [
         "//ift/encoder:__pkg__",
     ]
@@ -20,7 +20,7 @@ cc_binary(
         "//ift",
         "//ift/encoder",
         "//common",
-        ":encoder_config_cc_proto",
+        ":segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
@@ -36,7 +36,7 @@ cc_binary(
         "generate_table_keyed_config.cc",
     ],
     deps = [
-        ":encoder_config_cc_proto",
+        ":segmentation_plan_cc_proto",
         ":load_codepoints",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
@@ -54,7 +54,7 @@ cc_binary(
         "//ift",
         "//ift/encoder",
         "//common",
-        ":encoder_config_cc_proto",
+        ":segmentation_plan_cc_proto",
         ":load_codepoints",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
@@ -73,7 +73,7 @@ cc_library(
     ],
     deps = [
         "//common",
-        ":encoder_config_cc_proto",
+        ":segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
@@ -138,7 +138,7 @@ cc_binary(
     ],
     deps = [
         ":convert_iftb",
-        ":encoder_config_cc_proto",
+        ":segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
