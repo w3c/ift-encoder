@@ -1,5 +1,6 @@
 #include "ift/encoder/activation_condition.h"
 
+#include <iterator>
 #include <optional>
 
 #include "absl/container/btree_set.h"
@@ -223,61 +224,24 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
         }
         const auto& original_def = original->second;
 
-        // Segments match on {codepoints} OR {features}, whereas IFT conditions
-        // match on {codepoints} AND {features}. So the codepoint and features
-        // sets need to be placed in separate conditions which are joined by a
-        // disjunctive match if both are present
-        std::optional<PatchMap::Entry> codepoints_entry;
-        if (!original_def.codepoints.empty()) {
-          PatchMap::Entry entry;
-          entry.coverage.codepoints = original_def.codepoints;
-          entry.encoding = PatchEncoding::GLYPH_KEYED;
-          codepoints_entry = entry;
-        }
+        std::vector<PatchMap::Entry> sub_entries =
+            // Activated patch ID will be assigned after this step, so just use
+            // empty array as a place holder
+            original_def.ToEntries(PatchEncoding::GLYPH_KEYED, last_patch_id,
+                                   entries.size(), {});
+        auto& sub_entry = sub_entries.back();
 
-        std::optional<PatchMap::Entry> feature_entry;
-        if (!original_def.feature_tags.empty()) {
-          PatchMap::Entry entry;
-          entry.coverage.features = original_def.feature_tags;
-          entry.encoding = PatchEncoding::GLYPH_KEYED;
-          feature_entry = entry;
-        }
-
-        PatchMap::Entry entry;
-        if (codepoints_entry && feature_entry) {
-          // The codepoints and feature entries are going to be child entries
-          // which don't directly include an activated patch id, so set them to
-          // be ignored
-          MakeIgnored(*codepoints_entry, last_patch_id);
-          entries.push_back(*codepoints_entry);
-          uint32_t codepoints_entry_index = next_entry_index++;
-
-          MakeIgnored(*feature_entry, last_patch_id);
-          entries.push_back(*feature_entry);
-          uint32_t features_entry_index = next_entry_index++;
-
-          entry.coverage.conjunctive = false;
-          entry.coverage.child_indices.insert(codepoints_entry_index);
-          entry.coverage.child_indices.insert(features_entry_index);
-          entry.encoding = PatchEncoding::GLYPH_KEYED;
-        } else if (codepoints_entry) {
-          entry = *codepoints_entry;
-        } else if (feature_entry) {
-          entry = *feature_entry;
-        }
-
+        last_patch_id = sub_entry.patch_indices.back();
         if (condition->IsUnitary()) {
-          // this condition can use this entry to map itself.
-          last_patch_id = MapTo(entry, condition->activated());
+          // this condition can use this entry to map itself. Update the entries
+          // mapped patch id.
+          last_patch_id = MapTo(sub_entry, condition->activated());
           remove = true;
-        } else {
-          // Otherwise this entry does nothing (ignored = true), but will be
-          // referenced by later entries.
-          MakeIgnored(entry, last_patch_id);
         }
 
-        entries.push_back(entry);
-        segment_id_to_entry_index[segment_id] = next_entry_index++;
+        entries.insert(entries.end(), sub_entries.begin(), sub_entries.end());
+        next_entry_index = entries.size();
+        segment_id_to_entry_index[segment_id] = next_entry_index - 1;
       }
     }
 

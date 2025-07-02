@@ -12,7 +12,6 @@ using common::SegmentSet;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
-
 namespace ift::encoder {
 
 TEST(ActivationConditionTest, ActivationConditionsToEncoderConditions) {
