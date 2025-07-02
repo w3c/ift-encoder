@@ -18,6 +18,7 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
@@ -302,8 +303,7 @@ class GlyphGroupings {
     }
   }
 
-  const btree_map<GlyphSegmentation::ActivationCondition, GlyphSet>&
-  ConditionsAndGlyphs() const {
+  const btree_map<ActivationCondition, GlyphSet>& ConditionsAndGlyphs() const {
     return conditions_and_glyphs_;
   }
 
@@ -316,9 +316,9 @@ class GlyphGroupings {
   }
 
   // Returns a list of conditions which include segment.
-  const btree_set<GlyphSegmentation::ActivationCondition>&
-  TriggeringSegmentToConditions(segment_index_t segment) const {
-    static btree_set<GlyphSegmentation::ActivationCondition> empty;
+  const btree_set<ActivationCondition>& TriggeringSegmentToConditions(
+      segment_index_t segment) const {
+    static btree_set<ActivationCondition> empty;
     auto it = triggering_segment_to_conditions_.find(segment);
     if (it != triggering_segment_to_conditions_.end()) {
       return it->second;
@@ -333,13 +333,11 @@ class GlyphGroupings {
     auto it = and_glyph_groups_.find(condition.and_segments);
     if (it != and_glyph_groups_.end()) {
       it->second.erase(gid);
-      GlyphSegmentation::ActivationCondition activation_condition =
-          GlyphSegmentation::ActivationCondition::and_segments(
-              condition.and_segments, 0);
+      ActivationCondition activation_condition =
+          ActivationCondition::and_segments(condition.and_segments, 0);
       if (condition.and_segments.size() == 1) {
-        activation_condition =
-            GlyphSegmentation::ActivationCondition::exclusive_segment(
-                *condition.and_segments.begin(), 0);
+        activation_condition = ActivationCondition::exclusive_segment(
+            *condition.and_segments.begin(), 0);
       }
       conditions_and_glyphs_[activation_condition].erase(gid);
 
@@ -352,9 +350,8 @@ class GlyphGroupings {
     it = or_glyph_groups_.find(condition.or_segments);
     if (it != or_glyph_groups_.end()) {
       it->second.erase(gid);
-      GlyphSegmentation::ActivationCondition activation_condition =
-          GlyphSegmentation::ActivationCondition::or_segments(
-              condition.or_segments, 0);
+      ActivationCondition activation_condition =
+          ActivationCondition::or_segments(condition.or_segments, 0);
       conditions_and_glyphs_[activation_condition].erase(gid);
 
       if (it->second.empty()) {
@@ -384,9 +381,8 @@ class GlyphGroupings {
     auto& and_glyphs = and_glyph_groups_[SegmentSet{exclusive_segment}];
     and_glyphs.union_set(glyphs);
 
-    GlyphSegmentation::ActivationCondition condition =
-        GlyphSegmentation::ActivationCondition::exclusive_segment(
-            exclusive_segment, 0);
+    ActivationCondition condition =
+        ActivationCondition::exclusive_segment(exclusive_segment, 0);
     conditions_and_glyphs_[condition].union_set(glyphs);
     // triggering segment to conditions is not affected by this change, so
     // doesn't need an update.
@@ -423,14 +419,12 @@ class GlyphGroupings {
     for (const auto& and_group : modified_and_groups) {
       if (and_group.size() == 1) {
         auto condition =
-            GlyphSegmentation::ActivationCondition::exclusive_segment(
-                *and_group.begin(), 0);
+            ActivationCondition::exclusive_segment(*and_group.begin(), 0);
         AddConditionAndGlyphs(condition, and_glyph_groups_[and_group]);
         continue;
       }
 
-      auto condition =
-          GlyphSegmentation::ActivationCondition::and_segments(and_group, 0);
+      auto condition = ActivationCondition::and_segments(and_group, 0);
       AddConditionAndGlyphs(condition, and_glyph_groups_[and_group]);
     }
 
@@ -461,8 +455,8 @@ class GlyphGroupings {
         }
       }
 
-      GlyphSegmentation::ActivationCondition condition =
-          GlyphSegmentation::ActivationCondition::or_segments(or_group, 0);
+      ActivationCondition condition =
+          ActivationCondition::or_segments(or_group, 0);
       if (glyphs.empty()) {
         // Group has been emptied out, so it's no longer needed.
         or_glyph_groups_.erase(or_group);
@@ -499,8 +493,7 @@ class GlyphGroupings {
   }
 
  private:
-  void AddConditionAndGlyphs(GlyphSegmentation::ActivationCondition condition,
-                             GlyphSet glyphs) {
+  void AddConditionAndGlyphs(ActivationCondition condition, GlyphSet glyphs) {
     const auto& [new_value_it, did_insert] =
         conditions_and_glyphs_.insert(std::pair(condition, glyphs));
     for (segment_index_t s : condition.TriggeringSegments()) {
@@ -508,8 +501,7 @@ class GlyphGroupings {
     }
   }
 
-  void RemoveConditionAndGlyphs(
-      GlyphSegmentation::ActivationCondition condition) {
+  void RemoveConditionAndGlyphs(ActivationCondition condition) {
     conditions_and_glyphs_.erase(condition);
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].erase(condition);
@@ -520,12 +512,11 @@ class GlyphGroupings {
   btree_map<SegmentSet, GlyphSet> or_glyph_groups_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
-  btree_map<GlyphSegmentation::ActivationCondition, GlyphSet>
-      conditions_and_glyphs_;
+  btree_map<ActivationCondition, GlyphSet> conditions_and_glyphs_;
 
   // Index that maps segments to all conditions in conditions_and_glyphs_ which
   // reference that segment.
-  flat_hash_map<uint32_t, btree_set<GlyphSegmentation::ActivationCondition>>
+  flat_hash_map<uint32_t, btree_set<ActivationCondition>>
       triggering_segment_to_conditions_;
 
   // Set of segments in the fallback condition.
@@ -952,11 +943,10 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
  */
 StatusOr<std::optional<GlyphSet>> TryMergingACompositeCondition(
     SegmentationContext& context, segment_index_t base_segment_index,
-    const GlyphSegmentation::ActivationCondition& base_condition) {
+    const ActivationCondition& base_condition) {
   auto candidate_conditions =
       context.glyph_groupings.TriggeringSegmentToConditions(base_segment_index);
-  for (GlyphSegmentation::ActivationCondition next_condition :
-       candidate_conditions) {
+  for (ActivationCondition next_condition : candidate_conditions) {
     if (next_condition.IsFallback()) {
       // Merging the fallback will cause all segments to be merged into one,
       // which is undesirable so don't consider the fallback.
@@ -1066,8 +1056,7 @@ StatusOr<bool> IsPatchTooSmall(SegmentationContext& context,
 StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
 MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
   auto start_condition =
-      GlyphSegmentation::ActivationCondition::exclusive_segment(start_segment,
-                                                                0);
+      ActivationCondition::exclusive_segment(start_segment, 0);
   for (auto it = context.glyph_groupings.ConditionsAndGlyphs().lower_bound(
            start_condition);
        it != context.glyph_groupings.ConditionsAndGlyphs().end(); it++) {

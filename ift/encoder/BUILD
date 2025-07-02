@@ -1,6 +1,9 @@
 cc_library(
     name = "encoder",
     srcs = [
+        "activation_condition.h",
+        "activation_condition.cc",
+        "types.h",
         "closure_glyph_segmenter.cc",
         "closure_glyph_segmenter.h",
         "compiler.cc",

@@ -18,6 +18,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -86,6 +87,7 @@ using common::IntSet;
 using common::make_hb_blob;
 using google::protobuf::TextFormat;
 using ift::URLTemplate;
+using ift::encoder::ActivationCondition;
 using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::Compiler;
 using ift::encoder::GlyphSegmentation;
@@ -290,7 +292,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   }
   compiler.AddNonGlyphDataSegment(all);
 
-  std::vector<GlyphSegmentation::ActivationCondition> conditions;
+  std::vector<ActivationCondition> conditions;
   for (const auto& c : segmentation.Conditions()) {
     conditions.push_back(c);
   }
