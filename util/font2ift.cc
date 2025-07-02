@@ -200,7 +200,7 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   }
 
   auto condition_entries =
-      TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
+      TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
           activation_conditions, segments));
   for (const auto& entry : condition_entries) {
     TRYV(compiler.AddGlyphDataPatchCondition(entry));

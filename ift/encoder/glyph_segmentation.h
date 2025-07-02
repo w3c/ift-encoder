@@ -5,12 +5,10 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "absl/types/span.h"
 #include "common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
-#include "ift/proto/patch_map.h"
 #include "util/segmentation_plan.pb.h"
 
 namespace ift::encoder {
@@ -37,15 +35,6 @@ class GlyphSegmentation {
       : init_font_segment_(init_font_segment),
         init_font_glyphs_(init_font_glyphs),
         unmapped_glyphs_(unmapped_glyphs) {}
-
-  /*
-   * Converts a list of activation conditions into a list of condition entries
-   * which are used by the encoder to specify conditions.
-   */
-  static absl::StatusOr<std::vector<proto::PatchMap::Entry>>
-  ActivationConditionsToPatchMapEntries(
-      absl::Span<const ActivationCondition> conditions,
-      const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
 
   /*
    * Returns a human readable string representation of this segmentation and
