@@ -303,7 +303,7 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
     segments[i++] = s;
   }
 
-  auto entries = TRY(GlyphSegmentation::ActivationConditionsToPatchMapEntries(
+  auto entries = TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
       conditions, segments));
   for (const auto& e : entries) {
     TRYV(compiler.AddGlyphDataPatchCondition(e));

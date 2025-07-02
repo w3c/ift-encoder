@@ -2,7 +2,9 @@
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
 #include "common/int_set.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/proto/patch_map.h"
 #include "util/segmentation_plan.pb.h"
 
 namespace ift::encoder {
@@ -40,6 +42,15 @@ class ActivationCondition {
    */
   static ActivationCondition composite_condition(
       absl::Span<const common::SegmentSet> groups, patch_id_t activated);
+
+  /*
+   * Converts a list of activation conditions into a list of condition entries
+   * which are used by the encoder to specify conditions.
+   */
+  static absl::StatusOr<std::vector<proto::PatchMap::Entry>>
+  ActivationConditionsToPatchMapEntries(
+      absl::Span<const ActivationCondition> conditions,
+      const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
 
   /*
    * This condition is activated if every set of segments intersects the

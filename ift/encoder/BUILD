@@ -100,3 +100,15 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "activation_condition_test",
+    size = "small",
+    srcs = [
+        "activation_condition_test.cc",
+    ],
+    deps = [
+        ":encoder",
+        "@googletest//:gtest_main",
+    ],
+)
