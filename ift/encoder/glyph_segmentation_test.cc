@@ -5,6 +5,7 @@
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
@@ -54,12 +55,11 @@ TEST_F(GlyphSegmentationTest, ActivationConditionsToEncoderConditions) {
       {4, {'g'}},
   };
 
-  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
-      GlyphSegmentation::ActivationCondition::exclusive_segment(2, 2),
-      GlyphSegmentation::ActivationCondition::exclusive_segment(3, 4),
-      GlyphSegmentation::ActivationCondition::or_segments({1, 3}, 5),
-      GlyphSegmentation::ActivationCondition::composite_condition(
-          {{1, 3}, {2, 4}}, 6),
+  std::vector<ActivationCondition> activation_conditions = {
+      ActivationCondition::exclusive_segment(2, 2),
+      ActivationCondition::exclusive_segment(3, 4),
+      ActivationCondition::or_segments({1, 3}, 5),
+      ActivationCondition::composite_condition({{1, 3}, {2, 4}}, 6),
   };
 
   std::vector<PatchMap::Entry> expected;
@@ -131,8 +131,8 @@ TEST_F(GlyphSegmentationTest,
       {2, combined},
   };
 
-  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions = {
-      GlyphSegmentation::ActivationCondition::and_segments({1, 2}, 5),
+  std::vector<ActivationCondition> activation_conditions = {
+      ActivationCondition::and_segments({1, 2}, 5),
   };
 
   std::vector<PatchMap::Entry> expected;
@@ -609,21 +609,15 @@ initial_features {
 }
 
 TEST_F(GlyphSegmentationTest, ActivationConditionOrdering) {
-  auto a = GlyphSegmentation::ActivationCondition::exclusive_segment(4, 8);
-  auto b =
-      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4}, 8);
-  auto c =
-      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4}, 9);
+  auto a = ActivationCondition::exclusive_segment(4, 8);
+  auto b = ActivationCondition::and_segments(SegmentSet{4}, 8);
+  auto c = ActivationCondition::and_segments(SegmentSet{4}, 9);
 
-  auto d =
-      GlyphSegmentation::ActivationCondition::or_segments(SegmentSet{4, 5}, 9);
-  auto e =
-      GlyphSegmentation::ActivationCondition::or_segments(SegmentSet{4, 6}, 9);
+  auto d = ActivationCondition::or_segments(SegmentSet{4, 5}, 9);
+  auto e = ActivationCondition::or_segments(SegmentSet{4, 6}, 9);
 
-  auto f =
-      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4, 5}, 9);
-  auto g =
-      GlyphSegmentation::ActivationCondition::and_segments(SegmentSet{4, 6}, 9);
+  auto f = ActivationCondition::and_segments(SegmentSet{4, 5}, 9);
+  auto g = ActivationCondition::and_segments(SegmentSet{4, 6}, 9);
 
   ASSERT_EQ(a, a);
   ASSERT_EQ(b, b);

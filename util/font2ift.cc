@@ -17,6 +17,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
@@ -61,6 +62,7 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::SegmentSet;
+using ift::encoder::ActivationCondition;
 using ift::encoder::Compiler;
 using ift::encoder::design_space_t;
 using ift::encoder::GlyphSegmentation;
@@ -161,8 +163,7 @@ StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
   return result;
 }
 
-GlyphSegmentation::ActivationCondition FromProto(
-    const ActivationConditionProto& condition) {
+ActivationCondition FromProto(const ActivationConditionProto& condition) {
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
   std::vector<SegmentSet> groups;
@@ -172,8 +173,8 @@ GlyphSegmentation::ActivationCondition FromProto(
     groups.push_back(set);
   }
 
-  return GlyphSegmentation::ActivationCondition::composite_condition(
-      groups, condition.activated_patch());
+  return ActivationCondition::composite_condition(groups,
+                                                  condition.activated_patch());
 }
 
 Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
@@ -182,7 +183,7 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
     TRYV(compiler.AddGlyphDataPatch(id, values(gids)));
   }
 
-  std::vector<GlyphSegmentation::ActivationCondition> activation_conditions;
+  std::vector<ActivationCondition> activation_conditions;
   for (const auto& c : plan.glyph_patch_conditions()) {
     activation_conditions.push_back(FromProto(c));
   }
