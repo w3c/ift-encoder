@@ -99,6 +99,10 @@ struct SubsetDefinition {
 
   void ConfigureInput(hb_subset_input_t* input, hb_face_t* face) const;
 
+  // Generate one or more entries that represents this subset definition
+  // in an IFT patch mapping.
+  //
+  // If no mapped patch_ids are provided then this will create an ignored entry.
   std::vector<ift::proto::PatchMap::Entry> ToEntries(
       ift::proto::PatchEncoding encoding, uint32_t last_patch_id,
       uint32_t next_entry_index, std::vector<uint32_t> patch_ids) const;

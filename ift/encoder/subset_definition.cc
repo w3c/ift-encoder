@@ -196,8 +196,15 @@ std::vector<PatchMap::Entry> SubsetDefinition::ToEntries(
 
   // Last entry is the one that maps the patch ids
   auto& e = entries.back();
-  e.patch_indices = patch_ids;
-  e.ignored = false;
+  if (patch_ids.empty()) {
+    e.ignored = true;
+    // No mapping provided so this entry will be ignored and the patch id we are
+    // free to assign whatever value.
+    e.patch_indices.push_back(++last_patch_id);
+  } else {
+    e.patch_indices = patch_ids;
+    e.ignored = false;
+  }
 
   return entries;
 }
