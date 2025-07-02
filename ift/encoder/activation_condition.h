@@ -4,6 +4,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 #include "util/segmentation_plan.pb.h"
 
@@ -109,7 +110,7 @@ class ActivationCondition {
   }
 
  private:
-  ActivationCondition() : conditions_(), activated_(0) {}
+  ActivationCondition() : conditions_(), activated_(0), encoding_(proto::GLYPH_KEYED) {}
 
   bool is_fallback_ = false;
   bool is_exclusive_ = false;
@@ -117,6 +118,7 @@ class ActivationCondition {
   // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...
   std::vector<common::SegmentSet> conditions_;
   patch_id_t activated_;
+  proto::PatchEncoding encoding_;
 };
 
 }  // namespace ift::encoder
