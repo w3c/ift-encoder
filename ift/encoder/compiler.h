@@ -14,7 +14,9 @@
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "hb-subset.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
 
@@ -286,6 +288,11 @@ class Compiler {
 
   absl::Status PopulateGlyphKeyedPatchMap(
       ift::proto::PatchMap& patch_map) const;
+
+  std::vector<ActivationCondition> EdgesToActivationConditions(
+      ProcessingContext& context, const SubsetDefinition& node_subset,
+      absl::Span<const Compiler::Edge> edges, proto::PatchEncoding encoding,
+      absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments) const;
 
   absl::Status PopulateTableKeyedPatchMap(
       ProcessingContext& context, const SubsetDefinition& base_subset,
