@@ -11,7 +11,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "common/axis_range.h"
 #include "common/binary_diff.h"
 #include "common/compat_id.h"
 #include "common/font_data.h"
@@ -20,7 +19,9 @@
 #include "common/try.h"
 #include "common/woff2.h"
 #include "hb-subset.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/glyph_keyed_diff.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -33,7 +34,6 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::AxisRange;
 using common::BinaryDiff;
 using common::CompatId;
 using common::FontData;
@@ -44,6 +44,7 @@ using common::IntSet;
 using common::make_hb_blob;
 using common::make_hb_face;
 using common::make_hb_set;
+using common::SegmentSet;
 using common::Woff2;
 using ift::GlyphKeyedDiff;
 using ift::proto::GLYPH_KEYED;
@@ -386,22 +387,29 @@ Status Compiler::PopulateGlyphKeyedPatchMap(PatchMap& patch_map) const {
   return absl::OkStatus();
 }
 
-Status Compiler::PopulateTableKeyedPatchMap(
+// Converts outgoing edges for a given node into a list of activation conditions
+// and associated segments.
+std::vector<ActivationCondition> Compiler::EdgesToActivationConditions(
     ProcessingContext& context, const SubsetDefinition& node_subset,
-    const std::vector<Compiler::Edge>& edges, PatchEncoding encoding,
-    PatchMap& table_keyed_patch_map) const {
-  for (const auto& edge : edges) {
-    PatchEncoding edge_encoding = encoding;
-    if (edge_encoding == TABLE_KEYED_PARTIAL &&
-        edge.ChangesDesignSpace(node_subset)) {
-      // This edge will result in a change to design space which requires the
-      // glyph keyed patch mapping to be updated with a new compat id, which
-      // means this patch will need to be fully invalidating.
-      edge_encoding = TABLE_KEYED_FULL;
+    absl::Span<const Compiler::Edge> edges, PatchEncoding encoding,
+    flat_hash_map<segment_index_t, SubsetDefinition>& segments) const {
+  flat_hash_map<SubsetDefinition, segment_index_t> subset_def_to_segment_index;
+
+  std::vector<ActivationCondition> result;
+  segment_index_t next_segment_index = 0;
+  for (const auto& e : edges) {
+    SegmentSet segment_ids;
+    for (const auto& s : e.Subsets()) {
+      auto [it, did_insert] =
+          subset_def_to_segment_index.insert(std::pair(s, next_segment_index));
+      if (did_insert) {
+        segments[next_segment_index++] = s;
+      }
+      segment_ids.insert(it->second);
     }
 
-    std::vector<uint32_t> edge_patches;
-    for (Compiler::Jump& j : edge.Jumps(node_subset, use_prefetch_lists_)) {
+    std::vector<patch_id_t> edge_patches;
+    for (Compiler::Jump& j : e.Jumps(node_subset, this->use_prefetch_lists_)) {
       auto [it, did_insert] = context.table_keyed_patch_id_map_.insert(
           std::pair(std::move(j), context.next_id_));
       if (did_insert) {
@@ -410,20 +418,41 @@ Status Compiler::PopulateTableKeyedPatchMap(
       edge_patches.push_back(it->second);
     }
 
-    if (!edge_patches.empty()) {
-      uint32_t last_patch_id = 0;
-      uint32_t next_entry_index = table_keyed_patch_map.GetEntries().size();
-      if (!table_keyed_patch_map.GetEntries().empty()) {
-        last_patch_id =
-            table_keyed_patch_map.GetEntries().back().patch_indices.back();
-      }
+    auto condition =
+        ActivationCondition::or_segments(segment_ids, edge_patches.front());
 
-      auto entries = edge.Combined().ToEntries(edge_encoding, last_patch_id,
-                                               next_entry_index, edge_patches);
-      for (const auto& e : entries) {
-        TRYV(table_keyed_patch_map.AddEntry(e));
-      }
+    PatchEncoding edge_encoding = encoding;
+    if (edge_encoding == TABLE_KEYED_PARTIAL &&
+        e.ChangesDesignSpace(node_subset)) {
+      // This edge will result in a change to design space which requires the
+      // glyph keyed patch mapping to be updated with a new compat id, which
+      // means this patch will need to be fully invalidating.
+      edge_encoding = TABLE_KEYED_FULL;
     }
+    condition.SetEncoding(edge_encoding);
+    condition.AddPrefetches(
+        absl::Span<const patch_id_t>(edge_patches).subspan(1));
+
+    result.push_back(condition);
+  }
+
+  return result;
+}
+
+Status Compiler::PopulateTableKeyedPatchMap(
+    ProcessingContext& context, const SubsetDefinition& node_subset,
+    const std::vector<Compiler::Edge>& edges, PatchEncoding encoding,
+    PatchMap& table_keyed_patch_map) const {
+  // To create the table keyed patch mappings we use the activation condition
+  // compiler. The outgoing edges for this node are converted into an activation
+  // condition list and then compiled into mapping entries.
+  flat_hash_map<segment_index_t, SubsetDefinition> segments;
+  auto conditions = EdgesToActivationConditions(context, node_subset, edges,
+                                                encoding, segments);
+  auto entries = TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
+      conditions, segments));
+  for (auto e : entries) {
+    TRYV(table_keyed_patch_map.AddEntry(e));
   }
   return absl::OkStatus();
 }

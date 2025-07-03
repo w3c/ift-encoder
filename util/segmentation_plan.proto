@@ -188,10 +188,10 @@ message Features {
 // A variable font design space.
 message DesignSpace {
   // Map from axis tag to range on that axis.
-  map<string, AxisRange> ranges = 1;
+  map<string, AxisRangeProto> ranges = 1;
 }
 
-message AxisRange {
+message AxisRangeProto {
   float start = 1;
   float end = 2;
 }
