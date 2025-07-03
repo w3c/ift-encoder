@@ -418,8 +418,19 @@ std::vector<ActivationCondition> Compiler::EdgesToActivationConditions(
       edge_patches.push_back(it->second);
     }
 
+    // Conjunctive matching is used for composite conditions. In the context of
+    // table keyed patch maps composite entries are used to add multiple
+    // segments in a single patch. There will always be other entries for the
+    // individual segments. As a result a composite entry should only be matched
+    // and loaded on the client when each component segment is matched, thus
+    // conjunctive matching is used.
+    //
+    // If disjunctive matching was used it would be possible for a composite
+    // entry to be selected by the client when only one of the component
+    // segments was present, which is wasteful. It would have been better to
+    // select the entry with only the single matched segment.
     auto condition =
-        ActivationCondition::or_segments(segment_ids, edge_patches.front());
+        ActivationCondition::and_segments(segment_ids, edge_patches.front());
 
     PatchEncoding edge_encoding = encoding;
     if (edge_encoding == TABLE_KEYED_PARTIAL &&
