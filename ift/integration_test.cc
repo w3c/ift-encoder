@@ -1583,6 +1583,64 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
 }
 
+TEST_F(IntegrationTest,
+       MixedMode_DesignSpaceAugmentation_NoOverfetch) {
+  Compiler compiler;
+  auto init_gids = InitEncoderForVfMixedMode(compiler);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_vf_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1_gids = TestVfSegment1();
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), segment_1_gids);
+  auto segment_2 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment2());
+  auto segment_3 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment3());
+  auto segment_4 = FontHelper::GidsToUnicodes(face.get(), TestVfSegment4());
+
+  // target paritions: {0, 1}, {2}, {3, 4} + add wght axis
+  SubsetDefinition base_def;
+  base_def.codepoints.insert(segment_0.begin(), segment_0.end());
+  base_def.codepoints.insert(segment_1.begin(), segment_1.end());
+  base_def.design_space = {{kWght, AxisRange::Point(100)}};
+  auto sc = compiler.SetInitSubsetFromDef(base_def);
+
+  compiler.AddNonGlyphDataSegment(segment_2);
+  auto segment_3_and_4 = segment_3;
+  segment_3_and_4.insert(segment_4.begin(), segment_4.end());
+  compiler.AddDesignSpaceSegment({{kWght, *AxisRange::Range(100, 900)}});
+  compiler.AddNonGlyphDataSegment(segment_3_and_4);
+
+  sc.Update(compiler.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_2, 2, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(compiler.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_3, 3, PatchEncoding::GLYPH_KEYED)));
+  sc.Update(compiler.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_4, 4, PatchEncoding::GLYPH_KEYED)));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  compiler.SetJumpAhead(2);
+
+  auto encoding = compiler.Compile();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  // Phase 1: non VF augmentation.
+  auto extended = Extend(*encoding, {chunk3_cp, chunk4_cp});
+  ASSERT_TRUE(extended.ok()) << extended.status();
+  auto extended_face = extended->face();
+
+  // chunks 3 and 4 should be present, 2 should not
+  auto codepoints = FontHelper::ToCodepointsSet(extended_face.get());
+  ASSERT_TRUE(codepoints.contains(chunk1_cp));
+  ASSERT_FALSE(codepoints.contains(chunk2_cp));
+  ASSERT_TRUE(codepoints.contains(chunk3_cp));
+  ASSERT_TRUE(codepoints.contains(chunk4_cp));
+
+  // No gvar data should be loaded yet
+  ASSERT_FALSE(
+      FontHelper::GetTags(extended_face.get()).contains(FontHelper::kGvar));
+}
+
 StatusOr<FontData> desubroutinize(hb_face_t* font) {
   hb_subset_input_t* input = hb_subset_input_create_or_fail();
   if (!input) {
