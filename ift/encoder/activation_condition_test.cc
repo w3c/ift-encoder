@@ -86,6 +86,91 @@ TEST(ActivationConditionTest, ActivationConditionsToEncoderConditions) {
 }
 
 TEST(ActivationConditionTest,
+     ActivationConditionsToEncoderConditions_WithPrefetches) {
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {1, {'a', 'b'}},
+      {2, {'c'}},
+      {3, {'d', 'e', 'f'}},
+      {4, {'g'}},
+  };
+
+  auto a1 = ActivationCondition::exclusive_segment(2, 2);
+  auto a2 = ActivationCondition::exclusive_segment(3, 4);
+  a2.AddPrefetches({13, 12});
+  a2.SetEncoding(PatchEncoding::TABLE_KEYED_FULL);
+
+  auto a3 = ActivationCondition::or_segments({1, 3}, 5);
+  auto a4 = ActivationCondition::composite_condition({{1, 3}, {2, 4}}, 6);
+
+  std::vector<ActivationCondition> activation_conditions = {
+      a1,
+      a2,
+      a3,
+      a4,
+  };
+
+  std::vector<PatchMap::Entry> expected;
+
+  // entry[0] {{2}} -> 2,
+  expected.push_back(
+      PatchMap::Entry({'c'}, 2, proto::PatchEncoding::GLYPH_KEYED));
+
+  // entry[1] {{3}} -> 4
+  {
+    PatchMap::Entry condition({'d', 'e', 'f'}, 4,
+                              proto::PatchEncoding::TABLE_KEYED_FULL);
+    condition.patch_indices.push_back(13);
+    condition.patch_indices.push_back(12);
+    expected.push_back(condition);
+  }
+
+  // entry[2] {{1}} ignored
+  {
+    PatchMap::Entry condition({'a', 'b'}, 13, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[3] {{4}} ignored
+  {
+    PatchMap::Entry condition({'g'}, 14, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[4] {{1 OR 3}} -> 5
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {2, 1};
+    condition.patch_indices.push_back(5);
+    expected.push_back(condition);
+  }
+
+  // entry[5] {{2 OR 4}} ignored
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 3};  // entry[0], entry[3]
+    condition.patch_indices.push_back(6);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[6] {{1 OR 3} AND {2 OR 4}} -> 6
+  {
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {4, 5};  // entry[4], entry[5]
+    condition.patch_indices.push_back(6);
+    condition.coverage.conjunctive = true;
+    expected.push_back(condition);
+  }
+
+  auto entries = ActivationCondition::ActivationConditionsToPatchMapEntries(
+      activation_conditions, segments);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+  ASSERT_EQ(*entries, expected);
+}
+
+TEST(ActivationConditionTest,
      ActivationConditionsToEncoderConditions_WithFeatures) {
   SubsetDefinition smcp;
   smcp.feature_tags = {HB_TAG('s', 'm', 'c', 'p')};

@@ -87,7 +87,11 @@ class ActivationCondition {
   /*
    * The patch to load when the condition is satisfied.
    */
-  patch_id_t activated() const { return activated_; }
+  patch_id_t activated() const { return activated_.front(); }
+
+  absl::Span<const patch_id_t> prefetches() const {
+    return absl::Span<const patch_id_t>(activated_).subspan(1);
+  }
 
   bool IsExclusive() const { return is_exclusive_; }
 
@@ -109,15 +113,22 @@ class ActivationCondition {
     return !(*this == other);
   }
 
+  void SetEncoding(proto::PatchEncoding encoding) { encoding_ = encoding; }
+
+  void AddPrefetches(absl::Span<const patch_id_t> activated) {
+    activated_.insert(activated_.end(), activated.begin(), activated.end());
+  }
+
  private:
-  ActivationCondition() : conditions_(), activated_(0), encoding_(proto::GLYPH_KEYED) {}
+  ActivationCondition()
+      : conditions_(), activated_({0}), encoding_(proto::GLYPH_KEYED) {}
 
   bool is_fallback_ = false;
   bool is_exclusive_ = false;
   // Represents:
   // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...
   std::vector<common::SegmentSet> conditions_;
-  patch_id_t activated_;
+  std::vector<patch_id_t> activated_;
   proto::PatchEncoding encoding_;
 };
 

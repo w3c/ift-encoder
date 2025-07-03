@@ -26,7 +26,7 @@ namespace ift::encoder {
 ActivationCondition ActivationCondition::exclusive_segment(
     segment_index_t index, patch_id_t activated) {
   ActivationCondition condition;
-  condition.activated_ = activated;
+  condition.activated_ = {activated};
   condition.conditions_ = {{index}};
   condition.is_exclusive_ = true;
   return condition;
@@ -35,7 +35,7 @@ ActivationCondition ActivationCondition::exclusive_segment(
 ActivationCondition ActivationCondition::and_segments(
     const SegmentSet& segments, patch_id_t activated) {
   ActivationCondition conditions;
-  conditions.activated_ = activated;
+  conditions.activated_ = {activated};
 
   for (auto id : segments) {
     conditions.conditions_.push_back(SegmentSet{id});
@@ -48,7 +48,7 @@ ActivationCondition ActivationCondition::or_segments(const SegmentSet& segments,
                                                      patch_id_t activated,
                                                      bool is_fallback) {
   ActivationCondition conditions;
-  conditions.activated_ = activated;
+  conditions.activated_ = {activated};
   conditions.conditions_.push_back(segments);
   conditions.is_fallback_ = is_fallback;
 
@@ -58,7 +58,7 @@ ActivationCondition ActivationCondition::or_segments(const SegmentSet& segments,
 ActivationCondition ActivationCondition::composite_condition(
     absl::Span<const SegmentSet> groups, patch_id_t activated) {
   ActivationCondition conditions;
-  conditions.activated_ = activated;
+  conditions.activated_ = {activated};
   for (const auto& group : groups) {
     conditions.conditions_.push_back(group);
   }
@@ -167,11 +167,14 @@ void MakeIgnored(PatchMap::Entry& entry, patch_id_t& last_patch_id) {
   entry.patch_indices.push_back(++last_patch_id);
 }
 
-patch_id_t MapTo(PatchMap::Entry& entry, patch_id_t new_patch_id) {
+patch_id_t MapTo(PatchMap::Entry& entry, patch_id_t new_patch_id,
+                 Span<const patch_id_t> prefetches) {
   entry.ignored = false;
   entry.patch_indices.clear();
   entry.patch_indices.push_back(new_patch_id);
-  return new_patch_id;
+  entry.patch_indices.insert(entry.patch_indices.end(), prefetches.begin(),
+                             prefetches.end());
+  return entry.patch_indices.back();
 }
 
 StatusOr<std::vector<PatchMap::Entry>>
@@ -232,7 +235,8 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
         if (condition->IsUnitary()) {
           // this condition can use this entry to map itself. Update the entries
           // mapped patch id.
-          last_patch_id = MapTo(sub_entry, condition->activated());
+          last_patch_id =
+              MapTo(sub_entry, condition->activated(), condition->prefetches());
           remove = true;
         }
 
@@ -280,7 +284,8 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
       }
 
       if (condition->conditions().size() == 1) {
-        last_patch_id = MapTo(entry, condition->activated());
+        last_patch_id =
+            MapTo(entry, condition->activated(), condition->prefetches());
         remove = true;
       } else {
         MakeIgnored(entry, last_patch_id);
@@ -315,7 +320,8 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
       entry.coverage.child_indices.insert(segment_group_to_entry_index[group]);
     }
 
-    last_patch_id = MapTo(entry, condition->activated());
+    last_patch_id =
+        MapTo(entry, condition->activated(), condition->prefetches());
     entries.push_back(entry);
   }
 
