@@ -56,6 +56,69 @@ if (s1) then p1
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DefaultFeatures) {
+  SubsetDefinition init;
+  init.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
+  init.codepoints = {'a'};
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // ccmp is a default feature and is already included so should not show up in
+  // the segmentation.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid71 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DropsUneededSegment) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+                                                         {{'b'}, {'c'}, {'a'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, {'a'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // Optional segment with 'a' isn't need as it's already included in the init,
+  // so the segmentation shouldn't include anything for it.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid71 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       SimpleSegmentation_DropsUneededSegment_DefaultFeature) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+                                                         {{'b'}, {'c'}, ccmp});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, ccmp};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // Optional segment with 'a' isn't need as it's already included in the init,
+  // so the segmentation shouldn't include anything for it.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid71 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithPartialOverlap) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'b', 'c'}, {'c', 'd'}});

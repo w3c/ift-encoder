@@ -25,6 +25,7 @@ cc_library(
     deps = [
         "//ift",
         "//ift/proto",
+        "//ift/feature_registry:feature_registry",
         "//util:segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",

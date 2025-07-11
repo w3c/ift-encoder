@@ -18,12 +18,12 @@ cc_library(
     ":feature_registry_h",
   ],
   deps = [
-    "@abseil-cpp//absl/container:flat_hash_map",
+    "@abseil-cpp//absl/container:flat_hash_set",
     "@abseil-cpp//absl/base:no_destructor",
     "@harfbuzz",
   ],
-  visibility = [
-    "//ift/proto:__pkg__",
+  visibility = [    
+    "//ift/encoder:__pkg__",
   ],
 )
 
