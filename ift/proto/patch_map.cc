@@ -9,7 +9,6 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/sparse_bit_set.h"
-#include "ift/feature_registry/feature_registry.h"
 #include "ift/proto/patch_encoding.h"
 
 using absl::btree_set;
@@ -20,8 +19,6 @@ using absl::StatusOr;
 using common::FontHelper;
 using common::IntSet;
 using common::SparseBitSet;
-using ift::feature_registry::FeatureTagToIndex;
-using ift::feature_registry::IndexToFeatureTag;
 
 namespace ift::proto {
 

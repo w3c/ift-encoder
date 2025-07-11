@@ -19,6 +19,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
@@ -89,8 +90,6 @@ class GlyphClosureCache {
       return absl::InternalError("Closure subset configuration failed.");
     }
 
-    // TODO(garretrieger): automatically include IFT default features in input
-    // config.
     segment.ConfigureInput(input, preprocessed_face_.get());
 
     hb_subset_plan_t* plan =
@@ -189,6 +188,19 @@ class RequestedSegmentationInformation {
   }
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
+
+  // Returns the init font segment with all default always included items
+  // removed
+  //
+  // this is useful when we need to know what non-default items are included
+  // in the init font segment.
+  const SubsetDefinition InitFontSegmentWithoutDefaults() const {
+    SubsetDefinition result = init_font_segment_;
+    SubsetDefinition defaults;
+    Compiler::AddInitSubsetDefaults(defaults);
+    result.Subtract(defaults);
+    return result;
+  }
 
   const GlyphSet& InitFontGlyphs() const { return init_font_glyphs_; }
 
@@ -483,9 +495,9 @@ class GlyphGroupings {
   // Converts this grouping into a finalized GlyphSegmentation.
   StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const {
-    GlyphSegmentation segmentation(segmentation_info.InitFontSegment(),
-                                   segmentation_info.InitFontGlyphs(),
-                                   unmapped_glyphs_);
+    GlyphSegmentation segmentation(
+        segmentation_info.InitFontSegmentWithoutDefaults(),
+        segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
     segmentation.CopySegments(segmentation_info.Segments());
     TRYV(GlyphSegmentation::GroupsToSegmentation(
         and_glyph_groups_, or_glyph_groups_, fallback_segments_, segmentation));
@@ -1156,6 +1168,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
   }
+
+  // The IFT compiler has a set of defaults always included in the initial font
+  // add them here so we correctly factor them into the generated segmentation.
+  Compiler::AddInitSubsetDefaults(initial_segment);
 
   SegmentationContext context(face, initial_segment, codepoint_segments);
   context.patch_size_min_bytes = patch_size_min_bytes;

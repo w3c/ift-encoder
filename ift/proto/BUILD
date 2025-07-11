@@ -15,7 +15,6 @@ cc_library(
     "//ift/encoder:__pkg__",
   ],
   deps = [
-      "//ift/feature_registry",
       "//common",
       "@abseil-cpp//absl/status:statusor",
       "@abseil-cpp//absl/container:flat_hash_map",

@@ -22,6 +22,7 @@
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/feature_registry/feature_registry.h"
 #include "ift/glyph_keyed_diff.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -47,6 +48,7 @@ using common::make_hb_set;
 using common::SegmentSet;
 using common::Woff2;
 using ift::GlyphKeyedDiff;
+using ift::feature_registry::DefaultFeatureTags;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::IFTTable;
 using ift::proto::PatchEncoding;
@@ -55,6 +57,14 @@ using ift::proto::TABLE_KEYED_FULL;
 using ift::proto::TABLE_KEYED_PARTIAL;
 
 namespace ift::encoder {
+
+// Configures a subset definition to contain all of the default, always included
+// items (eg. https://w3c.github.io/IFT/Overview.html#feature-tag-list)
+void Compiler::AddInitSubsetDefaults(SubsetDefinition& subset_definition) {
+  std::copy(DefaultFeatureTags().begin(), DefaultFeatureTags().end(),
+            std::inserter(subset_definition.feature_tags,
+                          subset_definition.feature_tags.begin()));
+}
 
 static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
                             uint32_t choose, std::vector<Compiler::Edge>& out) {
@@ -219,6 +229,7 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
 
   ProcessingContext context(next_id_);
   context.init_subset_ = init_subset_;
+  AddInitSubsetDefaults(context.init_subset_);
   if (IsMixedMode()) {
     // Glyph keyed patches can't change the glyph count in the font (and hence
     // loca len) so always include the last gid in the init subset to force the

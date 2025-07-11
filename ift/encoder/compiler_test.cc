@@ -676,12 +676,12 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
       PatchMap::Entry(segment_3_cps, 3, PatchEncoding::GLYPH_KEYED)));
 
   PatchMap::Entry feature(segment_3_cps, 4, PatchEncoding::GLYPH_KEYED);
-  feature.coverage.features = {HB_TAG('c', 'c', 'm', 'p')};
+  feature.coverage.features = {HB_TAG('s', 'm', 'c', 'p')};
   s.Update(compiler.AddGlyphDataPatchCondition(feature));
 
   ASSERT_TRUE(s.ok()) << s;
 
-  // Partitions {0, 1}, {2, 3, 4}, +ccmp
+  // Partitions {0, 1}, {2, 3, 4}, +smcp
   IntSet base_subset;
   base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
   base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
@@ -692,7 +692,7 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   extension_segment.insert(segment_3_cps.begin(), segment_3_cps.end());
   extension_segment.insert(segment_4_cps.begin(), segment_4_cps.end());
   compiler.AddNonGlyphDataSegment(extension_segment);
-  compiler.AddFeatureGroupSegment({HB_TAG('c', 'c', 'm', 'p')});
+  compiler.AddFeatureGroupSegment({HB_TAG('s', 'm', 'c', 'p')});
   ASSERT_TRUE(s.ok()) << s;
 
   auto encoding = compiler.Compile();
@@ -703,9 +703,45 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_WithFeatureMappings) {
   // expected patches:
   // - segment 2 (glyph keyed)
   // - segment 3 (glyph keyed)
-  // - segment 4 (glyph keyed), triggered by ccmap + segment 3
+  // - segment 4 (glyph keyed), triggered by smcp + segment 3
   // - table keyed patches...
   // TODO(garretrieger): Check graph instead
+}
+
+TEST_F(CompilerTest, Encode_IncludesDefaultFeatures) {
+  Compiler compiler;
+  {
+    hb_face_t* face = noto_sans_jp.reference_face();
+    compiler.SetFace(face);
+    hb_face_destroy(face);
+  }
+
+  // Partitions {0, 1}, {2, 3, 4}, +vert
+  IntSet base_subset;
+  base_subset.insert(segment_0_cps.begin(), segment_0_cps.end());
+  base_subset.insert(segment_1_cps.begin(), segment_1_cps.end());
+  auto s = compiler.SetInitSubset(base_subset);
+
+  IntSet extension_segment;
+  extension_segment.insert(segment_2_cps.begin(), segment_2_cps.end());
+  extension_segment.insert(segment_3_cps.begin(), segment_3_cps.end());
+  extension_segment.insert(segment_4_cps.begin(), segment_4_cps.end());
+  compiler.AddNonGlyphDataSegment(extension_segment);
+  compiler.AddFeatureGroupSegment({HB_TAG('v', 'e', 'r', 't')});
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto encoding = compiler.Compile();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  // expected patches:
+  // - + {2, 3, 4}
+  // - No patch for vert should be included since it's a default feature.
+  ASSERT_EQ(encoding->patches.size(), 1);
+
+  // vert should be in the base font.
+  auto face = encoding->init_font.face();
+  ASSERT_TRUE(FontHelper::GetFeatureTags(face.get())
+                  .contains(HB_TAG('v', 'e', 'r', 't')));
 }
 
 TEST_F(CompilerTest, Encode_FourSubsets) {

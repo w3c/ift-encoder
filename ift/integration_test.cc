@@ -1583,8 +1583,7 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
   ASSERT_GT(FontHelper::GvarData(extended_face.get(), chunk4_gid)->size(), 0);
 }
 
-TEST_F(IntegrationTest,
-       MixedMode_DesignSpaceAugmentation_NoOverfetch) {
+TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_NoOverfetch) {
   Compiler compiler;
   auto init_gids = InitEncoderForVfMixedMode(compiler);
   ASSERT_TRUE(init_gids.ok()) << init_gids.status();

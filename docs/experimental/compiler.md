@@ -254,17 +254,11 @@ non-exhaustive list of some possibilities:
 
 * Add support for producing "glyph keyed only" IFT fonts that make use of only glyph keyed patches.
 
-* Add the default feature list to encodings, see: https://w3c.github.io/IFT/Overview.html#feature-tag-list. The default
-  feature list should be imported from the spec and applied to generated font subsets. That is all generated subsets
-  should implicitly include these features.
-
 * Finish implementing support for all options in the encoder config schema. There's several options which we do not yet
   have support for.
 
 * Improved patch map compilation to reduce encoded size. The format2 patch map has several tools at it's disposal to
-  produce compact encodings which we are not yet fully leveraging. In particular for the table keyed patch map we do not
-  utilize child entry indices at all to reuse previously encoded code point sets. This would be quite effective at
-  reducing encoding sizes when jump ahead > 1 is used as the same code point set will be repeated multiple times.
+  produce compact encodings which we are not yet fully leveraging.
 
 * Additionally, some smaller size reductions could be realized by smartly picking entry ids that reduce the total number
   of entry deltas needed in the encoding.
