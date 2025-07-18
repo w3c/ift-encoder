@@ -2,6 +2,7 @@
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
 #include "common/int_set.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/proto/patch_encoding.h"
@@ -97,6 +98,22 @@ class ActivationCondition {
 
   bool IsUnitary() const {
     return conditions().size() == 1 && conditions().at(0).size() == 1;
+  }
+
+  // Compute and return the probability that this condition will be activated
+  // based on the provided individual segment probabilities.
+  double Probability(absl::Span<const Segment> segments) const {
+    double total_probability = 1.0;
+    for (const auto& segment_set : conditions_) {
+      double not_probability = 1.0;
+      for (unsigned s_index : segment_set) {
+        const auto& s = segments[s_index];
+        not_probability *= 1.0 - s.Probability();
+      }
+      double set_probability = 1.0 - not_probability;
+      total_probability *= set_probability;
+    }
+    return total_probability;
   }
 
   ActivationConditionProto ToConfigProto() const;

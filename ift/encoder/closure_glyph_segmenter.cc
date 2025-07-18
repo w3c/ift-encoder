@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
@@ -79,10 +80,23 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
 }
 
 void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
-                   const SegmentSet& segments, SubsetDefinition& base) {
+                   const SegmentSet& segments, Segment& base) {
+  // Merged segments are activated disjunctively (s1 or ... or sn)
+  //
+  // We can compute the probability by first determining the probability
+  // that none of the individual segments are matched (!s1 and ... and !sn) and
+  // then inverting that to get the probability that at least one of the
+  // individual segments was matched.
+  //
+  // This gives:
+  // P(merged) = 1 - (1 - P(s1)) * ... * (1 - P(sn))
+  double probability_not_matched = 1.0 - base.Probability();
   for (segment_index_t next : segments) {
-    base.Union(segmentation_info.Segments()[next]);
+    const auto& s = segmentation_info.Segments()[next];
+    probability_not_matched *= 1.0 - s.Probability();
+    base.Definition().Union(s.Definition());
   }
+  base.SetProbability(1.0 - probability_not_matched);
 }
 
 // Calculates the estimated size of a patch which includes all glyphs exclusive
@@ -102,7 +116,7 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
 bool WouldMixFeaturesAndCodepoints(
     const RequestedSegmentationInformation& segment_info,
     segment_index_t base_segment_index, const SegmentSet& segments) {
-  const auto& base = segment_info.Segments()[base_segment_index];
+  const auto& base = segment_info.Segments()[base_segment_index].Definition();
   bool base_codepoints_only =
       !base.codepoints.empty() && base.feature_tags.empty();
   bool base_features_only =
@@ -113,7 +127,7 @@ bool WouldMixFeaturesAndCodepoints(
   }
 
   for (segment_index_t id : segments) {
-    const auto& s = segment_info.Segments()[id];
+    const auto& s = segment_info.Segments()[id].Definition();
 
     if (base_codepoints_only && !s.feature_tags.empty()) {
       return true;
@@ -165,9 +179,10 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
   }
 
   const auto& segments = context.segmentation_info.Segments();
-  uint32_t size_before = segments[base_segment_index].codepoints.size();
+  uint32_t size_before =
+      segments[base_segment_index].Definition().codepoints.size();
 
-  SubsetDefinition merged_segment = segments[base_segment_index];
+  Segment merged_segment = segments[base_segment_index];
   MergeSegments(context.segmentation_info, to_merge_segments, merged_segment);
 
   GlyphSet gid_conditions_to_update;
@@ -199,7 +214,7 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
     return std::nullopt;
   }
 
-  uint32_t size_after = context.segmentation_info.MergeSegments(
+  uint32_t size_after = context.segmentation_info.AssignMergedSegment(
       base_segment_index, to_merge_segments, merged_segment);
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
           << " codepoints for segment " << base_segment_index
@@ -452,8 +467,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<SubsetDefinition> codepoint_segments,
-    uint32_t patch_size_min_bytes, uint32_t patch_size_max_bytes) const {
+    std::vector<Segment> codepoint_segments, uint32_t patch_size_min_bytes,
+    uint32_t patch_size_max_bytes) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
