@@ -91,6 +91,7 @@ using ift::encoder::ActivationCondition;
 using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::Compiler;
 using ift::encoder::GlyphSegmentation;
+using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
@@ -314,12 +315,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<SubsetDefinition> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                              uint32_t number_of_segments) {
+std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
+                                     uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  std::vector<SubsetDefinition> out;
+  std::vector<Segment> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -329,10 +330,16 @@ std::vector<SubsetDefinition> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    SubsetDefinition group;
+    // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
+    // or take them as an input.
+    //                     for example for CJK we can assign probabilities
+    //                     following a typical exponential decay curve base on
+    //                     the supplied codepoint ordering.
+    Segment group(SubsetDefinition(), 0.9);
     for (; start != end; start++) {
-      group.codepoints.insert(*start);
+      group.Definition().codepoints.insert(*start);
     }
+
     out.push_back(group);
   }
 
@@ -379,9 +386,11 @@ int main(int argc, char** argv) {
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
 
   for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
-    SubsetDefinition s;
+    // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
+    // or take them as an input.
+    Segment s(SubsetDefinition(), 0.05);
     hb_tag_t tag_value = FontHelper::ToTag(tag);
-    s.feature_tags = {tag_value};
+    s.Definition().feature_tags = {tag_value};
     groups.push_back(s);
   }
 

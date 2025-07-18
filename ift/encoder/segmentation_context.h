@@ -9,6 +9,7 @@
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
@@ -33,7 +34,7 @@ namespace ift::encoder {
 class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
-                      const std::vector<SubsetDefinition>& segments)
+                      const std::vector<Segment>& segments)
       : glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info(segments, initial_segment, glyph_closure_cache),

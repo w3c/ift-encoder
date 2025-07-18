@@ -2,17 +2,19 @@
 
 #include <vector>
 
+#include "ift/encoder/segment.h"
+
 namespace ift::encoder {
 
 RequestedSegmentationInformation::RequestedSegmentationInformation(
-    std::vector<SubsetDefinition> segments, SubsetDefinition init_font_segment,
+    std::vector<Segment> segments, SubsetDefinition init_font_segment,
     GlyphClosureCache& closure_cache)
     : segments_(std::move(segments)),
       init_font_segment_(std::move(init_font_segment)) {
   SubsetDefinition all;
   all.Union(init_font_segment_);
   for (const auto& s : segments_) {
-    all.Union(s);
+    all.Union(s.Definition());
   }
 
   {

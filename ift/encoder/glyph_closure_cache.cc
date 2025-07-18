@@ -100,14 +100,14 @@ Status GlyphClosureCache::AnalyzeSegment(
     if (segment_ids.contains(s)) {
       continue;
     }
-    except_segment.Union(segmentation_info.Segments()[s]);
+    except_segment.Union(segmentation_info.Segments()[s].Definition());
   }
 
   auto B_except_segment_closure = TRY(GlyphClosure(except_segment));
 
   SubsetDefinition only_segment = segmentation_info.InitFontSegment();
   for (segment_index_t s_id : segment_ids) {
-    only_segment.Union(segmentation_info.Segments()[s_id]);
+    only_segment.Union(segmentation_info.Segments()[s_id].Definition());
   }
 
   auto I_only_segment_closure = TRY(GlyphClosure(only_segment));

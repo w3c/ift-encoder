@@ -12,6 +12,7 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
@@ -21,10 +22,10 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(const std::vector<SubsetDefinition>& segments) {
+  GlyphGroupings(const std::vector<Segment>& segments) {
     uint32_t index = 0;
     for (const auto& s : segments) {
-      if (!s.Empty()) {
+      if (!s.Definition().Empty()) {
         fallback_segments_.insert(index);
       }
       index++;
@@ -100,7 +101,7 @@ class GlyphGroupings {
     GlyphSegmentation segmentation(
         segmentation_info.InitFontSegmentWithoutDefaults(),
         segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
-    segmentation.CopySegments(segmentation_info.Segments());
+    segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
     TRYV(GlyphSegmentation::GroupsToSegmentation(
         and_glyph_groups_, or_glyph_groups_, fallback_segments_, segmentation));
     return segmentation;

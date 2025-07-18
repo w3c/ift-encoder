@@ -49,8 +49,8 @@ class GlyphSegmentationTest : public ::testing::Test {
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
   ClosureGlyphSegmenter segmenter;
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();
@@ -124,7 +124,11 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
   init.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
 
   auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), init,
-                                                         {{'b'}, {'c'}, smcp});
+                                                         {
+                                                             {{'b'}, 0.5},
+                                                             {{'c'}, 0.5},
+                                                             {smcp, 0.5},
+                                                         });
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();
@@ -250,7 +254,7 @@ initial_features {
 TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
   ClosureGlyphSegmenter segmenter;
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
+      roboto.get(), {'a'}, {{{'f', 0xc1}, 0.5}, {{'i', 0x106}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();
@@ -357,9 +361,15 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
   ClosureGlyphSegmenter segmenter;
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {{'a', 'b', 'd'}, 0.5},
+                                             {{'e', 'f'}, 0.5},
+                                             {{'j', 'k'}, 0.5},
+                                             {{'m', 'n', 'o', 'p'}, 0.5},
+                                         },
+                                         370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();

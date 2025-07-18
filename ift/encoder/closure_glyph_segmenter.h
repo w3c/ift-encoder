@@ -4,6 +4,7 @@
 
 #include "absl/status/statusor.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
@@ -32,7 +33,7 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<SubsetDefinition> segments, uint32_t patch_size_min_bytes = 0,
+      std::vector<Segment> segments, uint32_t patch_size_min_bytes = 0,
       uint32_t patch_size_max_bytes = UINT32_MAX) const;
 };
 

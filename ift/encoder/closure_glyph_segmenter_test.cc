@@ -40,8 +40,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
 };
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}};
@@ -60,8 +60,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DefaultFeatures) {
   SubsetDefinition init;
   init.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
   init.codepoints = {'a'};
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), init, {{{'b'}, 0.5}, {{'c'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}};
@@ -79,8 +79,8 @@ if (s1) then p1
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DropsUneededSegment) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
-                                                         {{'b'}, {'c'}, {'a'}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {{'a'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, {'a'}};
@@ -101,8 +101,8 @@ TEST_F(ClosureGlyphSegmenterTest,
        SimpleSegmentation_DropsUneededSegment_DefaultFeature) {
   SubsetDefinition ccmp;
   ccmp.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
-                                                         {{'b'}, {'c'}, ccmp});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {ccmp, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, ccmp};
@@ -121,7 +121,7 @@ if (s1) then p1
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithPartialOverlap) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'b', 'c'}, {'c', 'd'}});
+      roboto.get(), {'a'}, {{{'b', 'c'}, 0.5}, {{'c', 'd'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b', 'c'}, {'c', 'd'}};
@@ -140,7 +140,8 @@ if ((s0 OR s1)) then p2
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFullOverlap) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'b', 'c'}, {'b', 'c'}, {'d'}});
+      roboto.get(), {'a'},
+      {{{'b', 'c'}, 0.5}, {{'b', 'c'}, 0.5}, {{'d'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -158,7 +159,7 @@ if ((s0 OR s1)) then p1
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithAdditionalConditionOverlap) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
+      roboto.get(), {'a'}, {{{'f'}, 0.5}, {{'i'}, 0.5}, {{'f', 'i'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'f'}, {'i'}, {'f', 'i'}};
@@ -179,8 +180,8 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
-                                                         {{'b'}, {'c'}, smcp});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {smcp, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, smcp};
@@ -206,7 +207,7 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures_DontMergeFeatures) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'b'}, {'c'}, smcp}, 10000);
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {smcp, 0.5}}, 10000);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b', 'c'}, {}, smcp};
@@ -224,8 +225,8 @@ if (s0 AND s2) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
-  auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{'f'}, 0.5}, {{'i'}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'f'}, {'i'}};
@@ -243,8 +244,8 @@ if (s0 AND s1) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, OrCondition) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
-                                                         {{0xc1}, {0x106}});
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{{0xc1}, 0.5}, {{0x106}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{0xc1}, {0x106}};
@@ -266,9 +267,13 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBase_ViaConditions) {
   // there is a dependency between these two. The result should have no
   // conditional patches since ligatures will have been brought into the merged
   // {e, f, i, l}
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}}, 370);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {{{'a', 'b', 'd'}, 0.5},
+                                          {{'e', 'f'}, 0.5},
+                                          {{'j', 'k', 'm', 'n'}, 0.5},
+                                          {{'i', 'l'}, 0.5}},
+                                         370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -289,9 +294,13 @@ if (s2) then p2
 TEST_F(ClosureGlyphSegmenterTest, MergeBases) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}}, 370);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {{{'a', 'b', 'd'}, 0.5},
+                                          {{'e', 'f'}, 0.5},
+                                          {{'j', 'k'}, 0.5},
+                                          {{'m', 'n', 'o', 'p'}, 0.5}},
+                                         370);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -317,10 +326,13 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases_MaxSize) {
   // {e, f} is too small, since no conditional patches exist it will merge with
   // the next available base which is {'m', 'n', 'o', 'p'}. However that patch
   // is too large, so the next one {j, k} will actually be chosen.
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}}, 370,
-      700);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {{{'a', 'b', 'd'}, 0.5},
+                                          {{'e', 'f'}, 0.5},
+                                          {{'m', 'n', 'o', 'p'}, 0.5},
+                                          {{'j', 'k'}, 0.5}},
+                                         370, 700);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -340,7 +352,7 @@ if (s2) then p2
 
 TEST_F(ClosureGlyphSegmenterTest, MixedAndOr) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
+      roboto.get(), {'a'}, {{{'f', 0xc1}, 0.5}, {{'i', 0x106}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'f', 0xc1}, {'i', 0x106}};
@@ -361,7 +373,8 @@ if (s0 AND s1) then p2
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FallbackSegment) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
+      noto_nastaliq_urdu.get(), {},
+      {{{0x62a}, 0.5}, {{0x62b}, 0.5}, {{0x62c}, 0.5}, {{0x62d}, 0.5}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 12);
@@ -392,7 +405,7 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   uint32_t per_group = codepoints.size() / num_segments;
   uint32_t remainder = codepoints.size() % num_segments;
 
-  std::vector<SubsetDefinition> segments;
+  std::vector<Segment> segments;
   int i = 0;
   SubsetDefinition segment;
   for (uint32_t cp : codepoints) {
@@ -400,7 +413,7 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
 
     uint32_t group_size = per_group + (remainder > 0 ? 1 : 0);
     if (++i % group_size == 0) {
-      segments.push_back(segment);
+      segments.push_back({segment, 0.5});
       segment.Clear();
       if (remainder > 0) {
         remainder--;
@@ -410,7 +423,7 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
 
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
-  segments.push_back(smcp);
+  segments.push_back({smcp, 0.5});
 
   auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                                          segments, 4000, 12000);

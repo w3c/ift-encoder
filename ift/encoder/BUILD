@@ -2,7 +2,7 @@ cc_library(
     name = "encoder",
     srcs = [                
         "closure_glyph_segmenter.cc",
-        "closure_glyph_segmenter.h",
+        "closure_glyph_segmenter.h",        
         "compiler.cc",
         "compiler.h",        
     ],
@@ -67,6 +67,7 @@ cc_library(
         "activation_condition.cc",
         "types.h",
         "init_subset_defaults.h",
+        "segment.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
