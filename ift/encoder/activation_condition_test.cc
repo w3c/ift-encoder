@@ -294,28 +294,40 @@ TEST(ActivationConditionTest, MergedProbability) {
   };
 
   // Ignores segments that are not present in the condition.
-  EXPECT_NEAR(ActivationCondition::exclusive_segment(0, 1).MergedProbability(
+  EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(
                   segments, {5}, 0.12),
               0.75, 1e-9);
 
   // Simple one to one replacement
-  EXPECT_NEAR(ActivationCondition::exclusive_segment(0, 1).MergedProbability(
+  EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(
                   segments, {0}, 0.12),
               0.12, 1e-9);
 
   // Simple two to one replacement
-  EXPECT_NEAR(ActivationCondition::and_segments({0, 1}, 1).MergedProbability(
+  EXPECT_NEAR(*ActivationCondition::and_segments({0, 1}, 1).MergedProbability(
+                  segments, {0, 1}, 0.12),
+              0.12, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::or_segments({0, 1}, 1).MergedProbability(
                   segments, {0, 1}, 0.12),
               0.12, 1e-9);
 
-  // Partial replacement
-  EXPECT_NEAR(ActivationCondition::and_segments({0, 1, 2}, 1)
-                  .MergedProbability(segments, {1, 2}, 0.4),
+  // Conjunctive with partial replacement
+  EXPECT_NEAR(*ActivationCondition::and_segments({0, 1, 2}, 1)
+                   .MergedProbability(segments, {1, 2}, 0.4),
               // P() = P(0) * P(merged) = 0.75 * 0.4 = 0.3
               0.3, 1e-9);
 
-  // TODO XXXX disjunctive cases.
-  // TODO XXXX rejects composite.
+  // Disjunctive with partial replacement
+  EXPECT_NEAR(*ActivationCondition::or_segments({0, 1, 2}, 1)
+                   .MergedProbability(segments, {1, 2}, 0.4),
+              // P() = P(0) + P(merged) - P(0) * P(merged)
+              // = 0.75 + 0.4 - 0.75 * 0.4
+              /* = */ 0.85, 1e-9);
+
+  EXPECT_TRUE(absl::IsUnimplemented(
+      ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
+          .MergedProbability(segments, {1, 2}, 0.4)
+          .status()));
 }
 
 }  // namespace ift::encoder

@@ -103,12 +103,12 @@ class ActivationCondition {
   // Compute and return the probability that this condition will be activated
   // based on the provided individual segment probabilities.
   absl::StatusOr<double> Probability(absl::Span<const Segment> segments) const {
-    bool is_disjunctive = conditions_.size() > 1;
+    bool is_conjunctive = conditions_.size() > 1;
     double total_probability = 1.0;
     for (const auto& segment_set : conditions_) {
-      if (is_disjunctive && segment_set.size() > 1) {
-        // Composite conditions (eg. (a and b) or (c and d)) may have repeated
-        // segments in each conjunctive group (eg. (a and b) or (a and d)) which
+      if (is_conjunctive && segment_set.size() > 1) {
+        // Composite conditions (eg. (a or b) and (c or d)) may have repeated
+        // segments in each conjunctive group (eg. (a or b) and (a or d)) which
         // requires special analysis to correctly determine probability. For our
         // current use cases we don't need to support this.
         return absl::UnimplementedError(
@@ -130,30 +130,62 @@ class ActivationCondition {
   // Compute and return the probability that this condition will be activated if
   // it is modified to merge all segments in "merged_segments" into a single
   // segment with "merged_probability".
-  double MergedProbability(absl::Span<const Segment> segments,
-                           const common::SegmentSet& merged_segments,
-                           double merged_probability) const {
-    // TODO XXXX  double check this implementation, and add some tests.
-    double total_probability = 1.0;
-    for (const auto& segment_set : conditions_) {
-      double not_probability = 1.0;
+  absl::StatusOr<double> MergedProbability(
+      absl::Span<const Segment> segments,
+      const common::SegmentSet& merged_segments,
+      double merged_probability) const {
+    if (conditions_.size() > 1) {
+      // Purely conjunctive condition.
+      double total_probability = 1.0;
       bool segment_set_contains_merged = false;
-      for (unsigned s_index : segment_set) {
-        if (merged_segments.contains(s_index)) {
-          segment_set_contains_merged = true;
-          continue;  // Skip individual segments that are part of the merged set
+      for (const auto& segment_set : conditions_) {
+        if (segment_set.size() > 1) {
+          // Composite conditions (eg. (a or b) and (c or d)) may have repeated
+          // segments in each conjunctive group (eg. (a or b) and (a or d))
+          // which requires special analysis to correctly determine probability.
+          // For our current use cases we don't need to support this.
+          return absl::UnimplementedError(
+              "Calculating probability of composite conditions is not "
+              "supported.");
         }
-        const auto& s = segments[s_index];
-        not_probability *= 1.0 - s.Probability();
+        for (unsigned s_index : segment_set) {
+          if (merged_segments.contains(s_index)) {
+            segment_set_contains_merged = true;
+            continue;  // Skip individual segments that are part of the merged
+                       // set
+          }
+          const auto& s = segments[s_index];
+          total_probability *= s.Probability();
+        }
       }
-
       if (segment_set_contains_merged) {
-        not_probability *= 1.0 - merged_probability;
+        total_probability *= merged_probability;
       }
-      double set_probability = 1.0 - not_probability;
-      total_probability *= set_probability;
+      return total_probability;
+    } else {
+      // Purely disjunctive condition.
+      double total_probability = 1.0;
+      for (const auto& segment_set : conditions_) {
+        double not_probability = 1.0;
+        bool segment_set_contains_merged = false;
+        for (unsigned s_index : segment_set) {
+          if (merged_segments.contains(s_index)) {
+            segment_set_contains_merged = true;
+            continue;  // Skip individual segments that are part of the merged
+                       // set
+          }
+          const auto& s = segments[s_index];
+          not_probability *= 1.0 - s.Probability();
+        }
+
+        if (segment_set_contains_merged) {
+          not_probability *= 1.0 - merged_probability;
+        }
+        double set_probability = 1.0 - not_probability;
+        total_probability *= set_probability;
+      }
+      return total_probability;
     }
-    return total_probability;
   }
 
   ActivationConditionProto ToConfigProto() const;

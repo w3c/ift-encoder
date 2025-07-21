@@ -224,6 +224,7 @@ struct CandidateMerge {
         auto condition_segments = c.TriggeringSegments();
         if (condition_segments.is_subset_of(merged_segments)) {
           TRYV(AddConditionAndPatchSize(context, c, removed_conditions));
+          continue;
         }
 
         condition_segments.intersect(merged_segments);
@@ -282,8 +283,8 @@ struct CandidateMerge {
     for (const auto& [c, size] : modified_conditions) {
       // For modified conditions we assume the associated patch size does not
       // change, only the probability associated with the condition changes.
-      cost_delta += c.MergedProbability(segments, merged_segments,
-                                        merged_segment.Probability()) *
+      cost_delta += TRY(c.MergedProbability(segments, merged_segments,
+                                            merged_segment.Probability())) *
                     (size + PER_REQUEST_OVERHEAD);
     }
 
@@ -359,8 +360,8 @@ struct CandidateMerge {
       return std::nullopt;
     }
 
-    double cost_delta = TRY(ComputeCostDelta(context, segments_to_merge,
-                                             merged_segment, new_patch_size));
+    double cost_delta = TRY(ComputeCostDelta(
+        context, segments_to_merge_with_base, merged_segment, new_patch_size));
 
     return CandidateMerge{.base_segment_index = base_segment_index,
                           .segments_to_merge = segments_to_merge,
