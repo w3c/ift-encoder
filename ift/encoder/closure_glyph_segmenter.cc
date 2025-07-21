@@ -58,6 +58,208 @@ namespace ift::encoder {
 //   - composite patches (NOT STARTED)
 // - Multi segment combination testing with GSUB dep analysis to guide.
 
+static StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
+                                                 const GlyphSet& gids);
+
+static StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
+                                                 const SegmentSet& segment_ids);
+
+/*
+ * Represents a potential merge operation that can be applied to the
+ * SegmentationContext.
+ */
+struct CandidateMerge {
+  // The segment into which other segments will be merged.
+  segment_index_t base_segment_index;
+
+  // The set of segments to be merged into the base_segment_index.
+  common::SegmentSet segments_to_merge;
+
+  // The result of merge the above segments.
+  Segment merged_segment;
+
+  // If true the merge segment will be inert, that is it won't interact
+  // with the closure.
+  bool new_segment_is_inert;
+
+  // Estimated size of the patch after merging.
+  uint32_t new_patch_size;
+
+  // The estimated change overall cost of the segmentation if this merge
+  // were to be appiled.
+  double cost_delta;
+
+  // The set of glyphs that would be invalidated (need reprocessing) if this
+  // merge is applied.
+  common::GlyphSet invalidated_glyphs;
+
+  // Applies this merge operation to the given SegmentationContext.
+  std::optional<GlyphSet> Apply(SegmentationContext& context) {
+    const auto& segments = context.segmentation_info.Segments();
+    uint32_t size_before =
+        segments[base_segment_index].Definition().codepoints.size();
+    uint32_t size_after = context.segmentation_info.AssignMergedSegment(
+        base_segment_index, segments_to_merge, merged_segment);
+    VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
+            << " codepoints for segment " << base_segment_index
+            << ". New patch size " << new_patch_size << " bytes.";
+
+    // Remove the fallback segment or group, it will be fully recomputed by
+    // GroupGlyphs
+    context.glyph_groupings.RemoveFallbackSegments(segments_to_merge);
+
+    // Regardless of wether the new segment is inert all of the information
+    // associated with the segments removed by the merge should be removed.
+    context.InvalidateGlyphInformation(invalidated_glyphs, segments_to_merge);
+
+    if (new_segment_is_inert) {
+      // The newly formed segment will be inert which means we can construct the
+      // new condition sets and glyph groupings here instead of using the
+      // closure analysis to do it. The new segment is simply the union of all
+      // glyphs associated with each segment that is part of the merge.
+      // (gid_conditons_to_update)
+      context.inert_segments.insert(base_segment_index);
+      for (glyph_id_t gid : invalidated_glyphs) {
+        context.glyph_condition_set.AddAndCondition(gid, base_segment_index);
+      }
+      context.glyph_groupings.AddGlyphsToExclusiveGroup(base_segment_index,
+                                                        invalidated_glyphs);
+
+      // We've now fully updated information for these glyphs so don't need to
+      // return them.
+      invalidated_glyphs.clear();
+    } else {
+      context.inert_segments.erase(base_segment_index);
+    }
+
+    return invalidated_glyphs;
+  }
+
+  static bool WouldMixFeaturesAndCodepoints(
+      const RequestedSegmentationInformation& segment_info,
+      segment_index_t base_segment_index, const SegmentSet& segments) {
+    const auto& base = segment_info.Segments()[base_segment_index].Definition();
+    bool base_codepoints_only =
+        !base.codepoints.empty() && base.feature_tags.empty();
+    bool base_features_only =
+        base.codepoints.empty() && !base.feature_tags.empty();
+
+    if (!base_codepoints_only && !base_features_only) {
+      return false;
+    }
+
+    for (segment_index_t id : segments) {
+      const auto& s = segment_info.Segments()[id].Definition();
+
+      if (base_codepoints_only && !s.feature_tags.empty()) {
+        return true;
+      } else if (base_features_only && !s.codepoints.empty()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  static void MergeSegments(
+      const RequestedSegmentationInformation& segmentation_info,
+      const SegmentSet& segments, Segment& base) {
+    // Merged segments are activated disjunctively (s1 or ... or sn)
+    //
+    // We can compute the probability by first determining the probability
+    // that none of the individual segments are matched (!s1 and ... and !sn)
+    // and then inverting that to get the probability that at least one of the
+    // individual segments was matched.
+    //
+    // This gives:
+    // P(merged) = 1 - (1 - P(s1)) * ... * (1 - P(sn))
+    double probability_not_matched = 1.0 - base.Probability();
+    for (segment_index_t next : segments) {
+      const auto& s = segmentation_info.Segments()[next];
+      probability_not_matched *= 1.0 - s.Probability();
+      base.Definition().Union(s.Definition());
+    }
+    base.SetProbability(1.0 - probability_not_matched);
+  }
+
+  static StatusOr<std::optional<CandidateMerge>> AssessMerge(
+      SegmentationContext& context, segment_index_t base_segment_index,
+      const SegmentSet& segments_to_merge_) {
+    if (WouldMixFeaturesAndCodepoints(context.segmentation_info,
+                                      base_segment_index, segments_to_merge_)) {
+      // Because we don't yet have a good cost function for evaluating potential
+      // mergers: the merger if it doesn't find a previous merge candidate will
+      // try to merge together segments that are composed of codepoints with a
+      // segment that adds an optional feature. Since this feature segments are
+      // likely rarely used this will inflate the size of the patches for those
+      // codepoint segments unnecessarily.
+      //
+      // So for now just don't merge cases where we would be combining codepoint
+      // only segments with feature only segments.
+      VLOG(0) << "  Merge would mix features into a codepoint only segment, "
+                 "skipping.";
+      return std::nullopt;
+    }
+
+    // Create a merged segment, and remove all of the others
+    SegmentSet segments_to_merge = segments_to_merge_;
+    SegmentSet segments_to_merge_with_base = segments_to_merge_;
+    segments_to_merge.erase(base_segment_index);
+    segments_to_merge_with_base.insert(base_segment_index);
+
+    bool new_segment_is_inert =
+        context.inert_segments.contains(base_segment_index) &&
+        segments_to_merge.is_subset_of(context.inert_segments);
+    if (new_segment_is_inert) {
+      VLOG(0) << "  Merged segment will be inert, closure analysis will be "
+                 "skipped.";
+    }
+
+    const auto& segments = context.segmentation_info.Segments();
+
+    Segment merged_segment = segments[base_segment_index];
+    MergeSegments(context.segmentation_info, segments_to_merge, merged_segment);
+
+    GlyphSet gid_conditions_to_update;
+    for (segment_index_t segment_index : segments_to_merge) {
+      // segments which are being removed/changed may appear in gid_conditions,
+      // we need to update those (and the down stream and/or glyph groups) to
+      // reflect the removal/change and allow recalculation during the
+      // GroupGlyphs steps
+      //
+      // Changes caused by adding new segments into the base segment will be
+      // handled by the next AnalyzeSegment step.
+      gid_conditions_to_update.union_set(
+          context.glyph_condition_set.GlyphsWithSegment(segment_index));
+    }
+
+    uint32_t new_patch_size = 0;
+    if (!new_segment_is_inert) {
+      new_patch_size =
+          TRY(EstimatePatchSizeBytes(context, segments_to_merge_with_base));
+    } else {
+      // For inert patches we can precompute the glyph set saving a closure
+      // operation
+      GlyphSet merged_glyphs = gid_conditions_to_update;
+      merged_glyphs.union_set(
+          context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
+      new_patch_size = TRY(
+          EstimatePatchSizeBytes(context.original_face.get(), merged_glyphs));
+    }
+    if (new_patch_size > context.patch_size_max_bytes) {
+      return std::nullopt;
+    }
+
+    return CandidateMerge{.base_segment_index = base_segment_index,
+                          .segments_to_merge = segments_to_merge,
+                          .merged_segment = std::move(merged_segment),
+                          .new_segment_is_inert = new_segment_is_inert,
+                          .new_patch_size = new_patch_size,
+                          .cost_delta = 0.0,  // TODO XXXX compute this.
+                          .invalidated_glyphs = gid_conditions_to_update};
+  }
+};
+
 // Calculates the estimated size of a patch for original_face which includes
 // 'gids'.
 //
@@ -79,26 +281,6 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
   return patch_data.size();
 }
 
-void MergeSegments(const RequestedSegmentationInformation& segmentation_info,
-                   const SegmentSet& segments, Segment& base) {
-  // Merged segments are activated disjunctively (s1 or ... or sn)
-  //
-  // We can compute the probability by first determining the probability
-  // that none of the individual segments are matched (!s1 and ... and !sn) and
-  // then inverting that to get the probability that at least one of the
-  // individual segments was matched.
-  //
-  // This gives:
-  // P(merged) = 1 - (1 - P(s1)) * ... * (1 - P(sn))
-  double probability_not_matched = 1.0 - base.Probability();
-  for (segment_index_t next : segments) {
-    const auto& s = segmentation_info.Segments()[next];
-    probability_not_matched *= 1.0 - s.Probability();
-    base.Definition().Union(s.Definition());
-  }
-  base.SetProbability(1.0 - probability_not_matched);
-}
-
 // Calculates the estimated size of a patch which includes all glyphs exclusive
 // to the listed codepoints. Will typically overestimate the size since we use
 // a faster, but less effective version of brotli to generate the estimate.
@@ -111,34 +293,6 @@ StatusOr<uint32_t> EstimatePatchSizeBytes(SegmentationContext& context,
   return EstimatePatchSizeBytes(context.original_face.get(), exclusive_gids);
 }
 
-// Check a proposed merger to see if it would result in mixing codepoint only
-// and feature only segments.
-bool WouldMixFeaturesAndCodepoints(
-    const RequestedSegmentationInformation& segment_info,
-    segment_index_t base_segment_index, const SegmentSet& segments) {
-  const auto& base = segment_info.Segments()[base_segment_index].Definition();
-  bool base_codepoints_only =
-      !base.codepoints.empty() && base.feature_tags.empty();
-  bool base_features_only =
-      base.codepoints.empty() && !base.feature_tags.empty();
-
-  if (!base_codepoints_only && !base_features_only) {
-    return false;
-  }
-
-  for (segment_index_t id : segments) {
-    const auto& s = segment_info.Segments()[id].Definition();
-
-    if (base_codepoints_only && !s.feature_tags.empty()) {
-      return true;
-    } else if (base_features_only && !s.codepoints.empty()) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 // Attempt to merge to_merge_semgents into base_segment_index. If maximum
 // patch size would be exceeded does not merge and returns nullopt.
 //
@@ -148,108 +302,25 @@ bool WouldMixFeaturesAndCodepoints(
 StatusOr<std::optional<GlyphSet>> TryMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& to_merge_segments_) {
-  if (WouldMixFeaturesAndCodepoints(context.segmentation_info,
-                                    base_segment_index, to_merge_segments_)) {
-    // Because we don't yet have a good cost function for evaluating potential
-    // mergers: the merger if it doesn't find a previous merge candidate will
-    // try to merge together segments that are composed of codepoints with a
-    // segment that adds an optional feature. Since this feature segments are
-    // likely rarely used this will inflate the size of the patches for those
-    // codepoint segments unnecessarily.
-    //
-    // So for now just don't merge cases where we would be combining codepoint
-    // only segments with feature only segments.
-    VLOG(0) << "  Merge would mix features into a codepoint only segment, "
-               "skipping.";
+  auto maybe_candidate_merge = TRY(CandidateMerge::AssessMerge(
+      context, base_segment_index, to_merge_segments_));
+  if (!maybe_candidate_merge.has_value()) {
     return std::nullopt;
   }
-
-  // Create a merged segment, and remove all of the others
-  SegmentSet to_merge_segments = to_merge_segments_;
-  SegmentSet to_merge_segments_with_base = to_merge_segments_;
-  to_merge_segments.erase(base_segment_index);
-  to_merge_segments_with_base.insert(base_segment_index);
-
-  bool new_segment_is_inert =
-      context.inert_segments.contains(base_segment_index) &&
-      to_merge_segments.is_subset_of(context.inert_segments);
-  if (new_segment_is_inert) {
-    VLOG(0)
-        << "  Merged segment will be inert, closure analysis will be skipped.";
-  }
-
-  const auto& segments = context.segmentation_info.Segments();
-  uint32_t size_before =
-      segments[base_segment_index].Definition().codepoints.size();
-
-  Segment merged_segment = segments[base_segment_index];
-  MergeSegments(context.segmentation_info, to_merge_segments, merged_segment);
-
-  GlyphSet gid_conditions_to_update;
-  for (segment_index_t segment_index : to_merge_segments) {
-    // segments which are being removed/changed may appear in gid_conditions, we
-    // need to update those (and the down stream and/or glyph groups) to reflect
-    // the removal/change and allow recalculation during the GroupGlyphs steps
-    //
-    // Changes caused by adding new segments into the base segment will be
-    // handled by the next AnalyzeSegment step.
-    gid_conditions_to_update.union_set(
-        context.glyph_condition_set.GlyphsWithSegment(segment_index));
-  }
-
-  uint32_t new_patch_size = 0;
-  if (!new_segment_is_inert) {
-    new_patch_size =
-        TRY(EstimatePatchSizeBytes(context, to_merge_segments_with_base));
-  } else {
-    // For inert patches we can precompute the glyph set saving a closure
-    // operation
-    GlyphSet merged_glyphs = gid_conditions_to_update;
-    merged_glyphs.union_set(
-        context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
-    new_patch_size =
-        TRY(EstimatePatchSizeBytes(context.original_face.get(), merged_glyphs));
-  }
-  if (new_patch_size > context.patch_size_max_bytes) {
-    return std::nullopt;
-  }
-
-  uint32_t size_after = context.segmentation_info.AssignMergedSegment(
-      base_segment_index, to_merge_segments, merged_segment);
-  VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
-          << " codepoints for segment " << base_segment_index
-          << ". New patch size " << new_patch_size << " bytes.";
-
-  // Remove the fallback segment or group, it will be fully recomputed by
-  // GroupGlyphs
-  context.glyph_groupings.RemoveFallbackSegments(to_merge_segments);
-
-  // Regardless of wether the new segment is inert all of the information
-  // associated with the segments removed by the merge should be removed.
-  context.InvalidateGlyphInformation(gid_conditions_to_update,
-                                     to_merge_segments);
-
-  if (new_segment_is_inert) {
-    // The newly formed segment will be inert which means we can construct the
-    // new condition sets and glyph groupings here instead of using the closure
-    // analysis to do it. The new segment is simply the union of all glyphs
-    // associated with each segment that is part of the merge.
-    // (gid_conditons_to_update)
-    context.inert_segments.insert(base_segment_index);
-    for (glyph_id_t gid : gid_conditions_to_update) {
-      context.glyph_condition_set.AddAndCondition(gid, base_segment_index);
-    }
-    context.glyph_groupings.AddGlyphsToExclusiveGroup(base_segment_index,
-                                                      gid_conditions_to_update);
-
-    // We've now fully updated information for these glyphs so don't need to
-    // return them.
-    gid_conditions_to_update.clear();
-  } else {
-    context.inert_segments.erase(base_segment_index);
-  }
-
-  return gid_conditions_to_update;
+  auto& candidate_merge = maybe_candidate_merge.value();
+  // TODO XXXXX
+  // - Then above this function we should iterate through all candidate merges,
+  // generating
+  //   a list of proposed merges which are then sorted by cost and the lowest
+  //   negative cost option is selected and applied (positive cost options
+  //   should be thrown out)
+  // - When estimating cost deltas we can collect the set of glyphs in the newly
+  // merged patch
+  //   and exclude those from all other non merged patches to generate a rough
+  //   estimate of their new size.
+  // - caches that may be useful: glyph set -> patch size, condition ->
+  // probability
+  return candidate_merge.Apply(context);
 }
 
 /*
