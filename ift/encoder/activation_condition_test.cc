@@ -252,29 +252,70 @@ TEST(ActivationConditionTest, ActivationConditionProbabilities) {
       Segment({}, 0.25),
   };
 
-  ASSERT_EQ(ActivationCondition::exclusive_segment(0, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::exclusive_segment(0, 1).Probability(segments),
             0.75);
-  ASSERT_EQ(ActivationCondition::exclusive_segment(2, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::exclusive_segment(2, 1).Probability(segments),
             0.25);
 
-  ASSERT_EQ(ActivationCondition::and_segments({0, 1}, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::and_segments({0, 1}, 1).Probability(segments),
             0.75 * 0.5);
-  ASSERT_EQ(ActivationCondition::and_segments({0, 2}, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::and_segments({0, 2}, 1).Probability(segments),
             0.75 * 0.25);
   ASSERT_EQ(
-      ActivationCondition::and_segments({0, 1, 2}, 1).Probability(segments),
+      *ActivationCondition::and_segments({0, 1, 2}, 1).Probability(segments),
       0.75 * 0.5 * 0.25);
 
-  double one_or_two = 1.0 - (1.0 - 0.5) * (1.0 - 0.25);
-  ASSERT_EQ(ActivationCondition::or_segments({1, 2}, 1).Probability(segments),
+  double one_or_two = 0.5 + 0.25 - 0.5 * 0.25;
+  ASSERT_EQ(*ActivationCondition::or_segments({1, 2}, 1).Probability(segments),
             one_or_two);
-  double zero_or_one = 1.0 - (1.0 - 0.75) * (1.0 - 0.5);
-  ASSERT_EQ(ActivationCondition::or_segments({0, 1}, 1).Probability(segments),
+
+  double zero_or_one = 0.75 + 0.5 - 0.75 * 0.5;
+  ASSERT_EQ(*ActivationCondition::or_segments({0, 1}, 1).Probability(segments),
             zero_or_one);
 
-  ASSERT_EQ(ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
-                .Probability(segments),
-            one_or_two * zero_or_one);
+  double zero_or_one_or_two = 0.75 + 0.5 + 0.25 - 0.75 * 0.5 - 0.75 * 0.25 -
+                              0.5 * 0.25 + 0.75 * 0.5 * 0.25;
+  ASSERT_EQ(
+      *ActivationCondition::or_segments({0, 1, 2}, 1).Probability(segments),
+      zero_or_one_or_two);
+
+  // Composite conditions aren't currently supported.
+  ASSERT_TRUE(absl::IsUnimplemented(
+      ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
+          .Probability(segments)
+          .status()));
+}
+
+TEST(ActivationConditionTest, MergedProbability) {
+  std::vector<Segment> segments = {
+      Segment({}, 0.75),
+      Segment({}, 0.5),
+      Segment({}, 0.25),
+  };
+
+  // Ignores segments that are not present in the condition.
+  EXPECT_NEAR(ActivationCondition::exclusive_segment(0, 1).MergedProbability(
+                  segments, {5}, 0.12),
+              0.75, 1e-9);
+
+  // Simple one to one replacement
+  EXPECT_NEAR(ActivationCondition::exclusive_segment(0, 1).MergedProbability(
+                  segments, {0}, 0.12),
+              0.12, 1e-9);
+
+  // Simple two to one replacement
+  EXPECT_NEAR(ActivationCondition::and_segments({0, 1}, 1).MergedProbability(
+                  segments, {0, 1}, 0.12),
+              0.12, 1e-9);
+
+  // Partial replacement
+  EXPECT_NEAR(ActivationCondition::and_segments({0, 1, 2}, 1)
+                  .MergedProbability(segments, {1, 2}, 0.4),
+              // P() = P(0) * P(merged) = 0.75 * 0.4 = 0.3
+              0.3, 1e-9);
+
+  // TODO XXXX disjunctive cases.
+  // TODO XXXX rejects composite.
 }
 
 }  // namespace ift::encoder
