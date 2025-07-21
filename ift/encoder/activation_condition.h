@@ -102,13 +102,53 @@ class ActivationCondition {
 
   // Compute and return the probability that this condition will be activated
   // based on the provided individual segment probabilities.
-  double Probability(absl::Span<const Segment> segments) const {
+  absl::StatusOr<double> Probability(absl::Span<const Segment> segments) const {
+    bool is_disjunctive = conditions_.size() > 1;
     double total_probability = 1.0;
     for (const auto& segment_set : conditions_) {
+      if (is_disjunctive && segment_set.size() > 1) {
+        // Composite conditions (eg. (a and b) or (c and d)) may have repeated
+        // segments in each conjunctive group (eg. (a and b) or (a and d)) which
+        // requires special analysis to correctly determine probability. For our
+        // current use cases we don't need to support this.
+        return absl::UnimplementedError(
+            "Calculating probability of composite conditions is not "
+            "supported.");
+      }
+
       double not_probability = 1.0;
       for (unsigned s_index : segment_set) {
         const auto& s = segments[s_index];
         not_probability *= 1.0 - s.Probability();
+      }
+      double set_probability = 1.0 - not_probability;
+      total_probability *= set_probability;
+    }
+    return total_probability;
+  }
+
+  // Compute and return the probability that this condition will be activated if
+  // it is modified to merge all segments in "merged_segments" into a single
+  // segment with "merged_probability".
+  double MergedProbability(absl::Span<const Segment> segments,
+                           const common::SegmentSet& merged_segments,
+                           double merged_probability) const {
+    // TODO XXXX  double check this implementation, and add some tests.
+    double total_probability = 1.0;
+    for (const auto& segment_set : conditions_) {
+      double not_probability = 1.0;
+      bool segment_set_contains_merged = false;
+      for (unsigned s_index : segment_set) {
+        if (merged_segments.contains(s_index)) {
+          segment_set_contains_merged = true;
+          continue;  // Skip individual segments that are part of the merged set
+        }
+        const auto& s = segments[s_index];
+        not_probability *= 1.0 - s.Probability();
+      }
+
+      if (segment_set_contains_merged) {
+        not_probability *= 1.0 - merged_probability;
       }
       double set_probability = 1.0 - not_probability;
       total_probability *= set_probability;
