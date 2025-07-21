@@ -102,7 +102,8 @@ struct CandidateMerge {
         base_segment_index, segments_to_merge, merged_segment);
     VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
             << " codepoints for segment " << base_segment_index
-            << ". New patch size " << new_patch_size << " bytes.";
+            << ". New patch size " << new_patch_size << " bytes. "
+            << "Cost delta is " << cost_delta << ".";
 
     // Remove the fallback segment or group, it will be fully recomputed by
     // GroupGlyphs
@@ -135,6 +136,7 @@ struct CandidateMerge {
     return invalidated_glyphs;
   }
 
+ private:
   static bool WouldMixFeaturesAndCodepoints(
       const RequestedSegmentationInformation& segment_info,
       segment_index_t base_segment_index, const SegmentSet& segments) {
@@ -182,6 +184,113 @@ struct CandidateMerge {
     base.SetProbability(1.0 - probability_not_matched);
   }
 
+  static Status AddConditionAndPatchSize(
+      const SegmentationContext& context, const ActivationCondition& condition,
+      btree_map<ActivationCondition, uint32_t>& conditions) {
+    auto existing = conditions.find(condition);
+    if (existing != conditions.end()) {
+      // already exists.
+      return absl::OkStatus();
+    }
+
+    // TODO XXXXX add a cache for patch size lookups.
+    const auto& conditions_and_glyphs =
+        context.glyph_groupings.ConditionsAndGlyphs();
+    auto it = conditions_and_glyphs.find(condition);
+    if (it == conditions_and_glyphs.end()) {
+      return absl::InternalError(
+          "Condition which should be present wasn't found.");
+    }
+
+    const GlyphSet& glyphs = it->second;
+    uint32_t patch_size =
+        TRY(EstimatePatchSizeBytes(context.original_face.get(), glyphs));
+    conditions.insert(std::pair(condition, patch_size));
+    return absl::OkStatus();
+  }
+
+  static Status FindModifiedConditions(
+      const SegmentationContext& context, const SegmentSet& merged_segments,
+      btree_map<ActivationCondition, uint32_t>& removed_conditions,
+      btree_map<ActivationCondition, uint32_t>& modified_conditions) {
+    for (auto s : merged_segments) {
+      for (const auto& c :
+           context.glyph_groupings.TriggeringSegmentToConditions(s)) {
+        if (c.IsFallback()) {
+          // Ignore fallback for this analysis.
+          continue;
+        }
+
+        auto condition_segments = c.TriggeringSegments();
+        if (condition_segments.is_subset_of(merged_segments)) {
+          TRYV(AddConditionAndPatchSize(context, c, removed_conditions));
+        }
+
+        condition_segments.intersect(merged_segments);
+        if (!condition_segments.empty()) {
+          TRYV(AddConditionAndPatchSize(context, c, modified_conditions));
+        }
+      }
+    }
+
+    return absl::OkStatus();
+  }
+
+  static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
+                                           const SegmentSet& merged_segments,
+                                           const Segment& merged_segment,
+                                           uint32_t new_patch_size) {
+    // TODO XXXXX make this a tunable parameter taken as an input in the
+    // segmentation configuration.
+    constexpr uint32_t PER_REQUEST_OVERHEAD = 75;
+
+    // These are conditions which will be removed by appying the merge.
+    // A condition is removed if it is a subset of the merged_segments.
+    //
+    // Map value is the size of the patch associated with the condition.
+    btree_map<ActivationCondition, uint32_t> removed_conditions;
+
+    // These are conditions which will be modified, but not removed
+    // by applying the merge. These are conditions that intersect
+    // but are not a subset of merged_segments.
+    //
+    // Map value is the size of the patch associated with the condition.
+    btree_map<ActivationCondition, uint32_t> modified_conditions;
+
+    TRYV(FindModifiedConditions(context, merged_segments, removed_conditions,
+                                modified_conditions));
+
+    // Merge will introduce a new patch (merged_segment) with size
+    // "new_patch_size", add the associated cost.
+    double cost_delta =
+        merged_segment.Probability() * (new_patch_size + PER_REQUEST_OVERHEAD);
+
+    // Now we remove all of the cost associated with segments that are either
+    // removed or modified.
+    const auto& segments = context.segmentation_info.Segments();
+    for (const auto& [c, size] : removed_conditions) {
+      cost_delta -=
+          TRY(c.Probability(segments)) * (size + PER_REQUEST_OVERHEAD);
+    }
+    for (const auto& [c, size] : modified_conditions) {
+      cost_delta -=
+          TRY(c.Probability(segments)) * (size + PER_REQUEST_OVERHEAD);
+    }
+
+    // Lastly add back the costs associated with the modified version of each
+    // segment.
+    for (const auto& [c, size] : modified_conditions) {
+      // For modified conditions we assume the associated patch size does not
+      // change, only the probability associated with the condition changes.
+      cost_delta += c.MergedProbability(segments, merged_segments,
+                                        merged_segment.Probability()) *
+                    (size + PER_REQUEST_OVERHEAD);
+    }
+
+    return cost_delta;
+  }
+
+ public:
   static StatusOr<std::optional<CandidateMerge>> AssessMerge(
       SegmentationContext& context, segment_index_t base_segment_index,
       const SegmentSet& segments_to_merge_) {
@@ -250,12 +359,15 @@ struct CandidateMerge {
       return std::nullopt;
     }
 
+    double cost_delta = TRY(ComputeCostDelta(context, segments_to_merge,
+                                             merged_segment, new_patch_size));
+
     return CandidateMerge{.base_segment_index = base_segment_index,
                           .segments_to_merge = segments_to_merge,
                           .merged_segment = std::move(merged_segment),
                           .new_segment_is_inert = new_segment_is_inert,
                           .new_patch_size = new_patch_size,
-                          .cost_delta = 0.0,  // TODO XXXX compute this.
+                          .cost_delta = cost_delta,
                           .invalidated_glyphs = gid_conditions_to_update};
   }
 };
