@@ -1,6 +1,6 @@
 cc_library(
     name = "encoder",
-    srcs = [                
+    srcs = [
         "closure_glyph_segmenter.cc",
         "closure_glyph_segmenter.h",        
         "compiler.cc",
@@ -44,6 +44,8 @@ cc_library(
         "glyph_condition_set.h",
         "glyph_groupings.h",
         "glyph_groupings.cc",
+        "candidate_merge.cc",
+        "candidate_merge.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -53,6 +55,7 @@ cc_library(
     deps = [
         ":common",
         "//ift/feature_registry",
+        "//ift",
     ],
 )
 
