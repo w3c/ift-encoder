@@ -160,4 +160,46 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   EXPECT_NEAR(merge.cost_delta, expected_cost_delta, 1e-9);
 }
 
+TEST_F(CandidateMergeTest, OperatorLess) {
+  Segment empty_segment({}, 0.0);
+  CandidateMerge a{.base_segment_index = 0,
+                   .segments_to_merge = {1},
+                   .merged_segment = empty_segment,
+                   .new_segment_is_inert = false,
+                   .new_patch_size = 0,
+                   .cost_delta = 100.0};
+  CandidateMerge b{.base_segment_index = 1,
+                   .segments_to_merge = {2},
+                   .merged_segment = empty_segment,
+                   .new_segment_is_inert = false,
+                   .new_patch_size = 0,
+                   .cost_delta = 100.0};
+  CandidateMerge c{.base_segment_index = 1,
+                   .segments_to_merge = {3},
+                   .merged_segment = empty_segment,
+                   .new_segment_is_inert = false,
+                   .new_patch_size = 0,
+                   .cost_delta = 100.0};
+  CandidateMerge d{.base_segment_index = 0,
+                   .segments_to_merge = {1},
+                   .merged_segment = empty_segment,
+                   .new_segment_is_inert = false,
+                   .new_patch_size = 0,
+                   .cost_delta = 200.0};
+
+  EXPECT_TRUE(a < b);
+  EXPECT_TRUE(b < c);
+  EXPECT_TRUE(a < c);
+  EXPECT_TRUE(a < d);
+  EXPECT_TRUE(b < d);
+  EXPECT_TRUE(c < d);
+
+  EXPECT_FALSE(b < a);
+  EXPECT_FALSE(c < b);
+  EXPECT_FALSE(c < a);
+  EXPECT_FALSE(d < a);
+  EXPECT_FALSE(d < b);
+  EXPECT_FALSE(d < c);
+}
+
 }  // namespace ift::encoder
