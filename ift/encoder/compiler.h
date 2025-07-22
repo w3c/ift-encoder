@@ -45,8 +45,6 @@ class Compiler {
   Compiler& operator=(const Compiler&) = delete;
   Compiler& operator=(Compiler&& other) = delete;
 
-  static void AddInitSubsetDefaults(SubsetDefinition& subset_definition);
-
   /*
    * Configures how many graph levels can be reached from each node in the
    * encoded graph. Defaults to 1.

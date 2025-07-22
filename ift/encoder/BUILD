@@ -1,17 +1,10 @@
 cc_library(
     name = "encoder",
-    srcs = [
-        "activation_condition.h",
-        "activation_condition.cc",
-        "types.h",
+    srcs = [                
         "closure_glyph_segmenter.cc",
         "closure_glyph_segmenter.h",
         "compiler.cc",
-        "compiler.h",
-        "glyph_segmentation.cc",
-        "glyph_segmentation.h",
-        "subset_definition.cc",
-        "subset_definition.h",
+        "compiler.h",        
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -34,6 +27,59 @@ cc_library(
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:initialize",
         "@harfbuzz",
+        ":common",
+        ":segmentation_context",
+    ],
+)
+
+cc_library(
+    name = "segmentation_context",
+    srcs = [
+        "segmentation_context.h",
+        "segmentation_context.cc",
+        "glyph_closure_cache.h",
+        "glyph_closure_cache.cc",   
+        "requested_segmentation_information.h",
+        "requested_segmentation_information.cc",
+        "glyph_condition_set.h",
+        "glyph_groupings.h",
+        "glyph_groupings.cc",
+    ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+    ],
+    visibility = [
+    ],
+    deps = [
+        ":common",
+        "//ift/feature_registry",
+    ],
+)
+
+cc_library(
+    name = "common",
+    srcs = [
+        "subset_definition.cc",
+        "subset_definition.h",
+        "glyph_segmentation.cc",
+        "glyph_segmentation.h",
+        "activation_condition.h",
+        "activation_condition.cc",
+        "types.h",
+        "init_subset_defaults.h",
+    ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+    ],
+    visibility = [
+    ],
+    deps = [
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "//common",
+        "//ift/proto",
+        "//util:segmentation_plan_cc_proto",
     ],
 )
 
