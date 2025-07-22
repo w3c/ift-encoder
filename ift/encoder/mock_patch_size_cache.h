@@ -1,6 +1,7 @@
 #ifndef IFT_ENCODER_MOCK_PATCH_SIZE_CACHE_H_
 #define IFT_ENCODER_MOCK_PATCH_SIZE_CACHE_H_
 
+#include "absl/log/log.h"
 #include "ift/encoder/patch_size_cache.h"
 
 namespace ift::encoder {
@@ -11,9 +12,11 @@ class MockPatchSizeCache : public PatchSizeCache {
   absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override {
     auto it = patch_sizes_.find(gids);
     if (it != patch_sizes_.end()) {
+      VLOG(0) << "GetPatchSize(" << gids.ToString() << ") = " << it->second;
       return it->second;
     }
     // Return a default value if no specific size is set for the given glyphs.
+    VLOG(0) << "Unspecified patch size for " << gids.ToString();
     return 100;
   }
 
