@@ -34,44 +34,11 @@ using common::GlyphSet;
 using common::SegmentSet;
 using ift::GlyphKeyedDiff;
 
-// Calculates the estimated size of a patch for original_face which includes
-// 'gids'.
-//
-// Will typically overestimate the size since we use a faster, but less
-// effective version of brotli (quality 9 instead of 11) to generate the
-// estimate.
-static StatusOr<uint32_t> EstimatePatchSizeBytes(hb_face_t* original_face,
-                                                 const GlyphSet& gids) {
-  FontData font_data(original_face);
-  CompatId id;
-  // Since this is just an estimate and we don't need ultra precise numbers run
-  // at a lower brotli quality to improve performance.
-  GlyphKeyedDiff diff(font_data, id,
-                      {FontHelper::kGlyf, FontHelper::kGvar, FontHelper::kCFF,
-                       FontHelper::kCFF2},
-                      8);
-
-  auto patch_data = TRY(diff.CreatePatch(gids));
-  return patch_data.size();
-}
-
-// Calculates the estimated size of a patch which includes all glyphs exclusive
-// to the listed codepoints. Will typically overestimate the size since we use
-// a faster, but less effective version of brotli to generate the estimate.
-static StatusOr<uint32_t> EstimatePatchSizeBytes(
-    SegmentationContext& context, const SegmentSet& segment_ids) {
-  GlyphSet and_gids;
-  GlyphSet or_gids;
-  GlyphSet exclusive_gids;
-  TRYV(context.AnalyzeSegment(segment_ids, and_gids, or_gids, exclusive_gids));
-  return EstimatePatchSizeBytes(context.original_face.get(), exclusive_gids);
-}
-
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
     SegmentationContext& context, segment_index_t base_segment_index,
     const GlyphSet& glyphs) {
   uint32_t patch_size_bytes =
-      TRY(EstimatePatchSizeBytes(context.original_face.get(), glyphs));
+      TRY(context.patch_size_cache->GetPatchSize(glyphs));
   if (patch_size_bytes >= context.patch_size_min_bytes) {
     return false;
   }
@@ -181,7 +148,6 @@ static Status AddConditionAndPatchSize(
     return absl::OkStatus();
   }
 
-  // TODO XXXXX add a cache for patch size lookups.
   const auto& conditions_and_glyphs =
       context.glyph_groupings.ConditionsAndGlyphs();
   auto it = conditions_and_glyphs.find(condition);
@@ -191,8 +157,7 @@ static Status AddConditionAndPatchSize(
   }
 
   const GlyphSet& glyphs = it->second;
-  uint32_t patch_size =
-      TRY(EstimatePatchSizeBytes(context.original_face.get(), glyphs));
+  uint32_t patch_size = TRY(context.patch_size_cache->GetPatchSize(glyphs));
   conditions.insert(std::pair(condition, patch_size));
   return absl::OkStatus();
 }
@@ -330,16 +295,18 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
 
   uint32_t new_patch_size = 0;
   if (!new_segment_is_inert) {
+    GlyphSet and_gids, or_gids, exclusive_gids;
+    TRYV(context.AnalyzeSegment(segments_to_merge_with_base, and_gids, or_gids,
+                                exclusive_gids));
     new_patch_size =
-        TRY(EstimatePatchSizeBytes(context, segments_to_merge_with_base));
+        TRY(context.patch_size_cache->GetPatchSize(exclusive_gids));
   } else {
     // For inert patches we can precompute the glyph set saving a closure
     // operation
     GlyphSet merged_glyphs = gid_conditions_to_update;
     merged_glyphs.union_set(
         context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
-    new_patch_size =
-        TRY(EstimatePatchSizeBytes(context.original_face.get(), merged_glyphs));
+    new_patch_size = TRY(context.patch_size_cache->GetPatchSize(merged_glyphs));
   }
   if (new_patch_size > context.patch_size_max_bytes) {
     return std::nullopt;

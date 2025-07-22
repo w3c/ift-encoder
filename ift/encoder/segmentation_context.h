@@ -1,6 +1,8 @@
 #ifndef IFT_ENCODER_SEGMENTATION_CONTEXT_H_
 #define IFT_ENCODER_SEGMENTATION_CONTEXT_H_
 
+#include <memory>
+
 #include "absl/status/status.h"
 #include "common/font_data.h"
 #include "common/try.h"
@@ -8,6 +10,7 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
@@ -35,7 +38,8 @@ class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments)
-      : glyph_closure_cache(face),
+      : patch_size_cache(new PatchSizeCacheImpl(face)),
+        glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
@@ -103,6 +107,7 @@ class SegmentationContext {
 
  public:
   // Caches and logging
+  std::unique_ptr<PatchSizeCache> patch_size_cache;
   GlyphClosureCache glyph_closure_cache;
 
   // Init

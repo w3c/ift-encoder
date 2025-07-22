@@ -46,6 +46,7 @@ cc_library(
         "glyph_groupings.cc",
         "candidate_merge.cc",
         "candidate_merge.h",
+        "patch_size_cache.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -157,6 +158,7 @@ cc_test(
     size = "small",
     srcs = [
         "candidate_merge_test.cc",
+        "mock_patch_size_cache.h",
     ],
     data = [
         "//common:testdata",
