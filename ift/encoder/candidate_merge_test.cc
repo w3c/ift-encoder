@@ -4,6 +4,7 @@
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
+#include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
 
 using common::CodepointSet;
@@ -68,8 +69,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   ASSERT_GT(merge.cost_delta, 0);
 }
 
-// More complex test that checks the actual computed cost value for a case
-// involving both removed and modified conditions.
+// More complex test that checks the actual computed cost value.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   std::vector<Segment> segments = {
       {{'f'}, 0.75},
@@ -81,14 +81,83 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
 
-  // TODO XXXXX use a mock estimate patch size cache so we can control the
-  // relevant patch sizes
-  //      and predict the outcome of the cost calculation.
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
-  // There should be three overall conditions 'f' -> p0, 'i' -> p1, 'f' and 'i'
-  // -> p3
+  // There are four glyph sets in use here with this segmentation:
+  // 1. f -> {74}
+  // 2. i -> {77}
+  // 3. f+i -> {444, 446}
+  // 4. merged -> {74, 77, 444, 446}
+  size_cache->SetPatchSize({74}, 200);
+  size_cache->SetPatchSize({77}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({74, 77, 444, 446}, 600);
 
-  // TODO XXXXX test for results of cost calculation.
+  // Expected cost delta:
+  // After the merge there's only one single patch containing everything,
+  // so subtract costs of the patches prior to the merge and add the cost
+  // of the newly merged patch
+  double p_f_or_i = 0.75 + 0.95 - 0.75 * 0.95;  // probability of (f or i)
+  double p_f_and_i = 0.75 * 0.95;               // probability of (f and i)
+  double expected_cost_delta =
+      -0.75 * (200 + 75)        // less cost of {f}
+      - 0.95 * (300 + 75)       // less cost of {i}
+      - p_f_and_i * (150 + 75)  // less cost of {f + i}
+      + p_f_or_i * (600 + 75);  // add cost of the new merged patch
+
+  context->patch_size_cache.reset(size_cache);
+  auto r = CandidateMerge::AssessMerge(*context, 0, {1});
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+  EXPECT_NEAR(merge.cost_delta, expected_cost_delta, 1e-9);
+}
+
+// More complex test that checks the actual computed cost value, includes a
+// modified condition.
+TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
+  std::vector<Segment> segments = {
+      {{'a'}, 0.50},
+      {{'f'}, 0.75},
+      {{'i'}, 0.95},
+  };
+
+  ClosureGlyphSegmenter segmenter;
+  auto context =
+      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+
+  // There are four glyph sets in use here with this segmentation:
+  // 1. a -> {69}
+  // 1. f -> {74}
+  // 3. f+i -> {444, 446}
+  // 4. merged -> {69, 74}
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({74}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({69, 74}, 450);
+
+  // Expected cost delta:
+  // After the merge there's only one single patch containing everything,
+  // so subtract costs of the patches prior to the merge and add the cost
+  // of the newly merged patch
+  double p_a_or_f = 0.50 + 0.75 - 0.50 * 0.75;  // probability of (a or f)
+  double p_f_and_i = 0.75 * 0.95;               // probability of (f and i)
+  double expected_cost_delta =
+      -0.50 * (200 + 75)                // less cost of {a}
+      - 0.75 * (300 + 75)               // less cost of {f}
+      - p_f_and_i * (150 + 75)          // less cost of {f + i}
+      + (p_a_or_f * 0.95) * (150 + 75)  // add cost of modified segment
+      + p_a_or_f * (450 + 75);          // add cost of the new merged patch
+
+  context->patch_size_cache.reset(size_cache);
+  auto r = CandidateMerge::AssessMerge(*context, 0, {1});
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+  EXPECT_NEAR(merge.cost_delta, expected_cost_delta, 1e-9);
 }
 
 }  // namespace ift::encoder
