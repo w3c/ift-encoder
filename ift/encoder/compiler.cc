@@ -20,6 +20,7 @@
 #include "common/woff2.h"
 #include "hb-subset.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/feature_registry/feature_registry.h"
@@ -57,14 +58,6 @@ using ift::proto::TABLE_KEYED_FULL;
 using ift::proto::TABLE_KEYED_PARTIAL;
 
 namespace ift::encoder {
-
-// Configures a subset definition to contain all of the default, always included
-// items (eg. https://w3c.github.io/IFT/Overview.html#feature-tag-list)
-void Compiler::AddInitSubsetDefaults(SubsetDefinition& subset_definition) {
-  std::copy(DefaultFeatureTags().begin(), DefaultFeatureTags().end(),
-            std::inserter(subset_definition.feature_tags,
-                          subset_definition.feature_tags.begin()));
-}
 
 static void AddCombinations(const std::vector<const SubsetDefinition*>& in,
                             uint32_t choose, std::vector<Compiler::Edge>& out) {
