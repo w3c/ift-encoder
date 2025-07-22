@@ -36,6 +36,16 @@ struct CandidateMerge {
   // merge is applied.
   common::GlyphSet invalidated_glyphs;
 
+  bool operator<(const CandidateMerge& other) const {
+    if (cost_delta != other.cost_delta) {
+      return cost_delta < other.cost_delta;
+    }
+    if (base_segment_index != other.base_segment_index) {
+      return base_segment_index < other.base_segment_index;
+    }
+    return segments_to_merge < other.segments_to_merge;
+  }
+
   // Applies this merge operation to the given SegmentationContext.
   std::optional<common::GlyphSet> Apply(SegmentationContext& context);
 
