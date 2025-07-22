@@ -4,6 +4,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/patch_size_cache.h"
 
 using absl::Status;
 using absl::StatusOr;
