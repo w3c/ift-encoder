@@ -5,6 +5,7 @@
 #include "absl/status/statusor.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/segment.h"
+#include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
@@ -35,6 +36,16 @@ class ClosureGlyphSegmenter {
       hb_face_t* face, SubsetDefinition initial_segment,
       std::vector<Segment> segments, uint32_t patch_size_min_bytes = 0,
       uint32_t patch_size_max_bytes = UINT32_MAX) const;
+
+  /*
+   * Generates a segmentation context for the provided segmentation input.
+   *
+   * This context will contain the initial groupings without doing any merging.
+   * Useful for writing tests that require a initialized segmentation context.
+   */
+  absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      std::vector<Segment> segments) const;
 };
 
 }  // namespace ift::encoder

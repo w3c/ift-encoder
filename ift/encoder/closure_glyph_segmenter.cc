@@ -289,38 +289,16 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     std::vector<Segment> codepoint_segments, uint32_t patch_size_min_bytes,
     uint32_t patch_size_max_bytes) const {
-  uint32_t glyph_count = hb_face_get_glyph_count(face);
-  if (!glyph_count) {
-    return absl::InvalidArgumentError("Provided font has no glyphs.");
-  }
-
-  // The IFT compiler has a set of defaults always included in the initial font
-  // add them here so we correctly factor them into the generated segmentation.
-  AddInitSubsetDefaults(initial_segment);
-
-  SegmentationContext context(face, initial_segment, codepoint_segments);
-  context.patch_size_min_bytes = patch_size_min_bytes;
-  context.patch_size_max_bytes = patch_size_max_bytes;
-
-  // ### Generate the initial conditions and groupings by processing all
-  // segments and glyphs. ###
-  VLOG(0) << "Forming initial segmentation plan.";
-  for (segment_index_t segment_index = 0;
-       segment_index < context.segmentation_info.Segments().size();
-       segment_index++) {
-    TRY(context.ReprocessSegment(segment_index));
-  }
-  context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
-
-  GlyphSet all_glyphs;
-  all_glyphs.insert_range(0, glyph_count - 1);
-  TRYV(context.GroupGlyphs(all_glyphs));
-  context.glyph_closure_cache.LogClosureCount("Condition grouping");
-
+  SegmentationContext context = TRY(
+      InitializeSegmentationContext(face, initial_segment, codepoint_segments));
   if (patch_size_min_bytes == 0) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
   }
+
+  // Add patch size bounds which are not considered during initialization.
+  context.patch_size_min_bytes = patch_size_min_bytes;
+  context.patch_size_max_bytes = patch_size_max_bytes;
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
   segment_index_t last_merged_segment_index = 0;
@@ -350,6 +328,39 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return absl::InternalError("unreachable");
+}
+
+StatusOr<SegmentationContext>
+ClosureGlyphSegmenter::InitializeSegmentationContext(
+    hb_face_t* face, SubsetDefinition initial_segment,
+    std::vector<Segment> codepoint_segments) const {
+  uint32_t glyph_count = hb_face_get_glyph_count(face);
+  if (!glyph_count) {
+    return absl::InvalidArgumentError("Provided font has no glyphs.");
+  }
+
+  // The IFT compiler has a set of defaults always included in the initial font
+  // add them here so we correctly factor them into the generated segmentation.
+  AddInitSubsetDefaults(initial_segment);
+
+  SegmentationContext context(face, initial_segment, codepoint_segments);
+
+  // ### Generate the initial conditions and groupings by processing all
+  // segments and glyphs. ###
+  VLOG(0) << "Forming initial segmentation plan.";
+  for (segment_index_t segment_index = 0;
+       segment_index < context.segmentation_info.Segments().size();
+       segment_index++) {
+    TRY(context.ReprocessSegment(segment_index));
+  }
+  context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
+
+  GlyphSet all_glyphs;
+  all_glyphs.insert_range(0, glyph_count - 1);
+  TRYV(context.GroupGlyphs(all_glyphs));
+  context.glyph_closure_cache.LogClosureCount("Condition grouping");
+
+  return context;
 }
 
 }  // namespace ift::encoder

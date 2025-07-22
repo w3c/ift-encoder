@@ -153,6 +153,22 @@ cc_test(
 )
 
 cc_test(
+    name = "candidate_merge_test",
+    size = "small",
+    srcs = [
+        "candidate_merge_test.cc",
+    ],
+    data = [
+        "//common:testdata",
+    ],
+    deps = [
+        ":encoder",
+        "//common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "activation_condition_test",
     size = "small",
     srcs = [
