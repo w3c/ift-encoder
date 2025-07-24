@@ -244,16 +244,16 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
 StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& segments_to_merge_) {
-  if (WouldMixFeaturesAndCodepoints(context.segmentation_info,
+  if (!context.merge_strategy.UseCosts() &&
+      WouldMixFeaturesAndCodepoints(context.segmentation_info,
                                     base_segment_index, segments_to_merge_)) {
-    // Because we don't yet have a good cost function for evaluating potential
-    // mergers: the merger if it doesn't find a previous merge candidate will
+    // With the heuristic merger if it doesn't find a previous merge candidate will
     // try to merge together segments that are composed of codepoints with a
     // segment that adds an optional feature. Since this feature segments are
     // likely rarely used this will inflate the size of the patches for those
     // codepoint segments unnecessarily.
     //
-    // So for now just don't merge cases where we would be combining codepoint
+    // So don't merge cases where we would be combining codepoint
     // only segments with feature only segments.
     VLOG(0) << "  Merge would mix features into a codepoint only segment, "
                "skipping.";
@@ -307,7 +307,9 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
         context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
     new_patch_size = TRY(context.patch_size_cache->GetPatchSize(merged_glyphs));
   }
-  if (new_patch_size > context.merge_strategy.PatchSizeMaxBytes()) {
+
+  if (!context.merge_strategy.UseCosts() &&
+      new_patch_size > context.merge_strategy.PatchSizeMaxBytes()) {
     return std::nullopt;
   }
 

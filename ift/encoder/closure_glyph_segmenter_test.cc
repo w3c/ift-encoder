@@ -435,4 +435,10 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 
+// TODO XXXX tests for cost merging
+// - basic case of applying obvious negative merges and avoiding positive cost
+// ones.
+// - won't apply positive cost merges if no negative are available.
+// - case with composite conditions.
+
 }  // namespace ift::encoder
