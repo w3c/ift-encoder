@@ -191,10 +191,9 @@ StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
  * This uses a hueristic approach for locating candidate segments to merge.
  */
 template <typename ConditionAndGlyphIt>
-StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
-MergeSegmentWithHeuristic(SegmentationContext& context,
-                          uint32_t base_segment_index,
-                          const ConditionAndGlyphIt& it) {
+StatusOr<std::optional<GlyphSet>> MergeSegmentWithHeuristic(
+    SegmentationContext& context, uint32_t base_segment_index,
+    const ConditionAndGlyphIt& it) {
   if (!TRY(CandidateMerge::IsPatchTooSmall(context, base_segment_index,
                                            it->second))) {
     // Patch is big enough, no merge is needed.
@@ -205,13 +204,13 @@ MergeSegmentWithHeuristic(SegmentationContext& context,
       TryMergingACompositeCondition(context, base_segment_index, it->first));
   if (modified_gids.has_value()) {
     // Return to the parent method so it can reanalyze and reform groups
-    return std::pair(base_segment_index, *modified_gids);
+    return *modified_gids;
   }
 
   modified_gids = TRY(TryMergingABaseSegment(context, base_segment_index, it));
   if (modified_gids.has_value()) {
     // Return to the parent method so it can reanalyze and reform groups
-    return std::pair(base_segment_index, *modified_gids);
+    return *modified_gids;
   }
 
   VLOG(0) << "Unable to get segment " << base_segment_index
@@ -219,17 +218,74 @@ MergeSegmentWithHeuristic(SegmentationContext& context,
   return std::nullopt;
 }
 
+Status CollectCompositeCandidateMerges(
+    SegmentationContext& context, uint32_t base_segment_index,
+    std::optional<CandidateMerge>& smallest_candidate_merge) {
+  auto candidate_conditions =
+      context.glyph_groupings.TriggeringSegmentToConditions(base_segment_index);
+  for (ActivationCondition next_condition : candidate_conditions) {
+    if (next_condition.IsFallback()) {
+      // Merging the fallback will cause all segments to be merged into one,
+      // which is undesirable so don't consider the fallback.
+      continue;
+    }
+
+    SegmentSet triggering_segments = next_condition.TriggeringSegments();
+    if (!triggering_segments.contains(base_segment_index)) {
+      continue;
+    }
+
+    auto candidate_merge = TRY(CandidateMerge::AssessMerge(
+        context, base_segment_index, triggering_segments));
+    if (candidate_merge.has_value() &&
+        *candidate_merge < smallest_candidate_merge) {
+      smallest_candidate_merge = *candidate_merge;
+    }
+  }
+  return absl::OkStatus();
+}
+
+Status CollectExclusiveCandidateMerges(
+    SegmentationContext& context, uint32_t base_segment_index,
+    std::optional<CandidateMerge>& smallest_candidate_merge) {
+  auto candidate_conditions = context.glyph_groupings.ConditionsAndGlyphs();
+  for (const auto& [condition, glyphs] : candidate_conditions) {
+    if (condition.IsFallback() || !condition.IsExclusive()) {
+      continue;
+    }
+
+    SegmentSet triggering_segments = condition.TriggeringSegments();
+    auto candidate_merge = TRY(CandidateMerge::AssessMerge(
+        context, base_segment_index, triggering_segments));
+    if (candidate_merge.has_value() &&
+        *candidate_merge < smallest_candidate_merge) {
+      smallest_candidate_merge = *candidate_merge;
+    }
+  }
+  return absl::OkStatus();
+}
+
 /*
  * Checks the cost of all possible merges with start_segment and perform
  * the merge that has the lowest negative cost delta.
  */
-template <typename ConditionAndGlyphIt>
-StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
-MergeSegmentWithCosts(SegmentationContext& context, uint32_t base_segment_index,
-                      const ConditionAndGlyphIt& it) {
-  btree_set<CandidateMerge> candidate_merges;
-  // TODO XXXXX
-  return std::nullopt;
+StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
+    SegmentationContext& context, uint32_t base_segment_index) {
+  std::optional<CandidateMerge> smallest_candidate_merge;
+  TRYV(CollectExclusiveCandidateMerges(context, base_segment_index,
+                                       smallest_candidate_merge));
+  TRYV(CollectCompositeCandidateMerges(context, base_segment_index,
+                                       smallest_candidate_merge));
+  if (!smallest_candidate_merge.has_value()) {
+    return std::nullopt;
+  }
+
+  if (smallest_candidate_merge->cost_delta >= 0.0) {
+    // Only do merges that will lower the overall cost.
+    return std::nullopt;
+  }
+
+  return smallest_candidate_merge->Apply(context);
 }
 
 /*
@@ -262,15 +318,16 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
       continue;
     }
 
-    std::optional<std::pair<segment_index_t, GlyphSet>> merged;
+    std::optional<GlyphSet> modified_gids;
     if (context.merge_strategy.UseCosts()) {
-      merged = TRY(MergeSegmentWithCosts(context, base_segment_index, it));
+      modified_gids = TRY(MergeSegmentWithCosts(context, base_segment_index));
     } else {
-      merged = TRY(MergeSegmentWithHeuristic(context, base_segment_index, it));
+      modified_gids =
+          TRY(MergeSegmentWithHeuristic(context, base_segment_index, it));
     }
 
-    if (merged.has_value()) {
-      return merged;
+    if (modified_gids.has_value()) {
+      return std::pair(base_segment_index, *modified_gids);
     }
   }
 
