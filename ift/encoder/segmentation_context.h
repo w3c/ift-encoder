@@ -40,7 +40,8 @@ class SegmentationContext {
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments,
                       MergeStrategy strategy)
-      : patch_size_cache(new PatchSizeCacheImpl(face)),
+      : patch_size_cache(
+            new PatchSizeCacheImpl(face, strategy.BrotliQuality())),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
         merge_strategy(strategy),

@@ -79,6 +79,8 @@ class MergeStrategy {
   uint32_t network_overhead_cost_;
   uint32_t patch_size_min_bytes_;
   uint32_t patch_size_max_bytes_;
+  // 9 and above are quite slow given the number of compressions that need to be
+  // performed.
   uint32_t brotli_quality_ = 8;
 };
 
