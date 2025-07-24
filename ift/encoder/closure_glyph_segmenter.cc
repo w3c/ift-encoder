@@ -183,15 +183,68 @@ StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
 }
 
 /*
- * Searches segments starting from start_segment for the next who's exclusive
- * gids patch is too small. If found, try increasing the size of the patch via
- * merging.
+ * Attempts to merge base_segment_index.
  *
  * If a merge was performed returns the segment which was modified to allow
  * groupings to be updated.
+ *
+ * This uses a hueristic approach for locating candidate segments to merge.
+ */
+template <typename ConditionAndGlyphIt>
+StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
+MergeSegmentWithHeuristic(SegmentationContext& context,
+                          uint32_t base_segment_index,
+                          const ConditionAndGlyphIt& it) {
+  if (!TRY(CandidateMerge::IsPatchTooSmall(context, base_segment_index,
+                                           it->second))) {
+    // Patch is big enough, no merge is needed.
+    return std::nullopt;
+  }
+
+  auto modified_gids = TRY(
+      TryMergingACompositeCondition(context, base_segment_index, it->first));
+  if (modified_gids.has_value()) {
+    // Return to the parent method so it can reanalyze and reform groups
+    return std::pair(base_segment_index, *modified_gids);
+  }
+
+  modified_gids = TRY(TryMergingABaseSegment(context, base_segment_index, it));
+  if (modified_gids.has_value()) {
+    // Return to the parent method so it can reanalyze and reform groups
+    return std::pair(base_segment_index, *modified_gids);
+  }
+
+  VLOG(0) << "Unable to get segment " << base_segment_index
+          << " above minimum size. Continuing to next segment.";
+  return std::nullopt;
+}
+
+/*
+ * Checks the cost of all possible merges with start_segment and perform
+ * the merge that has the lowest negative cost delta.
+ */
+template <typename ConditionAndGlyphIt>
+StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
+MergeSegmentWithCosts(SegmentationContext& context, uint32_t base_segment_index,
+                      const ConditionAndGlyphIt& it) {
+  btree_set<CandidateMerge> candidate_merges;
+  // TODO XXXXX
+  return std::nullopt;
+}
+
+/*
+ * Searches segments starting from start_segment and attempts to merge following
+ * the configured strategy.
+ *
+ * If a merge was performed returns the segment and glyphs which were modified
+ * to allow groupings to be updated.
  */
 StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
 MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
+  if (context.merge_strategy.IsNone()) {
+    return std::nullopt;
+  }
+
   auto start_condition =
       ActivationCondition::exclusive_segment(start_segment, 0);
   for (auto it = context.glyph_groupings.ConditionsAndGlyphs().lower_bound(
@@ -209,27 +262,16 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
       continue;
     }
 
-    if (!TRY(CandidateMerge::IsPatchTooSmall(context, base_segment_index,
-                                             it->second))) {
-      continue;
+    std::optional<std::pair<segment_index_t, GlyphSet>> merged;
+    if (context.merge_strategy.UseCosts()) {
+      merged = TRY(MergeSegmentWithCosts(context, base_segment_index, it));
+    } else {
+      merged = TRY(MergeSegmentWithHeuristic(context, base_segment_index, it));
     }
 
-    auto modified_gids = TRY(
-        TryMergingACompositeCondition(context, base_segment_index, condition));
-    if (modified_gids.has_value()) {
-      // Return to the parent method so it can reanalyze and reform groups
-      return std::pair(base_segment_index, *modified_gids);
+    if (merged.has_value()) {
+      return merged;
     }
-
-    modified_gids =
-        TRY(TryMergingABaseSegment(context, base_segment_index, it));
-    if (modified_gids.has_value()) {
-      // Return to the parent method so it can reanalyze and reform groups
-      return std::pair(base_segment_index, *modified_gids);
-    }
-
-    VLOG(0) << "Unable to get segment " << base_segment_index
-            << " above minimum size. Continuing to next segment.";
   }
 
   return std::nullopt;
