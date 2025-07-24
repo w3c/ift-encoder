@@ -36,10 +36,11 @@ class PatchSizeCacheImpl : public PatchSizeCache {
 
     common::FontData font_data(original_face_.get());
     common::CompatId id;
-    GlyphKeyedDiff diff(font_data, id,
-                        {common::FontHelper::kGlyf, common::FontHelper::kGvar,
-                         common::FontHelper::kCFF, common::FontHelper::kCFF2},
-                        8);
+    GlyphKeyedDiff diff(
+        font_data, id,
+        {common::FontHelper::kGlyf, common::FontHelper::kGvar,
+         common::FontHelper::kCFF, common::FontHelper::kCFF2},
+        8);  // TODO XXXX use brotli quality from merge strategy.
 
     auto patch_data = TRY(diff.CreatePatch(gids));
     uint32_t size = patch_data.size();

@@ -10,6 +10,7 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
@@ -37,10 +38,12 @@ namespace ift::encoder {
 class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
-                      const std::vector<Segment>& segments)
+                      const std::vector<Segment>& segments,
+                      MergeStrategy strategy)
       : patch_size_cache(new PatchSizeCacheImpl(face)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
+        merge_strategy(strategy),
         segmentation_info(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(segments) {}
@@ -112,10 +115,8 @@ class SegmentationContext {
 
   // Init
   common::hb_face_unique_ptr original_face;
+  MergeStrategy merge_strategy;
   RequestedSegmentationInformation segmentation_info;
-
-  uint32_t patch_size_min_bytes = 0;
-  uint32_t patch_size_max_bytes = UINT32_MAX;
 
   // Phase 1 - derived from segments and init information
   GlyphConditionSet glyph_condition_set;
