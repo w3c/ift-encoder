@@ -39,13 +39,13 @@ StatusOr<bool> CandidateMerge::IsPatchTooSmall(
     const GlyphSet& glyphs) {
   uint32_t patch_size_bytes =
       TRY(context.patch_size_cache->GetPatchSize(glyphs));
-  if (patch_size_bytes >= context.patch_size_min_bytes) {
+  if (patch_size_bytes >= context.merge_strategy.PatchSizeMinBytes()) {
     return false;
   }
 
   VLOG(0) << "Patch for segment " << base_segment_index << " is too small "
-          << "(" << patch_size_bytes << " < " << context.patch_size_min_bytes
-          << "). Merging...";
+          << "(" << patch_size_bytes << " < "
+          << context.merge_strategy.PatchSizeMinBytes() << "). Merging...";
 
   return true;
 }
@@ -308,10 +308,11 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
         context.glyph_condition_set.GlyphsWithSegment(base_segment_index));
     new_patch_size = TRY(context.patch_size_cache->GetPatchSize(merged_glyphs));
   }
-  if (new_patch_size > context.patch_size_max_bytes) {
+  if (new_patch_size > context.merge_strategy.PatchSizeMaxBytes()) {
     return std::nullopt;
   }
 
+  // TODO XXXXX only compute cost delta when merging strategy is cost based.
   double cost_delta = TRY(ComputeCostDelta(context, segments_to_merge_with_base,
                                            merged_segment, new_patch_size));
 

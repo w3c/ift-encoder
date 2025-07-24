@@ -4,6 +4,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 
 using common::CodepointSet;
@@ -207,7 +208,8 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures_DontMergeFeatures) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {smcp, 0.5}}, 10000);
+      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}, {smcp, 0.5}},
+      MergeStrategy::Heuristic(10000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b', 'c'}, {}, smcp};
@@ -273,7 +275,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBase_ViaConditions) {
                                           {{'e', 'f'}, 0.5},
                                           {{'j', 'k', 'm', 'n'}, 0.5},
                                           {{'i', 'l'}, 0.5}},
-                                         370);
+                                         MergeStrategy::Heuristic(370));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -300,7 +302,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases) {
                                           {{'e', 'f'}, 0.5},
                                           {{'j', 'k'}, 0.5},
                                           {{'m', 'n', 'o', 'p'}, 0.5}},
-                                         370);
+                                         MergeStrategy::Heuristic(370));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -332,7 +334,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases_MaxSize) {
                                           {{'e', 'f'}, 0.5},
                                           {{'m', 'n', 'o', 'p'}, 0.5},
                                           {{'j', 'k'}, 0.5}},
-                                         370, 700);
+                                         MergeStrategy::Heuristic(370, 700));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -425,8 +427,8 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   segments.push_back({smcp, 0.5});
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
-                                                         segments, 4000, 12000);
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 }
 

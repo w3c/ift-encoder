@@ -22,6 +22,7 @@
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
@@ -244,9 +245,7 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
   SegmentationContext non_incremental_context(
       face, context.segmentation_info.InitFontSegment(),
-      context.segmentation_info.Segments());
-  non_incremental_context.patch_size_min_bytes = 0;
-  non_incremental_context.patch_size_max_bytes = UINT32_MAX;
+      context.segmentation_info.Segments(), MergeStrategy::None());
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
@@ -287,18 +286,17 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> codepoint_segments, uint32_t patch_size_min_bytes,
-    uint32_t patch_size_max_bytes) const {
+    std::vector<Segment> codepoint_segments,
+    std::optional<MergeStrategy> strategy_) const {
   SegmentationContext context = TRY(
       InitializeSegmentationContext(face, initial_segment, codepoint_segments));
-  if (patch_size_min_bytes == 0) {
+
+  // Assign merge strategy which is not considered during init.
+  context.merge_strategy = strategy_.value_or(MergeStrategy::None());
+  if (context.merge_strategy.IsNone()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
   }
-
-  // Add patch size bounds which are not considered during initialization.
-  context.patch_size_min_bytes = patch_size_min_bytes;
-  context.patch_size_max_bytes = patch_size_max_bytes;
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
   segment_index_t last_merged_segment_index = 0;
@@ -343,7 +341,9 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   // add them here so we correctly factor them into the generated segmentation.
   AddInitSubsetDefaults(initial_segment);
 
-  SegmentationContext context(face, initial_segment, codepoint_segments);
+  // No merging is done during init.
+  SegmentationContext context(face, initial_segment, codepoint_segments,
+                              MergeStrategy::None());
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

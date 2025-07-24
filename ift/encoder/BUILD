@@ -72,6 +72,7 @@ cc_library(
         "types.h",
         "init_subset_defaults.h",
         "segment.h",
+        "merge_strategy.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",

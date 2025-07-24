@@ -2,8 +2,11 @@
 #ifndef IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 #define IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 
+#include <optional>
+
 #include "absl/status/statusor.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
@@ -34,8 +37,8 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<Segment> segments, uint32_t patch_size_min_bytes = 0,
-      uint32_t patch_size_max_bytes = UINT32_MAX) const;
+      std::vector<Segment> segments,
+      std::optional<MergeStrategy> strategy = std::nullopt) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.

@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -369,7 +370,7 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
                                              {{'j', 'k'}, 0.5},
                                              {{'m', 'n', 'o', 'p'}, 0.5},
                                          },
-                                         370);
+                                         MergeStrategy::Heuristic(370));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();

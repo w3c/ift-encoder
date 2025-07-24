@@ -22,6 +22,7 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -91,6 +92,7 @@ using ift::encoder::ActivationCondition;
 using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::Compiler;
 using ift::encoder::GlyphSegmentation;
+using ift::encoder::MergeStrategy;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
@@ -397,8 +399,8 @@ int main(int argc, char** argv) {
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(
       font->get(), init_segment, groups,
-      absl::GetFlag(FLAGS_min_patch_size_bytes),
-      absl::GetFlag(FLAGS_max_patch_size_bytes));
+      MergeStrategy::Heuristic(absl::GetFlag(FLAGS_min_patch_size_bytes),
+                               absl::GetFlag(FLAGS_max_patch_size_bytes)));
   if (!result.ok()) {
     std::cerr << result.status() << std::endl;
     return -1;
