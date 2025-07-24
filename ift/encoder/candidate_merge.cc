@@ -194,9 +194,8 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
                                          const SegmentSet& merged_segments,
                                          const Segment& merged_segment,
                                          uint32_t new_patch_size) {
-  // TODO XXXXX make this a tunable parameter taken as an input in the
-  // segmentation configuration.
-  constexpr uint32_t PER_REQUEST_OVERHEAD = 75;
+  const uint32_t per_request_overhead =
+      context.merge_strategy.NetworkOverheadCost();
 
   // These are conditions which will be removed by appying the merge.
   // A condition is removed if it is a subset of the merged_segments.
@@ -217,16 +216,16 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
   // Merge will introduce a new patch (merged_segment) with size
   // "new_patch_size", add the associated cost.
   double cost_delta =
-      merged_segment.Probability() * (new_patch_size + PER_REQUEST_OVERHEAD);
+      merged_segment.Probability() * (new_patch_size + per_request_overhead);
 
   // Now we remove all of the cost associated with segments that are either
   // removed or modified.
   const auto& segments = context.segmentation_info.Segments();
   for (const auto& [c, size] : removed_conditions) {
-    cost_delta -= TRY(c.Probability(segments)) * (size + PER_REQUEST_OVERHEAD);
+    cost_delta -= TRY(c.Probability(segments)) * (size + per_request_overhead);
   }
   for (const auto& [c, size] : modified_conditions) {
-    cost_delta -= TRY(c.Probability(segments)) * (size + PER_REQUEST_OVERHEAD);
+    cost_delta -= TRY(c.Probability(segments)) * (size + per_request_overhead);
   }
 
   // Lastly add back the costs associated with the modified version of each
@@ -236,7 +235,7 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
     // change, only the probability associated with the condition changes.
     cost_delta += TRY(c.MergedProbability(segments, merged_segments,
                                           merged_segment.Probability())) *
-                  (size + PER_REQUEST_OVERHEAD);
+                  (size + per_request_overhead);
   }
 
   return cost_delta;
@@ -312,9 +311,12 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     return std::nullopt;
   }
 
-  // TODO XXXXX only compute cost delta when merging strategy is cost based.
-  double cost_delta = TRY(ComputeCostDelta(context, segments_to_merge_with_base,
-                                           merged_segment, new_patch_size));
+  double cost_delta = 0.0;
+  if (context.merge_strategy.UseCosts()) {
+    // Cost delta values are only needed when using cost based merge strategy.
+    cost_delta = TRY(ComputeCostDelta(context, segments_to_merge_with_base,
+                                      merged_segment, new_patch_size));
+  }
 
   return CandidateMerge{.base_segment_index = base_segment_index,
                         .segments_to_merge = segments_to_merge,

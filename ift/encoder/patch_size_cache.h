@@ -24,9 +24,14 @@ class PatchSizeCache {
 // caches the result.
 class PatchSizeCacheImpl : public PatchSizeCache {
  public:
-  explicit PatchSizeCacheImpl(hb_face_t* original_face)
-      : original_face_(common::make_hb_face(hb_face_reference(original_face))) {
-  }
+  explicit PatchSizeCacheImpl(hb_face_t* original_face, uint32_t brotli_quality)
+      : font_data_(original_face),
+        id_(),
+        differ_(font_data_, id_,
+                {common::FontHelper::kGlyf, common::FontHelper::kGvar,
+                 common::FontHelper::kCFF, common::FontHelper::kCFF2},
+                brotli_quality),
+        cache_() {}
 
   absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override {
     auto it = cache_.find(gids);
@@ -34,22 +39,16 @@ class PatchSizeCacheImpl : public PatchSizeCache {
       return it->second;
     }
 
-    common::FontData font_data(original_face_.get());
-    common::CompatId id;
-    GlyphKeyedDiff diff(
-        font_data, id,
-        {common::FontHelper::kGlyf, common::FontHelper::kGvar,
-         common::FontHelper::kCFF, common::FontHelper::kCFF2},
-        8);  // TODO XXXX use brotli quality from merge strategy.
-
-    auto patch_data = TRY(diff.CreatePatch(gids));
+    auto patch_data = TRY(differ_.CreatePatch(gids));
     uint32_t size = patch_data.size();
     cache_[gids] = size;
     return size;
   }
 
  private:
-  common::hb_face_unique_ptr original_face_;
+  common::FontData font_data_;
+  common::CompatId id_;
+  GlyphKeyedDiff differ_;
   absl::flat_hash_map<common::GlyphSet, uint32_t> cache_;
 };
 

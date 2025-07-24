@@ -4,6 +4,7 @@
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
+#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
 
@@ -49,6 +50,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
+  context->merge_strategy = MergeStrategy::CostBased();
 
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
@@ -80,6 +82,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
+  context->merge_strategy = MergeStrategy::CostBased();
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -126,6 +129,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
+  context->merge_strategy = MergeStrategy::CostBased();
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
