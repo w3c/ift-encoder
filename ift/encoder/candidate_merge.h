@@ -36,6 +36,13 @@ struct CandidateMerge {
   // merge is applied.
   common::GlyphSet invalidated_glyphs;
 
+  bool operator==(const CandidateMerge& other) const {
+    // base segment and segments to merge uniquely identify a candidate
+    // merge operation.
+    return base_segment_index == other.base_segment_index &&
+           segments_to_merge == other.segments_to_merge;
+  }
+
   bool operator<(const CandidateMerge& other) const {
     if (cost_delta != other.cost_delta) {
       return cost_delta < other.cost_delta;
