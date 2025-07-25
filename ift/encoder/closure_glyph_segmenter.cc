@@ -224,9 +224,10 @@ Status CollectCompositeCandidateMerges(
   auto candidate_conditions =
       context.glyph_groupings.TriggeringSegmentToConditions(base_segment_index);
   for (ActivationCondition next_condition : candidate_conditions) {
-    if (next_condition.IsFallback()) {
+    if (next_condition.IsFallback() || next_condition.IsExclusive()) {
       // Merging the fallback will cause all segments to be merged into one,
-      // which is undesirable so don't consider the fallback.
+      // which is undesirable so don't consider the fallback. Also skip
+      // any non composite conditions.
       continue;
     }
 
@@ -255,10 +256,16 @@ Status CollectExclusiveCandidateMerges(
     }
 
     SegmentSet triggering_segments = condition.TriggeringSegments();
+    if (triggering_segments.contains(base_segment_index)) {
+      // Don't merge base with itself.
+      continue;
+    }
+
     auto candidate_merge = TRY(CandidateMerge::AssessMerge(
         context, base_segment_index, triggering_segments));
     if (candidate_merge.has_value() &&
-        *candidate_merge < smallest_candidate_merge) {
+        (!smallest_candidate_merge.has_value() ||
+         *candidate_merge < smallest_candidate_merge)) {
       smallest_candidate_merge = *candidate_merge;
     }
   }

@@ -215,17 +215,27 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
 
   // Merge will introduce a new patch (merged_segment) with size
   // "new_patch_size", add the associated cost.
-  double cost_delta =
-      merged_segment.Probability() * (new_patch_size + per_request_overhead);
+  double p = merged_segment.Probability();
+  double cost_delta = p * (new_patch_size + per_request_overhead);
+  VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString() << " =";
+
+  VLOG(1) << "    + (" << p << " * " << (new_patch_size + per_request_overhead)
+          << ") -> " << cost_delta << " [merged patch]";
 
   // Now we remove all of the cost associated with segments that are either
   // removed or modified.
   const auto& segments = context.segmentation_info.Segments();
   for (const auto& [c, size] : removed_conditions) {
-    cost_delta -= TRY(c.Probability(segments)) * (size + per_request_overhead);
+    double p = TRY(c.Probability(segments));
+    double d = p * (size + per_request_overhead);
+    cost_delta -= d;
+    VLOG(1) << "    - (" << p << " * " << (size + per_request_overhead)
+            << ") -> " << d << " [removed patch " << c.ToString() << "]";
   }
   for (const auto& [c, size] : modified_conditions) {
-    cost_delta -= TRY(c.Probability(segments)) * (size + per_request_overhead);
+    double d = TRY(c.Probability(segments)) * (size + per_request_overhead);
+    VLOG(1) << "    - " << d << " [modified patch " << c.ToString() << "]";
+    cost_delta -= d;
   }
 
   // Lastly add back the costs associated with the modified version of each
@@ -233,10 +243,13 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
   for (const auto& [c, size] : modified_conditions) {
     // For modified conditions we assume the associated patch size does not
     // change, only the probability associated with the condition changes.
-    cost_delta += TRY(c.MergedProbability(segments, merged_segments,
-                                          merged_segment.Probability())) *
-                  (size + per_request_overhead);
+    double d = TRY(c.MergedProbability(segments, merged_segments,
+                                       merged_segment.Probability())) *
+               (size + per_request_overhead);
+    VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
+    cost_delta += d;
   }
+  VLOG(1) << "    = " << cost_delta;
 
   return cost_delta;
 }
@@ -247,9 +260,9 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
   if (!context.merge_strategy.UseCosts() &&
       WouldMixFeaturesAndCodepoints(context.segmentation_info,
                                     base_segment_index, segments_to_merge_)) {
-    // With the heuristic merger if it doesn't find a previous merge candidate will
-    // try to merge together segments that are composed of codepoints with a
-    // segment that adds an optional feature. Since this feature segments are
+    // With the heuristic merger if it doesn't find a previous merge candidate
+    // will try to merge together segments that are composed of codepoints with
+    // a segment that adds an optional feature. Since this feature segments are
     // likely rarely used this will inflate the size of the patches for those
     // codepoint segments unnecessarily.
     //

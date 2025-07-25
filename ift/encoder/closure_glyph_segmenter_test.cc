@@ -432,13 +432,63 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 }
 
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_CostStrategy) {
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {{'a', 'b', 'c', 'd', 'e'}, 0.95},
+                                             {{'f', 'g', 'h', 'i', 'j'}, 0.90},
+                                             {{'k', 'l', 'm', 'n', 'o'}, 0.05},
+                                         },
+                                         MergeStrategy::CostBased());
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // It's expected that s0 and s1 are merged together to reduce network
+  // overhead.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'},
+      {},
+      {'k', 'l', 'm', 'n', 'o'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69, gid70, gid71, gid72, gid73, gid74, gid75, gid76, gid77, gid78, gid444, gid446 }
+p1: { gid79, gid80, gid81, gid82, gid83 }
+p2: { gid445, gid447 }
+if (s0) then p0
+if (s2) then p1
+if (s0 AND s2) then p2
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, CustomOverhead_CostStrategy) {
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {{'a', 'b', 'c', 'd', 'e'}, 0.95},
+                                             {{'f', 'g', 'h', 'i', 'j'}, 0.90},
+                                             {{'k', 'l', 'm', 'n', 'o'}, 0.05},
+                                         },
+                                         MergeStrategy::CostBased(7500));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Very high per request overhead incentivizes merging everything
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+       'o'},
+      {},
+      {}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69, gid70, gid71, gid72, gid73, gid74, gid75, gid76, gid77, gid78, gid79, gid80, gid81, gid82, gid83, gid444, gid445, gid446, gid447 }
+if (s0) then p0
+)");
+}
+
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
-
-// TODO XXXX tests for cost merging
-// - basic case of applying obvious negative merges and avoiding positive cost
-// ones.
-// - won't apply positive cost merges if no negative are available.
-// - case with composite conditions.
 
 }  // namespace ift::encoder
