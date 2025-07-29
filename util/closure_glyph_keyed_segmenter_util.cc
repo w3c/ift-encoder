@@ -151,7 +151,7 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         patch_id_to_url;
     for (const auto& condition : segmentation->Conditions()) {
       std::string url = *URLTemplate::PatchToUrl(
-          std::vector<uint8_t>{2, '1', '_', 128, '.', 'g', 'k'},
+          std::vector<uint8_t>{2, '1', '_', 128, 7, '.', 'i', 'f', 't', '_', 'g', 'k'},
           condition.activated());
 
       int type =
@@ -164,7 +164,7 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
       int type = pair.second;
       auto url_size = url_to_size.find(url);
       if (url_size == url_to_size.end()) {
-        return absl::InternalError("URL is missing.");
+        return absl::InternalError("URL is missing: " + url);
       }
 
       const char* id_postfix = (type == 0) ? "*" : ((type == 1) ? "" : "f");
