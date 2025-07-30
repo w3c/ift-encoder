@@ -119,9 +119,10 @@ StatusOr<std::vector<uint32_t>> TargetCodepoints(
   std::vector<uint32_t> codepoints_filtered;
   if (!codepoints_file.empty()) {
     auto codepoints = TRY(util::LoadCodepointsOrdered(codepoints_file.c_str()));
-    for (auto cp : codepoints) {
-      if (font_unicodes.contains(cp) && !init_codepoints.contains(cp)) {
-        codepoints_filtered.push_back(cp);
+    for (const auto& cp : codepoints) {
+      if (font_unicodes.contains(cp.codepoint) &&
+          !init_codepoints.contains(cp.codepoint)) {
+        codepoints_filtered.push_back(cp.codepoint);
       }
     }
   } else {
@@ -382,7 +383,9 @@ int main(int argc, char** argv) {
                 << std::endl;
       return -1;
     }
-    init_codepoints = *result;
+    for (const auto& cp : *result) {
+      init_codepoints.push_back(cp.codepoint);
+    }
   }
   SubsetDefinition init_segment;
   for (hb_codepoint_t cp : init_codepoints) {
