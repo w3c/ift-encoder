@@ -85,7 +85,9 @@ int main(int argc, char** argv) {
       return -1;
     }
 
-    set.insert(result->begin(), result->end());
+    for (const auto& cp_and_freq : *result) {
+      set.insert(cp_and_freq.codepoint);
+    }
     sets.push_back(set);
   }
 

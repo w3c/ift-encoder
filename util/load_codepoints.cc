@@ -26,8 +26,11 @@ StatusOr<common::FontData> LoadFile(const char* path) {
   return FontData(blob.get());
 }
 
-StatusOr<std::vector<uint32_t>> LoadCodepointsOrdered(const char* path) {
-  std::vector<uint32_t> out;
+
+
+StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
+    const char* path) {
+  std::vector<CodepointAndFrequency> out;
   std::ifstream in(path);
 
   if (!in.is_open()) {
@@ -38,36 +41,67 @@ StatusOr<std::vector<uint32_t>> LoadCodepointsOrdered(const char* path) {
   std::string line;
   while (std::getline(in, line)) {
     std::istringstream iss(line);
-    std::string hex_code;
-    std::string description;
+    std::string token;
+    if (!(iss >> token)) {
+      continue;
+    }
+    if (token[0] == '#') {
+      continue;
+    }
 
-    // Extract the hex code and description
-    if (iss >> hex_code) {
-      if (hex_code.empty() || hex_code.substr(0, 1) == "#") {
-        // comment line, skip
-        continue;
-      } else if (hex_code.substr(0, 2) == "0x") {
+    std::string hex_code_str;
+    std::optional<uint64_t> frequency;
+
+    size_t comma_pos = token.find(',');
+    if (comma_pos != std::string::npos) {
+      hex_code_str = token.substr(0, comma_pos);
+      std::string freq_str = token.substr(comma_pos + 1);
+      if (!freq_str.empty()) {
         try {
           size_t consumed = 0;
-          uint32_t cp = std::stoul(hex_code.substr(2), &consumed, 16);
-          if (consumed + 2 < hex_code.length()) {
+          uint64_t f = std::stoull(freq_str, &consumed, 10);
+          if (consumed != freq_str.length()) {
             return absl::InvalidArgumentError(
-                "trailing unused text in the hex number.");
+                "trailing unused text in the frequency number: " + freq_str);
           }
-          out.push_back(cp);
+          frequency = f;
         } catch (const std::out_of_range& oor) {
           return absl::InvalidArgumentError(
-              StrCat("Error converting hex code '", hex_code,
+              StrCat("Error converting frequency '", freq_str,
                      "' to integer: ", oor.what()));
         } catch (const std::invalid_argument& ia) {
-          return absl::InvalidArgumentError(StrCat(
-              "Invalid argument for hex code '", hex_code, "': ", ia.what()));
+          return absl::InvalidArgumentError(
+              StrCat("Invalid argument for frequency '", freq_str,
+                     "': ", ia.what()));
         }
-      } else {
-        return absl::InvalidArgumentError("Invalid hex code format: " +
-                                          hex_code);
       }
+    } else {
+      hex_code_str = token;
     }
+
+    if (hex_code_str.substr(0, 2) != "0x") {
+      return absl::InvalidArgumentError("Invalid hex code format: " +
+                                        hex_code_str);
+    }
+
+    uint32_t cp;
+    try {
+      size_t consumed = 0;
+      cp = std::stoul(hex_code_str.substr(2), &consumed, 16);
+      if (consumed != hex_code_str.length() - 2) {
+        return absl::InvalidArgumentError(
+            "trailing unused text in the hex number: " + hex_code_str);
+      }
+    } catch (const std::out_of_range& oor) {
+      return absl::InvalidArgumentError(
+          StrCat("Error converting hex code '", hex_code_str,
+                 "' to integer: ", oor.what()));
+    } catch (const std::invalid_argument& ia) {
+      return absl::InvalidArgumentError(
+          StrCat("Invalid argument for hex code '", hex_code_str,
+                 "': ", ia.what()));
+    }
+    out.push_back({cp, frequency});
   }
 
   in.close();

@@ -124,6 +124,8 @@ cc_test(
         "testdata/codepoints.txt",
         "testdata/codepoints_invalid_1.txt",
         "testdata/codepoints_invalid_2.txt",
+        "testdata/codepoints_with_freq.txt",
+         "testdata/codepoints_with_freq_invalid.txt",
     ],
     deps = [
         ":load_codepoints",
