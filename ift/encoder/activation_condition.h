@@ -102,6 +102,10 @@ class ActivationCondition {
 
   // Compute and return the probability that this condition will be activated
   // based on the provided individual segment probabilities.
+  //
+  // Important: this makes the assumption that segment probabilies are independent
+  //            which means this is only an estimate as this is likely not
+  //            true.
   absl::StatusOr<double> Probability(absl::Span<const Segment> segments) const {
     bool is_conjunctive = conditions_.size() > 1;
     double total_probability = 1.0;

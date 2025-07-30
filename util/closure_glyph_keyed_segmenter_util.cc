@@ -69,6 +69,19 @@ ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "The segmenter will avoid merges which result in patches larger than "
           "this amount.");
 
+ABSL_FLAG(bool, use_cost_based_merging, false,
+          "If set selects merges using a cost function, where the merge "
+          "selection aims to minimize the overall cost. If enable min and max "
+          "patch size flags will be ignored. This is currently experimental.");
+
+ABSL_FLAG(uint32_t, network_overhead_cost, 75,
+          "When picking merges via the cost method this is the cost in bytes "
+          "for each network request.");
+
+// TODO(garretrieger): add additional setting for cost base merging that
+// configures a minimum
+//                     grouping size (in terms of number of codepoints).
+
 ABSL_FLAG(std::vector<std::string>, optional_feature_tags, {},
           "A list of feature tags which can be optionally added to the font "
           "via patch.");
@@ -154,7 +167,8 @@ StatusOr<int> EncodingSize(const GlyphSegmentation* segmentation,
         patch_id_to_url;
     for (const auto& condition : segmentation->Conditions()) {
       std::string url = *URLTemplate::PatchToUrl(
-          std::vector<uint8_t>{2, '1', '_', 128, 7, '.', 'i', 'f', 't', '_', 'g', 'k'},
+          std::vector<uint8_t>{2, '1', '_', 128, 7, '.', 'i', 'f', 't', '_',
+                               'g', 'k'},
           condition.activated());
 
       int type =
@@ -396,11 +410,17 @@ int main(int argc, char** argv) {
     groups.push_back(s);
   }
 
-  ClosureGlyphSegmenter segmenter;
-  auto result = segmenter.CodepointToGlyphSegments(
-      font->get(), init_segment, groups,
+  MergeStrategy merge_strategy =
       MergeStrategy::Heuristic(absl::GetFlag(FLAGS_min_patch_size_bytes),
-                               absl::GetFlag(FLAGS_max_patch_size_bytes)));
+                               absl::GetFlag(FLAGS_max_patch_size_bytes));
+  if (absl::GetFlag(FLAGS_use_cost_based_merging)) {
+    merge_strategy =
+        MergeStrategy::CostBased(absl::GetFlag(FLAGS_network_overhead_cost));
+  }
+
+  ClosureGlyphSegmenter segmenter;
+  auto result = segmenter.CodepointToGlyphSegments(font->get(), init_segment,
+                                                   groups, merge_strategy);
   if (!result.ok()) {
     std::cerr << result.status() << std::endl;
     return -1;

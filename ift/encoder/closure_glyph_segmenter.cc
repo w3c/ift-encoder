@@ -75,18 +75,6 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
     return std::nullopt;
   }
   auto& candidate_merge = maybe_candidate_merge.value();
-  // TODO XXXXX
-  // - Then above this function we should iterate through all candidate merges,
-  // generating
-  //   a list of proposed merges which are then sorted by cost and the lowest
-  //   negative cost option is selected and applied (positive cost options
-  //   should be thrown out)
-  // - When estimating cost deltas we can collect the set of glyphs in the newly
-  // merged patch
-  //   and exclude those from all other non merged patches to generate a rough
-  //   estimate of their new size.
-  // - caches that may be useful: glyph set -> patch size, condition ->
-  // probability
   return candidate_merge.Apply(context);
 }
 
@@ -278,6 +266,45 @@ Status CollectExclusiveCandidateMerges(
  */
 StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
     SegmentationContext& context, uint32_t base_segment_index) {
+  // TODO(garretrieger): what we are trying to solve here is effectively
+  // a partitioning problem (finding the partitioning with lowest cost) which is
+  // NP.
+  //
+  // To make this tractable we use a simplistic greedy approach were we
+  // iteratively select two (or more) segments to merge that lower the overall
+  // cost. Currently this selects candidates from two sources:
+  // 1. Start with the highest probability segment, evaluate the cost delta for
+  //    merging it with every other segment. Once no more merges are found,
+  //    move on to the next highest frequency.
+  // 2. Consider merging the groups of segments that are known to interact as
+  //    these might give slightly better results due to reduction of
+  //    conditional patches.
+  //
+  // This approach can likely be improved:
+  // - Consider all possible pairs instead of just pairs with the highest freq
+  //   item.
+  // - This could be made tractable by caching the pair wise cost deltas and
+  //   invaldidating specific ones as needed on each merge.
+  // - After forming an initial greedy based partition try to fine tune by
+  //   randomly moving codepoints between the segments to see if further cost
+  //   reductions can be realized. Can use a computaton budget to set a bound
+  //   on how much time is spent here.
+  //
+  // Additional areas for improvement:
+  // - Our input data has per segment (or codepoint) probability data, but does
+  //   not at the moment contain co-occurrence probabilities, so when assessing
+  //   segment probabilities we must either work with lower, upper probability
+  //   bounds, or make the assumption that probabilities are independent (which
+  //   is almost certainly not true). All three approaches result in a cost
+  //   function which is not fully accurate.
+  // - This approach could be modified to utilize code point pair probabilities
+  //   to produce more accurate bounds via Boole's Inequality
+  //   (https://en.wikipedia.org/wiki/Boole%27s_inequality)
+  //
+  // Lastly, currently lacking a good set of frequency data for all unicode
+  // codepoints this approach has not yet been thoroughly tested. Next steps
+  // would be to gather some frequency data, test this approach as is, and then
+  // refine it potentially using some of the proposals noted above.
   std::optional<CandidateMerge> smallest_candidate_merge;
   TRYV(CollectExclusiveCandidateMerges(context, base_segment_index,
                                        smallest_candidate_merge));
