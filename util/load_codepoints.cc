@@ -26,8 +26,6 @@ StatusOr<common::FontData> LoadFile(const char* path) {
   return FontData(blob.get());
 }
 
-
-
 StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
     const char* path) {
   std::vector<CodepointAndFrequency> out;
@@ -70,9 +68,8 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
               StrCat("Error converting frequency '", freq_str,
                      "' to integer: ", oor.what()));
         } catch (const std::invalid_argument& ia) {
-          return absl::InvalidArgumentError(
-              StrCat("Invalid argument for frequency '", freq_str,
-                     "': ", ia.what()));
+          return absl::InvalidArgumentError(StrCat(
+              "Invalid argument for frequency '", freq_str, "': ", ia.what()));
         }
       }
     } else {
@@ -93,13 +90,12 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
             "trailing unused text in the hex number: " + hex_code_str);
       }
     } catch (const std::out_of_range& oor) {
-      return absl::InvalidArgumentError(
-          StrCat("Error converting hex code '", hex_code_str,
-                 "' to integer: ", oor.what()));
+      return absl::InvalidArgumentError(StrCat("Error converting hex code '",
+                                               hex_code_str,
+                                               "' to integer: ", oor.what()));
     } catch (const std::invalid_argument& ia) {
-      return absl::InvalidArgumentError(
-          StrCat("Invalid argument for hex code '", hex_code_str,
-                 "': ", ia.what()));
+      return absl::InvalidArgumentError(StrCat(
+          "Invalid argument for hex code '", hex_code_str, "': ", ia.what()));
     }
     out.push_back({cp, frequency});
   }

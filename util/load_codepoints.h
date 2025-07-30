@@ -15,6 +15,23 @@ absl::StatusOr<common::FontData> LoadFile(const char* path);
 struct CodepointAndFrequency {
   uint32_t codepoint;
   std::optional<uint64_t> frequency;
+
+  bool operator<(const CodepointAndFrequency& rhs) const {
+    if (frequency == rhs.frequency) {
+      return codepoint < rhs.codepoint;
+    }
+
+    if (frequency.has_value() && !rhs.frequency.has_value()) {
+      return true;
+    }
+
+    if (!frequency.has_value() && rhs.frequency.has_value()) {
+      return false;
+    }
+
+    // Sort from highest to lowest frequency.
+    return *frequency > *rhs.frequency;
+  }
 };
 
 // Loads the codepoint file at path and returns it contents.
