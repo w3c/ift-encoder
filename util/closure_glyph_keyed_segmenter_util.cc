@@ -110,19 +110,31 @@ using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
+using util::CodepointAndFrequency;
 
-StatusOr<std::vector<uint32_t>> TargetCodepoints(
+StatusOr<std::vector<CodepointAndFrequency>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file,
     const IntSet& init_codepoints) {
   IntSet font_unicodes = FontHelper::ToCodepointsSet(font);
 
-  std::vector<uint32_t> codepoints_filtered;
+  bool frequencies_required = absl::GetFlag(FLAGS_use_cost_based_merging);
+  std::vector<CodepointAndFrequency> codepoints_filtered;
   if (!codepoints_file.empty()) {
     auto codepoints = TRY(util::LoadCodepointsOrdered(codepoints_file.c_str()));
+    if (frequencies_required) {
+      // When frequencies are used we want codepoints sorted by freq.
+      std::sort(codepoints.begin(), codepoints.end());
+    }
     for (const auto& cp : codepoints) {
+      if (frequencies_required && !cp.frequency.has_value()) {
+        return absl::InvalidArgumentError(
+            "When using cost based merging codepoint frequency data must be "
+            "supplied.");
+      }
+
       if (font_unicodes.contains(cp.codepoint) &&
           !init_codepoints.contains(cp.codepoint)) {
-        codepoints_filtered.push_back(cp.codepoint);
+        codepoints_filtered.push_back(cp);
       }
     }
   } else {
@@ -130,7 +142,7 @@ StatusOr<std::vector<uint32_t>> TargetCodepoints(
     // font.
     for (uint32_t cp : font_unicodes) {
       if (!init_codepoints.contains(cp)) {
-        codepoints_filtered.push_back(cp);
+        codepoints_filtered.push_back(CodepointAndFrequency{cp, std::nullopt});
       }
     }
   }
@@ -332,10 +344,21 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
-                                     uint32_t number_of_segments) {
+StatusOr<std::vector<Segment>> GroupCodepoints(
+    std::vector<CodepointAndFrequency> codepoints,
+    uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
+  uint64_t max_frequency = 0;
+  for (const auto& cp : codepoints) {
+    max_frequency = std::max(max_frequency, *cp.frequency);
+  }
+  bool frequencies_required = absl::GetFlag(FLAGS_use_cost_based_merging);
+  if (per_group > 1 && frequencies_required) {
+    return absl::InvalidArgumentError(
+        "When using codepoint frequencies there must only be one codepoint per "
+        "segment.");
+  }
 
   std::vector<Segment> out;
   auto end = codepoints.begin();
@@ -347,14 +370,16 @@ std::vector<Segment> GroupCodepoints(std::vector<uint32_t> codepoints,
       remainder--;
     }
 
-    // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
-    // or take them as an input.
-    //                     for example for CJK we can assign probabilities
-    //                     following a typical exponential decay curve base on
-    //                     the supplied codepoint ordering.
-    Segment group(SubsetDefinition(), 0.9);
+    double probability = 1.0;
+    if (frequencies_required) {
+      // TODO(garretrieger): support segments with more than one codepoint in
+      //  probability mode by computing the merged probability.
+      probability = ((double)*start->frequency) / ((double)max_frequency);
+    }
+
+    Segment group(SubsetDefinition(), probability);
     for (; start != end; start++) {
-      group.Definition().codepoints.insert(*start);
+      group.Definition().codepoints.insert(start->codepoint);
     }
 
     out.push_back(group);
@@ -403,14 +428,19 @@ int main(int argc, char** argv) {
 
   auto groups =
       GroupCodepoints(*codepoints, absl::GetFlag(FLAGS_number_of_segments));
+  if (!groups.ok()) {
+    std::cerr << "Failed to generate segment groupings: " << codepoints.status()
+              << std::endl;
+    return -1;
+  }
 
   for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
     // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
     // or take them as an input.
-    Segment s(SubsetDefinition(), 0.05);
+    Segment s(SubsetDefinition(), 0.001);
     hb_tag_t tag_value = FontHelper::ToTag(tag);
     s.Definition().feature_tags = {tag_value};
-    groups.push_back(s);
+    groups->push_back(s);
   }
 
   MergeStrategy merge_strategy =
@@ -423,7 +453,7 @@ int main(int argc, char** argv) {
 
   ClosureGlyphSegmenter segmenter;
   auto result = segmenter.CodepointToGlyphSegments(font->get(), init_segment,
-                                                   groups, merge_strategy);
+                                                   *groups, merge_strategy);
   if (!result.ok()) {
     std::cerr << result.status() << std::endl;
     return -1;
