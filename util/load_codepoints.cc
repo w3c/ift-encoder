@@ -2,9 +2,11 @@
 
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/strip.h"
 #include "common/font_data.h"
 #include "hb.h"
 
@@ -26,6 +28,15 @@ StatusOr<common::FontData> LoadFile(const char* path) {
   return FontData(blob.get());
 }
 
+void PrintTo(const CodepointAndFrequency& cp_and_freq, std::ostream* os) {
+  if (cp_and_freq.frequency.has_value()) {
+    *os << "[" << cp_and_freq.codepoint << ", " << *cp_and_freq.frequency
+        << "]";
+  } else {
+    *os << cp_and_freq.codepoint;
+  }
+}
+
 StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
     const char* path) {
   std::vector<CodepointAndFrequency> out;
@@ -38,42 +49,43 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
 
   std::string line;
   while (std::getline(in, line)) {
-    std::istringstream iss(line);
-    std::string token;
-    if (!(iss >> token)) {
+    std::string trimmed_line(absl::StripAsciiWhitespace(line));
+
+    if (trimmed_line.empty() || trimmed_line[0] == '#') {
       continue;
     }
-    if (token[0] == '#') {
-      continue;
-    }
+
+    std::istringstream iss(trimmed_line);
 
     std::string hex_code_str;
-    std::optional<uint64_t> frequency;
+    if (!std::getline(iss, hex_code_str, ',')) {
+      continue;
+    }
 
-    size_t comma_pos = token.find(',');
-    if (comma_pos != std::string::npos) {
-      hex_code_str = token.substr(0, comma_pos);
-      std::string freq_str = token.substr(comma_pos + 1);
-      if (!freq_str.empty()) {
-        try {
-          size_t consumed = 0;
-          uint64_t f = std::stoull(freq_str, &consumed, 10);
-          if (consumed != freq_str.length()) {
-            return absl::InvalidArgumentError(
-                "trailing unused text in the frequency number: " + freq_str);
-          }
-          frequency = f;
-        } catch (const std::out_of_range& oor) {
+    std::string freq_str;
+    std::optional<uint64_t> frequency = std::nullopt;
+    if (std::getline(iss, freq_str, ',')) {
+      size_t consumed = 0;
+      try {
+        frequency = std::stoull(freq_str, &consumed, 10);
+        if (consumed < freq_str.length() && freq_str[consumed] != ' ') {
           return absl::InvalidArgumentError(
-              StrCat("Error converting frequency '", freq_str,
-                     "' to integer: ", oor.what()));
-        } catch (const std::invalid_argument& ia) {
+              "trailing unused text in the frequency.");
+        }
+      } catch (const std::out_of_range& oor) {
+        return absl::InvalidArgumentError(StrCat("Error converting frequency '",
+                                                 freq_str,
+                                                 "' to integer: ", oor.what()));
+      } catch (const std::invalid_argument& ia) {
+        if (freq_str == " COMMA") {
+          // name files sometimes have an entry like '0x002C  , COMMA' which
+          // should not be confused with a frequency.
+          frequency = std::nullopt;
+        } else {
           return absl::InvalidArgumentError(StrCat(
               "Invalid argument for frequency '", freq_str, "': ", ia.what()));
         }
       }
-    } else {
-      hex_code_str = token;
     }
 
     if (hex_code_str.substr(0, 2) != "0x") {
@@ -85,7 +97,8 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
     try {
       size_t consumed = 0;
       cp = std::stoul(hex_code_str.substr(2), &consumed, 16);
-      if (consumed != hex_code_str.length() - 2) {
+      if (consumed + 2 < hex_code_str.length() &&
+          hex_code_str[consumed + 2] != ' ') {
         return absl::InvalidArgumentError(
             "trailing unused text in the hex number: " + hex_code_str);
       }
