@@ -32,6 +32,8 @@ struct CodepointAndFrequency {
     // Sort from highest to lowest frequency.
     return *frequency > *rhs.frequency;
   }
+
+  friend void PrintTo(const CodepointAndFrequency& point, std::ostream* os);
 };
 
 // Loads the codepoint file at path and returns it contents.
