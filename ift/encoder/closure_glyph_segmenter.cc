@@ -70,7 +70,7 @@ StatusOr<std::optional<GlyphSet>> TryMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& to_merge_segments_) {
   auto maybe_candidate_merge = TRY(CandidateMerge::AssessMerge(
-      context, base_segment_index, to_merge_segments_));
+      context, base_segment_index, to_merge_segments_, std::nullopt));
   if (!maybe_candidate_merge.has_value()) {
     return std::nullopt;
   }
@@ -225,7 +225,8 @@ Status CollectCompositeCandidateMerges(
     }
 
     auto candidate_merge = TRY(CandidateMerge::AssessMerge(
-        context, base_segment_index, triggering_segments));
+        context, base_segment_index, triggering_segments,
+        smallest_candidate_merge));
     if (candidate_merge.has_value() &&
         *candidate_merge < smallest_candidate_merge) {
       smallest_candidate_merge = *candidate_merge;
@@ -249,8 +250,16 @@ Status CollectExclusiveCandidateMerges(
       continue;
     }
 
+    if (triggering_segments.min().value_or(UINT32_MAX) < base_segment_index) {
+      // Don't merge segments before the base, these are already fully processed
+      // and have already been assessed for merges of everything ahead of
+      // themselves.
+      continue;
+    }
+
     auto candidate_merge = TRY(CandidateMerge::AssessMerge(
-        context, base_segment_index, triggering_segments));
+        context, base_segment_index, triggering_segments,
+        smallest_candidate_merge));
     if (candidate_merge.has_value() &&
         (!smallest_candidate_merge.has_value() ||
          *candidate_merge < smallest_candidate_merge)) {

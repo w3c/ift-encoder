@@ -256,7 +256,8 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
 
 StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
-    const SegmentSet& segments_to_merge_) {
+    const SegmentSet& segments_to_merge_,
+    const std::optional<CandidateMerge>& best_merge_candidate) {
   if (!context.merge_strategy.UseCosts() &&
       WouldMixFeaturesAndCodepoints(context.segmentation_info,
                                     base_segment_index, segments_to_merge_)) {
@@ -279,15 +280,29 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
   segments_to_merge.erase(base_segment_index);
   segments_to_merge_with_base.insert(base_segment_index);
 
+  bool segments_to_merge_are_inert =
+      segments_to_merge.is_subset_of(context.inert_segments);
   bool new_segment_is_inert =
       context.inert_segments.contains(base_segment_index) &&
-      segments_to_merge.is_subset_of(context.inert_segments);
-  if (new_segment_is_inert) {
-    VLOG(0) << "  Merged segment will be inert, closure analysis will be "
-               "skipped.";
-  }
+      segments_to_merge_are_inert;
 
   const auto& segments = context.segmentation_info.Segments();
+
+  if (context.merge_strategy.UseCosts() && segments_to_merge_are_inert &&
+      segments_to_merge.size() == 1 && best_merge_candidate.has_value()) {
+    // Given an existing best merge candidate we can compute a probability
+    // threshold on the segments to be merged that will allow us to quickly
+    // discard merges which can't possibily beat the current best.
+    unsigned segment_to_merge = segments_to_merge.min().value();
+    unsigned segment_to_merge_size = TRY(context.patch_size_cache->GetPatchSize(
+        context.glyph_condition_set.GlyphsWithSegment(segment_to_merge)));
+    double threshold =
+        best_merge_candidate->InertProbabilityThreshold(segment_to_merge_size);
+    if (segments[segment_to_merge].Probability() <= threshold) {
+      // No chance for this merge to beat the current best.
+      return std::nullopt;
+    }
+  }
 
   Segment merged_segment = segments[base_segment_index];
   MergeSegments(context.segmentation_info, segments_to_merge, merged_segment);
@@ -333,13 +348,31 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
                                       merged_segment, new_patch_size));
   }
 
-  return CandidateMerge{.base_segment_index = base_segment_index,
-                        .segments_to_merge = segments_to_merge,
-                        .merged_segment = std::move(merged_segment),
-                        .new_segment_is_inert = new_segment_is_inert,
-                        .new_patch_size = new_patch_size,
-                        .cost_delta = cost_delta,
-                        .invalidated_glyphs = gid_conditions_to_update};
+  if (best_merge_candidate.has_value() &&
+      cost_delta >= best_merge_candidate.value().cost_delta) {
+    // Our delta is not smaller, don't bother returning a candidate.
+    return std::nullopt;
+  }
+
+  auto candidate =
+      CandidateMerge{.base_segment_index = base_segment_index,
+                     .segments_to_merge = segments_to_merge,
+                     .merged_segment = std::move(merged_segment),
+                     .new_segment_is_inert = new_segment_is_inert,
+                     .new_patch_size = new_patch_size,
+                     .cost_delta = cost_delta,
+                     .invalidated_glyphs = gid_conditions_to_update};
+
+  if (context.merge_strategy.UseCosts()) {
+    const GlyphSet& base_segment_glyphs =
+        context.glyph_condition_set.GlyphsWithSegment(base_segment_index);
+    candidate.base_size =
+        TRY(context.patch_size_cache->GetPatchSize(base_segment_glyphs));
+    candidate.base_probability = segments[base_segment_index].Probability();
+    candidate.network_overhead = context.merge_strategy.NetworkOverheadCost();
+  }
+
+  return candidate;
 }
 
 }  // namespace ift::encoder
