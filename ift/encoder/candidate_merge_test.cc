@@ -1,5 +1,7 @@
 #include "ift/encoder/candidate_merge.h"
 
+#include <optional>
+
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
@@ -55,7 +57,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
   // network overhead, Overall cost should be negative.
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1, 2});
+  auto r = CandidateMerge::AssessMerge(*context, 0, {1, 2}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -64,11 +66,81 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   // Case 2: merging a high and low frequency segment will signicantly increase
   // the probably of loading the low frequency bytes which will not outweigh the
   // network overhead cost reduction. Overall cost should be positive.
-  r = CandidateMerge::AssessMerge(*context, 0, {1, 3});
+  r = CandidateMerge::AssessMerge(*context, 0, {1, 3}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
   ASSERT_GT(merge.cost_delta, 0);
+  double prev_cost_delta = merge.cost_delta;
+
+  // Case 3: check that ordering (ie. what's 'base' and what's 'merged') does
+  // not change the cost delta.
+  r = CandidateMerge::AssessMerge(*context, 3, {0, 1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  merge = **r;
+  ASSERT_GT(merge.cost_delta, 0);
+  ASSERT_EQ(merge.cost_delta, prev_cost_delta);
+}
+
+TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
+  std::vector<Segment> segments = {
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+  };
+
+  ClosureGlyphSegmenter segmenter;
+  auto context =
+      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  ASSERT_TRUE(context.ok()) << context.status();
+  context->merge_strategy = MergeStrategy::CostBased();
+
+  unsigned base_size =
+      *context->patch_size_cache->GetPatchSize({'a', 'b', 'c', 'd', 'e', 'f'});
+
+  // Case 1: merge high frequency segments {0, 1}. Best current merge is set at
+  // 0, assess merge should return a better candidate.
+  auto r = CandidateMerge::AssessMerge(
+      *context, 0, {1},
+      CandidateMerge::BaselineCandidate(
+          0.0, base_size, 0.95, context->merge_strategy.NetworkOverheadCost()));
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+  ASSERT_LT(merge.cost_delta, 0);
+
+  // Case 2: merge high frequency segments {0, 1}. Best current merge is set at
+  // -500, assess merge should not return a better candidate.
+  r = CandidateMerge::AssessMerge(
+      *context, 0, {1},
+      CandidateMerge::BaselineCandidate(
+          -500.0, base_size, 0.95,
+          context->merge_strategy.NetworkOverheadCost()));
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_FALSE(r->has_value());
+
+  // Case 3: merging a high and low frequency segment will signicantly increase
+  // the probably of loading the low frequency bytes which will not outweigh the
+  // network overhead cost reduction. Overall cost should be positive. Baseline
+  // is set at 0 so no candidate is expected from the return.
+  r = CandidateMerge::AssessMerge(
+      *context, 0, {3},
+      CandidateMerge::BaselineCandidate(
+          0.0, base_size, 0.95, context->merge_strategy.NetworkOverheadCost()));
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_FALSE(r->has_value());
+
+  // Case 4: same as 4 but with order reversed, result should be the same.
+  base_size =
+      *context->patch_size_cache->GetPatchSize({'s', 't', 'u', 'v', 'w', 'x'});
+  r = CandidateMerge::AssessMerge(
+      *context, 3, {0},
+      CandidateMerge::BaselineCandidate(
+          0.0, base_size, 0.01, context->merge_strategy.NetworkOverheadCost()));
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_FALSE(r->has_value());
 }
 
 // More complex test that checks the actual computed cost value.
@@ -109,7 +181,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       + p_f_or_i * (600 + 75);  // add cost of the new merged patch
 
   context->patch_size_cache.reset(size_cache);
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1});
+  auto r = CandidateMerge::AssessMerge(*context, 0, {1}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -157,7 +229,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       + p_a_or_f * (450 + 75);          // add cost of the new merged patch
 
   context->patch_size_cache.reset(size_cache);
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1});
+  auto r = CandidateMerge::AssessMerge(*context, 0, {1}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
