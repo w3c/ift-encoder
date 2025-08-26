@@ -129,7 +129,8 @@ StatusOr<std::vector<CodepointAndFrequency>> TargetCodepoints(
       if (frequencies_required && !cp.frequency.has_value()) {
         return absl::InvalidArgumentError(
             "When using cost based merging codepoint frequency data must be "
-            "supplied.");
+            "supplied. Missing for " +
+            std::to_string(cp.codepoint));
       }
 
       if (font_unicodes.contains(cp.codepoint) &&
