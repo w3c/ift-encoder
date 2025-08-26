@@ -105,7 +105,8 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   auto r = CandidateMerge::AssessMerge(
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
-          0.0, base_size, 0.95, context->merge_strategy.NetworkOverheadCost()));
+          4, 0.0, base_size, 0.95,
+          context->merge_strategy.NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -116,7 +117,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessMerge(
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
-          -500.0, base_size, 0.95,
+          4, -500.0, base_size, 0.95,
           context->merge_strategy.NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
@@ -128,7 +129,8 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessMerge(
       *context, 0, {3},
       CandidateMerge::BaselineCandidate(
-          0.0, base_size, 0.95, context->merge_strategy.NetworkOverheadCost()));
+          4, 0.0, base_size, 0.95,
+          context->merge_strategy.NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -138,7 +140,8 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessMerge(
       *context, 3, {0},
       CandidateMerge::BaselineCandidate(
-          0.0, base_size, 0.01, context->merge_strategy.NetworkOverheadCost()));
+          4, 0.0, base_size, 0.01,
+          context->merge_strategy.NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 }

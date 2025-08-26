@@ -14,6 +14,18 @@ struct Segment {
   const SubsetDefinition& Definition() const { return definition; }
   SubsetDefinition& Definition() { return definition; }
 
+  bool MeetsMinimumGroupSize(uint32_t min_group_size) const {
+    if (!Definition().feature_tags.empty() ||
+        !Definition().design_space.empty()) {
+      // TODO(garretrieger): this computation should also include feature tags
+      // and design space
+      //                     into the min group size calculation.
+      return true;
+    }
+
+    return Definition().codepoints.size() >= min_group_size;
+  }
+
   void SetProbability(double probability) {
     this->probability = std::max(std::min(1.0, probability), 0.0);
   }
