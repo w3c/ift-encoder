@@ -41,11 +41,12 @@ struct CandidateMerge {
   double base_probability = 0.0;
   double network_overhead = 0.0;
 
-  static CandidateMerge BaselineCandidate(double cost_delta, double base_size,
+  static CandidateMerge BaselineCandidate(uint32_t base_segment_index,
+                                          double cost_delta, double base_size,
                                           double base_probability,
                                           double network_overhead) {
-    return CandidateMerge{.base_segment_index = 0,
-                          .segments_to_merge = {},
+    return CandidateMerge{.base_segment_index = base_segment_index,
+                          .segments_to_merge = {base_segment_index},
                           .merged_segment = Segment({}, 0.0),
                           .new_segment_is_inert = true,
                           .new_patch_size = 0,
@@ -113,8 +114,9 @@ struct CandidateMerge {
     double denom = best_case_merged_size -
                    best_case_merged_size * base_probability - total_patch_size;
     if (denom >= 0.0) {
-      // The minimum threshold is only valid when denom < 0, otherwise the greater
-      // than sign flips in the equality. In this case return -1 which implies no threshold.
+      // The minimum threshold is only valid when denom < 0, otherwise the
+      // greater than sign flips in the equality. In this case return -1 which
+      // implies no threshold.
       return -1.0;
     }
 

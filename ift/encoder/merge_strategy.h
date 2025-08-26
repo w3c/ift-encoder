@@ -31,7 +31,8 @@ class MergeStrategy {
   // as far less merge candidates need to be evaluated.
   static MergeStrategy Heuristic(uint32_t patch_size_min_bytes,
                                  uint32_t patch_size_max_bytes = UINT32_MAX) {
-    return MergeStrategy(false, 0, patch_size_min_bytes, patch_size_max_bytes);
+    return MergeStrategy(false, 0, 0, patch_size_min_bytes,
+                         patch_size_max_bytes);
   }
 
   // Merging will be performed such that it attempts to minimize the total
@@ -43,13 +44,16 @@ class MergeStrategy {
   // Network overhead cost is a fixed number of bytes that is added to every
   // patch size. Setting it higher will encourage more aggressive merging, while
   // setting it lower will encourage less aggressive merging.
-  static MergeStrategy CostBased(uint32_t network_overhead_cost = 75) {
-    return MergeStrategy(true, network_overhead_cost, 0, UINT32_MAX);
+  static MergeStrategy CostBased(uint32_t network_overhead_cost = 75,
+                                 uint32_t min_group_size = 4) {
+    return MergeStrategy(true, network_overhead_cost, min_group_size, 0,
+                         UINT32_MAX);
   }
 
   bool IsNone() const { return !use_costs_ && patch_size_min_bytes_ == 0; }
   bool UseCosts() const { return use_costs_; }
   uint32_t NetworkOverheadCost() const { return network_overhead_cost_; }
+  uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
 
@@ -69,14 +73,17 @@ class MergeStrategy {
 
  private:
   MergeStrategy(bool use_costs, uint32_t network_overhead_cost,
-                uint32_t patch_size_min_bytes, uint32_t patch_size_max_bytes)
+                uint32_t min_group_size, uint32_t patch_size_min_bytes,
+                uint32_t patch_size_max_bytes)
       : use_costs_(use_costs),
         network_overhead_cost_(network_overhead_cost),
+        min_group_size_(min_group_size),
         patch_size_min_bytes_(patch_size_min_bytes),
         patch_size_max_bytes_(patch_size_max_bytes) {}
 
   bool use_costs_;
   uint32_t network_overhead_cost_;
+  uint32_t min_group_size_;
   uint32_t patch_size_min_bytes_;
   uint32_t patch_size_max_bytes_;
   // 9 and above are quite slow given the number of compressions that need to be

@@ -228,7 +228,8 @@ Status CollectCompositeCandidateMerges(
         context, base_segment_index, triggering_segments,
         smallest_candidate_merge));
     if (candidate_merge.has_value() &&
-        *candidate_merge < smallest_candidate_merge) {
+        (!smallest_candidate_merge.has_value() ||
+         *candidate_merge < *smallest_candidate_merge)) {
       smallest_candidate_merge = *candidate_merge;
     }
   }
@@ -262,7 +263,7 @@ Status CollectExclusiveCandidateMerges(
         smallest_candidate_merge));
     if (candidate_merge.has_value() &&
         (!smallest_candidate_merge.has_value() ||
-         *candidate_merge < smallest_candidate_merge)) {
+         *candidate_merge < *smallest_candidate_merge)) {
       smallest_candidate_merge = *candidate_merge;
     }
   }
@@ -315,6 +316,23 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
   // would be to gather some frequency data, test this approach as is, and then
   // refine it potentially using some of the proposals noted above.
   std::optional<CandidateMerge> smallest_candidate_merge;
+  const auto& base_segment =
+      context.segmentation_info.Segments()[base_segment_index];
+  bool min_group_size_met = base_segment.MeetsMinimumGroupSize(
+      context.merge_strategy.MinimumGroupSize());
+  if (min_group_size_met) {
+    // If min group size is met, then we will no longer consider merge's that
+    // have a positive cost delta so start with an existing smallest candidate
+    // set to cost delta 0 which will filter out positive cost delta candidates.
+    const GlyphSet& base_glyphs =
+        context.glyph_condition_set.GlyphsWithSegment(base_segment_index);
+    unsigned base_size =
+        TRY(context.patch_size_cache->GetPatchSize(base_glyphs));
+    smallest_candidate_merge = CandidateMerge::BaselineCandidate(
+        base_segment_index, 0.0, base_size, base_segment.Probability(),
+        context.merge_strategy.NetworkOverheadCost());
+  }
+
   TRYV(CollectExclusiveCandidateMerges(context, base_segment_index,
                                        smallest_candidate_merge));
   TRYV(CollectCompositeCandidateMerges(context, base_segment_index,
@@ -323,8 +341,15 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
     return std::nullopt;
   }
 
-  if (smallest_candidate_merge->cost_delta >= 0.0) {
-    // Only do merges that will lower the overall cost.
+  if (smallest_candidate_merge->segments_to_merge ==
+      SegmentSet{base_segment_index}) {
+    // nothing smaller than the baseline was found.
+    return std::nullopt;
+  }
+
+  // Enforce a negative cost delta only if this segments has met the minimum
+  // grouping size.
+  if (min_group_size_met && smallest_candidate_merge->cost_delta >= 0.0) {
     return std::nullopt;
   }
 

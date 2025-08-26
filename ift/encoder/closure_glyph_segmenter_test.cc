@@ -462,6 +462,90 @@ if (s0 AND s2) then p2
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       SimpleSegmentation_CostStrategy_GroupMinimums) {
+  // Base line, nothing is merged
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {{
+                                                  'a',
+                                                  'b',
+                                                  'c',
+                                              },
+                                              0.01},
+                                             {{
+                                                  'f',
+                                                  'g',
+                                                  'h',
+                                              },
+                                              0.01},
+                                             {{'k', 'l', 'm', 'n', 'o'}, 0.01},
+                                         },
+                                         MergeStrategy::CostBased(75, 3));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{
+                                                         'a',
+                                                         'b',
+                                                         'c',
+                                                     },
+                                                     {
+                                                         'f',
+                                                         'g',
+                                                         'h',
+                                                     },
+                                                     {'k', 'l', 'm', 'n', 'o'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69, gid70, gid71 }
+p1: { gid74, gid75, gid76 }
+p2: { gid79, gid80, gid81, gid82, gid83 }
+p3: { gid445, gid447 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s1 AND s2) then p3
+)");
+
+  // With higher group minimums the two smaller segments are merged together
+  segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {{
+                                                  'a',
+                                                  'b',
+                                                  'c',
+                                              },
+                                              0.01},
+                                             {{
+                                                  'f',
+                                                  'g',
+                                                  'h',
+                                              },
+                                              0.01},
+                                             {{'k', 'l', 'm', 'n', 'o'}, 0.01},
+                                         },
+                                         MergeStrategy::CostBased(75, 5));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  expected_segments = {
+      {'a', 'b', 'c', 'f', 'g', 'h'}, {}, {'k', 'l', 'm', 'n', 'o'}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69, gid70, gid71, gid74, gid75, gid76 }
+p1: { gid79, gid80, gid81, gid82, gid83 }
+p2: { gid445, gid447 }
+if (s0) then p0
+if (s2) then p1
+if (s0 AND s2) then p2
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, CustomOverhead_CostStrategy) {
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
