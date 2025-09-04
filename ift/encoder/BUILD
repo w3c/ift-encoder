@@ -10,7 +10,7 @@ cc_library(
         "-DHB_EXPERIMENTAL_API",
     ],
     visibility = [
-        "//ift:__pkg__",
+        "//ift:__subpackages__",
         "//ift/client:__pkg__",
         "//js_client:__pkg__",
         "//util:__pkg__",
