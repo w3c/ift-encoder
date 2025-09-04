@@ -11,6 +11,17 @@ cc_proto_library(
     ]
 )
 
+proto_library(
+    name = "unicode_count_proto",
+    srcs = ["unicode_count.proto"],
+)
+
+cc_proto_library(
+    name = "unicode_count_cc_proto",
+    deps = [":unicode_count_proto"],
+    visibility = ["//visibility:public"],
+)
+
 cc_binary(
     name = "font2ift",
     srcs = [
