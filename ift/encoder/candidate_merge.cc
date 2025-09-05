@@ -120,24 +120,16 @@ static bool WouldMixFeaturesAndCodepoints(
 
 static void MergeSegments(const SegmentationContext& context,
                           const SegmentSet& segments, Segment& base) {
-  // Merged segments are activated disjunctively (s1 or ... or sn)
-  //
-  // We can compute the probability by first determining the probability
-  // that none of the individual segments are matched (!s1 and ... and !sn)
-  // and then inverting that to get the probability that at least one of the
-  // individual segments was matched.
-  //
-  // This gives:
-  // P(merged) = 1 - (1 - P(s1)) * ... * (1 - P(sn))
-  // TODO XXXXX utilize probability calculator
   const auto& segmentation_info = context.segmentation_info;
-  double probability_not_matched = 1.0 - base.Probability();
   for (segment_index_t next : segments) {
     const auto& s = segmentation_info.Segments()[next];
-    probability_not_matched *= 1.0 - s.Probability();
     base.Definition().Union(s.Definition());
   }
-  base.SetProbability(1.0 - probability_not_matched);
+
+  const auto* calculator = context.merge_strategy.ProbabilityCalculator();
+  const auto& bound = calculator->ComputeProbability(base.Definition());
+  // TODO(garretrieger): The full probability bound should be utilized here.
+  base.SetProbability(bound.min);
 }
 
 static Status AddConditionAndPatchSize(

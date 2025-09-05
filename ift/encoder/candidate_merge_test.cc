@@ -11,6 +11,7 @@
 #include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/mock_probability_calculator.h"
+#include "ift/freq/unicode_frequencies.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -18,6 +19,7 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
 using ift::freq::MockProbabilityCalculator;
+using ift::freq::UnicodeFrequencies;
 
 namespace ift::encoder {
 
@@ -50,8 +52,27 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
       {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
       {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
   };
+  std::vector<Segment> segments_with_merges = {
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+
+      // 0 + 1
+      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}, 0.98},
+
+      // 0 + 1 + 2
+      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+        'o', 'p', 'q', 'r'},
+       0.99},
+
+      // 0 + 1 + 3
+      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 's', 't',
+        'u', 'v', 'w', 'x'},
+       0.98},
+  };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
+      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
@@ -96,8 +117,23 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
       {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
   };
+
+  std::vector<Segment> segments_with_merges = {
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+
+      // 0 + 1
+      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'},
+       1.0 - (1.0 - 0.95) * (1.0 - 0.95)},
+
+      // 0 + 3
+      {{'a', 'b', 'c', 'd', 'e', 'f', 's', 't', 'u', 'v', 'w', 'x'},
+       1.0 - (1.0 - 0.95) * (1.0 - 0.01)},
+  };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
+      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
@@ -157,19 +193,20 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
 // More complex test that checks the actual computed cost value.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
+
   std::vector<Segment> segments = {
       {{'f'}, 0.75},
       {{'i'}, 0.95},
   };
-  auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
   context->merge_strategy =
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -211,15 +248,15 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       {{'f'}, 0.75},
       {{'i'}, 0.95},
   };
-  auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
   context->merge_strategy =
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
