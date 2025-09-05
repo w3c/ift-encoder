@@ -1,5 +1,6 @@
 #include "ift/encoder/candidate_merge.h"
 
+#include <memory>
 #include <optional>
 
 #include "common/font_data.h"
@@ -9,12 +10,14 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/mock_probability_calculator.h"
 
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
+using ift::freq::MockProbabilityCalculator;
 
 namespace ift::encoder {
 
@@ -47,12 +50,15 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
       {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
       {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
   };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy = MergeStrategy::CostBased();
+  context->merge_strategy =
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
@@ -90,12 +96,15 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
       {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
   };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy = MergeStrategy::CostBased();
+  context->merge_strategy =
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   unsigned base_size =
       *context->patch_size_cache->GetPatchSize({'a', 'b', 'c', 'd', 'e', 'f'});
@@ -152,12 +161,15 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       {{'f'}, 0.75},
       {{'i'}, 0.95},
   };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy = MergeStrategy::CostBased();
+  context->merge_strategy =
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -199,12 +211,15 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       {{'f'}, 0.75},
       {{'i'}, 0.95},
   };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
 
   ClosureGlyphSegmenter segmenter;
   auto context =
       segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy = MergeStrategy::CostBased();
+  context->merge_strategy =
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 

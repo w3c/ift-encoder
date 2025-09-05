@@ -8,13 +8,13 @@ namespace ift::freq {
 
 class UnigramProbabilityCalculator : public ProbabilityCalculator {
  public:
-  explicit UnigramProbabilityCalculator(const UnicodeFrequencies& frequencies);
+  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies);
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
 
  private:
-  const UnicodeFrequencies& frequencies_;
+  UnicodeFrequencies frequencies_;
 };
 
 }  // namespace ift::freq

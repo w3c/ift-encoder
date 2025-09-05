@@ -107,6 +107,9 @@ class ActivationCondition {
   //            independent which means this is only an estimate as this is
   //            likely not true.
   absl::StatusOr<double> Probability(absl::Span<const Segment> segments) const {
+    // TODO(garretrieger): XXXXX this is assuming independence between the
+    //   segmentations being combined. Rework to utilize the probability
+    //   calculator.
     bool is_conjunctive = conditions_.size() > 1;
     double total_probability = 1.0;
     for (const auto& segment_set : conditions_) {

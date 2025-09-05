@@ -3,6 +3,13 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
+
+#include "common/try.h"
+#include "ift/freq/noop_probability_calculator.h"
+#include "ift/freq/probability_calculator.h"
+#include "ift/freq/unicode_frequencies.h"
+#include "ift/freq/unigram_probability_calculator.h"
 
 namespace ift::encoder {
 
@@ -31,8 +38,11 @@ class MergeStrategy {
   // as far less merge candidates need to be evaluated.
   static MergeStrategy Heuristic(uint32_t patch_size_min_bytes,
                                  uint32_t patch_size_max_bytes = UINT32_MAX) {
-    return MergeStrategy(false, 0, 0, patch_size_min_bytes,
-                         patch_size_max_bytes);
+    MergeStrategy strategy(false, 0, 0, patch_size_min_bytes,
+                           patch_size_max_bytes);
+    strategy.probability_calculator_ =
+        std::make_unique<ift::freq::NoopProbabilityCalculator>();
+    return strategy;
   }
 
   // Merging will be performed such that it attempts to minimize the total
@@ -44,10 +54,30 @@ class MergeStrategy {
   // Network overhead cost is a fixed number of bytes that is added to every
   // patch size. Setting it higher will encourage more aggressive merging, while
   // setting it lower will encourage less aggressive merging.
-  static MergeStrategy CostBased(uint32_t network_overhead_cost = 75,
-                                 uint32_t min_group_size = 4) {
-    return MergeStrategy(true, network_overhead_cost, min_group_size, 0,
-                         UINT32_MAX);
+  static absl::StatusOr<MergeStrategy> CostBased(
+      freq::UnicodeFrequencies frequency_data,
+      uint32_t network_overhead_cost = 75, uint32_t min_group_size = 4) {
+    if (!frequency_data.HasData()) {
+      return absl::InvalidArgumentError(
+          "If cost based merging is enabled unicode frequency data must be "
+          "provided.");
+    }
+
+    MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
+                           UINT32_MAX);
+    strategy.probability_calculator_ =
+        std::make_unique<ift::freq::UnigramProbabilityCalculator>(
+            std::move(frequency_data));
+    return strategy;
+  }
+
+  static MergeStrategy CostBased(
+      std::unique_ptr<freq::ProbabilityCalculator> probability_calculator,
+      uint32_t network_overhead_cost, uint32_t min_group_size) {
+    MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
+                           UINT32_MAX);
+    strategy.probability_calculator_ = std::move(probability_calculator);
+    return strategy;
   }
 
   bool IsNone() const { return !use_costs_ && patch_size_min_bytes_ == 0; }
@@ -56,6 +86,9 @@ class MergeStrategy {
   uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
+  const freq::ProbabilityCalculator* ProbabilityCalculator() const {
+    return probability_calculator_.get();
+  }
 
   // Configures the brotli quality used when calculating patch sizes.
   // Defaults to 8.
@@ -79,7 +112,8 @@ class MergeStrategy {
         network_overhead_cost_(network_overhead_cost),
         min_group_size_(min_group_size),
         patch_size_min_bytes_(patch_size_min_bytes),
-        patch_size_max_bytes_(patch_size_max_bytes) {}
+        patch_size_max_bytes_(patch_size_max_bytes),
+        probability_calculator_(nullptr) {}
 
   bool use_costs_;
   uint32_t network_overhead_cost_;
@@ -89,6 +123,7 @@ class MergeStrategy {
   // 9 and above are quite slow given the number of compressions that need to be
   // performed.
   uint32_t brotli_quality_ = 8;
+  std::unique_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };
 
 }  // namespace ift::encoder

@@ -44,7 +44,7 @@ class SegmentationContext {
             new PatchSizeCacheImpl(face, strategy.BrotliQuality())),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        merge_strategy(strategy),
+        merge_strategy(std::move(strategy)),
         segmentation_info(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(segments) {}

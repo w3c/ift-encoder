@@ -24,6 +24,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/unicode_frequencies.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 #include "ift/url_template.h"
@@ -108,6 +109,7 @@ using ift::encoder::GlyphSegmentation;
 using ift::encoder::MergeStrategy;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
+using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 using util::CodepointAndFrequency;
@@ -345,15 +347,12 @@ StatusOr<int> SegmentationSize(hb_face_t* font,
   return EncodingSize(&segmentation, encoding);
 }
 
-StatusOr<std::vector<Segment>> GroupCodepoints(
+StatusOr<std::vector<SubsetDefinition>> GroupCodepoints(
     std::vector<CodepointAndFrequency> codepoints,
     uint32_t number_of_segments) {
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
-  uint64_t max_frequency = 0;
-  for (const auto& cp : codepoints) {
-    max_frequency = std::max(max_frequency, *cp.frequency);
-  }
+
   bool frequencies_required = absl::GetFlag(FLAGS_use_cost_based_merging);
   if (per_group > 1 && frequencies_required) {
     return absl::InvalidArgumentError(
@@ -361,7 +360,7 @@ StatusOr<std::vector<Segment>> GroupCodepoints(
         "segment.");
   }
 
-  std::vector<Segment> out;
+  std::vector<SubsetDefinition> out;
   auto end = codepoints.begin();
   for (uint32_t i = 0; i < number_of_segments; i++) {
     auto start = end;
@@ -371,22 +370,26 @@ StatusOr<std::vector<Segment>> GroupCodepoints(
       remainder--;
     }
 
-    double probability = 1.0;
-    if (frequencies_required) {
-      // TODO(garretrieger): support segments with more than one codepoint in
-      //  probability mode by computing the merged probability.
-      probability = ((double)*start->frequency) / ((double)max_frequency);
-    }
-
-    Segment group(SubsetDefinition(), probability);
+    SubsetDefinition def;
     for (; start != end; start++) {
-      group.Definition().codepoints.insert(start->codepoint);
+      def.codepoints.insert(start->codepoint);
     }
 
-    out.push_back(group);
+    out.push_back(def);
   }
 
   return out;
+}
+
+UnicodeFrequencies ToFrequencies(
+    const std::vector<CodepointAndFrequency>& cps) {
+  UnicodeFrequencies frequencies;
+  for (const auto& cp : cps) {
+    if (cp.frequency.has_value()) {
+      frequencies.Add(cp.codepoint, cp.codepoint, *cp.frequency);
+    }
+  }
+  return frequencies;
 }
 
 int main(int argc, char** argv) {
@@ -438,9 +441,8 @@ int main(int argc, char** argv) {
   for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
     // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
     // or take them as an input.
-    Segment s(SubsetDefinition(), 0.001);
-    hb_tag_t tag_value = FontHelper::ToTag(tag);
-    s.Definition().feature_tags = {tag_value};
+    SubsetDefinition s;
+    s.feature_tags = {FontHelper::ToTag(tag)};
     groups->push_back(s);
   }
 
@@ -448,13 +450,20 @@ int main(int argc, char** argv) {
       MergeStrategy::Heuristic(absl::GetFlag(FLAGS_min_patch_size_bytes),
                                absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (absl::GetFlag(FLAGS_use_cost_based_merging)) {
-    merge_strategy =
-        MergeStrategy::CostBased(absl::GetFlag(FLAGS_network_overhead_cost));
+    UnicodeFrequencies frequencies = ToFrequencies(*codepoints);
+    auto r = MergeStrategy::CostBased(
+        std::move(frequencies), absl::GetFlag(FLAGS_network_overhead_cost));
+    if (!r.ok()) {
+      std::cerr << "Failed to initialize merging strategy: " << r.status()
+                << std::endl;
+      return -1;
+    }
+    merge_strategy = std::move(*r);
   }
 
   ClosureGlyphSegmenter segmenter;
-  auto result = segmenter.CodepointToGlyphSegments(font->get(), init_segment,
-                                                   *groups, merge_strategy);
+  auto result = segmenter.CodepointToGlyphSegments(
+      font->get(), init_segment, *groups, std::move(merge_strategy));
   if (!result.ok()) {
     std::cerr << result.status() << std::endl;
     return -1;

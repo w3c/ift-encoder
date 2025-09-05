@@ -64,6 +64,7 @@ cc_binary(
     deps = [
         "//ift",
         "//ift/encoder",
+        "//ift/freq",
         "//common",
         ":segmentation_plan_cc_proto",
         ":load_codepoints",
