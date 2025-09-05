@@ -218,15 +218,17 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
   // Now we remove all of the cost associated with segments that are either
   // removed or modified.
   const auto& segments = context.segmentation_info.Segments();
+  const auto* calculator = context.merge_strategy.ProbabilityCalculator();
   for (const auto& [c, size] : removed_conditions) {
-    double p = TRY(c.Probability(segments));
+    double p = TRY(c.Probability(segments, *calculator));
     double d = p * (size + per_request_overhead);
     cost_delta -= d;
     VLOG(1) << "    - (" << p << " * " << (size + per_request_overhead)
             << ") -> " << d << " [removed patch " << c.ToString() << "]";
   }
   for (const auto& [c, size] : modified_conditions) {
-    double d = TRY(c.Probability(segments)) * (size + per_request_overhead);
+    double d = TRY(c.Probability(segments, *calculator)) *
+               (size + per_request_overhead);
     VLOG(1) << "    - " << d << " [modified patch " << c.ToString() << "]";
     cost_delta -= d;
   }

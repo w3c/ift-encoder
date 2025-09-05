@@ -16,6 +16,7 @@ cc_library(
         "//util:__pkg__",
     ],
     deps = [
+        ":activation_condition",
         "//ift",
         "//ift/proto",
         "//ift/feature_registry:feature_registry",
@@ -56,9 +57,24 @@ cc_library(
     ],
     deps = [
         ":common",
+        ":activation_condition",
         "//ift/feature_registry",
         "//ift",
         "//ift/freq",
+    ],
+)
+
+cc_library(
+    name = "activation_condition",
+    srcs = [
+        "activation_condition.h",
+        "activation_condition.cc",
+        "glyph_segmentation.cc",
+        "glyph_segmentation.h",
+    ],
+    deps = [
+        "//ift/freq",
+        ":common",
     ],
 )
 
@@ -67,10 +83,6 @@ cc_library(
     srcs = [
         "subset_definition.cc",
         "subset_definition.h",
-        "glyph_segmentation.cc",
-        "glyph_segmentation.h",
-        "activation_condition.h",
-        "activation_condition.cc",
         "types.h",
         "init_subset_defaults.h",
         "segment.h",
@@ -134,6 +146,7 @@ cc_test(
     ],
     deps = [
         ":encoder",
+        ":activation_condition",
         "//common",
         "@googletest//:gtest_main",
     ],
@@ -182,6 +195,8 @@ cc_test(
     ],
     deps = [
         ":encoder",
+        ":activation_condition",
+        "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],
 )

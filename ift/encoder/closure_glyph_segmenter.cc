@@ -472,6 +472,11 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     merge_strategy = std::move(*strategy);
   }
 
+  // TODO(garretrieger): XXXXXX if cost based merging is configured then check
+  // that
+  //  input subset defs are disjoint. could add a "RequiresDisjoint()" function
+  //  to merge strategy.
+
   SegmentationContext context = TRY(InitializeSegmentationContext(
       face, initial_segment,
       TRY(ToSegments(subset_definitions, merge_strategy))));

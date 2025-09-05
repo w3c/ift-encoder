@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "ift/encoder/segment.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 
 namespace ift::freq {
@@ -21,6 +22,15 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
       }
     }
     return {0.0, 0.0};
+  }
+
+  ProbabilityBound ComputeConjunctiveProbability(
+      const std::vector<const ift::encoder::Segment*>& segments) const override {
+    double probability = 1.0;
+    for (const auto* segment : segments) {
+      probability *= segment->Probability();
+    }
+    return {probability, probability};
   }
 
  private:
