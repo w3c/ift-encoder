@@ -5,7 +5,6 @@
 #include "absl/container/btree_set.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
-#include "ift/encoder/glyph_segmentation.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 

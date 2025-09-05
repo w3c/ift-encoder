@@ -439,8 +439,6 @@ int main(int argc, char** argv) {
   }
 
   for (const auto& tag : absl::GetFlag(FLAGS_optional_feature_tags)) {
-    // TODO(garretrieger): XXXXXX need to either calculate typical probabilities
-    // or take them as an input.
     SubsetDefinition s;
     s.feature_tags = {FontHelper::ToTag(tag)};
     groups->push_back(s);

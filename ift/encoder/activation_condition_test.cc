@@ -1,14 +1,18 @@
 #include "ift/encoder/activation_condition.h"
 
+#include <memory>
+
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/mock_probability_calculator.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 using common::CodepointSet;
 using common::IntSet;
 using common::SegmentSet;
+using ift::freq::MockProbabilityCalculator;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
@@ -247,42 +251,52 @@ TEST(ActivationConditionTest,
 
 TEST(ActivationConditionTest, ActivationConditionProbabilities) {
   std::vector<Segment> segments = {
-      Segment({}, 0.75),
-      Segment({}, 0.5),
-      Segment({}, 0.25),
+      Segment({'a'}, 0.75),
+      Segment({'b'}, 0.5),
+      Segment({'c'}, 0.25),
   };
+  std::vector<Segment> merged_segments = {
+      Segment({'a'}, 0.75),
+      Segment({'b'}, 0.5),
+      Segment({'c'}, 0.25),
 
-  ASSERT_EQ(*ActivationCondition::exclusive_segment(0, 1).Probability(segments),
+      // 0 OR 1
+      Segment({'a', 'b'}, 0.77),
+
+      // 1 OR 2
+      Segment({'b', 'c'}, 0.66),
+  };
+  MockProbabilityCalculator probability_calculator(merged_segments);
+
+  ASSERT_EQ(*ActivationCondition::exclusive_segment(0, 1).Probability(
+                segments, probability_calculator),
             0.75);
-  ASSERT_EQ(*ActivationCondition::exclusive_segment(2, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::exclusive_segment(2, 1).Probability(
+                segments, probability_calculator),
             0.25);
 
-  ASSERT_EQ(*ActivationCondition::and_segments({0, 1}, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::and_segments({0, 1}, 1).Probability(
+                segments, probability_calculator),
             0.75 * 0.5);
-  ASSERT_EQ(*ActivationCondition::and_segments({0, 2}, 1).Probability(segments),
+  ASSERT_EQ(*ActivationCondition::and_segments({0, 2}, 1).Probability(
+                segments, probability_calculator),
             0.75 * 0.25);
-  ASSERT_EQ(
-      *ActivationCondition::and_segments({0, 1, 2}, 1).Probability(segments),
-      0.75 * 0.5 * 0.25);
+  ASSERT_EQ(*ActivationCondition::and_segments({0, 1, 2}, 1)
+                 .Probability(segments, probability_calculator),
+            0.75 * 0.5 * 0.25);
 
-  double one_or_two = 0.5 + 0.25 - 0.5 * 0.25;
-  ASSERT_EQ(*ActivationCondition::or_segments({1, 2}, 1).Probability(segments),
-            one_or_two);
+  ASSERT_EQ(*ActivationCondition::or_segments({1, 2}, 1).Probability(
+                segments, probability_calculator),
+            0.66);
 
-  double zero_or_one = 0.75 + 0.5 - 0.75 * 0.5;
-  ASSERT_EQ(*ActivationCondition::or_segments({0, 1}, 1).Probability(segments),
-            zero_or_one);
-
-  double zero_or_one_or_two = 0.75 + 0.5 + 0.25 - 0.75 * 0.5 - 0.75 * 0.25 -
-                              0.5 * 0.25 + 0.75 * 0.5 * 0.25;
-  ASSERT_EQ(
-      *ActivationCondition::or_segments({0, 1, 2}, 1).Probability(segments),
-      zero_or_one_or_two);
+  ASSERT_EQ(*ActivationCondition::or_segments({0, 1}, 1).Probability(
+                segments, probability_calculator),
+            0.77);
 
   // Composite conditions aren't currently supported.
   ASSERT_TRUE(absl::IsUnimplemented(
       ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
-          .Probability(segments)
+          .Probability(segments, probability_calculator)
           .status()));
 }
 
