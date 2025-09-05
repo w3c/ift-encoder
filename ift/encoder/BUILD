@@ -47,6 +47,7 @@ cc_library(
         "candidate_merge.cc",
         "candidate_merge.h",
         "patch_size_cache.h",
+        "merge_strategy.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -57,6 +58,7 @@ cc_library(
         ":common",
         "//ift/feature_registry",
         "//ift",
+        "//ift/freq",
     ],
 )
 
@@ -72,12 +74,12 @@ cc_library(
         "types.h",
         "init_subset_defaults.h",
         "segment.h",
-        "merge_strategy.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
     ],
     visibility = [
+        "//visibility:public",
     ],
     deps = [
         "@abseil-cpp//absl/container:btree",
@@ -167,6 +169,7 @@ cc_test(
     deps = [
         ":encoder",
         "//common",
+        "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],
 )

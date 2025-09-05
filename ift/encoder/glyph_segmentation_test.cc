@@ -7,8 +7,8 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/unicode_frequencies.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
@@ -19,6 +19,7 @@ using common::IntSet;
 using common::make_hb_face;
 using common::SegmentSet;
 using google::protobuf::TextFormat;
+using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
@@ -50,8 +51,8 @@ class GlyphSegmentationTest : public ::testing::Test {
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
   ClosureGlyphSegmenter segmenter;
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{{'b'}, 0.5}, {{'c'}, 0.5}});
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();
@@ -126,9 +127,9 @@ TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
 
   auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), init,
                                                          {
-                                                             {{'b'}, 0.5},
-                                                             {{'c'}, 0.5},
-                                                             {smcp, 0.5},
+                                                             {'b'},
+                                                             {'c'},
+                                                             smcp,
                                                          });
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -254,8 +255,9 @@ initial_features {
 
 TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
   ClosureGlyphSegmenter segmenter;
+  UnicodeFrequencies freq;
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{{'f', 0xc1}, 0.5}, {{'i', 0x106}, 0.5}});
+      roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   auto config = segmentation->ToSegmentationPlanProto();
@@ -365,10 +367,10 @@ TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                          {
-                                             {{'a', 'b', 'd'}, 0.5},
-                                             {{'e', 'f'}, 0.5},
-                                             {{'j', 'k'}, 0.5},
-                                             {{'m', 'n', 'o', 'p'}, 0.5},
+                                             {'a', 'b', 'd'},
+                                             {'e', 'f'},
+                                             {'j', 'k'},
+                                             {'m', 'n', 'o', 'p'},
                                          },
                                          MergeStrategy::Heuristic(370));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();

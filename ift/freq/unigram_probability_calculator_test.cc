@@ -12,7 +12,7 @@ TEST(UnigramProbabilityCalculatorTest, ComputeProbability) {
   frequencies.Add(2, 2, 20);
   frequencies.Add(3, 3, 5);
 
-  UnigramProbabilityCalculator calculator(frequencies);
+  UnigramProbabilityCalculator calculator(std::move(frequencies));
 
   ift::encoder::SubsetDefinition def1;
   def1.codepoints = {1, 2};

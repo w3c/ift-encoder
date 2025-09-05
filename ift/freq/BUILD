@@ -5,13 +5,15 @@ cc_library(
         "unigram_probability_calculator.cc",
     ],
     hdrs = [
+        "noop_probability_calculator.h",
         "unicode_frequencies.h",
         "probability_calculator.h",
         "unigram_probability_calculator.h",
     ],
     deps = [
-        "//ift/encoder",
+        "//ift/encoder:common",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@harfbuzz",
     ],
     visibility = ["//visibility:public"],
 )
@@ -30,7 +32,17 @@ cc_test(
     srcs = ["unigram_probability_calculator_test.cc"],
     deps = [
         ":freq",
-        "//ift/encoder",
+        "//ift/encoder:common",
         "@googletest//:gtest_main",
     ],
+)
+
+cc_library(
+    name = "mock_probability_calculator",
+    hdrs = ["mock_probability_calculator.h"],
+    deps = [
+        ":freq",
+        "//ift/encoder:common",
+    ],
+    visibility = ["//visibility:public"],
 )

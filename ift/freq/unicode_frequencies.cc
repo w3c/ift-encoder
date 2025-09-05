@@ -5,6 +5,14 @@
 
 namespace ift::freq {
 
+UnicodeFrequencies::UnicodeFrequencies(
+    std::initializer_list<std::pair<std::pair<uint32_t, uint32_t>, uint64_t>>
+        frequencies) {
+  for (const auto& pair : frequencies) {
+    Add(pair.first.first, pair.first.second, pair.second);
+  }
+}
+
 void UnicodeFrequencies::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
   if (cp1 > cp2) {
     std::swap(cp1, cp2);

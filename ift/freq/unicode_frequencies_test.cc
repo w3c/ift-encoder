@@ -11,10 +11,11 @@ TEST(UnicodeFrequenciesTest, ProbabilityFor_NoFrequencies) {
 }
 
 TEST(UnicodeFrequenciesTest, ProbabilityFor) {
-  UnicodeFrequencies freq;
-  freq.Add(1, 2, 10);
-  freq.Add(3, 2, 20);
-  freq.Add(1, 1, 5);
+  UnicodeFrequencies freq{
+      {{1, 2}, 10},
+      {{3, 2}, 20},
+      {{1, 1}, 5},
+  };
 
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 2), 10.0 / 20.0);
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2, 1), 10.0 / 20.0);
@@ -25,9 +26,10 @@ TEST(UnicodeFrequenciesTest, ProbabilityFor) {
 }
 
 TEST(UnicodeFrequenciesTest, ProbabilityFor_MissingFrequency) {
-  UnicodeFrequencies freq;
-  freq.Add(1, 2, 10);
-  freq.Add(3, 2, 20);
+  UnicodeFrequencies freq{
+      {{1, 2}, 10},
+      {{2, 3}, 20},
+  };
 
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1), 1.0 / 20.0);
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 1), 1.0 / 20.0);

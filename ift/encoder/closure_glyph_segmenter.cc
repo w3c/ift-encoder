@@ -451,15 +451,31 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   return absl::OkStatus();
 }
 
+static StatusOr<std::vector<Segment>> ToSegments(
+    const std::vector<SubsetDefinition>& subset_definitions,
+    const MergeStrategy& merge_strategy) {
+  auto calculator = merge_strategy.ProbabilityCalculator();
+  std::vector<Segment> segments;
+  for (const auto& def : subset_definitions) {
+    auto probability = calculator->ComputeProbability(def);
+    segments.emplace_back(def, probability.min);
+  }
+  return segments;
+}
+
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> codepoint_segments,
-    std::optional<MergeStrategy> strategy_) const {
-  SegmentationContext context = TRY(
-      InitializeSegmentationContext(face, initial_segment, codepoint_segments));
+    const std::vector<SubsetDefinition>& subset_definitions,
+    std::optional<MergeStrategy> strategy) const {
+  MergeStrategy merge_strategy = MergeStrategy::None();
+  if (strategy.has_value()) {
+    merge_strategy = std::move(*strategy);
+  }
 
-  // Assign merge strategy which is not considered during init.
-  context.merge_strategy = strategy_.value_or(MergeStrategy::None());
+  SegmentationContext context = TRY(InitializeSegmentationContext(
+      face, initial_segment,
+      TRY(ToSegments(subset_definitions, merge_strategy))));
+  context.merge_strategy = std::move(merge_strategy);
   if (context.merge_strategy.IsNone()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
@@ -498,7 +514,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 StatusOr<SegmentationContext>
 ClosureGlyphSegmenter::InitializeSegmentationContext(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> codepoint_segments) const {
+    std::vector<Segment> segments) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
@@ -509,7 +525,7 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   AddInitSubsetDefaults(initial_segment);
 
   // No merging is done during init.
-  SegmentationContext context(face, initial_segment, codepoint_segments,
+  SegmentationContext context(face, initial_segment, segments,
                               MergeStrategy::None());
 
   // ### Generate the initial conditions and groupings by processing all

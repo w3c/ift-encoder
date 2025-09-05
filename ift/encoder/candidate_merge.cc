@@ -118,9 +118,8 @@ static bool WouldMixFeaturesAndCodepoints(
   return false;
 }
 
-static void MergeSegments(
-    const RequestedSegmentationInformation& segmentation_info,
-    const SegmentSet& segments, Segment& base) {
+static void MergeSegments(const SegmentationContext& context,
+                          const SegmentSet& segments, Segment& base) {
   // Merged segments are activated disjunctively (s1 or ... or sn)
   //
   // We can compute the probability by first determining the probability
@@ -130,6 +129,8 @@ static void MergeSegments(
   //
   // This gives:
   // P(merged) = 1 - (1 - P(s1)) * ... * (1 - P(sn))
+  // TODO XXXXX utilize probability calculator
+  const auto& segmentation_info = context.segmentation_info;
   double probability_not_matched = 1.0 - base.Probability();
   for (segment_index_t next : segments) {
     const auto& s = segmentation_info.Segments()[next];
@@ -305,7 +306,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
   }
 
   Segment merged_segment = segments[base_segment_index];
-  MergeSegments(context.segmentation_info, segments_to_merge, merged_segment);
+  MergeSegments(context, segments_to_merge, merged_segment);
 
   GlyphSet gid_conditions_to_update;
   for (segment_index_t segment_index : segments_to_merge) {
