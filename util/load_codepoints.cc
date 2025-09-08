@@ -9,6 +9,10 @@
 #include "absl/strings/strip.h"
 #include "common/font_data.h"
 #include "hb.h"
+#include "ift/freq/unicode_frequencies.h"
+#include "riegeli/bytes/fd_reader.h"
+#include "riegeli/records/record_reader.h"
+#include "util/unicode_count.pb.h"
 
 using absl::StatusOr;
 using absl::StrCat;
@@ -16,6 +20,7 @@ using absl::string_view;
 using common::FontData;
 using common::hb_blob_unique_ptr;
 using common::make_hb_blob;
+using ift::freq::UnicodeFrequencies;
 
 namespace util {
 
@@ -115,6 +120,31 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
 
   in.close();
   return out;
+}
+
+StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
+  UnicodeFrequencies frequencies;
+  riegeli::RecordReader reader{riegeli::FdReader(path)};
+  if (!reader.ok()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Failed to open file: ", path));
+  }
+  CodepointCount proto;
+  while (reader.ReadRecord(proto)) {
+    if (proto.codepoints_size() == 1) {
+      frequencies.Add(proto.codepoints(0), proto.codepoints(0), proto.count());
+    } else if (proto.codepoints_size() == 2) {
+      frequencies.Add(proto.codepoints(0), proto.codepoints(1), proto.count());
+    } else {
+      return absl::InvalidArgumentError(
+          "Data file has invalid format, does not have exactly 1 or 2 "
+          "codepoints per message.");
+    }
+  }
+  if (!reader.Close()) {
+    return absl::InternalError(reader.status().message());
+  }
+  return frequencies;
 }
 
 }  // namespace util

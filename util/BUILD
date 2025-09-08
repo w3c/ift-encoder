@@ -104,9 +104,13 @@ cc_library(
     ],
     deps = [
         "//common",
+        "//ift/freq",
+        ":unicode_count_cc_proto",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
+        "@riegeli//riegeli/bytes:fd_reader",
+        "@riegeli//riegeli/records:record_reader",
     ],
 )
 
@@ -138,6 +142,8 @@ cc_test(
         "testdata/codepoints_invalid_2.txt",
         "testdata/codepoints_with_freq.txt",
          "testdata/codepoints_with_freq_invalid.txt",
+         "testdata/test_freq_data.riegeli",
+         "testdata/invalid_test_freq_data.riegeli",
     ],
     deps = [
         ":load_codepoints",
@@ -158,5 +164,20 @@ cc_binary(
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_binary(
+    name = "generate_riegeli_test_data",
+    srcs = [
+        "generate_riegeli_test_data.cc",
+    ],
+    deps = [
+        ":unicode_count_cc_proto",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/status",
+        "@riegeli//riegeli/bytes:fd_writer",
+        "@riegeli//riegeli/records:record_writer",
     ],
 )
