@@ -239,7 +239,7 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
     // For modified conditions we assume the associated patch size does not
     // change, only the probability associated with the condition changes.
     double d = TRY(c.MergedProbability(segments, merged_segments,
-                                       merged_segment.Probability())) *
+                                       merged_segment, *calculator)) *
                (size + per_request_overhead);
     VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
     cost_delta += d;

@@ -1,7 +1,5 @@
 #include "ift/encoder/activation_condition.h"
 
-#include <memory>
-
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/subset_definition.h"
@@ -302,45 +300,74 @@ TEST(ActivationConditionTest, ActivationConditionProbabilities) {
 
 TEST(ActivationConditionTest, MergedProbability) {
   std::vector<Segment> segments = {
-      Segment({}, 0.75),
-      Segment({}, 0.5),
-      Segment({}, 0.25),
+      Segment({'a'}, 0.75),
+      Segment({'b'}, 0.50),
+      Segment({'c'}, 0.25),
   };
+  std::vector<Segment> merged_segments = {
+      Segment({'a'}, 0.75),
+      Segment({'b'}, 0.50),
+      Segment({'c'}, 0.25),
+
+      // 0 + 1
+      Segment({'a', 'b'}, 0.90),
+
+      // 0 + 2
+      Segment({'a', 'c'}, 0.80),
+
+      // 0 + 1 + 2
+      Segment({'a', 'b', 'c'}, 0.95),
+
+  };
+  MockProbabilityCalculator probability_calculator(merged_segments);
+
+  Segment merged_segment({'a', 'b'}, 0.85);
 
   // Ignores segments that are not present in the condition.
   EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(
-                  segments, {5}, 0.12),
+                  segments, {5}, merged_segment, probability_calculator),
               0.75, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::or_segments({0, 2}, 1).MergedProbability(
+                  segments, {5}, merged_segment, probability_calculator),
+              0.80, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::and_segments({0, 2}, 1).MergedProbability(
+                  segments, {5}, merged_segment, probability_calculator),
+              0.75 * 0.25, 1e-9);
 
-  // Simple one to one replacement
-  EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(
-                  segments, {0}, 0.12),
-              0.12, 1e-9);
+  // Conjunctive with merge intersection
+  // {0} get's replaced with {0 U 1}
 
-  // Simple two to one replacement
-  EXPECT_NEAR(*ActivationCondition::and_segments({0, 1}, 1).MergedProbability(
-                  segments, {0, 1}, 0.12),
-              0.12, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::and_segments({0, 2}, 1).MergedProbability(
+                  segments, {0, 1}, merged_segment, probability_calculator),
+              0.85 * 0.25, 1e-9);
+
+  // Disjunctive with merge intersection
+  // {0} get's replaced with {0 U 1}
+  EXPECT_NEAR(*ActivationCondition::or_segments({0}, 1).MergedProbability(
+                  segments, {0, 1}, merged_segment, probability_calculator),
+              0.85, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::or_segments({1}, 1).MergedProbability(
+                  segments, {0, 1}, merged_segment, probability_calculator),
+              0.85, 1e-9);
   EXPECT_NEAR(*ActivationCondition::or_segments({0, 1}, 1).MergedProbability(
-                  segments, {0, 1}, 0.12),
-              0.12, 1e-9);
+                  segments, {0, 1}, merged_segment, probability_calculator),
+              0.85, 1e-9);
 
-  // Conjunctive with partial replacement
+  // Disjunctive with partial merge intersection
+  EXPECT_NEAR(*ActivationCondition::or_segments({0, 2}, 1).MergedProbability(
+                  segments, {0, 1}, merged_segment, probability_calculator),
+              0.95, 1e-9);
+
+  // Conjunctive with partial merge intersection
   EXPECT_NEAR(*ActivationCondition::and_segments({0, 1, 2}, 1)
-                   .MergedProbability(segments, {1, 2}, 0.4),
-              // P() = P(0) * P(merged) = 0.75 * 0.4 = 0.3
-              0.3, 1e-9);
-
-  // Disjunctive with partial replacement
-  EXPECT_NEAR(*ActivationCondition::or_segments({0, 1, 2}, 1)
-                   .MergedProbability(segments, {1, 2}, 0.4),
-              // P() = P(0) + P(merged) - P(0) * P(merged)
-              // = 0.75 + 0.4 - 0.75 * 0.4
-              /* = */ 0.85, 1e-9);
+                   .MergedProbability(segments, {1, 2}, merged_segment,
+                                      probability_calculator),
+              0.75 * 0.85 * 0.85, 1e-9);
 
   EXPECT_TRUE(absl::IsUnimplemented(
       ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
-          .MergedProbability(segments, {1, 2}, 0.4)
+          .MergedProbability(segments, {1, 2}, merged_segment,
+                             probability_calculator)
           .status()));
 }
 
