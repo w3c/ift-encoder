@@ -59,6 +59,10 @@ ABSL_FLAG(
     std::string, codepoints_file, "",
     "Path to a file which defines the desired codepoint based segmentation.");
 
+ABSL_FLAG(std::string, frequency_data_file, "",
+          "Path to a file which contains codepoint frequency data in Riegeli "
+          "format.");
+
 ABSL_FLAG(uint32_t, number_of_segments, 2,
           "Number of segments to split the input codepoints into.");
 
@@ -392,6 +396,18 @@ UnicodeFrequencies ToFrequencies(
   return frequencies;
 }
 
+// Loads unicode frequency data from either a dedicated frequency data file or
+// from the codepoint and frequency entries if no data file is given.
+StatusOr<UnicodeFrequencies> GetFrequencyData(
+    const std::string& frequency_data_file,
+    const std::vector<CodepointAndFrequency>& cps) {
+  if (frequency_data_file.empty()) {
+    return ToFrequencies(cps);
+  }
+
+  return util::LoadFrequenciesFromRiegeli(frequency_data_file.c_str());
+}
+
 int main(int argc, char** argv) {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   auto args = absl::ParseCommandLine(argc, argv);
@@ -448,9 +464,15 @@ int main(int argc, char** argv) {
       MergeStrategy::Heuristic(absl::GetFlag(FLAGS_min_patch_size_bytes),
                                absl::GetFlag(FLAGS_max_patch_size_bytes));
   if (absl::GetFlag(FLAGS_use_cost_based_merging)) {
-    UnicodeFrequencies frequencies = ToFrequencies(*codepoints);
+    auto freq_data =
+        GetFrequencyData(absl::GetFlag(FLAGS_frequency_data_file), *codepoints);
+    if (!freq_data.ok()) {
+      std::cerr << "Failed to load codepoint frequency data: "
+                << freq_data.status();
+    }
+
     auto r = MergeStrategy::CostBased(
-        std::move(frequencies), absl::GetFlag(FLAGS_network_overhead_cost));
+        std::move(*freq_data), absl::GetFlag(FLAGS_network_overhead_cost));
     if (!r.ok()) {
       std::cerr << "Failed to initialize merging strategy: " << r.status()
                 << std::endl;

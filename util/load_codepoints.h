@@ -6,11 +6,17 @@
 
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
+#include "ift/freq/unicode_frequencies.h"
 
 namespace util {
 
 // Loads the file at path and returns it's binary contents.
 absl::StatusOr<common::FontData> LoadFile(const char* path);
+
+// Loads a Riegeli file of CodepointCount protos and returns a
+// UnicodeFrequencies instance.
+absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
+    const char* path);
 
 struct CodepointAndFrequency {
   uint32_t codepoint;

@@ -74,4 +74,22 @@ TEST_F(LoadCodepointsTest, LoadCodepointsWithFrequency_Invalid) {
 
 // TODO test with bad formatted hex
 
+TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli) {
+  auto result =
+      util::LoadFrequenciesFromRiegeli("util/testdata/test_freq_data.riegeli");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  EXPECT_EQ(result->ProbabilityFor(0x43, 0x43), 1.0);
+  EXPECT_EQ(result->ProbabilityFor(0x44, 0x44), 75.0 / 200.0);
+
+  EXPECT_EQ(result->ProbabilityFor(0x41, 0x42), 0.5);
+  EXPECT_EQ(result->ProbabilityFor(0x44, 0x45), 0.25);
+}
+
+TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_BadData) {
+  auto result = util::LoadFrequenciesFromRiegeli(
+      "util/testdata/invalid_test_freq_data.riegeli");
+  ASSERT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
 }  // namespace util
