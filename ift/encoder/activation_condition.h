@@ -116,8 +116,8 @@ class ActivationCondition {
   // segment with "merged_probability".
   absl::StatusOr<double> MergedProbability(
       absl::Span<const Segment> segments,
-      const common::SegmentSet& merged_segments,
-      double merged_probability) const;
+      const common::SegmentSet& merged_segments, const Segment& merged_segment,
+      const ift::freq::ProbabilityCalculator& calculator) const;
 
   ActivationConditionProto ToConfigProto() const;
 

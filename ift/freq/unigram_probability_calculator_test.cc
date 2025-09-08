@@ -5,8 +5,8 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 
-using ift::encoder::SubsetDefinition;
 using ift::encoder::Segment;
+using ift::encoder::SubsetDefinition;
 
 namespace ift::freq {
 
@@ -41,31 +41,31 @@ TEST(UnigramProbabilityCalculatorTest, ComputeProbability) {
 }
 
 TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
-  Segment s1 {{'a'}, 0.5};
-  Segment s2 {{'b'}, 0.2};
-  Segment s3 {{'c'}, 0.7};
+  Segment s1{{'a'}, 0.5};
+  Segment s2{{'b'}, 0.2};
+  Segment s3{{'c'}, 0.7};
 
   UnicodeFrequencies frequencies;
   frequencies.Add(1, 1, 10);
 
   UnigramProbabilityCalculator calculator(std::move(frequencies));
 
-  std::vector<const Segment *> segments {&s2};
+  std::vector<const Segment *> segments{&s2};
   ProbabilityBound bound = calculator.ComputeConjunctiveProbability(segments);
   EXPECT_DOUBLE_EQ(bound.min, 0.2);
   EXPECT_DOUBLE_EQ(bound.max, 0.2);
 
-  segments =  {&s1, &s3};
+  segments = {&s1, &s3};
   bound = calculator.ComputeConjunctiveProbability(segments);
   EXPECT_DOUBLE_EQ(bound.min, 0.5 * 0.7);
   EXPECT_DOUBLE_EQ(bound.max, 0.5 * 0.7);
 
-  segments =  {&s1, &s3, &s2};
+  segments = {&s1, &s3, &s2};
   bound = calculator.ComputeConjunctiveProbability(segments);
   EXPECT_DOUBLE_EQ(bound.min, 0.5 * 0.7 * 0.2);
   EXPECT_DOUBLE_EQ(bound.max, 0.5 * 0.7 * 0.2);
 
-  segments =  {};
+  segments = {};
   bound = calculator.ComputeConjunctiveProbability(segments);
   EXPECT_DOUBLE_EQ(bound.min, 1.0);
   EXPECT_DOUBLE_EQ(bound.max, 1.0);
