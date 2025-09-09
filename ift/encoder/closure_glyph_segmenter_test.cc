@@ -549,6 +549,16 @@ if (s0) then p0
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
+  UnicodeFrequencies frequencies{{{'a', 'a'}, 10}};
+  auto s = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a', 'd'}, {'d', 'c'}},
+      *MergeStrategy::CostBased(std::move(frequencies)));
+  ASSERT_FALSE(s.ok());
+  EXPECT_EQ(s.status().code(), absl::StatusCode::kInvalidArgument)
+      << s.status();
+}
+
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 

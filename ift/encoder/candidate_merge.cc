@@ -61,13 +61,15 @@ std::optional<GlyphSet> CandidateMerge::Apply(SegmentationContext& context) {
           << ". New patch size " << new_patch_size << " bytes. "
           << "Cost delta is " << cost_delta << ".";
 
-  // Remove the fallback segment or group, it will be fully recomputed by
-  // GroupGlyphs
-  context.glyph_groupings.RemoveFallbackSegments(segments_to_merge);
-
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
   context.InvalidateGlyphInformation(invalidated_glyphs, segments_to_merge);
+
+  // Remove the fallback segment or group, it will be fully recomputed by
+  // GroupGlyphs. This needs to happen after invalidation because in some
+  // cases invalidation may need to find conditions associated with the
+  // fallback segment.
+  context.glyph_groupings.RemoveFallbackSegments(segments_to_merge);
 
   if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the
