@@ -53,6 +53,22 @@ namespace ift::encoder {
 // An indepth description of how this segmentation implementation works can
 // be found in ../../docs/closure_glyph_segmentation.md.
 
+Status CheckForDisjointCodepoints(
+    const std::vector<SubsetDefinition>& subset_definitions) {
+  CodepointSet union_of_codepoints;
+  for (const auto& def : subset_definitions) {
+    CodepointSet intersection = def.codepoints;
+    intersection.intersect(union_of_codepoints);
+    if (!intersection.empty()) {
+      return absl::InvalidArgumentError(
+          "Input subset definitions must have disjoint codepoint sets when "
+          "using cost-based merging.");
+    }
+    union_of_codepoints.union_set(def.codepoints);
+  }
+  return absl::OkStatus();
+}
+
 // TODO(garretrieger): extensions/improvements that could be made:
 // - Can we reduce # of closures for the additional conditions checks?
 //   - is the full analysis needed to get the or set?
@@ -472,10 +488,9 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     merge_strategy = std::move(*strategy);
   }
 
-  // TODO(garretrieger): XXXXXX if cost based merging is configured then check
-  // that
-  //  input subset defs are disjoint. could add a "RequiresDisjoint()" function
-  //  to merge strategy.
+  if (merge_strategy.UseCosts()) {
+    TRYV(CheckForDisjointCodepoints(subset_definitions));
+  }
 
   SegmentationContext context = TRY(InitializeSegmentationContext(
       face, initial_segment,
@@ -490,6 +505,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   segment_index_t last_merged_segment_index = 0;
   while (true) {
     auto merged = TRY(MergeNextBaseSegment(context, last_merged_segment_index));
+
     if (!merged.has_value()) {
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
