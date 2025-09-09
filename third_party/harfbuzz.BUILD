@@ -105,6 +105,7 @@ cc_library(
         "src/hb-subset-serialize.h",
         "src/hb-unicode.h",
         "src/hb-version.h",
+	"src/hb-script-list.h",
     ],
     copts = [
         "-DHAVE_CONFIG_H",

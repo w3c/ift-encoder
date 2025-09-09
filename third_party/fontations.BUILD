@@ -13,6 +13,14 @@ rust_binary(
       ":shared_brotli_patch_decoder",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = select({
+        # For some reason rust is currently failing to build on osx,
+        # so for now these targets are marked as incompatible.
+        # This should be removed once the build failure is resolved.
+        # These targets are only needed by a couple of the tests.
+        "@platforms//os:osx": ["@platforms//:incompatible"],
+	"//conditions:default": [],
+    }),
 )
 
 rust_binary(
@@ -29,6 +37,14 @@ rust_binary(
       ":font_types",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = select({
+        # For some reason rust is currently failing to build on osx,
+        # so for now these targets are marked as incompatible.
+        # This should be removed once the build failure is resolved.
+        # These targets are only needed by a couple of the tests.
+        "@platforms//os:osx": ["@platforms//:incompatible"],
+	"//conditions:default": [],
+    }),
 )
 
 
