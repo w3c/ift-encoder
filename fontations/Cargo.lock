@@ -503,6 +503,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "euclid"
+version = "0.22.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad9cdb4b747e485a12abb0e6566612956c7a1bafa3bdb8d682c5b6d403589e48"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -555,14 +564,14 @@ dependencies = [
 
 [[package]]
 name = "font-test-data"
-version = "0.4.1"
+version = "0.6.0"
 dependencies = [
  "font-types",
 ]
 
 [[package]]
 name = "font-types"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bytemuck",
  "serde",
@@ -914,11 +923,12 @@ dependencies = [
 
 [[package]]
 name = "kurbo"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89234b2cc610a7dd927ebde6b41dd1a5d4214cffaef4cf1fb2195d592f92518f"
+checksum = "ce9729cc38c18d86123ab736fd2e7151763ba226ac2490ec092d1dd148825e32"
 dependencies = [
  "arrayvec",
+ "euclid",
  "smallvec",
 ]
 
@@ -1273,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.30.1"
+version = "0.35.0"
 dependencies = [
  "bytemuck",
  "core_maths",
@@ -1500,7 +1510,7 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "skrifa"
-version = "0.32.0"
+version = "0.37.0"
 dependencies = [
  "bytemuck",
  "core_maths",
@@ -1523,9 +1533,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.14.0"
+version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
+checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "smawk"
@@ -1974,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "write-fonts"
-version = "0.39.0"
+version = "0.43.0"
 dependencies = [
  "bincode",
  "diff",

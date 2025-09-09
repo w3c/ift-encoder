@@ -6,25 +6,17 @@ module(
 # Bazel Modules
 
 bazel_dep(name = "googletest", version = "1.17.0")
-bazel_dep(name = "abseil-cpp", version = "20250512.0")
-bazel_dep(name = "protobuf", version = "31.1")
+bazel_dep(name = "abseil-cpp", version = "20250814.0")
+bazel_dep(name = "protobuf", version = "32.0")
 bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_rust", version = "0.61.0")
+bazel_dep(name = "rules_rust", version = "0.64.0")
 bazel_dep(name = "glib", version = "2.82.2.bcr.5")
+bazel_dep(name = "brotli", version = "1.1.0")
 
 # Non Bazel Modules
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
-# Brotli Encoder/Decoder
-http_archive(
-    name = "brotli",
-    build_file = "//third_party:brotli.BUILD",
-    sha256 = "3b90c83489879701c05f39b68402ab9e5c880ec26142b5447e73afdda62ce525",
-    strip_prefix = "brotli-71fe6cac061ac62c0241f410fbd43a04a6b4f303",
-    url = "https://github.com/google/brotli/archive/71fe6cac061ac62c0241f410fbd43a04a6b4f303.zip",
-)
 
 # WOFF2 Encoder/Decoder
 http_archive(
@@ -39,9 +31,9 @@ http_archive(
 http_archive(
     name = "harfbuzz",
     build_file = "//third_party:harfbuzz.BUILD",
-    integrity = "sha256-LwhLlBZXpUZKSXuC/wc0X2jNTkALysLYVxL7vHGG2R0=",
-    strip_prefix = "harfbuzz-87bbb9fadf45ee04c7425d7e8f22072fdd827edb",
-    urls = ["https://github.com/harfbuzz/harfbuzz/archive/87bbb9fadf45ee04c7425d7e8f22072fdd827edb.zip"],
+    integrity = "sha256-0SazsSICV5gQEgXYPIhRmHo6ftm+fHxV3FqnLwLLtAA=",
+    strip_prefix = "harfbuzz-d59f62ac14b98a0b8c72ec7a00eb76b22b1800c8",
+    urls = ["https://github.com/harfbuzz/harfbuzz/archive/d59f62ac14b98a0b8c72ec7a00eb76b22b1800c8.zip"],
 )
 
 # Base 32 Hex
@@ -65,10 +57,10 @@ http_archive(
 # Fontations
 http_archive(
     name = "fontations",
-    urls = ["https://github.com/googlefonts/fontations/archive/430e4fe1c22f58328400583c8cb4af9b60ce42c8.zip"],
-    strip_prefix = "fontations-430e4fe1c22f58328400583c8cb4af9b60ce42c8",
+    urls = ["https://github.com/googlefonts/fontations/archive/1a8baba89aa129a899bc83b0b610881190f8bbad.zip"],
+    strip_prefix = "fontations-1a8baba89aa129a899bc83b0b610881190f8bbad",
     build_file = "//third_party:fontations.BUILD",
-    integrity = "sha256-QdAedF9Bnj3uaXRHEDsU76s3+S93bQtdWKFnQPOuMd8=",
+    integrity = "sha256-vyDtQ7LJHdb+l0dz8IYs2jvw9bnQxNvhaZgyRLfnlTA=",
 )
 
 
