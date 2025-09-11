@@ -8,6 +8,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/segmentation_context.h"
+#include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
 
@@ -45,16 +46,17 @@ struct CandidateMerge {
                                           double cost_delta, double base_size,
                                           double base_probability,
                                           double network_overhead) {
-    return CandidateMerge{.base_segment_index = base_segment_index,
-                          .segments_to_merge = {base_segment_index},
-                          .merged_segment = Segment({}, 0.0),
-                          .new_segment_is_inert = true,
-                          .new_patch_size = 0,
-                          .cost_delta = cost_delta,
-                          .invalidated_glyphs = {},
-                          .base_size = base_size,
-                          .base_probability = base_probability,
-                          .network_overhead = network_overhead};
+    return CandidateMerge{
+        .base_segment_index = base_segment_index,
+        .segments_to_merge = {base_segment_index},
+        .merged_segment = Segment({}, freq::ProbabilityBound::Zero()),
+        .new_segment_is_inert = true,
+        .new_patch_size = 0,
+        .cost_delta = cost_delta,
+        .invalidated_glyphs = {},
+        .base_size = base_size,
+        .base_probability = base_probability,
+        .network_overhead = network_overhead};
   }
 
   // This is the estimated smallest possible increase in a patch size as a

@@ -3,28 +3,9 @@
 
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 
 namespace ift::freq {
-
-struct ProbabilityBound {
-  static ProbabilityBound Zero() { return ProbabilityBound{0.0, 0.0}; }
-
-  ProbabilityBound(double min, double max) : min_(min), max_(max) {}
-
-  double Min() const { return min_; }
-  double Max() const { return max_; }
-
-  bool operator==(const ProbabilityBound& other) const {
-    return min_ == other.min_ && max_ == other.max_;
-  }
-
-  friend void PrintTo(const ProbabilityBound& point, std::ostream* os);
-
- private:
-  double min_;
-  double max_;
-  // TODO XXXX add fields to cache unigram and bigram sums
-};
 
 class ProbabilityCalculator {
  public:

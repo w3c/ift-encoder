@@ -3,7 +3,6 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
-#include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using ift::encoder::Segment;
@@ -42,8 +41,8 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   BigramProbabilityCalculator calc(std::move(frequencies));
 
-  Segment s1{{'a'}, 0};
-  Segment s2{{'b'}, 0};
+  Segment s1{{'a'}, ProbabilityBound::Zero()};
+  Segment s2{{'b'}, ProbabilityBound::Zero()};
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
             (ProbabilityBound{0.70 + 0.60 - 0.40, 1.0}));
 }

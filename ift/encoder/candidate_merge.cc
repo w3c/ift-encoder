@@ -137,7 +137,7 @@ static void MergeSegments(const SegmentationContext& context,
   const auto& bound = calculator->ComputeMergedProbability(merged_segments);
   // TODO(garretrieger): The full probability bound should be utilized here.
   base.Definition() = std::move(union_def);
-  base.SetProbability(bound.Min());
+  base.SetProbability(bound);
 }
 
 static Status AddConditionAndPatchSize(
