@@ -364,13 +364,14 @@ StatusOr<double> ActivationCondition::Probability(
     }
 
     // For a group (s1 OR s2 OR ...), compute the union of their definitions.
-    SubsetDefinition union_def;
+    std::vector<const Segment*> union_segments;
     for (unsigned s_index : segment_set) {
-      union_def.Union(segments[s_index].Definition());
+      const auto& s = segments[s_index];
+      union_segments.push_back(&s);
     }
 
     // TODO(garretrieger): The full probability bound should be utilized here.
-    return calculator.ComputeProbability(union_def).Min();
+    return calculator.ComputeMergedProbability(union_segments).Min();
   }
 
   return calculator.ComputeConjunctiveProbability(conjunctive_segments).Min();
@@ -416,21 +417,21 @@ StatusOr<double> ActivationCondition::MergedProbability(
 
     // For a group (s1 OR s2 OR ...), compute the union of their definitions.
     bool has_merged = false;
-    SubsetDefinition union_def;
+    std::vector<const Segment*> union_segments;
     for (unsigned s_index : segment_set) {
       if (!has_merged && merged_segments.contains(s_index)) {
         has_merged = true;
       }
-      union_def.Union(segments[s_index].Definition());
+      union_segments.push_back(&segments[s_index]);
     }
 
     if (has_merged) {
       // the condition group intersects with the merged set so need to union
       // in all of the merged segments to get the probability.
-      union_def.Union(merged_segment.Definition());
+      union_segments.push_back(&merged_segment);
     }
 
-    return calculator.ComputeProbability(union_def).Min();
+    return calculator.ComputeMergedProbability(union_segments).Min();
   }
 
   return calculator.ComputeConjunctiveProbability(conjunctive_segments).Min();
