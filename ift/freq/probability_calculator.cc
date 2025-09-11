@@ -3,7 +3,7 @@
 namespace ift::freq {
 
 void PrintTo(const ProbabilityBound& point, std::ostream* os) {
-  *os << "[" << point.min << ", " << point.max << "]";
+  *os << "[" << point.Min() << ", " << point.Max() << "]";
 }
 
 }  // namespace ift::freq

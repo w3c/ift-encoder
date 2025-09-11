@@ -474,7 +474,7 @@ static StatusOr<std::vector<Segment>> ToSegments(
   std::vector<Segment> segments;
   for (const auto& def : subset_definitions) {
     auto probability = calculator->ComputeProbability(def);
-    segments.emplace_back(def, probability.min);
+    segments.emplace_back(def, probability.Min());
   }
   return segments;
 }

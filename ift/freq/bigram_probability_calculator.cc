@@ -1,8 +1,8 @@
 #include "ift/freq/bigram_probability_calculator.h"
 
 #include "common/int_set.h"
-#include "hb.h"
 #include "ift/encoder/segment.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 
 using common::CodepointSet;
@@ -60,16 +60,26 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
   double unigram_sum = UnigramProbabilitySum(definition.codepoints);
   double bigram_sum = BigramProbabilitySum(definition.codepoints);
 
-  ProbabilityBound bounds;
-  // K = 1: P <= ...
-  bounds.max = std::max(std::min(unigram_sum, 1.0), 0.0);
-
-  // K = 2: P >= ..
-  bounds.min = std::max(std::min(unigram_sum - bigram_sum, 1.0), 0.0);
+  ProbabilityBound bounds{
+      // K = 2: P >= ..
+      std::max(std::min(unigram_sum - bigram_sum, 1.0), 0.0),
+      // K = 1: P <= ...
+      std::max(std::min(unigram_sum, 1.0), 0.0)};
 
   // TODO(garretrieger): XXXX layout tags
 
   return bounds;
+}
+
+ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
+    const std::vector<const Segment*>& segments) const {
+  // TODO XXX implement this using the cached uni/bigram sums once available in
+  // Segment.
+  SubsetDefinition merged;
+  for (const auto* s : segments) {
+    merged.Union(s->Definition());
+  }
+  return ComputeProbability(merged);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(

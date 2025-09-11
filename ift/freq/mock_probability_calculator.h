@@ -24,6 +24,16 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
     return {0.0, 0.0};
   }
 
+  ProbabilityBound ComputeMergedProbability(
+      const std::vector<const ift::encoder::Segment*>& segments)
+      const override {
+    ift::encoder::SubsetDefinition merged;
+    for (const auto* s : segments) {
+      merged.Union(s->Definition());
+    }
+    return ComputeProbability(merged);
+  }
+
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<const ift::encoder::Segment*>& segments)
       const override {

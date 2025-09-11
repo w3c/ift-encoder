@@ -16,6 +16,12 @@ class NoopProbabilityCalculator : public ProbabilityCalculator {
     return {0.0, 0.0};
   }
 
+  ProbabilityBound ComputeMergedProbability(
+      const std::vector<const ift::encoder::Segment*>& segments)
+      const override {
+    return {0.0, 0.0};
+  }
+
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<const ift::encoder::Segment*>& segments)
       const override {
