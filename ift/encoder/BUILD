@@ -99,6 +99,7 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_set",
         "//common",
         "//ift/proto",
+        "//ift/freq:common",
         "//util:segmentation_plan_cc_proto",
     ],
 )

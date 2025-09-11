@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using ift::encoder::Segment;
@@ -48,9 +49,9 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   UnigramProbabilityCalculator calculator(std::move(frequencies));
 
-  Segment s1{{1}, calculator.ComputeProbability({1}).Min()};
-  Segment s3{{3}, calculator.ComputeProbability({3}).Min()};
-  s3.SetProbability(calculator.ComputeProbability(s3.Definition()).Min());
+  Segment s1{{1}, calculator.ComputeProbability({1})};
+  Segment s3{{3}, calculator.ComputeProbability({3})};
+  s3.SetProbability(calculator.ComputeProbability(s3.Definition()));
 
   double p1 = 10.0 / 20.0;
   double p3 = 5.0 / 20.0;
@@ -62,9 +63,9 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 }
 
 TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
-  Segment s1{{'a'}, 0.5};
-  Segment s2{{'b'}, 0.2};
-  Segment s3{{'c'}, 0.7};
+  Segment s1{{'a'}, ProbabilityBound{0.5, 0.5}};
+  Segment s2{{'b'}, ProbabilityBound{0.2, 0.2}};
+  Segment s3{{'c'}, ProbabilityBound{0.7, 0.7}};
 
   UnicodeFrequencies frequencies;
   frequencies.Add(1, 1, 10);

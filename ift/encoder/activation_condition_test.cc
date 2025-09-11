@@ -4,6 +4,7 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/mock_probability_calculator.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
@@ -11,6 +12,7 @@ using common::CodepointSet;
 using common::IntSet;
 using common::SegmentSet;
 using ift::freq::MockProbabilityCalculator;
+using ift::freq::ProbabilityBound;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
@@ -249,20 +251,20 @@ TEST(ActivationConditionTest,
 
 TEST(ActivationConditionTest, ActivationConditionProbabilities) {
   std::vector<Segment> segments = {
-      Segment({'a'}, 0.75),
-      Segment({'b'}, 0.5),
-      Segment({'c'}, 0.25),
+      Segment({'a'}, ProbabilityBound{0.75, 0.75}),
+      Segment({'b'}, ProbabilityBound{0.5, 0.5}),
+      Segment({'c'}, ProbabilityBound{0.25, 0.25}),
   };
   std::vector<Segment> merged_segments = {
-      Segment({'a'}, 0.75),
-      Segment({'b'}, 0.5),
-      Segment({'c'}, 0.25),
+      Segment({'a'}, ProbabilityBound{0.75, 0.75}),
+      Segment({'b'}, ProbabilityBound{0.5, 0.5}),
+      Segment({'c'}, ProbabilityBound{0.25, 0.25}),
 
       // 0 OR 1
-      Segment({'a', 'b'}, 0.77),
+      Segment({'a', 'b'}, ProbabilityBound{0.77, 0.77}),
 
       // 1 OR 2
-      Segment({'b', 'c'}, 0.66),
+      Segment({'b', 'c'}, ProbabilityBound{0.66, 0.66}),
   };
   MockProbabilityCalculator probability_calculator(merged_segments);
 
@@ -300,28 +302,28 @@ TEST(ActivationConditionTest, ActivationConditionProbabilities) {
 
 TEST(ActivationConditionTest, MergedProbability) {
   std::vector<Segment> segments = {
-      Segment({'a'}, 0.75),
-      Segment({'b'}, 0.50),
-      Segment({'c'}, 0.25),
+      Segment({'a'}, ProbabilityBound{0.75, 0.75}),
+      Segment({'b'}, ProbabilityBound{0.50, 0.50}),
+      Segment({'c'}, ProbabilityBound{0.25, 0.25}),
   };
   std::vector<Segment> merged_segments = {
-      Segment({'a'}, 0.75),
-      Segment({'b'}, 0.50),
-      Segment({'c'}, 0.25),
+      Segment({'a'}, ProbabilityBound{0.75, 0.75}),
+      Segment({'b'}, ProbabilityBound{0.50, 0.50}),
+      Segment({'c'}, ProbabilityBound{0.25, 0.25}),
 
       // 0 + 1
-      Segment({'a', 'b'}, 0.90),
+      Segment({'a', 'b'}, ProbabilityBound{0.90, 0.90}),
 
       // 0 + 2
-      Segment({'a', 'c'}, 0.80),
+      Segment({'a', 'c'}, ProbabilityBound{0.80, 0.80}),
 
       // 0 + 1 + 2
-      Segment({'a', 'b', 'c'}, 0.95),
+      Segment({'a', 'b', 'c'}, ProbabilityBound{0.95, 0.95}),
 
   };
   MockProbabilityCalculator probability_calculator(merged_segments);
 
-  Segment merged_segment({'a', 'b'}, 0.85);
+  Segment merged_segment({'a', 'b'}, ProbabilityBound{0.85, 0.85});
 
   // Ignores segments that are not present in the condition.
   EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(

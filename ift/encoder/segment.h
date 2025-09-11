@@ -2,15 +2,15 @@
 #define IFT_ENCODER_SEGMENT_H_
 
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
 
 struct Segment {
-  Segment(SubsetDefinition definition, double probability)
-      : definition(std::move(definition)),
-        probability(std::max(std::min(1.0, probability), 0.0)) {}
+  Segment(SubsetDefinition definition, freq::ProbabilityBound probability)
+      : definition(std::move(definition)), probability(probability) {}
 
-  double Probability() const { return probability; }
+  double Probability() const { return probability.Min(); }
   const SubsetDefinition& Definition() const { return definition; }
   SubsetDefinition& Definition() { return definition; }
 
@@ -26,18 +26,18 @@ struct Segment {
     return Definition().codepoints.size() >= min_group_size;
   }
 
-  void SetProbability(double probability) {
-    this->probability = std::max(std::min(1.0, probability), 0.0);
+  void SetProbability(freq::ProbabilityBound probability) {
+    this->probability = probability;
   }
 
   void Clear() {
     definition.Clear();
-    probability = 0.0;
+    probability = freq::ProbabilityBound::Zero();
   }
 
  private:
   SubsetDefinition definition;
-  double probability;
+  freq::ProbabilityBound probability;
 };
 
 }  // namespace ift::encoder

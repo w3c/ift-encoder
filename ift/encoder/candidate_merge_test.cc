@@ -11,6 +11,7 @@
 #include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/mock_probability_calculator.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using common::CodepointSet;
@@ -19,6 +20,7 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
 using ift::freq::MockProbabilityCalculator;
+using ift::freq::ProbabilityBound;
 using ift::freq::UnicodeFrequencies;
 
 namespace ift::encoder {
@@ -47,29 +49,30 @@ class CandidateMergeTest : public ::testing::Test {
 // given very positive or very negative costs.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   std::vector<Segment> segments = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
   };
   std::vector<Segment> segments_with_merges = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
 
       // 0 + 1
-      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}, 0.98},
+      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'},
+       ProbabilityBound{0.98, 0.98}},
 
       // 0 + 1 + 2
       {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
         'o', 'p', 'q', 'r'},
-       0.99},
+       ProbabilityBound{0.99, 0.99}},
 
       // 0 + 1 + 3
       {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 's', 't',
         'u', 'v', 'w', 'x'},
-       0.98},
+       ProbabilityBound{0.98, 0.98}},
   };
   auto probability_calculator =
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
@@ -112,25 +115,27 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
 TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   std::vector<Segment> segments = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
   };
 
+  double merged_01 = 1.0 - (1.0 - 0.95) * (1.0 - 0.95);
+  double merged_03 = 1.0 - (1.0 - 0.95) * (1.0 - 0.01);
   std::vector<Segment> segments_with_merges = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, 0.95},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, 0.95},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, 0.95},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, 0.01},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
 
       // 0 + 1
       {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'},
-       1.0 - (1.0 - 0.95) * (1.0 - 0.95)},
+       ProbabilityBound{merged_01, merged_01}},
 
       // 0 + 3
       {{'a', 'b', 'c', 'd', 'e', 'f', 's', 't', 'u', 'v', 'w', 'x'},
-       1.0 - (1.0 - 0.95) * (1.0 - 0.01)},
+       ProbabilityBound{merged_03, merged_03}},
   };
   auto probability_calculator =
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
@@ -197,8 +202,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       {{' ', ' '}, 100}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
 
   std::vector<Segment> segments = {
-      {{'f'}, 0.75},
-      {{'i'}, 0.95},
+      {{'f'}, {0.75, 0.75}},
+      {{'i'}, {0.95, 0.95}},
   };
 
   ClosureGlyphSegmenter segmenter;
@@ -244,9 +249,9 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
 // modified condition.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   std::vector<Segment> segments = {
-      {{'a'}, 0.50},
-      {{'f'}, 0.75},
-      {{'i'}, 0.95},
+      {{'a'}, {0.50, 0.50}},
+      {{'f'}, {0.75, 0.75}},
+      {{'i'}, {0.95, 0.95}},
   };
   freq::UnicodeFrequencies frequencies{
       {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
@@ -292,7 +297,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
 }
 
 TEST_F(CandidateMergeTest, OperatorLess) {
-  Segment empty_segment({}, 0.0);
+  Segment empty_segment({}, ProbabilityBound::Zero());
   CandidateMerge a{.base_segment_index = 0,
                    .segments_to_merge = {1},
                    .merged_segment = empty_segment,

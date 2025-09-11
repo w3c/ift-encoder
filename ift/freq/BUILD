@@ -1,10 +1,16 @@
 cc_library(
+    name = "common",
+    srcs = ["probability_bound.cc"],
+    hdrs = ["probability_bound.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "freq",
     srcs = [
         "unicode_frequencies.cc",
         "unigram_probability_calculator.cc",
         "bigram_probability_calculator.cc",
-        "probability_calculator.cc",
     ],
     hdrs = [
         "noop_probability_calculator.h",
@@ -14,6 +20,7 @@ cc_library(
         "bigram_probability_calculator.h",
     ],
     deps = [
+        ":common",
         "//ift/encoder:common",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@harfbuzz",
