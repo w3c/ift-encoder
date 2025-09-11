@@ -131,7 +131,7 @@ static void MergeSegments(const SegmentationContext& context,
   const auto* calculator = context.merge_strategy.ProbabilityCalculator();
   const auto& bound = calculator->ComputeProbability(base.Definition());
   // TODO(garretrieger): The full probability bound should be utilized here.
-  base.SetProbability(bound.min);
+  base.SetProbability(bound.Min());
 }
 
 static Status AddConditionAndPatchSize(

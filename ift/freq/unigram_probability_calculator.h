@@ -17,6 +17,9 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
 
+  ProbabilityBound ComputeMergedProbability(
+      const std::vector<const ift::encoder::Segment*>& segments) const override;
+
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<const ift::encoder::Segment*>& segments) const override;
 
