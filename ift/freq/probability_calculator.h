@@ -9,6 +9,12 @@ namespace ift::freq {
 struct ProbabilityBound {
   double min;
   double max;
+
+  bool operator==(const ProbabilityBound& other) const {
+    return min == other.min && max == other.max;
+  }
+
+  friend void PrintTo(const ProbabilityBound& point, std::ostream* os);
 };
 
 class ProbabilityCalculator {
