@@ -19,6 +19,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/segmentation_context.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/glyph_keyed_diff.h"
 
 namespace ift::encoder {
@@ -122,15 +123,20 @@ static bool WouldMixFeaturesAndCodepoints(
 
 static void MergeSegments(const SegmentationContext& context,
                           const SegmentSet& segments, Segment& base) {
+  std::vector<const Segment*> merged_segments{&base};
   const auto& segmentation_info = context.segmentation_info;
+
+  SubsetDefinition union_def = base.Definition();
   for (segment_index_t next : segments) {
     const auto& s = segmentation_info.Segments()[next];
-    base.Definition().Union(s.Definition());
+    union_def.Union(s.Definition());
+    merged_segments.push_back(&s);
   }
 
   const auto* calculator = context.merge_strategy.ProbabilityCalculator();
-  const auto& bound = calculator->ComputeProbability(base.Definition());
+  const auto& bound = calculator->ComputeMergedProbability(merged_segments);
   // TODO(garretrieger): The full probability bound should be utilized here.
+  base.Definition() = std::move(union_def);
   base.SetProbability(bound.Min());
 }
 
