@@ -11,6 +11,8 @@ struct Segment {
       : definition(std::move(definition)), probability(probability) {}
 
   double Probability() const { return probability.Min(); }
+  const freq::ProbabilityBound& ProbabilityBound() const { return probability; }
+
   const SubsetDefinition& Definition() const { return definition; }
   SubsetDefinition& Definition() { return definition; }
 
