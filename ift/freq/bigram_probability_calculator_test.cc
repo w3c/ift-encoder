@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using ift::encoder::Segment;
@@ -41,10 +42,37 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   BigramProbabilityCalculator calc(std::move(frequencies));
 
-  Segment s1{{'a'}, ProbabilityBound::Zero()};
-  Segment s2{{'b'}, ProbabilityBound::Zero()};
+  Segment s1{{'a'}, calc.ComputeProbability({'a'})};
+  Segment s2{{'b'}, calc.ComputeProbability({'b'})};
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
             (ProbabilityBound{0.70 + 0.60 - 0.40, 1.0}));
+}
+
+TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability_Complex) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100}, {{'d', 'd'}, 55},
+      {{'e', 'e'}, 65}, {{'a', 'b'}, 40}, {{'a', 'c'}, 50},  {{'b', 'c'}, 60},
+      {{'a', 'd'}, 30}, {{'b', 'd'}, 20}, {{'c', 'd'}, 35},  {{'a', 'e'}, 5},
+      {{'b', 'e'}, 10}, {{'c', 'e'}, 15}, {{'d', 'e'}, 20},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies));
+
+  Segment s1{{'a', 'b'}, calc.ComputeProbability({'a', 'b'})};
+  Segment s2{{'c', 'd'}, calc.ComputeProbability({'c', 'd'})};
+  ProbabilityBound expected = calc.ComputeProbability({'a', 'b', 'c', 'd'});
+  ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}), expected);
+
+  expected = calc.ComputeProbability(s1.Definition());
+  ASSERT_EQ(calc.ComputeMergedProbability({&s1}), expected);
+
+  expected = calc.ComputeProbability({'a', 'b', 'c', 'd', 'e'});
+  Segment s3{{'a', 'd'}, calc.ComputeProbability({'a', 'd'})};
+  Segment s4{{'b', 'e'}, calc.ComputeProbability({'b', 'e'})};
+  Segment s5{{'c'}, calc.ComputeProbability({'c'})};
+  ProbabilityBound actual = calc.ComputeMergedProbability({&s3, &s4, &s5});
+  ASSERT_NEAR(actual.Min(), expected.Min(), 1e-9);
+  ASSERT_NEAR(actual.Max(), expected.Max(), 1e-9);
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeProbability_Clamped) {

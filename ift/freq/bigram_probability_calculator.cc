@@ -3,6 +3,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
 
 using common::CodepointSet;
@@ -60,26 +61,35 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
   double unigram_sum = UnigramProbabilitySum(definition.codepoints);
   double bigram_sum = BigramProbabilitySum(definition.codepoints);
 
-  ProbabilityBound bounds{
-      // K = 2: P >= ..
-      std::max(std::min(unigram_sum - bigram_sum, 1.0), 0.0),
-      // K = 1: P <= ...
-      std::max(std::min(unigram_sum, 1.0), 0.0)};
-
   // TODO(garretrieger): XXXX layout tags
-
-  return bounds;
+  return ProbabilityBound::BonferroniBound(unigram_sum, bigram_sum);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
     const std::vector<const Segment*>& segments) const {
-  // TODO XXX implement this using the cached uni/bigram sums once available in
-  // Segment.
-  SubsetDefinition merged;
-  for (const auto* s : segments) {
-    merged.Union(s->Definition());
+  // This assumes that segments are all disjoint, which is enforced in
+  // ClosureGlyphSegmenter::CodepointToGlyphSegments().
+  double unigram_sum = 0.0;
+  double bigram_sum = 0.0;
+  for (unsigned i = 0; i < segments.size(); i++) {
+    const Segment* s1 = segments[i];
+    bigram_sum += s1->ProbabilityBound().bigram_sum_;
+    unigram_sum += s1->ProbabilityBound().unigram_sum_;
+
+    // All of the bigram sums within a segment are already captured, we just
+    // need to add the combinations between the input segments.
+    for (unsigned j = i + 1; j < segments.size(); j++) {
+      const Segment* s2 = segments[j];
+      for (unsigned cp1 : s1->Definition().codepoints) {
+        for (unsigned cp2 : s2->Definition().codepoints) {
+          assert(cp1 != cp2);
+          bigram_sum += frequencies_.ProbabilityFor(cp1, cp2);
+        }
+      }
+    }
   }
-  return ComputeProbability(merged);
+
+  return ProbabilityBound::BonferroniBound(unigram_sum, bigram_sum);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(
