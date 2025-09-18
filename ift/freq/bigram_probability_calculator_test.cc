@@ -13,9 +13,10 @@ namespace ift::freq {
 
 TEST(BigramProbabilityCalculatorTest, ComputeProbability) {
   UnicodeFrequencies frequencies{
-      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100}, {{'d', 'd'}, 50},
 
-      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
+      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},  {{'a', 'd'}, 45},
+      {{'b', 'd'}, 17},
   };
 
   BigramProbabilityCalculator calc(std::move(frequencies));
@@ -25,12 +26,16 @@ TEST(BigramProbabilityCalculatorTest, ComputeProbability) {
   ASSERT_EQ(calc.ComputeProbability({'a'}), (ProbabilityBound{0.7, 0.7}));
   ASSERT_EQ(calc.ComputeProbability({'b'}), (ProbabilityBound{0.6, 0.6}));
   ASSERT_EQ(calc.ComputeProbability({'c'}), (ProbabilityBound{1.0, 1.0}));
-  ASSERT_EQ(calc.ComputeProbability({'a', 'b'}),
-            (ProbabilityBound{0.70 + 0.60 - 0.40, 1.0}));
 
-  auto b = calc.ComputeProbability({'a', 'b', 'c'});
-  ASSERT_DOUBLE_EQ(b.Min(), 1.00 + 0.70 + 0.60 - 0.40 - 0.50 - 0.60);
-  ASSERT_DOUBLE_EQ(b.Max(), 1.00);
+  double Pab = 0.70 + 0.60 - 0.40;  // 0.9
+  ASSERT_EQ(calc.ComputeProbability({'a', 'b'}), (ProbabilityBound{Pab, Pab}));
+
+  double Pbd = 0.60 + 0.50 - 0.17;
+  double Pabd_upper =
+      0.70 + 0.60 + 0.50 - 0.40 - 0.45;  // sum(Pi) - P(a and b) - P(a and d)
+  auto b = calc.ComputeProbability({'a', 'b', 'd'});
+  ASSERT_DOUBLE_EQ(b.Min(), Pbd);
+  ASSERT_DOUBLE_EQ(b.Max(), Pabd_upper);
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
@@ -44,8 +49,29 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   Segment s1{{'a'}, calc.ComputeProbability({'a'})};
   Segment s2{{'b'}, calc.ComputeProbability({'b'})};
+
+  double Pab = 0.70 + 0.60 - 0.40;
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
-            (ProbabilityBound{0.70 + 0.60 - 0.40, 1.0}));
+            (ProbabilityBound{Pab, Pab}));
+}
+
+TEST(BigramProbabilityCalculatorTest,
+     ComputeMergedProbability_SegmentProbConsidered) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
+
+      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies));
+
+  Segment s1{{'a'}, ProbabilityBound{0.93, 0.85}};
+  Segment s2{{'b'}, calc.ComputeProbability({'b'})};
+
+  // On merge the individual segment probabilities can be used in the new lower
+  // bound
+  ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
+            (ProbabilityBound{0.93, 0.93}));
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability_Complex) {
@@ -84,23 +110,25 @@ TEST(BigramProbabilityCalculatorTest, ComputeProbability_Clamped) {
 
   BigramProbabilityCalculator calc(std::move(frequencies));
   auto b = calc.ComputeProbability({'a', 'b'});
-  ASSERT_DOUBLE_EQ(b.Min(), 0.0);
-  ASSERT_DOUBLE_EQ(b.Max(), 0.3);
+  ASSERT_DOUBLE_EQ(b.Min(), 0.2);  // P(b) sets a lower bound in this case
+  ASSERT_DOUBLE_EQ(b.Max(), 0.2);
+}
 
-  UnicodeFrequencies frequencies2{
-      {{'a', 'a'}, 100}, {{'b', 'b'}, 100}, {{'c', 'c'}, 100},
+TEST(BigramProbabilityCalculatorTest, ComputeProbability_ClampedUpper) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 80}, {{'b', 'b'}, 90}, {{'c', 'c'}, 100},
 
-      {{'a', 'b'}, 40},  {{'a', 'c'}, 50},  {{'b', 'c'}, 60},
+      {{'a', 'b'}, 10}, {{'a', 'c'}, 10}, {{'b', 'c'}, 10},
   };
 
-  BigramProbabilityCalculator calc2(std::move(frequencies2));
-  b = calc2.ComputeProbability({'a', 'b'});
-  ASSERT_DOUBLE_EQ(b.Min(), 1.0);
+  BigramProbabilityCalculator calc(std::move(frequencies));
+  auto b = calc.ComputeProbability({'a', 'b'});
+  ASSERT_DOUBLE_EQ(b.Min(), 1.0);  // P(b) sets a lower bound in this case
   ASSERT_DOUBLE_EQ(b.Max(), 1.0);
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeProbability_WithLayoutTags) {
-  // TODO XXX test with layout tags
+  // TODO(garretrieger): XXXX test with layout tags once implemented.
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
