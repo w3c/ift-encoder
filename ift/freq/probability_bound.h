@@ -3,6 +3,8 @@
 
 #include <ostream>
 
+#include "absl/strings/str_cat.h"
+
 namespace ift::freq {
 
 class BigramProbabilityCalculator;
@@ -33,6 +35,10 @@ struct ProbabilityBound {
 
   bool operator==(const ProbabilityBound& other) const {
     return min_ == other.min_ && max_ == other.max_;
+  }
+
+  std::string ToString() const {
+    return absl::StrCat("[", min_, ", ", max_, "]");
   }
 
   friend void PrintTo(const ProbabilityBound& point, std::ostream* os);

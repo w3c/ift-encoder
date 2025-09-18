@@ -58,9 +58,12 @@ std::optional<GlyphSet> CandidateMerge::Apply(SegmentationContext& context) {
   uint32_t size_after = context.segmentation_info.AssignMergedSegment(
       base_segment_index, segments_to_merge, merged_segment);
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
-          << " codepoints for segment " << base_segment_index
-          << ". New patch size " << new_patch_size << " bytes. "
-          << "Cost delta is " << cost_delta << ".";
+          << " codepoints for segment " << base_segment_index << "."
+          << std::endl
+          << "  New patch size " << new_patch_size << " bytes. " << std::endl
+          << "  Cost delta is " << cost_delta << "." << std::endl
+          << "  New probability is "
+          << merged_segment.ProbabilityBound().ToString();
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.

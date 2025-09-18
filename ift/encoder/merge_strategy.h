@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "common/try.h"
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/noop_probability_calculator.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
@@ -67,6 +68,33 @@ class MergeStrategy {
                            UINT32_MAX);
     strategy.probability_calculator_ =
         std::make_unique<ift::freq::UnigramProbabilityCalculator>(
+            std::move(frequency_data));
+    return strategy;
+  }
+
+  // Merging will be performed such that it attempts to minimize the total
+  // estimated cost of the segmentation. Works the same as CostBased() with
+  // the following changes:
+  // - When analyzing probabilities of segments being encountered the
+  // calculations
+  //   will include both individual codepoint and pair codepoint probabilities.
+  // - Notably this means we don't need to assume independent codepoint
+  // probabilities like
+  //   "CostBased()" does.
+  // - As a result this is more accurate, but more computationally costly.
+  static absl::StatusOr<MergeStrategy> BigramCostBased(
+      freq::UnicodeFrequencies frequency_data,
+      uint32_t network_overhead_cost = 75, uint32_t min_group_size = 4) {
+    if (!frequency_data.HasData()) {
+      return absl::InvalidArgumentError(
+          "If cost based merging is enabled unicode frequency data must be "
+          "provided.");
+    }
+
+    MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
+                           UINT32_MAX);
+    strategy.probability_calculator_ =
+        std::make_unique<ift::freq::BigramProbabilityCalculator>(
             std::move(frequency_data));
     return strategy;
   }
