@@ -15,36 +15,66 @@ BigramProbabilityCalculator::BigramProbabilityCalculator(
     UnicodeFrequencies frequencies)
     : frequencies_(std::move(frequencies)) {}
 
-double BigramProbabilityCalculator::UnigramProbabilitySum(
-    const common::CodepointSet& codepoints) const {
-  double total = 0.0;
-  for (unsigned cp : codepoints) {
-    total += frequencies_.ProbabilityFor(cp);
-  }
-  return total;
-}
+ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
+    const CodepointSet& codepoints, double best_lower) const {
+  double unigram_total = 0.0;
+  double bigram_total = 0.0;
+  double max_partial_bigram_total = 0.0;
+  double max_single_bound = 0.0;
+  double max_pair_bound = 0.0;
 
-double BigramProbabilityCalculator::BigramProbabilitySum(
-    const common::CodepointSet& codepoints) const {
-  // This sums up the probabilities for all unique codepoint pairs from
-  // codepoints.
-  // TODO(garretrieger): this sum is expensive (O(n^2)) and since we'll be
-  // computing it repeatedly
-  //   for growing segments we can likely cache previous sums and build those up
-  //   with the new entries instead of computing from scratch every time. This
-  //   might be doable by capturing the unigram and bigram sums in Segment's and
-  //   then changing the probability calculator call signature to take a base
-  //   segment if it exists.
-  double total = 0.0;
-  auto it1 = codepoints.begin();
-  for (; it1 != codepoints.end(); it1++) {
-    auto it2 = it1;
-    it2++;
-    for (; it2 != codepoints.end(); it2++) {
-      total += frequencies_.ProbabilityFor(*it1, *it2);
+  for (auto it1 = codepoints.begin(); it1 != codepoints.end(); it1++) {
+    if (max_single_bound >= 1.0) {
+      // Bounds can't be lower than [1, 1] stop checking.
+      return ProbabilityBound(1.0, 1.0);
     }
+
+    double partial_total = 0.0;
+    unsigned cp1 = *it1;
+    double P1 = frequencies_.ProbabilityFor(cp1);
+    unigram_total += P1;
+    max_single_bound = std::max(P1, max_single_bound);
+    for (auto it2 = codepoints.begin(); it2 != codepoints.end(); it2++) {
+      unsigned cp2 = *it2;
+      if (cp1 == cp2) {
+        continue;
+      }
+      double P12 = frequencies_.ProbabilityFor(cp1, cp2);
+      partial_total += P12;
+      if (cp1 < cp2) {
+        max_pair_bound = std::max(P1 + frequencies_.ProbabilityFor(cp2) - P12,
+                                  max_pair_bound);
+        if (max_pair_bound >= 1.0) {
+          // Bounds can't be lower than [1, 1] stop checking.
+          return ProbabilityBound(1.0, 1.0);
+        }
+        bigram_total += P12;
+      }
+    }
+    max_partial_bigram_total =
+        std::max(partial_total, max_partial_bigram_total);
   }
-  return total;
+
+  // The bounds calculations are based on the Kounias bounds:
+  // https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full
+
+  // == Lower Bound ==
+  // A lower bound is given by the greater of three values:
+  // - Either the largest individual codepoint frequency.
+  // - max(Pi + Pj - Pij)
+  // - Or: sum(Pi) - sum(Pj<k)
+  double lower =
+      std::max(std::max(std::max(unigram_total - bigram_total, max_pair_bound),
+                        max_single_bound),
+               best_lower);
+
+  // == Upper Bound ==
+  // An upper bound is given by
+  // sum(Pi) - max_j=1..n [ sum_j!=k(Pjk) ]
+  double upper =
+      std::max(std::min(unigram_total - max_partial_bigram_total, 1.0), lower);
+
+  return ProbabilityBound(lower, upper);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
@@ -52,27 +82,36 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
   if (definition.Empty()) {
     return {1, 1};
   }
-
-  // Utilitizes the Bonferroni inequalities to compute probability bounds
-  // based on codepoint unigram and bigram frequencies.
-  // See:
-  // https://en.wikipedia.org/wiki/Boole%27s_inequality#Bonferroni_inequalities
-  double unigram_sum = UnigramProbabilitySum(definition.codepoints);
-  double bigram_sum = BigramProbabilitySum(definition.codepoints);
-
-  // TODO(garretrieger): We can use the approach described in
-  // https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full
-  // to compute a better upper bound:
-  // P(union) <= sum(P(Si)) - max_k=1..n (sum_i!=k(P(Sk n Si)))
-
   // TODO(garretrieger): XXXX incorporate layout tags
-  return ProbabilityBound::BonferroniBound(unigram_sum, bigram_sum);
+  return BigramProbabilityBound(definition.codepoints, 0.0);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
     const std::vector<const Segment*>& segments) const {
   // This assumes that segments are all disjoint, which is enforced in
   // ClosureGlyphSegmenter::CodepointToGlyphSegments().
+  double best_lower = 0.0;
+  for (const auto* s : segments) {
+    best_lower = std::max(best_lower, s->ProbabilityBound().Min());
+    if (best_lower >= 1.0) {
+      // Since this is a union the bound must be [1, 1]
+      return ProbabilityBound(1.0, 1.0);
+    }
+  }
+
+  SubsetDefinition union_def;
+  for (const auto* s : segments) {
+    union_def.Union(s->Definition());
+  }
+
+  // TODO(garretrieger): we can potentially cache information in the segment
+  //                     probability bound from the previous prob calculations
+  //                     that could be used during this merge to accelerate
+  //                     the computation. For example the unigram and bigram
+  //                     sums. Example code follows, would need to be updated
+  //                     to also handle the pair probabilities, and the upper
+  //                     bound calculations.
+  /*
   double unigram_sum = 0.0;
   double bigram_sum = 0.0;
   for (unsigned i = 0; i < segments.size(); i++) {
@@ -92,8 +131,8 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
       }
     }
   }
-
-  return ProbabilityBound::BonferroniBound(unigram_sum, bigram_sum);
+  */
+  return BigramProbabilityBound(union_def.codepoints, best_lower);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(

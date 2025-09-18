@@ -40,8 +40,10 @@ class UnicodeFrequencies {
   }
 
  private:
-  absl::flat_hash_map<std::pair<uint32_t, uint32_t>, uint64_t> frequencies_;
+  absl::flat_hash_map<uint64_t, uint64_t> frequencies_;
+  absl::flat_hash_map<uint64_t, double> probabilities_;
   uint64_t max_count_ = 0;
+  double unknown_probability = 1.0;
 };
 
 }  // namespace ift::freq
