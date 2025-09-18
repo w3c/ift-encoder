@@ -61,7 +61,12 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
   double unigram_sum = UnigramProbabilitySum(definition.codepoints);
   double bigram_sum = BigramProbabilitySum(definition.codepoints);
 
-  // TODO(garretrieger): XXXX layout tags
+  // TODO(garretrieger): We can use the approach described in
+  // https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full
+  // to compute a better upper bound:
+  // P(union) <= sum(P(Si)) - max_k=1..n (sum_i!=k(P(Sk n Si)))
+
+  // TODO(garretrieger): XXXX incorporate layout tags
   return ProbabilityBound::BonferroniBound(unigram_sum, bigram_sum);
 }
 
@@ -94,8 +99,24 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(
     const std::vector<const Segment*>& segments) const {
-  // TODO XXXX
-  return {0, 0};
+  // Here we don't have access to pair probabilities between the segments so we
+  // use a bound that relies only on the individual probabilities:
+  //
+  // sum(P(Si)) - (n - 1) <= P(intersection) <= min(P(Si))
+  //
+  // For the segments we actually have probability bounds, so use the segment
+  // min for the lower bound calc and the segment max for the upper bound calc.
+  double sum = 0.0;
+  double min_of_maxes = 1.0;
+  for (const Segment* s : segments) {
+    const auto& bound = s->ProbabilityBound();
+    sum += bound.Min();
+    if (bound.Max() < min_of_maxes) {
+      min_of_maxes = bound.Max();
+    }
+  }
+  double min_prob = sum - (double)segments.size() + 1.0;
+  return ProbabilityBound(std::max(0.0, min_prob), min_of_maxes);
 }
 
 }  // namespace ift::freq
