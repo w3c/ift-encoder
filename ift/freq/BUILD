@@ -3,6 +3,9 @@ cc_library(
     srcs = ["probability_bound.cc"],
     hdrs = ["probability_bound.h"],
     visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/strings",
+    ],
 )
 
 cc_library(

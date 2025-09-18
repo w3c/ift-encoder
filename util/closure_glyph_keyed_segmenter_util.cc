@@ -74,10 +74,59 @@ ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "The segmenter will avoid merges which result in patches larger than "
           "this amount.");
 
-ABSL_FLAG(bool, use_cost_based_merging, false,
-          "If set selects merges using a cost function, where the merge "
-          "selection aims to minimize the overall cost. If enable min and max "
-          "patch size flags will be ignored. This is currently experimental.");
+enum MergingStrategy {
+  HEURISTIC,
+  COST,
+  COST_BIGRAM,
+};
+
+std::string AbslUnparseFlag(MergingStrategy severity) {
+  switch (severity) {
+    case HEURISTIC:
+      return "heuristic";
+    case COST:
+      return "cost";
+    case COST_BIGRAM:
+      return "cost_bigram";
+  }
+  return "";  // Should be unreachable
+}
+
+bool AbslParseFlag(absl::string_view text, MergingStrategy* dst,
+                   std::string* error) {
+  if (text == "heuristic") {
+    *dst = HEURISTIC;
+    return true;
+  }
+  if (text == "cost") {
+    *dst = COST;
+    return true;
+  }
+  if (text == "cost_bigram") {
+    *dst = COST_BIGRAM;
+    return true;
+  }
+
+  *error = "Value must be one of: heuristic, cost, cost_bigram.";
+  return false;
+}
+
+ABSL_FLAG(
+    MergingStrategy, merging_strategy, HEURISTIC,
+    "Sets the strategy that is used to decide how to merge patches together. "
+    "There are three available strategies:\n"
+    " - heuristic (default): this strategy uses a simple heuristic that aims "
+    "to keep patch sizes within a supplied min and max. This is the default "
+    "and fastest strategy. Incorporates the ordering of input "
+    "codepoints, but does not use frequency data.\n"
+    " - cost: uses a probability based cost function and selects merges "
+    "that reduce overal cost. Utilizes individual codepoint frequency data."
+    "Does not enforce patch size min and max. Slower than the "
+    "HEURISTIC approach.\n"
+    " - cost_bigram: a refinement of the COST approach that uses a "
+    "more accurate cost function based on codepoint bigram probabilities. "
+    "This incorporates information an codepoint co-occurence. However, "
+    "the approach is more computationally costly than the COST strategy.");
 
 ABSL_FLAG(uint32_t, network_overhead_cost, 75,
           "When picking merges via the cost method this is the cost in bytes "
@@ -118,21 +167,25 @@ using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 using util::CodepointAndFrequency;
 
+static bool FrequenciesAreRequired() {
+  MergingStrategy strategy = absl::GetFlag(FLAGS_merging_strategy);
+  return (strategy == COST) || (strategy == COST_BIGRAM);
+}
+
 StatusOr<std::vector<CodepointAndFrequency>> TargetCodepoints(
     hb_face_t* font, const std::string& codepoints_file,
     const IntSet& init_codepoints) {
   IntSet font_unicodes = FontHelper::ToCodepointsSet(font);
 
-  bool frequencies_required = absl::GetFlag(FLAGS_use_cost_based_merging);
   std::vector<CodepointAndFrequency> codepoints_filtered;
   if (!codepoints_file.empty()) {
     auto codepoints = TRY(util::LoadCodepointsOrdered(codepoints_file.c_str()));
-    if (frequencies_required) {
+    if (FrequenciesAreRequired()) {
       // When frequencies are used we want codepoints sorted by freq.
       std::sort(codepoints.begin(), codepoints.end());
     }
     for (const auto& cp : codepoints) {
-      if (frequencies_required && !cp.frequency.has_value()) {
+      if (FrequenciesAreRequired() && !cp.frequency.has_value()) {
         return absl::InvalidArgumentError(
             "When using cost based merging codepoint frequency data must be "
             "supplied. Missing for " +
@@ -357,8 +410,7 @@ StatusOr<std::vector<SubsetDefinition>> GroupCodepoints(
   uint32_t per_group = codepoints.size() / number_of_segments;
   uint32_t remainder = codepoints.size() % number_of_segments;
 
-  bool frequencies_required = absl::GetFlag(FLAGS_use_cost_based_merging);
-  if (per_group > 1 && frequencies_required) {
+  if (per_group > 1 && FrequenciesAreRequired()) {
     return absl::InvalidArgumentError(
         "When using codepoint frequencies there must only be one codepoint per "
         "segment.");
@@ -463,7 +515,7 @@ int main(int argc, char** argv) {
   MergeStrategy merge_strategy =
       MergeStrategy::Heuristic(absl::GetFlag(FLAGS_min_patch_size_bytes),
                                absl::GetFlag(FLAGS_max_patch_size_bytes));
-  if (absl::GetFlag(FLAGS_use_cost_based_merging)) {
+  if (FrequenciesAreRequired()) {
     auto freq_data =
         GetFrequencyData(absl::GetFlag(FLAGS_frequency_data_file), *codepoints);
     if (!freq_data.ok()) {
@@ -471,8 +523,14 @@ int main(int argc, char** argv) {
                 << freq_data.status();
     }
 
-    auto r = MergeStrategy::CostBased(
-        std::move(*freq_data), absl::GetFlag(FLAGS_network_overhead_cost));
+    MergingStrategy requested_strategy = absl::GetFlag(FLAGS_merging_strategy);
+    auto r = (requested_strategy == COST)
+                 ? MergeStrategy::CostBased(
+                       std::move(*freq_data),
+                       absl::GetFlag(FLAGS_network_overhead_cost))
+                 : MergeStrategy::BigramCostBased(
+                       std::move(*freq_data),
+                       absl::GetFlag(FLAGS_network_overhead_cost));
     if (!r.ok()) {
       std::cerr << "Failed to initialize merging strategy: " << r.status()
                 << std::endl;

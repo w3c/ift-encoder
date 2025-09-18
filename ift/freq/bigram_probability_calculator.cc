@@ -4,7 +4,6 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
-#include "ift/freq/probability_calculator.h"
 
 using common::CodepointSet;
 using ift::encoder::Segment;
