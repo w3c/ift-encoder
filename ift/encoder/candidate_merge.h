@@ -129,7 +129,7 @@ struct CandidateMerge {
   }
 
   // Applies this merge operation to the given SegmentationContext.
-  std::optional<common::GlyphSet> Apply(SegmentationContext& context);
+  common::GlyphSet Apply(SegmentationContext& context);
 
   static absl::StatusOr<std::optional<CandidateMerge>> AssessMerge(
       SegmentationContext& context, segment_index_t base_segment_index,
