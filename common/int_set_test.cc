@@ -177,6 +177,23 @@ TEST_F(IntSetTest, BasicIteration) {
   ASSERT_EQ(it, set.end());
 }
 
+TEST_F(IntSetTest, ReverseIteration) {
+  IntSet empty{};
+  ASSERT_EQ(empty.rbegin(), empty.rend());
+
+  IntSet set{7, 9, 10};
+  auto it = set.rbegin();
+
+  ASSERT_NE(it, set.rend());
+  ASSERT_EQ(*it, 10);
+  ASSERT_EQ(*it++, 10);
+  ASSERT_EQ(*it, 9);
+  ASSERT_EQ(*(++it), 7);
+  ASSERT_EQ(*it, 7);
+  ++it;
+  ASSERT_EQ(it, set.rend());
+}
+
 TEST_F(IntSetTest, ForLoop) {
   IntSet set{7, 9, 10};
   int expected[] = {7, 9, 10};
