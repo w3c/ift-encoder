@@ -13,11 +13,11 @@ UnicodeFrequencies::UnicodeFrequencies(
   }
 }
 
-static uint64_t  ToKey(uint32_t cp1, uint32_t cp2) {
+static uint64_t ToKey(uint32_t cp1, uint32_t cp2) {
   if (cp1 < cp2) {
-    return (((uint64_t) cp1) << 32) | ((uint64_t) cp2);
+    return (((uint64_t)cp1) << 32) | ((uint64_t)cp2);
   } else {
-    return (((uint64_t) cp2) << 32) | ((uint64_t) cp1);
+    return (((uint64_t)cp2) << 32) | ((uint64_t)cp1);
   }
 }
 
@@ -27,12 +27,12 @@ void UnicodeFrequencies::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
   freq += count;
   if (freq > max_count_) {
     max_count_ = freq;
-    unknown_probability = 1.0 / (double) max_count_;
+    unknown_probability = 1.0 / (double)max_count_;
     for (auto it = frequencies_.begin(); it != frequencies_.end(); it++) {
-      probabilities_[it->first] = (double) it->second / (double) max_count_;
+      probabilities_[it->first] = (double)it->second / (double)max_count_;
     }
   } else {
-    probabilities_[key] = (double) freq / (double) max_count_;
+    probabilities_[key] = (double)freq / (double)max_count_;
   }
 }
 
