@@ -47,7 +47,13 @@ class SegmentationContext {
         merge_strategy(std::move(strategy)),
         segmentation_info(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(segments) {}
+        glyph_groupings(segments) {
+    for (unsigned i = 0; i < segments.size(); i++) {
+      if (!segments[i].Definition().Empty()) {
+        active_segments.insert(i);
+      }
+    }
+  }
 
   // Convert the information in this context into a finalized GlyphSegmentation
   // representation.
@@ -121,7 +127,12 @@ class SegmentationContext {
 
   // Phase 1 - derived from segments and init information
   GlyphConditionSet glyph_condition_set;
-  common::SegmentSet inert_segments;
+  common::SegmentSet
+      inert_segments;  // segments that don't interact with anything
+  common::SegmentSet active_segments;  // segments that are non-empty, and still
+                                       // need processing for merging.
+  // TODO(garretrieger): XXXXX if using cost strategy, compute a segment cutoff
+  // for the low probability long tail.
 
   // Phase 2 - derived from glyph_condition_set and init information.
   GlyphGroupings glyph_groupings;

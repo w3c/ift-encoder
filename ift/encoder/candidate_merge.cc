@@ -51,12 +51,16 @@ StatusOr<bool> CandidateMerge::IsPatchTooSmall(
   return true;
 }
 
-std::optional<GlyphSet> CandidateMerge::Apply(SegmentationContext& context) {
+GlyphSet CandidateMerge::Apply(SegmentationContext& context) {
   const auto& segments = context.segmentation_info.Segments();
   uint32_t size_before =
       segments[base_segment_index].Definition().codepoints.size();
   uint32_t size_after = context.segmentation_info.AssignMergedSegment(
       base_segment_index, segments_to_merge, merged_segment);
+
+  context.active_segments.subtract(segments_to_merge);
+  context.active_segments.insert(base_segment_index);
+
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
           << " codepoints for segment " << base_segment_index << "."
           << std::endl

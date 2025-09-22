@@ -418,7 +418,7 @@ StatusOr<std::vector<SubsetDefinition>> GroupCodepoints(
 
   std::vector<SubsetDefinition> out;
   auto end = codepoints.begin();
-  for (uint32_t i = 0; i < number_of_segments; i++) {
+  for (uint32_t i = 0; i < number_of_segments && end != codepoints.end(); i++) {
     auto start = end;
     end = std::next(end, per_group);
     if (remainder > 0) {
@@ -431,7 +431,9 @@ StatusOr<std::vector<SubsetDefinition>> GroupCodepoints(
       def.codepoints.insert(start->codepoint);
     }
 
-    out.push_back(def);
+    if (!def.Empty()) {
+      out.push_back(def);
+    }
   }
 
   return out;
