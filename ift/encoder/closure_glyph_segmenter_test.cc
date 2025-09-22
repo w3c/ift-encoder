@@ -559,6 +559,49 @@ TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
       << s.status();
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       SimpleSegmentation_AvoidsEmptyBases) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 1000},
+      {{'a', 'a'}, 1000},
+      {{'!', '!'}, 999},
+      {{0x203C, 0x203C}, 1} // !!
+      // Everything unspecified defaults to a count of 1.
+  };
+
+  // Base line, nothing is merged
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {{'a'}, {'!'}, {0x203C}},
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 1));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // With the current implementation we don't expect these segments to be merged
+  // together.
+  //
+  // {'!'} has no exclusive patch associated with it so it won't participate
+  // in the base merging checks. 0x203C won't be merged due to it's low frequency
+  //
+  // TODO(garretrieger): for this case to be correctly handled we need to check
+  //                     all composite conditions not just those that interact
+  //                     with the base segment. This will see the ('!' or 0x203c)
+  //                     as a cost reducing merge candidate.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'}, {'!'}, {0x203C}
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69 }
+p1: { gid989 }
+p2: { gid5 }
+if (s0) then p0
+if (s2) then p1
+if ((s1 OR s2)) then p2
+)");
+}
+
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 

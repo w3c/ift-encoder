@@ -320,6 +320,14 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
   // codepoints this approach has not yet been thoroughly tested. Next steps
   // would be to gather some frequency data, test this approach as is, and then
   // refine it potentially using some of the proposals noted above.
+
+  auto base_segment_glyphs = context.glyph_groupings.AndGlyphGroups().find(
+      SegmentSet{base_segment_index});
+  if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end()) {
+    // This base segment has no exclusive glyphs, there's no need to to compute merges.
+    return std::nullopt;
+  }
+
   std::optional<CandidateMerge> smallest_candidate_merge;
   const auto& base_segment =
       context.segmentation_info.Segments()[base_segment_index];
@@ -329,10 +337,8 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
-    const GlyphSet& base_glyphs =
-        context.glyph_condition_set.GlyphsWithSegment(base_segment_index);
     unsigned base_size =
-        TRY(context.patch_size_cache->GetPatchSize(base_glyphs));
+        TRY(context.patch_size_cache->GetPatchSize(base_segment_glyphs->second));
     smallest_candidate_merge = CandidateMerge::BaselineCandidate(
         base_segment_index, 0.0, base_size, base_segment.Probability(),
         context.merge_strategy.NetworkOverheadCost());

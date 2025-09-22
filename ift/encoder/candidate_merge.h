@@ -86,16 +86,13 @@ struct CandidateMerge {
   // segment must have for it to be possible to have a lower cost delta than
   // this one. Used to prefilter merges and avoid expensive cost delta
   // calculations.
-  double InertProbabilityThreshold(uint32_t patch_size) const {
+  double InertProbabilityThreshold(uint32_t patch_size, double merged_probability) const {
     // The threshold calculation here was worked out by hand by considering the
     // equation:
     //
     // minimum cost delta > best case merged size * merge probability
     //                      - total base size * base probability
     //                      - total patch size * patch probability
-    //
-    // Where merge probability is 1 - (1 - base probability) * (1 - patch
-    // probability) and the patch sizes include network overhead.
     //
     // The threshold is then found by solving for patch probability in the above
     // inequality.
@@ -113,18 +110,9 @@ struct CandidateMerge {
     double total_base_size = base_size + network_overhead;
     double total_patch_size = patch_size + network_overhead;
 
-    double denom = best_case_merged_size -
-                   best_case_merged_size * base_probability - total_patch_size;
-    if (denom >= 0.0) {
-      // The minimum threshold is only valid when denom < 0, otherwise the
-      // greater than sign flips in the equality. In this case return -1 which
-      // implies no threshold.
-      return -1.0;
-    }
 
-    double numerator = cost_delta - best_case_merged_size * base_probability +
-                       total_base_size * base_probability;
-    double min_p = std::min(std::max(numerator / denom, 0.0), 1.0);
+    double numerator = merged_probability * best_case_merged_size - base_probability * total_base_size - cost_delta;
+    double min_p = std::min(std::max(numerator / total_patch_size, 0.0), 1.0);
     return min_p;
   }
 

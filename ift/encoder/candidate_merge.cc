@@ -298,6 +298,9 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
 
   const auto& segments = context.segmentation_info.Segments();
 
+  Segment merged_segment = segments[base_segment_index];
+  MergeSegments(context, segments_to_merge, merged_segment);
+
   if (context.merge_strategy.UseCosts() && segments_to_merge_are_inert &&
       segments_to_merge.size() == 1 && best_merge_candidate.has_value()) {
     // Given an existing best merge candidate we can compute a probability
@@ -307,15 +310,12 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     unsigned segment_to_merge_size = TRY(context.patch_size_cache->GetPatchSize(
         context.glyph_condition_set.GlyphsWithSegment(segment_to_merge)));
     double threshold =
-        best_merge_candidate->InertProbabilityThreshold(segment_to_merge_size);
+        best_merge_candidate->InertProbabilityThreshold(segment_to_merge_size, merged_segment.Probability());
     if (segments[segment_to_merge].Probability() <= threshold) {
       // No chance for this merge to beat the current best.
       return std::nullopt;
     }
   }
-
-  Segment merged_segment = segments[base_segment_index];
-  MergeSegments(context, segments_to_merge, merged_segment);
 
   GlyphSet gid_conditions_to_update;
   for (segment_index_t segment_index : segments_to_merge) {
