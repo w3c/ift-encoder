@@ -478,19 +478,19 @@ TEST_F(ClosureGlyphSegmenterTest,
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
-      {'a', 'b', 'c'}, {'f', 'g', 'h'}, {'k', 'l', 'm', 'n', 'o'}};
+      {'k', 'l', 'm', 'n', 'o'}, {'a', 'b', 'c'}, {'f', 'g', 'h'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid69, gid70, gid71 }
-p1: { gid74, gid75, gid76 }
-p2: { gid79, gid80, gid81, gid82, gid83 }
+p0: { gid79, gid80, gid81, gid82, gid83 }
+p1: { gid69, gid70, gid71 }
+p2: { gid74, gid75, gid76 }
 p3: { gid445, gid447 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
-if (s1 AND s2) then p3
+if (s0 AND s2) then p3
 )");
 
   // With higher group minimums the two smaller segments are merged together
@@ -505,17 +505,17 @@ if (s1 AND s2) then p3
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   expected_segments = {
-      {'a', 'b', 'c', 'f', 'g', 'h'}, {}, {'k', 'l', 'm', 'n', 'o'}};
+      {'k', 'l', 'm', 'n', 'o'}, {'a', 'b', 'c', 'f', 'g', 'h'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid69, gid70, gid71, gid74, gid75, gid76 }
-p1: { gid79, gid80, gid81, gid82, gid83 }
+p0: { gid79, gid80, gid81, gid82, gid83 }
+p1: { gid69, gid70, gid71, gid74, gid75, gid76 }
 p2: { gid445, gid447 }
 if (s0) then p0
-if (s2) then p1
-if (s0 AND s2) then p2
+if (s1) then p1
+if (s0 AND s1) then p2
 )");
 }
 

@@ -1,5 +1,6 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -475,6 +476,21 @@ static StatusOr<std::vector<Segment>> ToSegments(
   for (const auto& def : subset_definitions) {
     auto probability = calculator->ComputeProbability(def);
     segments.emplace_back(def, probability);
+  }
+  if (merge_strategy.UseCosts()) {
+    // Cost based merging has probability data available for segments, use that
+    // to sort from highest to lowest. Later processing relies on this ordering.
+    std::sort(segments.begin(), segments.end(),
+              [](const Segment& a, const Segment& b) {
+                if (a.Probability() != b.Probability()) {
+                  return a.Probability() > b.Probability();
+                }
+                if (a.Definition().codepoints != b.Definition().codepoints) {
+                  return a.Definition().codepoints < b.Definition().codepoints;
+                }
+                return a.Definition().feature_tags <
+                       b.Definition().feature_tags;
+              });
   }
   return segments;
 }
