@@ -12,6 +12,7 @@ namespace common {
 
 class IntSet;
 
+template<bool reverse>
 class IntSetIterator {
  public:
   using iterator_category = std::forward_iterator_tag;
@@ -41,7 +42,7 @@ class IntSetIterator {
 
   IntSetIterator& operator++() {
     if (set_) {
-      if (!hb_set_next(set_, &current_codepoint_)) {
+      if (!(!reverse ? hb_set_next(set_, &current_codepoint_) : hb_set_previous(set_, &current_codepoint_))) {
         // Reached the end
         set_ = nullptr;
         current_codepoint_ = HB_CODEPOINT_INVALID;
@@ -73,8 +74,10 @@ class IntSetIterator {
  */
 class IntSet {
  public:
-  using iterator = IntSetIterator;
-  using const_iterator = IntSetIterator;
+  using iterator = IntSetIterator<false>;
+  using rev_iterator = IntSetIterator<true>;
+  using const_iterator = IntSetIterator<false>;
+  using const_rev_iterator = IntSetIterator<true>;
 
   IntSet() : set_(make_hb_set()) {}
 
@@ -171,6 +174,16 @@ class IntSet {
   const_iterator cend() const {
     return end();  // Calls const end()
   }
+
+  // Reverse iterators
+  rev_iterator rbegin() { return rev_iterator(set_.get()); }
+
+  rev_iterator rend() { return rev_iterator(); }
+
+  // const versions simply return the same iterator type
+  const_rev_iterator rbegin() const { return const_rev_iterator(set_.get()); }
+
+  const_rev_iterator rend() const { return const_rev_iterator(); }
 
   // Iterator over values in the set that are equal to or greater than start.
   const_iterator lower_bound(hb_codepoint_t start) const {
