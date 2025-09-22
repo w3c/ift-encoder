@@ -353,4 +353,46 @@ TEST_F(IntSetTest, SymmetricDifference) {
   ASSERT_EQ(a, expected);
 }
 
+TEST_F(IntSetTest, LowerBound) {
+  IntSet empty;
+  auto empty_it = empty.lower_bound(10);
+  ASSERT_EQ(empty_it, empty.end());
+
+  IntSet a{10, 20, 30};
+  auto it = a.lower_bound(15);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 20);
+
+  it = a.lower_bound(20);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 20);
+  it++;
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 30);
+  it++;
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(5);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 10);
+
+  it = a.lower_bound(35);
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(30);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 30);
+  ++it;
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(0);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 10);
+
+  IntSet b{0, 20, 30};
+  it = b.lower_bound(0);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 0);
+}
+
 }  // namespace common
