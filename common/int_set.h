@@ -26,8 +26,9 @@ class IntSetIterator {
   const hb_set_t* set_ = nullptr;  // nullptr signals we are at the end.
   hb_codepoint_t current_codepoint_ = HB_SET_VALUE_INVALID;
 
-  IntSetIterator(const hb_set_t* set)
-      : set_(set), current_codepoint_(HB_SET_VALUE_INVALID) {
+  IntSetIterator(const hb_set_t* set,
+                 hb_codepoint_t current_codepoint = HB_SET_VALUE_INVALID)
+      : set_(set), current_codepoint_(current_codepoint) {
     // c++ iterators start on the first element, so advance the iterator one
     // element.
     ++(*this);
@@ -169,6 +170,16 @@ class IntSet {
 
   const_iterator cend() const {
     return end();  // Calls const end()
+  }
+
+  // Iterator over values in the set that are equal to or greater than start.
+  const_iterator lower_bound(hb_codepoint_t start) const {
+    if (start > 0) {
+      start -= 1;
+    } else {
+      start = HB_SET_VALUE_INVALID;
+    }
+    return const_iterator(set_.get(), start);
   }
 
   void insert(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
