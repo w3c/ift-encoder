@@ -48,7 +48,14 @@ double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2) const {
   if (it != probabilities_.end()) {
     return it->second;
   }
-  return unknown_probability;
+
+  if (cp1 == cp2) {
+    return unknown_probability;
+  }
+
+  // Since we don't have data  on P(cp1 n cp2), just assume the probabilities
+  // for P(cp1) and P(cp2) are independent:
+  return ProbabilityFor(cp1, cp1) * ProbabilityFor(cp2, cp2);
 }
 
 }  // namespace ift::freq

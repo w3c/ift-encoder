@@ -12,7 +12,7 @@ namespace common {
 
 class IntSet;
 
-template<bool reverse>
+template <bool reverse>
 class IntSetIterator {
  public:
   using iterator_category = std::forward_iterator_tag;
@@ -42,7 +42,8 @@ class IntSetIterator {
 
   IntSetIterator& operator++() {
     if (set_) {
-      if (!(!reverse ? hb_set_next(set_, &current_codepoint_) : hb_set_previous(set_, &current_codepoint_))) {
+      if (!(!reverse ? hb_set_next(set_, &current_codepoint_)
+                     : hb_set_previous(set_, &current_codepoint_))) {
         // Reached the end
         set_ = nullptr;
         current_codepoint_ = HB_CODEPOINT_INVALID;

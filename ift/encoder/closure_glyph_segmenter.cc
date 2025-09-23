@@ -161,13 +161,13 @@ StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
   //  individual patch sizes don't need to be recomputed later on.
 
   auto next_segment_it =
-      context.active_segments.lower_bound(base_segment_index);
-  if (next_segment_it != context.active_segments.end() &&
+      context.ActiveSegments().lower_bound(base_segment_index);
+  if (next_segment_it != context.ActiveSegments().end() &&
       *next_segment_it == base_segment_index) {
     next_segment_it++;
   }
 
-  while (next_segment_it != context.active_segments.end()) {
+  while (next_segment_it != context.ActiveSegments().end()) {
     SegmentSet triggering_segments{*next_segment_it};
 
     auto modified_gids =
@@ -226,6 +226,12 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithHeuristic(
 Status CollectCompositeCandidateMerges(
     SegmentationContext& context, uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
+  if (base_segment_index >= context.OptimizationCutoffSegment()) {
+    // We are at the optimization cutoff, so we won't evaluate any composite
+    // candidates
+    return absl::OkStatus();
+  }
+
   auto candidate_conditions =
       context.glyph_groupings.TriggeringSegmentToConditions(base_segment_index);
   for (ActivationCondition next_condition : candidate_conditions) {
@@ -256,10 +262,18 @@ Status CollectCompositeCandidateMerges(
 Status CollectExclusiveCandidateMerges(
     SegmentationContext& context, uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
-  for (auto it = context.active_segments.lower_bound(base_segment_index);
-       it != context.active_segments.end(); it++) {
+  for (auto it = context.ActiveSegments().lower_bound(base_segment_index);
+       it != context.ActiveSegments().end(); it++) {
     if (*it == base_segment_index) {
       continue;
+    }
+
+    if (*it >= context.OptimizationCutoffSegment() &&
+        smallest_candidate_merge.has_value()) {
+      // We are at the optimization cutoff, so we won't evaluate any further
+      // candidates beyond what is need to select at least one. Since a
+      // candidate already exists, we can stop here.
+      return absl::OkStatus();
     }
 
     SegmentSet triggering_segments{*it};
@@ -324,24 +338,25 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
   auto base_segment_glyphs = context.glyph_groupings.AndGlyphGroups().find(
       SegmentSet{base_segment_index});
   if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end()) {
-    // This base segment has no exclusive glyphs, there's no need to to compute merges.
+    // This base segment has no exclusive glyphs, there's no need to to compute
+    // merges.
     return std::nullopt;
   }
 
   std::optional<CandidateMerge> smallest_candidate_merge;
   const auto& base_segment =
-      context.segmentation_info.Segments()[base_segment_index];
+      context.SegmentationInfo().Segments()[base_segment_index];
   bool min_group_size_met = base_segment.MeetsMinimumGroupSize(
-      context.merge_strategy.MinimumGroupSize());
+      context.GetMergeStrategy().MinimumGroupSize());
   if (min_group_size_met) {
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
-    unsigned base_size =
-        TRY(context.patch_size_cache->GetPatchSize(base_segment_glyphs->second));
+    unsigned base_size = TRY(
+        context.patch_size_cache->GetPatchSize(base_segment_glyphs->second));
     smallest_candidate_merge = CandidateMerge::BaselineCandidate(
         base_segment_index, 0.0, base_size, base_segment.Probability(),
-        context.merge_strategy.NetworkOverheadCost());
+        context.GetMergeStrategy().NetworkOverheadCost());
   }
 
   TRYV(CollectExclusiveCandidateMerges(context, base_segment_index,
@@ -375,17 +390,21 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
  * to allow groupings to be updated.
  */
 StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
-MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
-  if (context.merge_strategy.IsNone()) {
+MergeNextBaseSegment(SegmentationContext& context) {
+  if (context.GetMergeStrategy().IsNone()) {
     return std::nullopt;
   }
 
-  for (auto it = context.active_segments.lower_bound(start_segment);
-       it != context.active_segments.cend(); it++) {
+  while (true) {
+    auto it = context.ActiveSegments().cbegin();
+    if (it == context.ActiveSegments().cend()) {
+      break;
+    }
+
     segment_index_t base_segment_index = *it;
 
     std::optional<GlyphSet> modified_gids;
-    if (context.merge_strategy.UseCosts()) {
+    if (context.GetMergeStrategy().UseCosts()) {
       modified_gids = TRY(MergeSegmentWithCosts(context, base_segment_index));
     } else {
       modified_gids =
@@ -396,7 +415,7 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
       return std::pair(base_segment_index, *modified_gids);
     }
 
-    context.active_segments.erase(base_segment_index);
+    context.MarkFinished(base_segment_index);
   }
 
   return std::nullopt;
@@ -411,13 +430,13 @@ MergeNextBaseSegment(SegmentationContext& context, uint32_t start_segment) {
 Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
   SegmentationContext non_incremental_context(
-      face, context.segmentation_info.InitFontSegment(),
-      context.segmentation_info.Segments(), MergeStrategy::None());
+      face, context.SegmentationInfo().InitFontSegment(),
+      context.SegmentationInfo().Segments(), MergeStrategy::None());
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
   for (segment_index_t segment_index = 0;
-       segment_index < context.segmentation_info.Segments().size();
+       segment_index < context.SegmentationInfo().Segments().size();
        segment_index++) {
     TRY(non_incremental_context.ReprocessSegment(segment_index));
   }
@@ -491,11 +510,12 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     TRYV(CheckForDisjointCodepoints(subset_definitions));
   }
 
+  std::vector<Segment> segments =
+      TRY(ToSegments(subset_definitions, merge_strategy));
   SegmentationContext context = TRY(InitializeSegmentationContext(
-      face, initial_segment,
-      TRY(ToSegments(subset_definitions, merge_strategy))));
-  context.merge_strategy = std::move(merge_strategy);
-  if (context.merge_strategy.IsNone()) {
+      face, initial_segment, std::move(segments), std::move(merge_strategy)));
+
+  if (context.GetMergeStrategy().IsNone()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
   }
@@ -503,7 +523,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // ### Iteratively merge segments and incrementally reprocess affected data.
   segment_index_t last_merged_segment_index = 0;
   while (true) {
-    auto merged = TRY(MergeNextBaseSegment(context, last_merged_segment_index));
+    auto merged = TRY(MergeNextBaseSegment(context));
 
     if (!merged.has_value()) {
       // Nothing was merged so we're done.
@@ -515,7 +535,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     last_merged_segment_index = merged_segment_index;
 
     GlyphSet analysis_modified_gids;
-    if (!context.inert_segments.contains(last_merged_segment_index)) {
+    if (!context.InertSegments().contains(last_merged_segment_index)) {
       VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
               << " due to merge.";
       analysis_modified_gids =
@@ -534,7 +554,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 StatusOr<SegmentationContext>
 ClosureGlyphSegmenter::InitializeSegmentationContext(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> segments) const {
+    std::vector<Segment> segments, MergeStrategy merge_strategy) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
@@ -546,13 +566,13 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
 
   // No merging is done during init.
   SegmentationContext context(face, initial_segment, segments,
-                              MergeStrategy::None());
+                              std::move(merge_strategy));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###
   VLOG(0) << "Forming initial segmentation plan.";
   for (segment_index_t segment_index = 0;
-       segment_index < context.segmentation_info.Segments().size();
+       segment_index < context.SegmentationInfo().Segments().size();
        segment_index++) {
     TRY(context.ReprocessSegment(segment_index));
   }
@@ -562,6 +582,8 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   all_glyphs.insert_range(0, glyph_count - 1);
   TRYV(context.GroupGlyphs(all_glyphs));
   context.glyph_closure_cache.LogClosureCount("Condition grouping");
+
+  TRYV(context.InitOptimizationCutoff());
 
   return context;
 }

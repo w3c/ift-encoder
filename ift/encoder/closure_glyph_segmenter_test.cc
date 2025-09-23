@@ -559,20 +559,18 @@ TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
       << s.status();
 }
 
-TEST_F(ClosureGlyphSegmenterTest,
-       SimpleSegmentation_AvoidsEmptyBases) {
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_AvoidsEmptyBases) {
   UnicodeFrequencies frequencies{
       {{' ', ' '}, 1000},
       {{'a', 'a'}, 1000},
       {{'!', '!'}, 999},
-      {{0x203C, 0x203C}, 1} // !!
-      // Everything unspecified defaults to a count of 1.
+      {{0x203C, 0x203C}, 1}  // !!
+                             // Everything unspecified defaults to a count of 1.
   };
 
   // Base line, nothing is merged
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a'}, {'!'}, {0x203C}},
+      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}},
       *MergeStrategy::CostBased(std::move(frequencies), 75, 1));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -580,15 +578,14 @@ TEST_F(ClosureGlyphSegmenterTest,
   // together.
   //
   // {'!'} has no exclusive patch associated with it so it won't participate
-  // in the base merging checks. 0x203C won't be merged due to it's low frequency
+  // in the base merging checks. 0x203C won't be merged due to it's low
+  // frequency
   //
   // TODO(garretrieger): for this case to be correctly handled we need to check
   //                     all composite conditions not just those that interact
-  //                     with the base segment. This will see the ('!' or 0x203c)
-  //                     as a cost reducing merge candidate.
-  std::vector<SubsetDefinition> expected_segments = {
-      {'a'}, {'!'}, {0x203C}
-  };
+  //                     with the base segment. This will see the ('!' or
+  //                     0x203c) as a cost reducing merge candidate.
+  std::vector<SubsetDefinition> expected_segments = {{'a'}, {'!'}, {0x203C}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -599,6 +596,132 @@ p2: { gid5 }
 if (s0) then p0
 if (s2) then p1
 if ((s1 OR s2)) then p2
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoCostCutoff) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},
+      {{'d', 'd'}, 1},
+      // Pairs - setup so that b, c, d are always occuring together.
+      {{'b', 'c'}, 1},
+      {{'b', 'd'}, 1},
+      {{'c', 'd'}, 1},
+  };
+
+  auto strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.0);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // No Optimization Cutoff, b, c, and d are merged
+  // It's expected that s0 and s1 are merged together to reduce network
+  // overhead.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'},
+      {'b', 'c', 'd'},
+      {},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69 }
+p1: { gid70, gid71, gid72 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_WithCostCutoff) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},
+      {{'d', 'd'}, 1},
+      // Pairs - setup so that b, c, d are always occuring together.
+      {{'b', 'c'}, 1},
+      {{'b', 'd'}, 1},
+      {{'c', 'd'}, 1},
+  };
+
+  auto strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.05);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // With Optimization Cutoff, b, c, and d are not merged since
+  // optimization is disabled for them.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'},
+      {'b'},
+      {'c'},
+      {'d'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69 }
+p1: { gid70 }
+p2: { gid71 }
+p3: { gid72 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       SimpleSegmentation_WithCostCutoffAndMinGroup) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},
+      {{'d', 'd'}, 1},
+      // Pairs - setup so that b, c, d are always occuring together.
+      {{'b', 'c'}, 1},
+      {{'b', 'd'}, 1},
+      {{'c', 'd'}, 1},
+  };
+
+  auto strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 2);
+  strategy.SetOptimizationCutoffFraction(0.05);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // b, c, and d have optimization cutoff but will still be merged up to the
+  // min group size of 2.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b'},
+      {},
+      {'c', 'd'},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69, gid70 }
+p1: { gid71, gid72 }
+if (s0) then p0
+if (s2) then p1
 )");
 }
 
