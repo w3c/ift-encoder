@@ -78,11 +78,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter;
-  auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4));
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy =
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
@@ -141,11 +140,10 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter;
-  auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4));
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy =
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4);
 
   unsigned base_size =
       *context->patch_size_cache->GetPatchSize({'a', 'b', 'c', 'd', 'e', 'f'});
@@ -156,7 +154,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.95,
-          context->merge_strategy.NetworkOverheadCost()));
+          context->GetMergeStrategy().NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -168,7 +166,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
           4, -500.0, base_size, 0.95,
-          context->merge_strategy.NetworkOverheadCost()));
+          context->GetMergeStrategy().NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -180,7 +178,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       *context, 0, {3},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.95,
-          context->merge_strategy.NetworkOverheadCost()));
+          context->GetMergeStrategy().NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -191,7 +189,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       *context, 3, {0},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.01,
-          context->merge_strategy.NetworkOverheadCost()));
+          context->GetMergeStrategy().NetworkOverheadCost()));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 }
@@ -207,11 +205,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   };
 
   ClosureGlyphSegmenter segmenter;
-  auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 4));
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -257,11 +254,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
 
   ClosureGlyphSegmenter segmenter;
-  auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 4));
   ASSERT_TRUE(context.ok()) << context.status();
-  context->merge_strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 4);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 

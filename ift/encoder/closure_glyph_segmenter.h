@@ -47,7 +47,7 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<Segment> segments) const;
+      std::vector<Segment> segments, MergeStrategy merge_strategy) const;
 };
 
 }  // namespace ift::encoder

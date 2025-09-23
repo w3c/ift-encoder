@@ -29,11 +29,16 @@ TEST(UnicodeFrequenciesTest, ProbabilityFor_MissingFrequency) {
   UnicodeFrequencies freq{
       {{1, 2}, 10},
       {{2, 3}, 20},
+      {{3, 3}, 15},
   };
 
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1), 1.0 / 20.0);
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 1), 1.0 / 20.0);
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(4, 5), 1.0 / 20.0);
+
+  // For P(a n b) with unknown probabilities they are assumed to be
+  // independent.
+  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(4, 5), 1.0 / (20.0 * 20.0));
+  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(3, 4), 15.0 / (20.0 * 20.0));
 }
 
 TEST(UnicodeFrequenciesTest, AddAccumulates) {

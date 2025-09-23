@@ -74,6 +74,12 @@ ABSL_FLAG(uint32_t, max_patch_size_bytes, UINT32_MAX,
           "The segmenter will avoid merges which result in patches larger than "
           "this amount.");
 
+ABSL_FLAG(double, optimization_cutoff_fraction, 0.001,
+          "Stop optimizing segments with total cost below this fraction of "
+          "the total cost. Used to speedup processing time by skipping "
+          "optimization of segments that have very little contribution to "
+          "the total segmentation cost.");
+
 enum MergingStrategy {
   HEURISTIC,
   COST,
@@ -539,6 +545,9 @@ int main(int argc, char** argv) {
       return -1;
     }
     merge_strategy = std::move(*r);
+
+    merge_strategy.SetOptimizationCutoffFraction(
+        absl::GetFlag(FLAGS_optimization_cutoff_fraction));
   }
 
   ClosureGlyphSegmenter segmenter;

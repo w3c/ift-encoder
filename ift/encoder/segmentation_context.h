@@ -1,10 +1,12 @@
 #ifndef IFT_ENCODER_SEGMENTATION_CONTEXT_H_
 #define IFT_ENCODER_SEGMENTATION_CONTEXT_H_
 
+#include <cstdint>
 #include <memory>
 
 #include "absl/status/status.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
@@ -15,6 +17,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 
 namespace ift::encoder {
 
@@ -44,13 +47,14 @@ class SegmentationContext {
             new PatchSizeCacheImpl(face, strategy.BrotliQuality())),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        merge_strategy(std::move(strategy)),
-        segmentation_info(segments, initial_segment, glyph_closure_cache),
+        segmentation_info_(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(segments) {
+        glyph_groupings(segments),
+        merge_strategy_(std::move(strategy)),
+        optimization_cutoff_segment_(UINT32_MAX) {
     for (unsigned i = 0; i < segments.size(); i++) {
       if (!segments[i].Definition().Empty()) {
-        active_segments.insert(i);
+        active_segments_.insert(i);
       }
     }
   }
@@ -59,10 +63,66 @@ class SegmentationContext {
   // representation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
     GlyphSegmentation segmentation =
-        TRY(glyph_groupings.ToGlyphSegmentation(segmentation_info));
+        TRY(glyph_groupings.ToGlyphSegmentation(segmentation_info_));
     glyph_closure_cache.LogCacheStats();
     TRYV(ValidateSegmentation(segmentation));
     return segmentation;
+  }
+
+  const common::SegmentSet& ActiveSegments() const { return active_segments_; }
+
+  const common::SegmentSet& InertSegments() const { return inert_segments_; }
+
+  segment_index_t OptimizationCutoffSegment() const {
+    return optimization_cutoff_segment_;
+  }
+
+  const MergeStrategy& GetMergeStrategy() const { return merge_strategy_; }
+
+  const RequestedSegmentationInformation& SegmentationInfo() const {
+    return segmentation_info_;
+  }
+
+  // Assign a new merged segment to base and clear all of the segments that
+  // were merged into it.
+  uint32_t AssignMergedSegment(segment_index_t base,
+                               const common::SegmentSet& to_merge,
+                               const Segment& merged_segment, bool is_inert) {
+    unsigned count =
+        segmentation_info_.AssignMergedSegment(base, to_merge, merged_segment);
+    active_segments_.subtract(to_merge);
+    active_segments_.insert(base);
+    inert_segments_.subtract(to_merge);
+    if (is_inert) {
+      inert_segments_.insert(base);
+    } else {
+      inert_segments_.erase(base);
+    }
+    return count;
+  }
+
+  absl::Status InitOptimizationCutoff() {
+    if (GetMergeStrategy().UseCosts()) {
+      optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
+      if (optimization_cutoff_segment_ < segmentation_info_.Segments().size()) {
+        VLOG(0) << "Cutting off optimization at segment "
+                << optimization_cutoff_segment_ << ", P("
+                << optimization_cutoff_segment_ << ") = "
+                << segmentation_info_.Segments()[optimization_cutoff_segment_]
+                       .Probability();
+      } else {
+        VLOG(0) << "No optimization cutoff.";
+      }
+    }
+    return absl::OkStatus();
+  }
+
+  // Marks a segment as being finished being optimized.
+  //
+  // This will stop the merging iteration from doing any further
+  // processing on this segment.
+  void MarkFinished(segment_index_t segment) {
+    active_segments_.erase(segment);
   }
 
   /*
@@ -88,7 +148,7 @@ class SegmentationContext {
                               common::GlyphSet& or_gids,
                               common::GlyphSet& exclusive_gids) {
     return glyph_closure_cache.AnalyzeSegment(
-        segmentation_info, segment_ids, and_gids, or_gids, exclusive_gids);
+        segmentation_info_, segment_ids, and_gids, or_gids, exclusive_gids);
   }
 
   // Generates updated glyph conditions and glyph groupings for segment_index
@@ -101,7 +161,7 @@ class SegmentationContext {
   // The glyph condition set must be up to date and fully computed prior to
   // calling this.
   absl::Status GroupGlyphs(const common::GlyphSet& glyphs) {
-    return glyph_groupings.GroupGlyphs(segmentation_info, glyph_condition_set,
+    return glyph_groupings.GroupGlyphs(segmentation_info_, glyph_condition_set,
                                        glyph_closure_cache, glyphs);
   }
 
@@ -115,6 +175,12 @@ class SegmentationContext {
   absl::Status ValidateSegmentation(
       const GlyphSegmentation& segmentation) const;
 
+  // If the merging strategy specifies a minimum cost threshold, this computes
+  // the segment where we should stop computing optimized merges. This is
+  // considered to be the place where the potentional upside of optimization is
+  // too small to be worthwhile.
+  absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
+
  public:
   // Caches and logging
   std::unique_ptr<PatchSizeCache> patch_size_cache;
@@ -122,20 +188,26 @@ class SegmentationContext {
 
   // Init
   common::hb_face_unique_ptr original_face;
-  MergeStrategy merge_strategy;
-  RequestedSegmentationInformation segmentation_info;
 
-  // Phase 1 - derived from segments and init information
+ private:
+  RequestedSegmentationInformation segmentation_info_;
+
+ public:
+  // == Phase 1 - derived from segments and init information
   GlyphConditionSet glyph_condition_set;
-  common::SegmentSet
-      inert_segments;  // segments that don't interact with anything
-  common::SegmentSet active_segments;  // segments that are non-empty, and still
-                                       // need processing for merging.
-  // TODO(garretrieger): XXXXX if using cost strategy, compute a segment cutoff
-  // for the low probability long tail.
 
-  // Phase 2 - derived from glyph_condition_set and init information.
+  // == Phase 2 - derived from glyph_condition_set and init information.
   GlyphGroupings glyph_groupings;
+
+ private:
+  MergeStrategy merge_strategy_;
+
+  // == Merging Segment metadata
+  // segments that don't interact with anything
+  common::SegmentSet inert_segments_;
+  // segments that are non-empty, and still need processing for merging.
+  common::SegmentSet active_segments_;
+  segment_index_t optimization_cutoff_segment_;
 };
 
 }  // namespace ift::encoder

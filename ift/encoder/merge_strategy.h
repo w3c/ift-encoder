@@ -118,6 +118,18 @@ class MergeStrategy {
     return probability_calculator_.get();
   }
 
+  // Configures the threshold for when to stop optimizing segments.
+  //
+  // For the set of segments which account for less than this fraction of the
+  // total cost don't do expensive optimized merging, just merge adjacent
+  // segments.
+  double OptimizationCutoffFraction() const {
+    return optimization_cutoff_fraction_;
+  }
+  void SetOptimizationCutoffFraction(double value) {
+    optimization_cutoff_fraction_ = value;
+  }
+
   // Configures the brotli quality used when calculating patch sizes.
   // Defaults to 8.
   //
@@ -151,6 +163,8 @@ class MergeStrategy {
   // 9 and above are quite slow given the number of compressions that need to be
   // performed.
   uint32_t brotli_quality_ = 8;
+  double optimization_cutoff_fraction_ = 0.001;
+
   std::unique_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };
 
