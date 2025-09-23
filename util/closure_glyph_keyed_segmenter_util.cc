@@ -24,6 +24,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -139,8 +140,7 @@ ABSL_FLAG(uint32_t, network_overhead_cost, 75,
           "for each network request.");
 
 // TODO(garretrieger): add additional setting for cost base merging that
-// configures a minimum
-//                     grouping size (in terms of number of codepoints).
+// configures a minimum grouping size (in terms of number of codepoints).
 
 ABSL_FLAG(std::vector<std::string>, optional_feature_tags, {},
           "A list of feature tags which can be optionally added to the font "
@@ -168,6 +168,7 @@ using ift::encoder::GlyphSegmentation;
 using ift::encoder::MergeStrategy;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
+using ift::freq::BigramProbabilityCalculator;
 using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
@@ -468,6 +469,63 @@ StatusOr<UnicodeFrequencies> GetFrequencyData(
   return util::LoadFrequenciesFromRiegeli(frequency_data_file.c_str());
 }
 
+// Analysis of segmentation that does not utilize codepoint frequencies.
+static int NonFrequencyAnalysis(hb_face_t* font,
+                                const GlyphSegmentation& segmentation) {
+  auto cost = SegmentationSize(font, segmentation);
+  if (!cost.ok()) {
+    std::cerr << "Failed to compute segmentation cost: " << cost.status()
+              << std::endl;
+    return -1;
+  }
+  auto ideal_cost = IdealSegmentationSize(font, segmentation,
+                                          NumExclusivePatches(segmentation));
+  if (!ideal_cost.ok()) {
+    std::cerr << "Failed to compute ideal segmentation cost: " << cost.status()
+              << std::endl;
+    return -1;
+  }
+
+  std::cerr << std::endl;
+  std::cerr << "glyphs_in_fallback = " << segmentation.UnmappedGlyphs().size()
+            << std::endl;
+  std::cerr << "ideal_cost_bytes = " << *ideal_cost << std::endl;
+  std::cerr << "total_cost_bytes = " << *cost << std::endl;
+
+  double over_ideal_percent =
+      (((double)*cost) / ((double)*ideal_cost) * 100.0) - 100.0;
+  std::cerr << "%_extra_over_ideal = " << over_ideal_percent << std::endl;
+  return 0;
+}
+
+static int AnalysisWithFrequency(hb_face_t* font,
+                                 const GlyphSegmentation& segmentation) {
+  auto freq_data =
+      GetFrequencyData(absl::GetFlag(FLAGS_frequency_data_file), {});
+  if (!freq_data.ok()) {
+    std::cerr << "Failed to load codepoint frequencies: " << freq_data.status()
+              << std::endl;
+    return -1;
+  }
+
+  BigramProbabilityCalculator calculator(std::move(*freq_data));
+
+  ClosureGlyphSegmenter segmenter;
+  auto cost = segmenter.TotalCost(font, segmentation, calculator);
+  if (!cost.ok()) {
+    std::cerr << "Failed to compute cost of segmentation. " << cost.status()
+              << std::endl;
+    return -1;
+  }
+
+  std::cerr << "non_ift_cost_bytes = " << (uint64_t)cost->cost_for_non_segmented
+            << std::endl;
+  std::cerr << "total_cost_bytes = " << (uint64_t)cost->total_cost << std::endl;
+  std::cerr << "ideal_cost_bytes = " << (uint64_t)cost->ideal_cost << std::endl;
+
+  return 0;
+}
+
 int main(int argc, char** argv) {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   auto args = absl::ParseCommandLine(argc, argv);
@@ -583,29 +641,9 @@ int main(int argc, char** argv) {
   }
 
   std::cerr << ">> Analysis" << std::endl;
-  auto cost = SegmentationSize(font->get(), *result);
-  if (!cost.ok()) {
-    std::cerr << "Failed to compute segmentation cost: " << cost.status()
-              << std::endl;
-    return -1;
+  if (FrequenciesAreRequired()) {
+    return AnalysisWithFrequency(font->get(), *result);
+  } else {
+    return NonFrequencyAnalysis(font->get(), *result);
   }
-  auto ideal_cost =
-      IdealSegmentationSize(font->get(), *result, NumExclusivePatches(*result));
-  if (!ideal_cost.ok()) {
-    std::cerr << "Failed to compute ideal segmentation cost: " << cost.status()
-              << std::endl;
-    return -1;
-  }
-
-  std::cerr << std::endl;
-  std::cerr << "glyphs_in_fallback = " << result->UnmappedGlyphs().size()
-            << std::endl;
-  std::cerr << "ideal_cost_bytes = " << *ideal_cost << std::endl;
-  std::cerr << "total_cost_bytes = " << *cost << std::endl;
-
-  double over_ideal_percent =
-      (((double)*cost) / ((double)*ideal_cost) * 100.0) - 100.0;
-  std::cerr << "%_extra_over_ideal = " << over_ideal_percent << std::endl;
-
-  return 0;
 }
