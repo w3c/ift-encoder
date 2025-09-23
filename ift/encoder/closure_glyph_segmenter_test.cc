@@ -4,9 +4,12 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "ift/freq/unigram_probability_calculator.h"
 
 using common::CodepointSet;
 using common::FontData;
@@ -14,6 +17,7 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
 using ift::freq::UnicodeFrequencies;
+using ift::freq::UnigramProbabilityCalculator;
 
 namespace ift::encoder {
 
@@ -723,6 +727,47 @@ p1: { gid71, gid72 }
 if (s0) then p0
 if (s2) then p1
 )");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 95}, {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},   {{'d', 'd'}, 50}, {{'e', 'e'}, 25},
+  };
+  UnigramProbabilityCalculator calculator(std::move(frequencies));
+
+  // Basic no segment case.
+  GlyphSegmentation segmentation1({'a', 'b', 'c'}, {}, {});
+  auto sc = GlyphSegmentation::GroupsToSegmentation({}, {}, {}, segmentation1);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  ClosureGlyphSegmenter segmenter;
+  SegmentationCost base_cost =
+      *segmenter.TotalCost(roboto.get(), segmentation1, calculator);
+  ASSERT_GT(base_cost.total_cost, 1000);
+  ASSERT_EQ(base_cost.total_cost, base_cost.cost_for_non_segmented);
+  ASSERT_LT(base_cost.ideal_cost, base_cost.total_cost);
+
+  // Add some patches
+  GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
+  sc = GlyphSegmentation::GroupsToSegmentation(
+      {
+          {{0}, {100, 101, 102}},
+          {{1}, {103, 104, 105}},
+      },
+      {}, {}, segmentation2);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  std::vector<SubsetDefinition> segments{
+      {'d'},
+      {'e'},
+  };
+  segmentation2.CopySegments(segments);
+
+  SegmentationCost with_patches_cost =
+      *segmenter.TotalCost(roboto.get(), segmentation2, calculator);
+  ASSERT_GT(with_patches_cost.total_cost, base_cost.total_cost + 400);
+  ASSERT_LT(with_patches_cost.ideal_cost, with_patches_cost.total_cost);
 }
 
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped

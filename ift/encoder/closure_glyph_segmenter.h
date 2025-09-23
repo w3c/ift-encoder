@@ -9,8 +9,15 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_calculator.h"
 
 namespace ift::encoder {
+
+struct SegmentationCost {
+  double total_cost;
+  double cost_for_non_segmented;
+  double ideal_cost;
+};
 
 /*
  * This generates a glyph segmentation of a font which satisifies the closure
@@ -48,6 +55,14 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
       std::vector<Segment> segments, MergeStrategy merge_strategy) const;
+
+  /*
+   * Computes the total cost (expected number of bytes transferred) for a given
+   * segmentation with respect to the provided frequency data.
+   */
+  absl::StatusOr<SegmentationCost> TotalCost(
+      hb_face_t* original_face, const GlyphSegmentation& segmentation,
+      const freq::ProbabilityCalculator& probability_calculator) const;
 };
 
 }  // namespace ift::encoder

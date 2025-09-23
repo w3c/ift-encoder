@@ -20,12 +20,15 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
+#include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
 using absl::btree_map;
@@ -47,7 +50,9 @@ using common::IntSet;
 using common::make_hb_face;
 using common::make_hb_set;
 using common::SegmentSet;
+using common::Woff2;
 using ift::GlyphKeyedDiff;
+using ift::freq::ProbabilityCalculator;
 
 namespace ift::encoder {
 
@@ -586,6 +591,77 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   TRYV(context.InitOptimizationCutoff());
 
   return context;
+}
+
+static StatusOr<double> Woff2SizeOf(hb_face_t* original_face,
+                                    const SubsetDefinition& def) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  if (!input) {
+    return absl::InternalError("Failed to create subset input.");
+  }
+  def.ConfigureInput(input, original_face);
+
+  hb_face_t* init_face = hb_subset_or_fail(original_face, input);
+  hb_subset_input_destroy(input);
+  if (!init_face) {
+    return absl::InternalError("Failed to create initial face subset.");
+  }
+
+  FontData init_data(init_face);
+  hb_face_destroy(init_face);
+
+  FontData woff2 = TRY(Woff2::EncodeWoff2(init_data.str()));
+  return (double)woff2.size();
+}
+
+StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
+    hb_face_t* original_face, const GlyphSegmentation& segmentation,
+    const ProbabilityCalculator& probability_calculator) const {
+  SubsetDefinition non_ift;
+  non_ift.Union(segmentation.InitialFontSegment());
+
+  std::vector<Segment> segments;
+  for (const auto& def : segmentation.Segments()) {
+    non_ift.Union(def);
+
+    auto P = probability_calculator.ComputeProbability(def);
+    Segment s(def, P);
+    segments.push_back(std::move(s));
+  }
+
+  double init_font_size =
+      TRY(Woff2SizeOf(original_face, segmentation.InitialFontSegment()));
+  double non_ift_font_size = TRY(Woff2SizeOf(original_face, non_ift));
+
+  // TODO(garretrieger): for the total cost we need to also add in the table
+  // keyed patch costs
+  //                     may want to use the IFT compiler to produce the
+  //                     complete encoding then compute table keyed costs from
+  //                     that (in conjunction) with probability calculations.
+  double total_cost = init_font_size;
+
+  // Use highest quality so we get the true cost.
+  PatchSizeCacheImpl patch_sizer(original_face, 11);
+  for (const auto& c : segmentation.Conditions()) {
+    double Pc = TRY(c.Probability(segments, probability_calculator));
+    const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
+    double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
+    total_cost += Pc * (patch_size + 75);
+  }
+
+  double ideal_cost = 0.0;
+  double incremental_size =
+      non_ift_font_size / (double)non_ift.codepoints.size();
+  for (unsigned cp : non_ift.codepoints) {
+    double Pcp = probability_calculator.ComputeProbability({cp}).Min();
+    ideal_cost += Pcp * incremental_size;
+  }
+
+  return SegmentationCost{
+      .total_cost = total_cost,
+      .cost_for_non_segmented = non_ift_font_size,
+      .ideal_cost = ideal_cost,
+  };
 }
 
 }  // namespace ift::encoder
