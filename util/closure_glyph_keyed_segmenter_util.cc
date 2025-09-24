@@ -81,6 +81,9 @@ ABSL_FLAG(double, optimization_cutoff_fraction, 0.001,
           "optimization of segments that have very little contribution to "
           "the total segmentation cost.");
 
+ABSL_FLAG(std::optional<double>, init_font_merge_threshold, std::nullopt,
+          "Merge all segments into the init font where the cost delta is less than this threshold.");
+
 enum MergingStrategy {
   HEURISTIC,
   COST,
@@ -606,6 +609,8 @@ int main(int argc, char** argv) {
 
     merge_strategy.SetOptimizationCutoffFraction(
         absl::GetFlag(FLAGS_optimization_cutoff_fraction));
+    merge_strategy.SetInitFontMergeThreshold(
+        absl::GetFlag(FLAGS_init_font_merge_threshold));
   }
 
   ClosureGlyphSegmenter segmenter;
