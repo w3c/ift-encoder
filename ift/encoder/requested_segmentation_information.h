@@ -33,6 +33,32 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
+  void ReassignInitSubset(GlyphClosureCache& closure_cache, SubsetDefinition new_def, const common::SegmentSet& removed_segments) {
+    for (segment_index_t s : removed_segments) {
+      segments_[s].Clear();
+    }
+
+    init_font_segment_ = std::move(new_def);
+
+    SubsetDefinition all;
+    all.Union(init_font_segment_);
+    for (const auto& s : segments_) {
+      all.Union(s.Definition());
+    }
+
+    {
+      auto closure = closure_cache.GlyphClosure(init_font_segment_);
+      if (closure.ok()) {
+        init_font_glyphs_ = std::move(*closure);
+      }
+    }
+
+    auto closure = closure_cache.GlyphClosure(all);
+    if (closure.ok()) {
+      full_closure_ = std::move(*closure);
+    }
+  }
+
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
 
   // Returns the init font segment with all default always included items

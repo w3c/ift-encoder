@@ -806,6 +806,75 @@ if (s0) then p0
 )");
 }
 
+
+TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
+  // In this test we enable merging of segments into the init font
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 100},
+      {{'b', 'b'},  50},
+      {{'c', 'c'},  50},
+      {{'d', 'd'}, 100},
+
+      // b and c co-occur
+      {{'b', 'c'},  50},
+  };
+
+  MergeStrategy strategy = *MergeStrategy::BigramCostBased(std::move(frequencies));
+  strategy.SetInitFontMergeThreshold(-75);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {{'a'}, {'d'}, {'b'}, {'c'}},
+      strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  //  'a' and 'd' will be moved to the init font, leaving only two segments 'b', 'c'
+  std::vector<SubsetDefinition> expected_segments = {
+      {},
+      {},
+      {'b', 'c'},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69, gid72 }
+p0: { gid70, gid71 }
+if (s2) then p0
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
+  UnicodeFrequencies frequencies{
+      {{'A', 'A'}, 1},
+      {{'C', 'C'}, 1},
+      {{0x106, 0x106}, 100}, // Cacute (contains C glyph)
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies));
+  strategy.SetInitFontMergeThreshold(-75);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {{0x106}, {'A'}, {'C'}},
+      strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {},
+      {'A'},
+      {'C'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // C get's covered by the Cacute merge into int, so only A is left in the patch.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid39, gid117, gid700 }
+p0: { gid37 }
+if (s1) then p0
+)");
+}
+
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 
