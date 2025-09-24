@@ -412,4 +412,27 @@ TEST_F(IntSetTest, LowerBound) {
   ASSERT_EQ(*it, 0);
 }
 
+TEST_F(IntSetTest, Intersects) {
+  IntSet set1{1, 2, 3};
+  IntSet set2{3, 4, 5};
+  IntSet set3{4, 5, 6};
+  IntSet empty_set{};
+
+  ASSERT_TRUE(set1.intersects(set1));
+  ASSERT_TRUE(set1.intersects(set2));
+  ASSERT_TRUE(set2.intersects(set1));
+  ASSERT_FALSE(set1.intersects(set3));
+  ASSERT_FALSE(set3.intersects(set1));
+  ASSERT_FALSE(set1.intersects(empty_set));
+  ASSERT_FALSE(empty_set.intersects(set1));
+  ASSERT_FALSE(empty_set.intersects(empty_set));
+
+  IntSet set4{1, 2, 3};
+  ASSERT_TRUE(set1.intersects(set4));
+
+  IntSet set5{1, 2};
+  ASSERT_TRUE(set1.intersects(set5));
+  ASSERT_TRUE(set5.intersects(set1));
+}
+
 }  // namespace common

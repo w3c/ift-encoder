@@ -232,6 +232,18 @@ class IntSet {
     return hb_set_is_subset(set_.get(), other.set_.get());
   }
 
+  bool intersects(const IntSet& other) const {
+    if (this->size() > other.size()) {
+      return other.intersects(*this);
+    }
+    for (const hb_codepoint_t value : *this) {
+      if (other.contains(value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   std::optional<hb_codepoint_t> min() const {
     hb_codepoint_t value = hb_set_get_min(set_.get());
     if (value == HB_SET_VALUE_INVALID) {
