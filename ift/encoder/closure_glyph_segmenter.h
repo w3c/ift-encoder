@@ -64,8 +64,8 @@ class ClosureGlyphSegmenter {
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
       const freq::ProbabilityCalculator& probability_calculator) const;
 
-  private:
-    absl::Status MoveSegmentsToInitFont(SegmentationContext& context) const;
+ private:
+  absl::Status MoveSegmentsToInitFont(SegmentationContext& context) const;
 };
 
 }  // namespace ift::encoder

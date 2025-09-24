@@ -784,7 +784,11 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {0x106 /* Cacute */},
-      {{'A'}, {'B'}, {'C'},},
+      {
+          {'A'},
+          {'B'},
+          {'C'},
+      },
       *MergeStrategy::CostBased(std::move(frequencies)));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -793,7 +797,7 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   std::vector<SubsetDefinition> expected_segments = {
       {'A', 'B'},
       {},
-      {'C'}, // C glyph was already pulled in to the init font, so no merge
+      {'C'},  // C glyph was already pulled in to the init font, so no merge
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -806,29 +810,28 @@ if (s0) then p0
 )");
 }
 
-
 TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
   // In this test we enable merging of segments into the init font
   UnicodeFrequencies frequencies{
       {{'a', 'a'}, 100},
-      {{'b', 'b'},  50},
-      {{'c', 'c'},  50},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 50},
       {{'d', 'd'}, 100},
 
       // b and c co-occur
-      {{'b', 'c'},  50},
+      {{'b', 'c'}, 50},
   };
 
-  MergeStrategy strategy = *MergeStrategy::BigramCostBased(std::move(frequencies));
+  MergeStrategy strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies));
   strategy.SetInitFontMergeThreshold(-75);
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{'a'}, {'d'}, {'b'}, {'c'}},
-      strategy);
+      roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  //  'a' and 'd' will be moved to the init font, leaving only two segments 'b', 'c'
+  //  'a' and 'd' will be moved to the init font, leaving only two segments 'b',
+  //  'c'
   std::vector<SubsetDefinition> expected_segments = {
       {},
       {},
@@ -848,16 +851,14 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   UnicodeFrequencies frequencies{
       {{'A', 'A'}, 1},
       {{'C', 'C'}, 1},
-      {{0x106, 0x106}, 100}, // Cacute (contains C glyph)
+      {{0x106, 0x106}, 100},  // Cacute (contains C glyph)
   };
 
   MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies));
   strategy.SetInitFontMergeThreshold(-75);
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {{0x106}, {'A'}, {'C'}},
-      strategy);
+      roboto.get(), {}, {{0x106}, {'A'}, {'C'}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -867,7 +868,8 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-  // C get's covered by the Cacute merge into int, so only A is left in the patch.
+  // C get's covered by the Cacute merge into int, so only A is left in the
+  // patch.
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid39, gid117, gid700 }
 p0: { gid37 }

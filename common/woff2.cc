@@ -15,7 +15,8 @@ using woff2::WOFF2StringOut;
 
 namespace common {
 
-StatusOr<FontData> Woff2::EncodeWoff2(string_view font, bool glyf_transform, int quality) {
+StatusOr<FontData> Woff2::EncodeWoff2(string_view font, bool glyf_transform,
+                                      int quality) {
   WOFF2Params params;
   params.brotli_quality = quality;
   params.allow_transforms = glyf_transform;
