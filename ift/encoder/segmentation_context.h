@@ -52,11 +52,7 @@ class SegmentationContext {
         glyph_groupings(segments),
         merge_strategy_(std::move(strategy)),
         optimization_cutoff_segment_(UINT32_MAX) {
-    for (unsigned i = 0; i < segments.size(); i++) {
-      if (!segments[i].Definition().Empty()) {
-        active_segments_.insert(i);
-      }
-    }
+    ComputeActiveSegments();
   }
 
   // Convert the information in this context into a finalized GlyphSegmentation
@@ -141,6 +137,39 @@ class SegmentationContext {
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 
+  /*
+   * Invalidates all grouping information and fully reprocesses all segments.
+   */
+  absl::Status ReassignInitSubset(SubsetDefinition new_def, const common::SegmentSet& removed_segments) {
+    unsigned glyph_count = hb_face_get_glyph_count(original_face.get());
+
+    segmentation_info_.ReassignInitSubset(glyph_closure_cache, std::move(new_def), removed_segments);
+    active_segments_.clear();
+    ComputeActiveSegments();
+
+    // All segments depend on the init subset def, so we must reprocess everything.
+    // First reset grouping information:
+    glyph_condition_set = GlyphConditionSet(glyph_count);
+    glyph_groupings = GlyphGroupings(SegmentationInfo().Segments());
+    inert_segments_.clear();
+
+    // Then reprocess segments:
+    for (segment_index_t segment_index = 0;
+       segment_index < SegmentationInfo().Segments().size();
+       segment_index++) {
+      TRY(ReprocessSegment(segment_index));
+    }
+
+    common::GlyphSet all_glyphs;
+    all_glyphs.insert_range(0, glyph_count - 1);
+    TRYV(GroupGlyphs(all_glyphs));
+    glyph_closure_cache.LogClosureCount("Segmentation reprocess for init def change.");
+
+    TRYV(InitOptimizationCutoff());
+
+    return absl::OkStatus();
+  }
+
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
   absl::Status AnalyzeSegment(const common::SegmentSet& segment_ids,
@@ -166,6 +195,15 @@ class SegmentationContext {
   }
 
  private:
+
+  void ComputeActiveSegments() {
+    for (unsigned i = 0; i < segmentation_info_.Segments().size(); i++) {
+      if (!segmentation_info_.Segments()[i].Definition().Empty()) {
+        active_segments_.insert(i);
+      }
+    }
+  }
+
   /*
    * Ensures that the produce segmentation is:
    * - Disjoint (no duplicated glyphs) and doesn't overlap what's in the initial

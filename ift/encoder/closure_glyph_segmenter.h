@@ -65,7 +65,7 @@ class ClosureGlyphSegmenter {
       const freq::ProbabilityCalculator& probability_calculator) const;
 
   private:
-    absl::StatusOr<SegmentationContext> MoveSegmentsToInitFont(SegmentationContext& context) const;
+    absl::Status MoveSegmentsToInitFont(SegmentationContext& context) const;
 };
 
 }  // namespace ift::encoder
