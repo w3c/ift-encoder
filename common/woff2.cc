@@ -15,9 +15,9 @@ using woff2::WOFF2StringOut;
 
 namespace common {
 
-StatusOr<FontData> Woff2::EncodeWoff2(string_view font, bool glyf_transform) {
+StatusOr<FontData> Woff2::EncodeWoff2(string_view font, bool glyf_transform, int quality) {
   WOFF2Params params;
-  params.brotli_quality = 11;
+  params.brotli_quality = quality;
   params.allow_transforms = glyf_transform;
   size_t buffer_size =
       MaxWOFF2CompressedSize((const uint8_t*)font.data(), font.size());

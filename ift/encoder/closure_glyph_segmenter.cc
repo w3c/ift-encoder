@@ -593,27 +593,6 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   return context;
 }
 
-static StatusOr<double> Woff2SizeOf(hb_face_t* original_face,
-                                    const SubsetDefinition& def) {
-  hb_subset_input_t* input = hb_subset_input_create_or_fail();
-  if (!input) {
-    return absl::InternalError("Failed to create subset input.");
-  }
-  def.ConfigureInput(input, original_face);
-
-  hb_face_t* init_face = hb_subset_or_fail(original_face, input);
-  hb_subset_input_destroy(input);
-  if (!init_face) {
-    return absl::InternalError("Failed to create initial face subset.");
-  }
-
-  FontData init_data(init_face);
-  hb_face_destroy(init_face);
-
-  FontData woff2 = TRY(Woff2::EncodeWoff2(init_data.str()));
-  return (double)woff2.size();
-}
-
 StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
     hb_face_t* original_face, const GlyphSegmentation& segmentation,
     const ProbabilityCalculator& probability_calculator) const {
@@ -630,8 +609,8 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   }
 
   double init_font_size =
-      TRY(Woff2SizeOf(original_face, segmentation.InitialFontSegment()));
-  double non_ift_font_size = TRY(Woff2SizeOf(original_face, non_ift));
+      TRY(CandidateMerge::Woff2SizeOf(original_face, segmentation.InitialFontSegment(), 11));
+  double non_ift_font_size = TRY(CandidateMerge::Woff2SizeOf(original_face, non_ift, 11));
 
   // TODO(garretrieger): for the total cost we need to also add in the table
   // keyed patch costs

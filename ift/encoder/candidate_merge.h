@@ -130,6 +130,15 @@ struct CandidateMerge {
   static absl::StatusOr<bool> IsPatchTooSmall(
       SegmentationContext& context, segment_index_t base_segment_index,
       const common::GlyphSet& glyphs);
+
+  static absl::StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
+                                                 const common::SegmentSet& merged_segments,
+                                                 std::optional<const Segment*> merged_segment,
+                                                 uint32_t new_patch_size);
+
+  static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
+                                              const SubsetDefinition& def,
+                                              int quality);
 };
 
 }  // namespace ift::encoder
