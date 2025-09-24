@@ -82,7 +82,8 @@ ABSL_FLAG(double, optimization_cutoff_fraction, 0.001,
           "the total segmentation cost.");
 
 ABSL_FLAG(std::optional<double>, init_font_merge_threshold, std::nullopt,
-          "Merge all segments into the init font where the cost delta is less than this threshold.");
+          "Merge all segments into the init font where the cost delta is less "
+          "than this threshold.");
 
 enum MergingStrategy {
   HEURISTIC,

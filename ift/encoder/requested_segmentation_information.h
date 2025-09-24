@@ -33,7 +33,9 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
-  void ReassignInitSubset(GlyphClosureCache& closure_cache, SubsetDefinition new_def, const common::SegmentSet& removed_segments) {
+  void ReassignInitSubset(GlyphClosureCache& closure_cache,
+                          SubsetDefinition new_def,
+                          const common::SegmentSet& removed_segments) {
     for (segment_index_t s : removed_segments) {
       segments_[s].Clear();
     }

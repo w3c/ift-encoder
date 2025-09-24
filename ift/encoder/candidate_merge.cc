@@ -14,6 +14,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -22,7 +23,6 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/glyph_keyed_diff.h"
-#include "common/woff2.h"
 
 namespace ift::encoder {
 
@@ -217,24 +217,26 @@ StatusOr<uint32_t> CandidateMerge::Woff2SizeOf(hb_face_t* original_face,
   return (double)woff2.size();
 }
 
-static StatusOr<int64_t> InitFontDelta(const SegmentationContext& context, const SegmentSet& merged_segments) {
+static StatusOr<int64_t> InitFontDelta(const SegmentationContext& context,
+                                       const SegmentSet& merged_segments) {
   int quality = context.GetMergeStrategy().BrotliQuality();
   SubsetDefinition init_def = context.SegmentationInfo().InitFontSegment();
-  int64_t before = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(), init_def, quality));
+  int64_t before = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(),
+                                                   init_def, quality));
 
   for (segment_index_t s : merged_segments) {
     init_def.Union(context.SegmentationInfo().Segments().at(s).Definition());
   }
 
-  int64_t after = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(), init_def, quality));
+  int64_t after = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(),
+                                                  init_def, quality));
 
   return after - before;
 }
 
-StatusOr<double> CandidateMerge::ComputeCostDelta(const SegmentationContext& context,
-                                                  const SegmentSet& merged_segments,
-                                                  std::optional<const Segment*> merged_segment,
-                                                  uint32_t new_patch_size) {
+StatusOr<double> CandidateMerge::ComputeCostDelta(
+    const SegmentationContext& context, const SegmentSet& merged_segments,
+    std::optional<const Segment*> merged_segment, uint32_t new_patch_size) {
   bool moving_to_init_font = !merged_segment.has_value();
   const uint32_t per_request_overhead =
       context.GetMergeStrategy().NetworkOverheadCost();
@@ -262,10 +264,12 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(const SegmentationContext& con
     // "new_patch_size", add the associated cost.
     double p = (*merged_segment)->Probability();
     cost_delta += p * (new_patch_size + per_request_overhead);
-    VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString() << " =";
+    VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString()
+            << " =";
 
-    VLOG(1) << "    + (" << p << " * " << (new_patch_size + per_request_overhead)
-            << ") -> " << cost_delta << " [merged patch]";
+    VLOG(1) << "    + (" << p << " * "
+            << (new_patch_size + per_request_overhead) << ") -> " << cost_delta
+            << " [merged patch]";
   } else {
     // Otherwise the merged segments are being moved to the init font, compute
     // the resulting size delta.
@@ -307,8 +311,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(const SegmentationContext& con
       // the cost addition as usual.
       SegmentSet condition_segments = c.TriggeringSegments();
       condition_segments.subtract(merged_segments);
-      ActivationCondition new_condition = ActivationCondition::and_segments(condition_segments, 0);
-      double p = TRY(c.Probability(segments, *context.GetMergeStrategy().ProbabilityCalculator()));
+      ActivationCondition new_condition =
+          ActivationCondition::and_segments(condition_segments, 0);
+      double p = TRY(c.Probability(
+          segments, *context.GetMergeStrategy().ProbabilityCalculator()));
       double d = p * (size + per_request_overhead);
       VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
       cost_delta += d;
@@ -371,10 +377,12 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     // threshold on the segments to be merged that will allow us to quickly
     // discard merges which can't possibily beat the current best.
     unsigned segment_to_merge = segments_to_merge.min().value();
-    const GlyphSet& glyphs = context.glyph_condition_set.GlyphsWithSegment(segment_to_merge);
+    const GlyphSet& glyphs =
+        context.glyph_condition_set.GlyphsWithSegment(segment_to_merge);
     unsigned segment_to_merge_size = 0;
     if (!glyphs.empty()) {
-      segment_to_merge_size = TRY(context.patch_size_cache->GetPatchSize(glyphs));
+      segment_to_merge_size =
+          TRY(context.patch_size_cache->GetPatchSize(glyphs));
     }
     double threshold = best_merge_candidate->InertProbabilityThreshold(
         segment_to_merge_size, merged_segment.Probability());
