@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 #include "common/try.h"
 #include "ift/freq/bigram_probability_calculator.h"
@@ -130,6 +131,16 @@ class MergeStrategy {
     optimization_cutoff_fraction_ = value;
   }
 
+  // Configures the threshold (cost delta) for when to merge a segment into
+  // the init font. If not set then no segments will be merged into the init
+  // font.
+  std::optional<double> InitFontMergeThreshold() const {
+    return init_font_merge_threshold_;
+  }
+  void SetInitFontMergeThreshold(std::optional<double> value) {
+    init_font_merge_threshold_ = value;
+  }
+
   // Configures the brotli quality used when calculating patch sizes.
   // Defaults to 8.
   //
@@ -164,8 +175,9 @@ class MergeStrategy {
   // performed.
   uint32_t brotli_quality_ = 8;
   double optimization_cutoff_fraction_ = 0.001;
+  std::optional<double> init_font_merge_threshold_ = std::nullopt;
 
-  std::unique_ptr<freq::ProbabilityCalculator> probability_calculator_;
+  std::shared_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };
 
 }  // namespace ift::encoder

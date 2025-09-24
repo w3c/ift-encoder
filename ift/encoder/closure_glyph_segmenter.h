@@ -63,6 +63,9 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<SegmentationCost> TotalCost(
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
       const freq::ProbabilityCalculator& probability_calculator) const;
+
+  private:
+    absl::StatusOr<SegmentationContext> MoveSegmentsToInitFont(SegmentationContext& context) const;
 };
 
 }  // namespace ift::encoder

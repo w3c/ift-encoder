@@ -28,6 +28,7 @@
 #include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
@@ -508,6 +509,56 @@ static StatusOr<std::vector<Segment>> ToSegments(
   return segments;
 }
 
+StatusOr<SegmentationContext> ClosureGlyphSegmenter::MoveSegmentsToInitFont(SegmentationContext& context) const {
+  if (!context.GetMergeStrategy().InitFontMergeThreshold().has_value()) {
+    return absl::FailedPreconditionError("Cannot be called when there is no merge threshold configured.");
+  }
+
+  double threshold = *context.GetMergeStrategy().InitFontMergeThreshold();
+
+  VLOG(0) << "Checking if there are any segments which should be moved into the initial font.";
+  SegmentSet segments_to_move;
+  for (const auto& [c, glyphs] : context.glyph_groupings.ConditionsAndGlyphs()) {
+    SegmentSet candidate_segments = c.TriggeringSegments();
+    if (!candidate_segments.intersects(context.ActiveSegments())) {
+      // Only do this check for things involving active segments, this let's us skip
+      // checks for conditions are are extremely unlikely to benefit from merging
+      // into the init font.
+      continue;
+    }
+
+    double delta = TRY(CandidateMerge::ComputeCostDelta(context, candidate_segments, std::nullopt, 0));
+    if (delta >= threshold * (double) candidate_segments.size()) {
+      // Merging doesn't improve cost, skip.
+      continue;
+    }
+
+    // TODO(garretrieger): to get a more accurate picture we should consider comparing
+    //   to an updated init subset definition on each iteration.
+    segments_to_move.union_set(candidate_segments);
+    VLOG(0) << "  Moving segments " << candidate_segments.ToString() << " into the initial font (cost delta = " << delta << ")";
+  }
+
+  SubsetDefinition initial_segment = context.SegmentationInfo().InitFontSegment();
+  std::vector<Segment> segments;
+  for (unsigned i = 0; i < context.SegmentationInfo().Segments().size(); i++) {
+    const Segment& segment = context.SegmentationInfo().Segments()[i];
+    if (segments_to_move.contains(i)) {
+      initial_segment.Union(segment.Definition());
+    } else if (!segment.Definition().Empty()) {
+      segments.push_back(segment);
+    }
+  }
+
+  // Reset the context using the new initial font and segment definitions.
+  VLOG(0) << segments_to_move.size() << " segments moved into the initial font. "
+          << "Initial font now has " << initial_segment.codepoints.size() << " codepoints. "
+          << "Initial segmentation plan will be recomputed." << std::endl;
+  MergeStrategy strategy = context.GetMergeStrategy();
+  return TRY(InitializeSegmentationContext(
+      context.original_face.get(), initial_segment, std::move(segments), std::move(strategy)));
+}
+
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
@@ -529,6 +580,12 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   if (context.GetMergeStrategy().IsNone()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
+  }
+
+  // ### First phase of merging is to check for any patches which should be moved to the initial font
+  //     (eg. cases where the probability of a patch is ~1.0).
+  if (context.GetMergeStrategy().UseCosts() && context.GetMergeStrategy().InitFontMergeThreshold().has_value()) {
+    context = TRY(MoveSegmentsToInitFont(context));
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
