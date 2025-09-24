@@ -371,8 +371,11 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
     // threshold on the segments to be merged that will allow us to quickly
     // discard merges which can't possibily beat the current best.
     unsigned segment_to_merge = segments_to_merge.min().value();
-    unsigned segment_to_merge_size = TRY(context.patch_size_cache->GetPatchSize(
-        context.glyph_condition_set.GlyphsWithSegment(segment_to_merge)));
+    const GlyphSet& glyphs = context.glyph_condition_set.GlyphsWithSegment(segment_to_merge);
+    unsigned segment_to_merge_size = 0;
+    if (!glyphs.empty()) {
+      segment_to_merge_size = TRY(context.patch_size_cache->GetPatchSize(glyphs));
+    }
     double threshold = best_merge_candidate->InertProbabilityThreshold(
         segment_to_merge_size, merged_segment.Probability());
     if (segments[segment_to_merge].Probability() <= threshold) {

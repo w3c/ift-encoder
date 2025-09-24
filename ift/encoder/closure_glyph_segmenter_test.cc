@@ -770,6 +770,42 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_LT(with_patches_cost.ideal_cost, with_patches_cost.total_cost);
 }
 
+TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
+  // This test sets up a case where a segment ends up with no glyphs
+  // because the glyphs for it are already part of the init font.
+  // In this case these segments should be effectively disabled for the
+  // analysis and final output.
+
+  UnicodeFrequencies frequencies{
+      {{'A', 'A'}, 100},
+      {{'B', 'B'}, 100},
+      {{'C', 'C'}, 100},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {0x106 /* Cacute */},
+      {{'A'}, {'B'}, {'C'},},
+      *MergeStrategy::CostBased(std::move(frequencies)));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // It's expected that s0 and s1 are merged together to reduce network
+  // overhead.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'A', 'B'},
+      {},
+      {'C'}, // C glyph was already pulled in to the init font, so no merge
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // And it shouldn't be present in the segmenation conditions,
+  // so no s2 should appear in the conditions.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid39, gid117, gid700 }
+p0: { gid37, gid38 }
+if (s0) then p0
+)");
+}
+
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 

@@ -273,6 +273,12 @@ Status CollectExclusiveCandidateMerges(
       continue;
     }
 
+    if (context.InertSegments().contains(*it) && context.glyph_condition_set.GlyphsWithSegment(*it).empty()) {
+      // this segment is effectively a noop, it interacts with nothing and has no glyphs
+      // so don't consider it for a merge.
+      continue;
+    }
+
     if (*it >= context.OptimizationCutoffSegment() &&
         smallest_candidate_merge.has_value()) {
       // We are at the optimization cutoff, so we won't evaluate any further

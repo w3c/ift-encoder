@@ -109,7 +109,7 @@ struct CandidateMerge {
                                    network_overhead +
                                    BEST_CASE_MERGE_SIZE_DELTA;
     double total_base_size = base_size + network_overhead;
-    double total_patch_size = patch_size + network_overhead;
+    double total_patch_size = patch_size > 0 ? patch_size + network_overhead : 0;
 
     double numerator = merged_probability * best_case_merged_size -
                        base_probability * total_base_size - cost_delta;
