@@ -20,7 +20,9 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/glyph_keyed_diff.h"
+#include "common/woff2.h"
 
 namespace ift::encoder {
 
@@ -33,6 +35,7 @@ using common::FontData;
 using common::FontHelper;
 using common::GlyphSet;
 using common::SegmentSet;
+using common::Woff2;
 using ift::GlyphKeyedDiff;
 
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
@@ -192,10 +195,47 @@ static Status FindModifiedConditions(
   return absl::OkStatus();
 }
 
-static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
-                                         const SegmentSet& merged_segments,
-                                         const Segment& merged_segment,
-                                         uint32_t new_patch_size) {
+StatusOr<uint32_t> CandidateMerge::Woff2SizeOf(hb_face_t* original_face,
+                                               const SubsetDefinition& def,
+                                               int quality) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  if (!input) {
+    return absl::InternalError("Failed to create subset input.");
+  }
+  def.ConfigureInput(input, original_face);
+
+  hb_face_t* init_face = hb_subset_or_fail(original_face, input);
+  hb_subset_input_destroy(input);
+  if (!init_face) {
+    return absl::InternalError("Failed to create initial face subset.");
+  }
+
+  FontData init_data(init_face);
+  hb_face_destroy(init_face);
+
+  FontData woff2 = TRY(Woff2::EncodeWoff2(init_data.str(), false, quality));
+  return (double)woff2.size();
+}
+
+static StatusOr<int64_t> InitFontDelta(const SegmentationContext& context, const SegmentSet& merged_segments) {
+  int quality = context.GetMergeStrategy().BrotliQuality();
+  SubsetDefinition init_def = context.SegmentationInfo().InitFontSegment();
+  int64_t before = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(), init_def, quality));
+
+  for (segment_index_t s : merged_segments) {
+    init_def.Union(context.SegmentationInfo().Segments().at(s).Definition());
+  }
+
+  int64_t after = TRY(CandidateMerge::Woff2SizeOf(context.original_face.get(), init_def, quality));
+
+  return after - before;
+}
+
+StatusOr<double> CandidateMerge::ComputeCostDelta(const SegmentationContext& context,
+                                                  const SegmentSet& merged_segments,
+                                                  std::optional<const Segment*> merged_segment,
+                                                  uint32_t new_patch_size) {
+  bool moving_to_init_font = !merged_segment.has_value();
   const uint32_t per_request_overhead =
       context.GetMergeStrategy().NetworkOverheadCost();
 
@@ -215,14 +255,22 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
   TRYV(FindModifiedConditions(context, merged_segments, removed_conditions,
                               modified_conditions));
 
-  // Merge will introduce a new patch (merged_segment) with size
-  // "new_patch_size", add the associated cost.
-  double p = merged_segment.Probability();
-  double cost_delta = p * (new_patch_size + per_request_overhead);
-  VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString() << " =";
+  double cost_delta = 0.0;
 
-  VLOG(1) << "    + (" << p << " * " << (new_patch_size + per_request_overhead)
-          << ") -> " << cost_delta << " [merged patch]";
+  if (!moving_to_init_font) {
+    // Merge will introduce a new patch (merged_segment) with size
+    // "new_patch_size", add the associated cost.
+    double p = (*merged_segment)->Probability();
+    cost_delta += p * (new_patch_size + per_request_overhead);
+    VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString() << " =";
+
+    VLOG(1) << "    + (" << p << " * " << (new_patch_size + per_request_overhead)
+            << ") -> " << cost_delta << " [merged patch]";
+  } else {
+    // Otherwise the merged segments are being moved to the init font, compute
+    // the resulting size delta.
+    cost_delta += TRY(InitFontDelta(context, merged_segments));
+  }
 
   // Now we remove all of the cost associated with segments that are either
   // removed or modified.
@@ -245,10 +293,32 @@ static StatusOr<double> ComputeCostDelta(const SegmentationContext& context,
   // Lastly add back the costs associated with the modified version of each
   // segment.
   for (const auto& [c, size] : modified_conditions) {
+    if (moving_to_init_font) {
+      if (c.conditions().size() == 1) {
+        // When segments are moved into the init font then a condition that
+        // is a union will also get moved into the init font since it will
+        // always be needed. As a result the cost for this patch is already
+        // accounted for in the InitFontDelta() computed above.
+        continue;
+      }
+
+      // For the conjunctive case we need to remove the segments being
+      // moved to the init font from the condition. Then we can compute
+      // the cost addition as usual.
+      SegmentSet condition_segments = c.TriggeringSegments();
+      condition_segments.subtract(merged_segments);
+      ActivationCondition new_condition = ActivationCondition::and_segments(condition_segments, 0);
+      double p = TRY(c.Probability(segments, *context.GetMergeStrategy().ProbabilityCalculator()));
+      double d = p * (size + per_request_overhead);
+      VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
+      cost_delta += d;
+      continue;
+    }
+
     // For modified conditions we assume the associated patch size does not
     // change, only the probability associated with the condition changes.
     double d = TRY(c.MergedProbability(segments, merged_segments,
-                                       merged_segment, *calculator)) *
+                                       **merged_segment, *calculator)) *
                (size + per_request_overhead);
     VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
     cost_delta += d;
@@ -349,7 +419,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
   if (context.GetMergeStrategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
     cost_delta = TRY(ComputeCostDelta(context, segments_to_merge_with_base,
-                                      merged_segment, new_patch_size));
+                                      &merged_segment, new_patch_size));
   }
 
   if (best_merge_candidate.has_value() &&

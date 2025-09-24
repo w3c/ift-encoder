@@ -34,6 +34,14 @@ TEST_F(Woff2Test, EncodeWoff2) {
   ASSERT_LT(woff2->size(), font.size());
 }
 
+TEST_F(Woff2Test, EncodeWoff2_Quality) {
+  auto woff2_high = Woff2::EncodeWoff2(font.str(), true, 11);
+  auto woff2_low = Woff2::EncodeWoff2(font.str(), true, 6);
+  ASSERT_TRUE(woff2_high.ok()) << woff2_high.status();
+  ASSERT_TRUE(woff2_low.ok()) << woff2_low.status();
+  ASSERT_LT(woff2_high->size(), woff2_low->size());
+}
+
 TEST_F(Woff2Test, EncodeWoff2_NoGlyfTransform) {
   auto woff2 = Woff2::EncodeWoff2(font.str(), true);
   auto woff2_no_transform = Woff2::EncodeWoff2(font.str(), false);

@@ -9,7 +9,7 @@ namespace common {
 
 struct Woff2 {
   static absl::StatusOr<FontData> EncodeWoff2(absl::string_view font,
-                                              bool glyf_transform = true);
+                                              bool glyf_transform = true, int quality = 11);
   static absl::StatusOr<FontData> DecodeWoff2(absl::string_view font);
 };
 
