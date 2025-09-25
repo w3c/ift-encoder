@@ -232,6 +232,15 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithHeuristic(
 Status CollectCompositeCandidateMerges(
     SegmentationContext& context, uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
+  // TODO(garretrieger): XXXX this should check all composite conditions
+  //   as candiate merges, not just those that interact with base. It's
+  //   common that a disjunction is acting effectively like a exclusive
+  //   segment and would make a good candidate for merging with base.
+  //   Ultimately it may be simpler to merge the Collect*CandidateMerges
+  //   functions into a single function that does a single pass over
+  //   conditions and just filters appropriately by active segments
+  //   and the cutoff. See the approach used in init font merging.
+
   if (base_segment_index >= context.OptimizationCutoffSegment()) {
     // We are at the optimization cutoff, so we won't evaluate any composite
     // candidates
@@ -274,14 +283,9 @@ Status CollectExclusiveCandidateMerges(
       continue;
     }
 
-    if (context.InertSegments().contains(*it) &&
-        context.glyph_condition_set.GlyphsWithSegment(*it).empty()) {
-      // this segment is effectively a noop, it interacts with nothing and has
-      // no glyphs so don't consider it for a merge.
-      continue;
-    }
+    segment_index_t segment_index = *it;
 
-    if (*it >= context.OptimizationCutoffSegment() &&
+    if (segment_index >= context.OptimizationCutoffSegment() &&
         smallest_candidate_merge.has_value()) {
       // We are at the optimization cutoff, so we won't evaluate any further
       // candidates beyond what is need to select at least one. Since a
@@ -289,7 +293,16 @@ Status CollectExclusiveCandidateMerges(
       return absl::OkStatus();
     }
 
-    SegmentSet triggering_segments{*it};
+    SegmentSet triggering_segments{segment_index};
+    auto segment_glyphs =
+        context.glyph_groupings.AndGlyphGroups().find(triggering_segments);
+    if (segment_glyphs == context.glyph_groupings.AndGlyphGroups().end() ||
+        segment_glyphs->second.empty()) {
+      // This segment has no exclusive glyphs, so no need to consider it for a
+      // merge.
+      continue;
+    }
+
     auto candidate_merge = TRY(CandidateMerge::AssessMerge(
         context, base_segment_index, triggering_segments,
         smallest_candidate_merge));
@@ -350,7 +363,8 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
 
   auto base_segment_glyphs = context.glyph_groupings.AndGlyphGroups().find(
       SegmentSet{base_segment_index});
-  if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end()) {
+  if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end() ||
+      base_segment_glyphs->second.empty()) {
     // This base segment has no exclusive glyphs, there's no need to to compute
     // merges.
     return std::nullopt;
@@ -372,6 +386,11 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
         context.GetMergeStrategy().NetworkOverheadCost());
   }
 
+  // TODO(garretrieger): On each iteration we should consider all merge pairs
+  //  rather than limiting ourselves just to pairs involving a single
+  //  base_segment_index. This will take some care to keep it performant
+  //  however. We'd likely need a priority queue to cache deltas with a
+  //  way of invalidating any pairs that are changed by each merge operation.
   TRYV(CollectExclusiveCandidateMerges(context, base_segment_index,
                                        smallest_candidate_merge));
   TRYV(CollectCompositeCandidateMerges(context, base_segment_index,
@@ -526,12 +545,32 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
       context.SegmentationInfo().InitFontSegment();
   bool change_made;
   do {
+    // TODO(garretrieger): exclude segments beyond the cutoff.
+    // TODO(garretrieger): when considering disjunctive composite conditions we
+    //   want to check moved each member segment individually into the init
+    //   font. This is because moving any one single segment has the effect of
+    //   moving that patch into the init font. So it will often be less costly
+    //   to move only one. This could be handled by first running through
+    //   all conditions and collecting all disjunctive members into the
+    //   candidates set.
+    // TODO(garretrieger): as an optimization probably want to avoid rechecking
+    //   segments that have previously been assessed for move into init font.
+    // TODO(garretrieger): consider reworking this using gids instead of
+    //  codepoints. That is specify init font def in terms of gids. That will
+    //  more closely match the intention of merging a specific patch into the
+    //  init font. Will need to modify segmentation plan to support init font
+    //  gid set.
+    // TODO(garretrieger): should prune codepoints that are pulled into the init
+    //   font from the segments. Will avoid having noop segments (segments
+    //   with codepoints but no interactions/patches).
+    SegmentSet candidates = context.ActiveSegments();
+
     change_made = false;
     SegmentSet segments_to_move;
     for (const auto& [c, glyphs] :
          context.glyph_groupings.ConditionsAndGlyphs()) {
       SegmentSet candidate_segments = c.TriggeringSegments();
-      if (!candidate_segments.intersects(context.ActiveSegments())) {
+      if (!candidate_segments.intersects(candidates)) {
         // Only do this check for things involving active segments, this let's
         // us skip checks for conditions are are extremely unlikely to benefit
         // from merging into the init font.
@@ -540,6 +579,7 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
 
       double delta = TRY(CandidateMerge::ComputeCostDelta(
           context, candidate_segments, std::nullopt, 0));
+
       if (delta >= threshold * (double)candidate_segments.size()) {
         // Merging doesn't improve cost, skip.
         continue;
