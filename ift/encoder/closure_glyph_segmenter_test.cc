@@ -772,6 +772,55 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   // This test sets up a case where a segment ends up with no glyphs
+  // because the glyphs for it are part of a disjunctive condition
+  // In this case these segments should be effectively disabled for the
+  // analysis and final output.
+
+  UnicodeFrequencies frequencies{
+      {{'A', 'A'}, 1000}, {{'C', 'C'}, 1000}, {{0x106, 0x106}, 1}, /* Cacute */
+  };
+
+  MergeStrategy strategy =
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.0);
+
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'A'}, {'C'}, {0x106}, /* Cacute */
+                                         },
+                                         strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // The initial conditions are:
+  // {A} -> p0
+  // {B} -> p1
+  // {C, Cacute} -> p2
+  // When merging then A should not consider merging with C
+  // since there is no exclusive patch associated with either.
+  // TODO(garretrieger): once the composite condition merging logic is improved
+  //  then this case will be correctly handled by the evaluation of merging
+  // {C, Cacute} with {A}.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'A'},
+      {'C'},
+      {0x106},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid37 }
+p1: { gid117, gid700 }
+p2: { gid39 }
+if (s0) then p0
+if (s2) then p1
+if ((s1 OR s2)) then p2
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, InitNoGlyphSegments_CostMerging) {
+  // This test sets up a case where a segment ends up with no glyphs
   // because the glyphs for it are already part of the init font.
   // In this case these segments should be effectively disabled for the
   // analysis and final output.
@@ -868,7 +917,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-  // C get's covered by the Cacute merge into int, so only A is left in the
+  // C get's covered by the Cacute merge into init, so only A is left in the
   // patch.
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid39, gid117, gid700 }

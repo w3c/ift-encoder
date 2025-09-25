@@ -85,6 +85,10 @@ ABSL_FLAG(std::optional<double>, init_font_merge_threshold, std::nullopt,
           "Merge all segments into the init font where the cost delta is less "
           "than this threshold.");
 
+ABSL_FLAG(
+    int, verbosity, 0,
+    "Log verbosity level from. 0 is least verbose, higher values are more.");
+
 enum MergingStrategy {
   HEURISTIC,
   COST,
@@ -532,6 +536,7 @@ static int AnalysisWithFrequency(hb_face_t* font,
 
 int main(int argc, char** argv) {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+  absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
 

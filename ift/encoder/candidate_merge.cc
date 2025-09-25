@@ -258,7 +258,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
                               modified_conditions));
 
   double cost_delta = 0.0;
-
+  VLOG(1) << "cost delta for merge of " << merged_segments.ToString() << ":";
   if (!moving_to_init_font) {
     // Merge will introduce a new patch (merged_segment) with size
     // "new_patch_size", add the associated cost.
@@ -273,7 +273,9 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   } else {
     // Otherwise the merged segments are being moved to the init font, compute
     // the resulting size delta.
-    cost_delta += TRY(InitFontDelta(context, merged_segments));
+    double delta = TRY(InitFontDelta(context, merged_segments));
+    VLOG(1) << "    + " << delta << " [init font increase]";
+    cost_delta += delta;
   }
 
   // Now we remove all of the cost associated with segments that are either
@@ -282,15 +284,18 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   const auto* calculator = context.GetMergeStrategy().ProbabilityCalculator();
   for (const auto& [c, size] : removed_conditions) {
     double p = TRY(c.Probability(segments, *calculator));
-    double d = p * (size + per_request_overhead);
+    double s = (size + per_request_overhead);
+    double d = p * s;
     cost_delta -= d;
-    VLOG(1) << "    - (" << p << " * " << (size + per_request_overhead)
-            << ") -> " << d << " [removed patch " << c.ToString() << "]";
+    VLOG(1) << "    - (" << p << " * " << s << ") -> " << d
+            << " [removed patch " << c.ToString() << "]";
   }
   for (const auto& [c, size] : modified_conditions) {
-    double d = TRY(c.Probability(segments, *calculator)) *
-               (size + per_request_overhead);
-    VLOG(1) << "    - " << d << " [modified patch " << c.ToString() << "]";
+    double p = TRY(c.Probability(segments, *calculator));
+    double s = size + per_request_overhead;
+    double d = p * s;
+    VLOG(1) << "    - (" << p << " * " << s << " ) -> " << d
+            << " [modified patch " << c.ToString() << "]";
     cost_delta -= d;
   }
 
