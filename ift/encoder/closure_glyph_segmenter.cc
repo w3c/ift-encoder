@@ -664,6 +664,9 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
   do {
     // TODO(garretrieger): as an optimization probably want to avoid rechecking
     //   segments that have previously been assessed for move into init font.
+    //   alternatively should be able to modify this to not immediately apply
+    //   the move, but scan all options and collect the set of segments to move
+    //   then repeat analysis until no changes.
     // TODO(garretrieger): consider reworking this using gids instead of
     //  codepoints. That is specify init font def in terms of gids. That will
     //  more closely match the intention of merging a specific patch into the
