@@ -427,6 +427,89 @@ MergeNextBaseSegment(SegmentationContext& context) {
     return std::nullopt;
   }
 
+  // TODO(garretrieger): also consider moving the fallback segment into the
+  // init font. We should be able to compute an associated cost delta and
+  // should proceed if it's negative. Will need to reprocess the segmentation
+  // can utilize the existing ReassignInitSubset() method.
+
+  // TODO(garretrieger): merges are currently only done by merging two
+  // or more segment subset definitions together. However, there's a
+  // more granular type of merge possible where two patches are merged:
+  // the new patch has glyphs from both patches and it's conditions
+  // are a union of the two patches. However, the participating segment
+  // definitions aren't merged.
+  //
+  // To illustrate where this is useful consider this case:
+  //
+  // P(s1) = 100%
+  // P(s2) = 100%
+  // P(s3) =   1%
+  // P(s4) =   1%
+  //
+  // With patches
+  // s1 -> p0
+  // s3 -> p1
+  // s4 -> p2
+  // (s2 OR s3 OR s4) -> p3
+  //
+  // Ideally we want to merge p3 and p0 since both have 100% probability
+  // but we don't want to also pull in s3 and s4 with their associated
+  // patches as those are low probability. If we limit ourselves to
+  // only merging segment definitions then it's not possible to merge
+  // p3 and p0 without also merging in p1 and p2.
+  //
+  // However, if we take the more granular approach the mapping can be
+  // modifed to:
+  //
+  // P(s1) = 100%
+  // P(s2) = 100%
+  // P(s3) =   1%
+  // P(s4) =   1%
+  //
+  // With patches
+  // (s1 or s2 or s3 or s4) -> p0 + p3
+  // s3 -> p1
+  // s4 -> p2
+  //
+  // Here's a rough plan for how this capability could be added into the
+  // existing code:
+  // - Introduce a second type of merge that is considered called a "glyph
+  // union".
+  // - In the glyph groupings datastructure we keep a union find structure that
+  //   stores groupings of glyph ids.
+  // - When producing the or_glyphs groups if the glyph being categorized is
+  // part
+  //   of a group in the union find then expand the condidtion set to include
+  //   all conditions on all glyphs in the group.
+  // - In the above example we'd put the glyphs from p0 and p3 into a union
+  // - Then the conditions s1 -> p0, (s2 OR s3 OR s4) -> p3 will match the union
+  //   and both condition sets will be expanded out to the superset (s1 or s2 or
+  //   s3 or s4) creating a single combined patch.
+  // - Cost delta computation will need to be updated to be able to assess this
+  // case.
+  // - There's a small complication that glyph sets might change (eg. s1 get's
+  // expanded
+  //   so p0 gets bigger). All new glyphs in p0 will need to be considered to be
+  //   in the union. This can be handled by doing grouping in two phases, first
+  //   form the unmodified groupings, then expand them using the union find.
+
+  // TODO(garretrieger): special casing for handling multiple script frequency
+  // data sets when segmenting for multiple scripts (specifically disjoint ones)
+  // we essentially want to consider their frequencies in isolation from the
+  // other scripts. For example if greek has a codepoint with 100% probability
+  // and cyrillic has a codepoint with 100% probability those would normally be
+  // considered a good candidate to merge, but we likely don't want to merge
+  // those as most users in practice will be encountering only one of those two
+  // scripts at a time. Very roughly I think this can be solved by keeping
+  // multiple active segment sets (one per script) and during merging only
+  // consider one set at a time. This will prevent merges across scripts. Idea
+  // is early stage and definitely needs some more development.
+
+  // TODO(garretrieger): there's also the problem of overlapping scripts (eg.
+  // CJK) that will need special casing. Very broad strokes idea is to assess
+  // cost for each script individually and use the sum of the individual costs
+  // as the overall cost.
+
   while (true) {
     auto it = context.ActiveSegments().cbegin();
     if (it == context.ActiveSegments().cend()) {
@@ -553,6 +636,18 @@ static StatusOr<bool> CheckAndApplyInitFontMove(
   return true;
 }
 
+// This method analyzes the segments and checks to see if any should be
+// moved into the initial font.
+//
+// The common example where this is useful is for segments that have 100%
+// probability. Since these are always needed, the most efficient thing to
+// do is to move them into the initial font so they are already loaded
+// without needing to be part of a patch.
+//
+// The approach is fairly straightforward: iterate through all of the
+// conditions/patches and compute a cost delta for moving that patch
+// into the init font. Move only those cases whose delta is below a
+// configurable threshold.
 Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
     SegmentationContext& context) const {
   if (!context.GetMergeStrategy().InitFontMergeThreshold().has_value()) {
