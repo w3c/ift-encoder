@@ -896,6 +896,51 @@ if (s2) then p0
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       InitFontMerging_DisjunctiveCheckedIndividually) {
+  UnicodeFrequencies frequencies{
+      {{'A', 'A'}, 100},
+      {{'C', 'C'}, 100},
+      {{'B', 'B'}, 1},
+      {{0x106, 0x106}, 1},  // Cacute
+  };
+
+  MergeStrategy strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
+  strategy.SetInitFontMergeThreshold(-75);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'A'}, {'B'}, {'C'}, {0x106}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  /*
+  Before Merge:
+  initial font: { gid0 }
+  p0: { gid37 }
+  p1: { gid38 }
+  p2: { gid117, gid700 }
+  p3: { gid39 } # this is the 'C' glyph
+  if (s0) then p0
+  if (s2) then p1
+  if (s3) then p2
+  if ((s1 OR s3)) then p3
+
+  The init move should check and move C individually despite it not
+  having it's own exclusive patch (due to it being in a disjunctive condition).
+  Cacute will not be moved since it's low probability.
+  */
+  std::vector<SubsetDefinition> expected_segments = {{}, {}, {'B'}, {0x106}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid37, gid39 }
+p0: { gid38 }
+p1: { gid117, gid700 }
+if (s2) then p0
+if (s3) then p1
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   UnicodeFrequencies frequencies{
       {{'A', 'A'}, 1},

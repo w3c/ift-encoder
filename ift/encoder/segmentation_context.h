@@ -73,6 +73,19 @@ class SegmentationContext {
     return optimization_cutoff_segment_;
   }
 
+  common::SegmentSet CutoffSegments() const {
+    common::SegmentSet result;
+
+    unsigned num_segments = SegmentationInfo().Segments().size();
+    segment_index_t start = OptimizationCutoffSegment();
+    if (!num_segments || start > num_segments - 1) {
+      return result;
+    }
+
+    result.insert_range(start, num_segments - 1);
+    return result;
+  }
+
   const MergeStrategy& GetMergeStrategy() const { return merge_strategy_; }
 
   const RequestedSegmentationInformation& SegmentationInfo() const {

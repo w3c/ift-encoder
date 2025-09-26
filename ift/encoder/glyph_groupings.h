@@ -14,6 +14,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 
 namespace ift::encoder {
 
@@ -35,6 +36,22 @@ class GlyphGroupings {
   const absl::btree_map<ActivationCondition, common::GlyphSet>&
   ConditionsAndGlyphs() const {
     return conditions_and_glyphs_;
+  }
+
+  // Returns the set all of segments that are part of a disjunctive condition.
+  // This includes segments that are part of exclusive conditions.
+  common::SegmentSet AllDisjunctiveSegments() const {
+    common::SegmentSet result;
+    for (const auto& [c, _] : conditions_and_glyphs_) {
+      if (c.conditions().size() != 1) {
+        // Any condition with more than one segment group is conjunctive.
+        continue;
+      }
+      for (segment_index_t s : *c.conditions().begin()) {
+        result.insert(s);
+      }
+    }
+    return result;
   }
 
   const absl::btree_map<common::SegmentSet, common::GlyphSet>& AndGlyphGroups()
