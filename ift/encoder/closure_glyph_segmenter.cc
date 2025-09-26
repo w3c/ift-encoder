@@ -529,14 +529,36 @@ static StatusOr<std::vector<Segment>> ToSegments(
   return segments;
 }
 
+static StatusOr<bool> CheckAndApplyInitFontMove(
+    const SegmentSet& candidate_segments, SegmentationContext& context,
+    SubsetDefinition& initial_segment) {
+  const double threshold = *context.GetMergeStrategy().InitFontMergeThreshold();
+  const double delta = TRY(CandidateMerge::ComputeCostDelta(
+      context, candidate_segments, std::nullopt, 0));
+
+  if (delta >= threshold * (double)candidate_segments.size()) {
+    // Merging doesn't improve cost, skip.
+    return false;
+  }
+
+  VLOG(0) << "  Moving segments " << candidate_segments.ToString()
+          << " into the initial font (cost delta = " << delta << ")";
+
+  for (segment_index_t s : candidate_segments) {
+    initial_segment.Union(
+        context.SegmentationInfo().Segments()[s].Definition());
+  }
+
+  TRYV(context.ReassignInitSubset(initial_segment, candidate_segments));
+  return true;
+}
+
 Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
     SegmentationContext& context) const {
   if (!context.GetMergeStrategy().InitFontMergeThreshold().has_value()) {
     return absl::FailedPreconditionError(
         "Cannot be called when there is no merge threshold configured.");
   }
-
-  double threshold = *context.GetMergeStrategy().InitFontMergeThreshold();
 
   VLOG(0) << "Checking if there are any segments which should be moved into "
              "the initial font.";
@@ -545,14 +567,6 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
       context.SegmentationInfo().InitFontSegment();
   bool change_made;
   do {
-    // TODO(garretrieger): exclude segments beyond the cutoff.
-    // TODO(garretrieger): when considering disjunctive composite conditions we
-    //   want to check moved each member segment individually into the init
-    //   font. This is because moving any one single segment has the effect of
-    //   moving that patch into the init font. So it will often be less costly
-    //   to move only one. This could be handled by first running through
-    //   all conditions and collecting all disjunctive members into the
-    //   candidates set.
     // TODO(garretrieger): as an optimization probably want to avoid rechecking
     //   segments that have previously been assessed for move into init font.
     // TODO(garretrieger): consider reworking this using gids instead of
@@ -563,42 +577,40 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
     // TODO(garretrieger): should prune codepoints that are pulled into the init
     //   font from the segments. Will avoid having noop segments (segments
     //   with codepoints but no interactions/patches).
-    SegmentSet candidates = context.ActiveSegments();
+    SegmentSet to_check_individually =
+        context.glyph_groupings.AllDisjunctiveSegments();
+    SegmentSet excluded = context.CutoffSegments();
+    to_check_individually.subtract(excluded);
 
     change_made = false;
-    SegmentSet segments_to_move;
-    for (const auto& [c, glyphs] :
-         context.glyph_groupings.ConditionsAndGlyphs()) {
-      SegmentSet candidate_segments = c.TriggeringSegments();
-      if (!candidate_segments.intersects(candidates)) {
-        // Only do this check for things involving active segments, this let's
-        // us skip checks for conditions are are extremely unlikely to benefit
-        // from merging into the init font.
+    for (segment_index_t s : to_check_individually) {
+      SegmentSet candidate_segments{s};
+      change_made = TRY(CheckAndApplyInitFontMove(candidate_segments, context,
+                                                  initial_segment));
+      if (change_made) {
+        break;
+      }
+    }
+
+    if (change_made) {
+      continue;
+    }
+
+    for (const auto& [candidate_segments, _] :
+         context.glyph_groupings.AndGlyphGroups()) {
+      if (candidate_segments.size() <= 1 ||
+          candidate_segments.intersects(excluded)) {
+        // All size 1 segments handled in the previous loop.
+        // Since this is conjunction, having an excluded segment in it's
+        // condition makes the probability near 0.
         continue;
       }
 
-      double delta = TRY(CandidateMerge::ComputeCostDelta(
-          context, candidate_segments, std::nullopt, 0));
-
-      if (delta >= threshold * (double)candidate_segments.size()) {
-        // Merging doesn't improve cost, skip.
-        continue;
+      change_made = TRY(CheckAndApplyInitFontMove(candidate_segments, context,
+                                                  initial_segment));
+      if (change_made) {
+        break;
       }
-
-      // TODO(garretrieger): to get a more accurate picture we should consider
-      // comparing
-      //   to an updated init subset definition on each iteration.
-      segments_to_move.union_set(candidate_segments);
-      VLOG(0) << "  Moving segments " << candidate_segments.ToString()
-              << " into the initial font (cost delta = " << delta << ")";
-      for (segment_index_t s : segments_to_move) {
-        initial_segment.Union(
-            context.SegmentationInfo().Segments()[s].Definition());
-      }
-
-      TRYV(context.ReassignInitSubset(initial_segment, segments_to_move));
-      change_made = true;
-      break;
     }
   } while (change_made);
 
