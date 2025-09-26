@@ -258,17 +258,15 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
                               modified_conditions));
 
   double cost_delta = 0.0;
-  VLOG(1) << "cost delta for merge of " << merged_segments.ToString() << ":";
+  VLOG(1) << "cost_delta for merge of " << merged_segments.ToString()
+            << " =";
   if (!moving_to_init_font) {
     // Merge will introduce a new patch (merged_segment) with size
     // "new_patch_size", add the associated cost.
     double p = (*merged_segment)->Probability();
-    cost_delta += p * (new_patch_size + per_request_overhead);
-    VLOG(1) << "  cost_delta for merge of " << merged_segments.ToString()
-            << " =";
-
-    VLOG(1) << "    + (" << p << " * "
-            << (new_patch_size + per_request_overhead) << ") -> " << cost_delta
+    double s = new_patch_size + per_request_overhead;
+    cost_delta += p * s;
+    VLOG(1) << "    + (" << p << " * " << s << ") -> " << cost_delta
             << " [merged patch]";
   } else {
     // Otherwise the merged segments are being moved to the init font, compute
@@ -316,6 +314,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       // the cost addition as usual.
       SegmentSet condition_segments = c.TriggeringSegments();
       condition_segments.subtract(merged_segments);
+      if (condition_segments.empty()) {
+        continue;
+      }
+
       ActivationCondition new_condition =
           ActivationCondition::and_segments(condition_segments, 0);
       double p = TRY(c.Probability(
