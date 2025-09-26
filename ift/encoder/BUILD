@@ -2,9 +2,9 @@ cc_library(
     name = "encoder",
     srcs = [
         "closure_glyph_segmenter.cc",
-        "closure_glyph_segmenter.h",        
+        "closure_glyph_segmenter.h",
         "compiler.cc",
-        "compiler.h",        
+        "compiler.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -39,7 +39,7 @@ cc_library(
         "segmentation_context.h",
         "segmentation_context.cc",
         "glyph_closure_cache.h",
-        "glyph_closure_cache.cc",   
+        "glyph_closure_cache.cc",
         "requested_segmentation_information.h",
         "requested_segmentation_information.cc",
         "glyph_condition_set.h",
@@ -49,6 +49,8 @@ cc_library(
         "candidate_merge.h",
         "patch_size_cache.h",
         "merge_strategy.h",
+        "glyph_union.h",
+        "glyph_union.cc",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -61,6 +63,11 @@ cc_library(
         "//ift/feature_registry",
         "//ift",
         "//ift/freq",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:node_hash_set",
     ],
 )
 
@@ -198,6 +205,16 @@ cc_test(
         ":encoder",
         ":activation_condition",
         "//ift/freq:mock_probability_calculator",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "glyph_union_test",
+    srcs = ["glyph_union_test.cc"],
+    deps = [
+        ":segmentation_context",
+        "//common",
         "@googletest//:gtest_main",
     ],
 )
