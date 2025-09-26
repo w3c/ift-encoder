@@ -1,6 +1,7 @@
 #ifndef IFT_ENCODER_GLYPH_GROUPINGS_H_
 #define IFT_ENCODER_GLYPH_GROUPINGS_H_
 
+#include <cstdint>
 #include <vector>
 
 #include "absl/container/btree_map.h"
@@ -11,6 +12,7 @@
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/glyph_union.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
@@ -23,7 +25,8 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(const std::vector<Segment>& segments) {
+  GlyphGroupings(const std::vector<Segment>& segments, uint32_t glyph_count)
+      : glyph_union_(glyph_count) {
     uint32_t index = 0;
     for (const auto& s : segments) {
       if (!s.Definition().Empty()) {
@@ -36,7 +39,7 @@ class GlyphGroupings {
   bool operator==(const GlyphGroupings& other) {
     return and_glyph_groups_ == other.and_glyph_groups_ &&
            or_glyph_groups_ == other.or_glyph_groups_ &&
-           exclusive_glyph_group_ == other.exclusive_glyph_group_;
+           exclusive_glyph_groups_ == other.exclusive_glyph_groups_;
   }
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
@@ -64,8 +67,8 @@ class GlyphGroupings {
 
   const common::GlyphSet& ExclusiveGlyphs(segment_index_t s) const {
     static const common::GlyphSet empty{};
-    auto it = exclusive_glyph_group_.find(s);
-    if (it != exclusive_glyph_group_.end()) {
+    auto it = exclusive_glyph_groups_.find(s);
+    if (it != exclusive_glyph_groups_.end()) {
       return it->second;
     }
     return empty;
@@ -102,7 +105,7 @@ class GlyphGroupings {
   // segment).
   void AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
                                  const common::GlyphSet& glyphs) {
-    auto& exc_glyphs = exclusive_glyph_group_[exclusive_segment];
+    auto& exc_glyphs = exclusive_glyph_groups_[exclusive_segment];
     exc_glyphs.union_set(glyphs);
 
     ActivationCondition condition =
@@ -110,6 +113,18 @@ class GlyphGroupings {
     conditions_and_glyphs_[condition].union_set(glyphs);
     // triggering segment to conditions is not affected by this change, so
     // doesn't need an update.
+  }
+
+  absl::Status UnionPatches(const common::GlyphSet& a,
+                            const common::GlyphSet& b) {
+    TRYV(glyph_union_.Union(a));
+    TRYV(glyph_union_.Union(b));
+    auto a_min = a.min();
+    auto b_min = b.min();
+    if (a_min.has_value() && b_min.has_value()) {
+      TRYV(glyph_union_.Union(*a_min, *b_min));
+    }
+    return absl::OkStatus();
   }
 
   // Updates this glyph grouping for all glyphs in the 'glyphs' set to match
@@ -128,13 +143,32 @@ class GlyphGroupings {
     segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
 
     TRYV(GlyphSegmentation::GroupsToSegmentation(
-        and_glyph_groups_, or_glyph_groups_, exclusive_glyph_group_,
+        and_glyph_groups_, or_glyph_groups_, exclusive_glyph_groups_,
         fallback_segments_, segmentation));
 
     return segmentation;
   }
 
  private:
+  absl::Status ComputeReplacementConditions(
+      const GlyphUnion& glyph_unions,
+      const common::SegmentSet& modified_exclusive_segments,
+      const absl::btree_set<common::SegmentSet>& modified_or_groups,
+      absl::flat_hash_map<uint32_t, common::SegmentSet>& replacement_conditions)
+      const;
+
+  absl::Status ReplaceConditions(
+      const GlyphUnion& glyph_unions,
+      const absl::flat_hash_map<uint32_t, common::SegmentSet>&
+          replacement_conditions,
+      common::SegmentSet& modified_exclusive_segments,
+      absl::btree_set<common::SegmentSet>& modified_or_groups);
+
+  absl::Status ExpandConditions(
+      const GlyphUnion& glyph_unions,
+      common::SegmentSet& modified_exclusive_segments,
+      absl::btree_set<common::SegmentSet>& modified_or_groups);
+
   void AddConditionAndGlyphs(ActivationCondition condition,
                              common::GlyphSet glyphs) {
     const auto& [new_value_it, did_insert] =
@@ -151,9 +185,35 @@ class GlyphGroupings {
     }
   }
 
+  // Tracks patches that are should be merged directly together. Any disjunctive
+  // or exclusive patches which belong to the same union group will be merged
+  // together. The merge is done by combining all of the linked glyphs into a
+  // single patch and merging all of the condition segments into a single
+  // condition.
+  //
+  // Conjunctive conditions/patches are unaffected by this mechanism since they
+  // can't be joined together in the same fashion.
+  //
+  // To illustrate this here is a simple example. Let's say we have the
+  // following conditions:
+  //
+  // - s1 -> {g1}
+  // - s2 -> {g2}
+  // - s2 or s3 -> {g3, g4}
+  //
+  // And the union has {g1, g4}
+  //
+  // Then this would result in the final conditions:
+  // s2 -> {g2}
+  // s1 or s2 or s3 -> {g1, g3, g4}
+  //
+  // Notice how the (s1), (s2 or s3) conditions/patches have been merged while
+  // the s2 -> {g2} condition/patch is left untouched.
+  GlyphUnion glyph_union_;
+
   absl::btree_map<common::SegmentSet, common::GlyphSet> and_glyph_groups_;
   absl::btree_map<common::SegmentSet, common::GlyphSet> or_glyph_groups_;
-  absl::btree_map<segment_index_t, common::GlyphSet> exclusive_glyph_group_;
+  absl::btree_map<segment_index_t, common::GlyphSet> exclusive_glyph_groups_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
   absl::btree_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
