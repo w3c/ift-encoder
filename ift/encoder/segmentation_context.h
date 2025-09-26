@@ -49,7 +49,7 @@ class SegmentationContext {
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(segments),
+        glyph_groupings(segments, hb_face_get_glyph_count(face)),
         merge_strategy_(std::move(strategy)),
         optimization_cutoff_segment_(UINT32_MAX) {
     ComputeActiveSegments();
@@ -165,7 +165,8 @@ class SegmentationContext {
     // All segments depend on the init subset def, so we must reprocess
     // everything. First reset grouping information:
     glyph_condition_set = GlyphConditionSet(glyph_count);
-    glyph_groupings = GlyphGroupings(SegmentationInfo().Segments());
+    glyph_groupings =
+        GlyphGroupings(SegmentationInfo().Segments(), glyph_count);
     inert_segments_.clear();
 
     // Then reprocess segments:

@@ -178,6 +178,19 @@ cc_test(
 )
 
 cc_test(
+    name = "glyph_groupings_test",
+    srcs = ["glyph_groupings_test.cc"],
+    data = [
+        "//common:testdata",
+    ],
+    deps = [
+        ":segmentation_context",
+        "//common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "candidate_merge_test",
     size = "small",
     srcs = [
