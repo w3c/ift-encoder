@@ -258,8 +258,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
                               modified_conditions));
 
   double cost_delta = 0.0;
-  VLOG(1) << "cost_delta for merge of " << merged_segments.ToString()
-            << " =";
+  VLOG(1) << "cost_delta for merge of " << merged_segments.ToString() << " =";
   if (!moving_to_init_font) {
     // Merge will introduce a new patch (merged_segment) with size
     // "new_patch_size", add the associated cost.

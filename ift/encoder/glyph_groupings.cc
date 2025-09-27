@@ -6,6 +6,7 @@
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/types.h"
 
 using absl::btree_set;
 using absl::Status;
@@ -16,15 +17,24 @@ namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(
     const GlyphConditions& condition, uint32_t gid) {
+  if (condition.and_segments.size() == 1) {
+    segment_index_t s = *condition.and_segments.begin();
+    exclusive_glyph_group_[s].erase(gid);
+    ActivationCondition activation_condition =
+        ActivationCondition::exclusive_segment(s, 0);
+    conditions_and_glyphs_[activation_condition].erase(gid);
+
+    if (exclusive_glyph_group_[s].empty()) {
+      exclusive_glyph_group_.erase(s);
+      RemoveConditionAndGlyphs(activation_condition);
+    }
+  }
+
   auto it = and_glyph_groups_.find(condition.and_segments);
   if (it != and_glyph_groups_.end()) {
     it->second.erase(gid);
     ActivationCondition activation_condition =
         ActivationCondition::and_segments(condition.and_segments, 0);
-    if (condition.and_segments.size() == 1) {
-      activation_condition = ActivationCondition::exclusive_segment(
-          *condition.and_segments.begin(), 0);
-    }
     conditions_and_glyphs_[activation_condition].erase(gid);
 
     if (it->second.empty()) {
@@ -55,15 +65,23 @@ Status GlyphGroupings::GroupGlyphs(
     GlyphClosureCache& closure_cache, const GlyphSet& glyphs) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
 
+  SegmentSet modified_exclusive_segments;
   btree_set<SegmentSet> modified_and_groups;
   btree_set<SegmentSet> modified_or_groups;
   for (glyph_id_t gid : glyphs) {
     const auto& condition = glyph_condition_set.ConditionsFor(gid);
 
     if (!condition.and_segments.empty()) {
-      and_glyph_groups_[condition.and_segments].insert(gid);
-      modified_and_groups.insert(condition.and_segments);
+      if (condition.and_segments.size() == 1) {
+        segment_index_t s = *condition.and_segments.begin();
+        exclusive_glyph_group_[s].insert(gid);
+        modified_exclusive_segments.insert(s);
+      } else {
+        and_glyph_groups_[condition.and_segments].insert(gid);
+        modified_and_groups.insert(condition.and_segments);
+      }
     }
+
     if (!condition.or_segments.empty()) {
       or_glyph_groups_[condition.or_segments].insert(gid);
       modified_or_groups.insert(condition.or_segments);
@@ -76,14 +94,12 @@ Status GlyphGroupings::GroupGlyphs(
     }
   }
 
-  for (const auto& and_group : modified_and_groups) {
-    if (and_group.size() == 1) {
-      auto condition =
-          ActivationCondition::exclusive_segment(*and_group.begin(), 0);
-      AddConditionAndGlyphs(condition, and_glyph_groups_[and_group]);
-      continue;
-    }
+  for (segment_index_t s : modified_exclusive_segments) {
+    auto condition = ActivationCondition::exclusive_segment(s, 0);
+    AddConditionAndGlyphs(condition, exclusive_glyph_group_[s]);
+  }
 
+  for (const auto& and_group : modified_and_groups) {
     auto condition = ActivationCondition::and_segments(and_group, 0);
     AddConditionAndGlyphs(condition, and_glyph_groups_[and_group]);
   }
