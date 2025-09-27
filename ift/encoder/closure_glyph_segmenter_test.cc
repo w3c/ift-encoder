@@ -738,7 +738,8 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
 
   // Basic no segment case.
   GlyphSegmentation segmentation1({'a', 'b', 'c'}, {}, {});
-  auto sc = GlyphSegmentation::GroupsToSegmentation({}, {}, {}, segmentation1);
+  auto sc =
+      GlyphSegmentation::GroupsToSegmentation({}, {}, {}, {}, segmentation1);
   ASSERT_TRUE(sc.ok()) << sc;
 
   ClosureGlyphSegmenter segmenter;
@@ -750,12 +751,12 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
 
   // Add some patches
   GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
-  sc = GlyphSegmentation::GroupsToSegmentation(
-      {
-          {{0}, {100, 101, 102}},
-          {{1}, {103, 104, 105}},
-      },
-      {}, {}, segmentation2);
+  sc = GlyphSegmentation::GroupsToSegmentation({}, {},
+                                               {
+                                                   {0, {100, 101, 102}},
+                                                   {1, {103, 104, 105}},
+                                               },
+                                               {}, segmentation2);
   ASSERT_TRUE(sc.ok()) << sc;
 
   std::vector<SubsetDefinition> segments{

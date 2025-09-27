@@ -33,6 +33,14 @@ class GlyphGroupings {
     }
   }
 
+  bool operator==(const GlyphGroupings& other) {
+    return and_glyph_groups_ == other.and_glyph_groups_ &&
+           or_glyph_groups_ == other.or_glyph_groups_ &&
+           exclusive_glyph_group_ == other.exclusive_glyph_group_;
+  }
+
+  bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
+
   const absl::btree_map<ActivationCondition, common::GlyphSet>&
   ConditionsAndGlyphs() const {
     return conditions_and_glyphs_;
@@ -54,14 +62,13 @@ class GlyphGroupings {
     return result;
   }
 
-  const absl::btree_map<common::SegmentSet, common::GlyphSet>& AndGlyphGroups()
-      const {
-    return and_glyph_groups_;
-  }
-
-  const absl::btree_map<common::SegmentSet, common::GlyphSet>& OrGlyphGroups()
-      const {
-    return or_glyph_groups_;
+  const common::GlyphSet& ExclusiveGlyphs(segment_index_t s) const {
+    static const common::GlyphSet empty{};
+    auto it = exclusive_glyph_group_.find(s);
+    if (it != exclusive_glyph_group_.end()) {
+      return it->second;
+    }
+    return empty;
   }
 
   // Returns a list of conditions which include segment.
@@ -95,8 +102,8 @@ class GlyphGroupings {
   // segment).
   void AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
                                  const common::GlyphSet& glyphs) {
-    auto& and_glyphs = and_glyph_groups_[common::SegmentSet{exclusive_segment}];
-    and_glyphs.union_set(glyphs);
+    auto& exc_glyphs = exclusive_glyph_group_[exclusive_segment];
+    exc_glyphs.union_set(glyphs);
 
     ActivationCondition condition =
         ActivationCondition::exclusive_segment(exclusive_segment, 0);
@@ -119,8 +126,11 @@ class GlyphGroupings {
         segmentation_info.InitFontSegmentWithoutDefaults(),
         segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
     segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
+
     TRYV(GlyphSegmentation::GroupsToSegmentation(
-        and_glyph_groups_, or_glyph_groups_, fallback_segments_, segmentation));
+        and_glyph_groups_, or_glyph_groups_, exclusive_glyph_group_,
+        fallback_segments_, segmentation));
+
     return segmentation;
   }
 
@@ -143,6 +153,7 @@ class GlyphGroupings {
 
   absl::btree_map<common::SegmentSet, common::GlyphSet> and_glyph_groups_;
   absl::btree_map<common::SegmentSet, common::GlyphSet> or_glyph_groups_;
+  absl::btree_map<segment_index_t, common::GlyphSet> exclusive_glyph_group_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
   absl::btree_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;

@@ -96,6 +96,8 @@ class GlyphSegmentation {
           and_glyph_groups,
       const absl::btree_map<common::SegmentSet, common::GlyphSet>&
           or_glyph_groups,
+      const absl::btree_map<segment_index_t, common::GlyphSet>&
+          exclusive_glyph_groups,
       const common::SegmentSet& fallback_group,
       GlyphSegmentation& segmentation);
 

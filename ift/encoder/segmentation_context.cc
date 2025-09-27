@@ -96,12 +96,12 @@ StatusOr<segment_index_t> SegmentationContext::ComputeSegmentCutoff() const {
   double total_cost = 0.0;
   double overhead = merge_strategy_.NetworkOverheadCost();
   for (segment_index_t s : active_segments_) {
-    auto segment_glyphs = glyph_groupings.AndGlyphGroups().find(SegmentSet{s});
-    if (segment_glyphs == glyph_groupings.AndGlyphGroups().end()) {
+    auto segment_glyphs = glyph_groupings.ExclusiveGlyphs(s);
+    if (segment_glyphs.empty()) {
       continue;
     }
 
-    double size = TRY(patch_size_cache->GetPatchSize(segment_glyphs->second));
+    double size = TRY(patch_size_cache->GetPatchSize(segment_glyphs));
     double probability = segmentation_info_.Segments()[s].Probability();
     total_cost += probability * (size + overhead);
   }
@@ -112,12 +112,12 @@ StatusOr<segment_index_t> SegmentationContext::ComputeSegmentCutoff() const {
   for (auto it = active_segments_.rbegin(); it != active_segments_.rend();
        it++) {
     segment_index_t s = *it;
-    auto segment_glyphs = glyph_groupings.AndGlyphGroups().find(SegmentSet{s});
-    if (segment_glyphs == glyph_groupings.AndGlyphGroups().end()) {
+    auto segment_glyphs = glyph_groupings.ExclusiveGlyphs(s);
+    if (segment_glyphs.empty()) {
       continue;
     }
 
-    double size = TRY(patch_size_cache->GetPatchSize(segment_glyphs->second));
+    double size = TRY(patch_size_cache->GetPatchSize(segment_glyphs));
     double probability = segmentation_info_.Segments()[s].Probability();
     cutoff_tail_cost -= probability * (size + overhead);
     if (cutoff_tail_cost < 0.0) {
