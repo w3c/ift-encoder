@@ -35,30 +35,20 @@ namespace ift::encoder {
 Status GlyphSegmentation::GroupsToSegmentation(
     const btree_map<SegmentSet, GlyphSet>& and_glyph_groups,
     const btree_map<SegmentSet, GlyphSet>& or_glyph_groups,
+    const btree_map<segment_index_t, GlyphSet>& exclusive_glyph_groups,
     const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
   segmentation.patches_.clear();
   segmentation.conditions_.clear();
 
   // Map segments into patch ids
-  for (const auto& [and_segments, glyphs] : and_glyph_groups) {
-    if (and_segments.size() != 1) {
-      continue;
-    }
-
-    segment_index_t segment = *and_segments.begin();
+  for (const auto& [segment, glyphs] : exclusive_glyph_groups) {
     segmentation.patches_.insert(std::pair(next_id, glyphs));
-    // All 1 segment and conditions are considered to be exclusive
     segmentation.conditions_.insert(
         ActivationCondition::exclusive_segment(segment, next_id++));
   }
 
   for (const auto& [and_segments, glyphs] : and_glyph_groups) {
-    if (and_segments.size() == 1) {
-      // already processed above
-      continue;
-    }
-
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
         ActivationCondition::and_segments(and_segments, next_id));

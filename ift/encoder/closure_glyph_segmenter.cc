@@ -202,11 +202,11 @@ StatusOr<std::optional<GlyphSet>> TryMergingABaseSegment(
 
 StatusOr<std::optional<GlyphSet>> MergeSegmentWithHeuristic(
     SegmentationContext& context, uint32_t base_segment_index) {
-  auto base_segment_glyphs = context.glyph_groupings.AndGlyphGroups().find(
-      SegmentSet{base_segment_index});
-  if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end() ||
+  auto base_segment_glyphs =
+      context.glyph_groupings.ExclusiveGlyphs(base_segment_index);
+  if (base_segment_glyphs.empty() ||
       !TRY(CandidateMerge::IsPatchTooSmall(context, base_segment_index,
-                                           base_segment_glyphs->second))) {
+                                           base_segment_glyphs))) {
     // Patch is big enough, no merge is needed.
     return std::nullopt;
   }
@@ -293,16 +293,15 @@ Status CollectExclusiveCandidateMerges(
       return absl::OkStatus();
     }
 
-    SegmentSet triggering_segments{segment_index};
     auto segment_glyphs =
-        context.glyph_groupings.AndGlyphGroups().find(triggering_segments);
-    if (segment_glyphs == context.glyph_groupings.AndGlyphGroups().end() ||
-        segment_glyphs->second.empty()) {
+        context.glyph_groupings.ExclusiveGlyphs(segment_index);
+    if (segment_glyphs.empty()) {
       // This segment has no exclusive glyphs, so no need to consider it for a
       // merge.
       continue;
     }
 
+    SegmentSet triggering_segments{segment_index};
     auto candidate_merge = TRY(CandidateMerge::AssessMerge(
         context, base_segment_index, triggering_segments,
         smallest_candidate_merge));
@@ -361,10 +360,9 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
   // would be to gather some frequency data, test this approach as is, and then
   // refine it potentially using some of the proposals noted above.
 
-  auto base_segment_glyphs = context.glyph_groupings.AndGlyphGroups().find(
-      SegmentSet{base_segment_index});
-  if (base_segment_glyphs == context.glyph_groupings.AndGlyphGroups().end() ||
-      base_segment_glyphs->second.empty()) {
+  auto base_segment_glyphs =
+      context.glyph_groupings.ExclusiveGlyphs(base_segment_index);
+  if (base_segment_glyphs.empty()) {
     // This base segment has no exclusive glyphs, there's no need to to compute
     // merges.
     return std::nullopt;
@@ -379,8 +377,8 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
-    unsigned base_size = TRY(
-        context.patch_size_cache->GetPatchSize(base_segment_glyphs->second));
+    unsigned base_size =
+        TRY(context.patch_size_cache->GetPatchSize(base_segment_glyphs));
     smallest_candidate_merge = CandidateMerge::BaselineCandidate(
         base_segment_index, 0.0, base_size, base_segment.Probability(),
         context.GetMergeStrategy().NetworkOverheadCost());
@@ -572,14 +570,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     return absl::FailedPreconditionError("glyph_condition_set isn't correct.");
   }
 
-  if (non_incremental_context.glyph_groupings.AndGlyphGroups() !=
-      context.glyph_groupings.AndGlyphGroups()) {
-    return absl::FailedPreconditionError("and_glyph groups aren't correct.");
-  }
-
-  if (non_incremental_context.glyph_groupings.OrGlyphGroups() !=
-      context.glyph_groupings.OrGlyphGroups()) {
-    return absl::FailedPreconditionError("or_glyph groups aren't correct.");
+  if (non_incremental_context.glyph_groupings != context.glyph_groupings) {
+    return absl::FailedPreconditionError("glyph groups aren't correct.");
   }
 
   return absl::OkStatus();
@@ -694,18 +686,18 @@ Status ClosureGlyphSegmenter::MoveSegmentsToInitFont(
       continue;
     }
 
-    for (const auto& [candidate_segments, _] :
-         context.glyph_groupings.AndGlyphGroups()) {
-      if (candidate_segments.size() <= 1 ||
-          candidate_segments.intersects(excluded)) {
-        // All size 1 segments handled in the previous loop.
-        // Since this is conjunction, having an excluded segment in it's
+    for (const auto& [condition, _] :
+         context.glyph_groupings.ConditionsAndGlyphs()) {
+      if (condition.conditions().size() <= 1 ||
+          condition.TriggeringSegments().intersects(excluded)) {
+        // All size 1 conditions are disjunctive and handled in the previous
+        // loop. Since this is conjunction, having an excluded segment in it's
         // condition makes the probability near 0.
         continue;
       }
 
-      change_made = TRY(CheckAndApplyInitFontMove(candidate_segments, context,
-                                                  initial_segment));
+      change_made = TRY(CheckAndApplyInitFontMove(
+          condition.TriggeringSegments(), context, initial_segment));
       if (change_made) {
         break;
       }
