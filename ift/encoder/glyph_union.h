@@ -13,6 +13,7 @@
 
 namespace ift::encoder {
 
+// TODO XXXX rename GlyphPartition
 /*
  * This stores disjoint sets of glyph IDs and can retrieve all members of
  * these sets.
