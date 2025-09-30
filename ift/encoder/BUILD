@@ -34,6 +34,20 @@ cc_library(
 )
 
 cc_library(
+    name = "glyph_union",
+    srcs = [
+        "glyph_union.h",
+        "glyph_union.cc",
+    ],
+    deps = [
+        ":common",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/container:flat_hash_map",
+    ],
+)
+
+cc_library(
     name = "segmentation_context",
     srcs = [
         "segmentation_context.h",
@@ -49,8 +63,7 @@ cc_library(
         "candidate_merge.h",
         "patch_size_cache.h",
         "merge_strategy.h",
-        "glyph_union.h",
-        "glyph_union.cc",
+
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -58,6 +71,7 @@ cc_library(
     visibility = [
     ],
     deps = [
+        ":glyph_union",
         ":common",
         ":activation_condition",
         "//ift/feature_registry",
@@ -226,7 +240,7 @@ cc_test(
     name = "glyph_union_test",
     srcs = ["glyph_union_test.cc"],
     deps = [
-        ":segmentation_context",
+        ":glyph_union",
         "//common",
         "@googletest//:gtest_main",
     ],

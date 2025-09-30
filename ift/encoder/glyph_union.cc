@@ -85,6 +85,18 @@ Status GlyphUnion::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
   return absl::OkStatus();
 }
 
+absl::Status GlyphUnion::Union(const GlyphUnion& other) {
+  if (other.parent_.size() != parent_.size()) {
+    return absl::InvalidArgumentError("Glyph unions are not compatible, they must have the same number of elements.");
+  }
+
+  for (unsigned i = 0; i < other.parent_.size(); i++) {
+    TRYV(Union(i, other.parent_[i]));
+  }
+
+  return absl::OkStatus();
+}
+
 StatusOr<glyph_id_t> GlyphUnion::Find(glyph_id_t glyph) const {
   if (glyph >= parent_.size()) {
     return absl::InvalidArgumentError(

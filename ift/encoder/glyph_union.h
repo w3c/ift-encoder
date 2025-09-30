@@ -26,6 +26,7 @@ class GlyphUnion {
   // Merge all of the sets that intersect glyphs into a single set.
   absl::Status Union(const common::GlyphSet& glyphs);
   absl::Status Union(glyph_id_t glyph1, glyph_id_t glyph2);
+  absl::Status Union(const GlyphUnion& other);
 
   absl::StatusOr<glyph_id_t> Find(glyph_id_t glyph) const;
   absl::StatusOr<const common::GlyphSet&> GlyphsFor(glyph_id_t glyph) const;
