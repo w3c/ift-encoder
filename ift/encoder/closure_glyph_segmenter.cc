@@ -397,7 +397,7 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
     return std::nullopt;
   }
 
-  if (smallest_candidate_merge->segments_to_merge ==
+  if (smallest_candidate_merge->SegmentsToMerge() ==
       SegmentSet{base_segment_index}) {
     // nothing smaller than the baseline was found.
     return std::nullopt;
@@ -405,7 +405,7 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
 
   // Enforce a negative cost delta only if this segments has met the minimum
   // grouping size.
-  if (min_group_size_met && smallest_candidate_merge->cost_delta >= 0.0) {
+  if (min_group_size_met && smallest_candidate_merge->CostDelta() >= 0.0) {
     return std::nullopt;
   }
 

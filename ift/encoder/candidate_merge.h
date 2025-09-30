@@ -12,52 +12,66 @@
 
 namespace ift::encoder {
 
+class CandidateMergeTest;
+
 struct CandidateMerge {
+  friend class CandidateMergeTest;
+
+ private:
   // The segment into which other segments will be merged.
-  segment_index_t base_segment_index;
+  segment_index_t base_segment_index_;
 
   // The set of segments to be merged into the base_segment_index.
-  common::SegmentSet segments_to_merge;
+  common::SegmentSet segments_to_merge_;
 
   // The result of merge the above segments.
-  Segment merged_segment;
+  Segment merged_segment_;
 
   // If true the merge segment will be inert, that is it won't interact
   // with the closure.
-  bool new_segment_is_inert;
+  bool new_segment_is_inert_;
 
   // Estimated size of the patch after merging.
-  uint32_t new_patch_size;
+  uint32_t new_patch_size_;
 
   // The estimated change overall cost of the segmentation if this merge
   // were to be appiled.
-  double cost_delta;
+  double cost_delta_;
 
   // The set of glyphs that would be invalidated (need reprocessing) if this
   // merge is applied.
-  common::GlyphSet invalidated_glyphs;
+  common::GlyphSet invalidated_glyphs_;
 
   // Inert probability threshold computation cache
-  double base_size = 0.0;
-  double base_probability = 0.0;
-  double network_overhead = 0.0;
+  double base_size_ = 0.0;
+  double base_probability_ = 0.0;
+  double network_overhead_ = 0.0;
 
+  CandidateMerge(Segment merged_segment) : merged_segment_(merged_segment) {}
+
+ public:
   static CandidateMerge BaselineCandidate(uint32_t base_segment_index,
                                           double cost_delta, double base_size,
                                           double base_probability,
                                           double network_overhead) {
-    return CandidateMerge{
-        .base_segment_index = base_segment_index,
-        .segments_to_merge = {base_segment_index},
-        .merged_segment = Segment({}, freq::ProbabilityBound::Zero()),
-        .new_segment_is_inert = true,
-        .new_patch_size = 0,
-        .cost_delta = cost_delta,
-        .invalidated_glyphs = {},
-        .base_size = base_size,
-        .base_probability = base_probability,
-        .network_overhead = network_overhead};
+    CandidateMerge merge(Segment({}, freq::ProbabilityBound::Zero()));
+    merge.base_segment_index_ = base_segment_index;
+    merge.segments_to_merge_ = {base_segment_index};
+    merge.new_segment_is_inert_ = true;
+    merge.new_patch_size_ = 0;
+    merge.cost_delta_ = cost_delta;
+    merge.invalidated_glyphs_ = {};
+    merge.base_size_ = base_size;
+    merge.base_probability_ = base_probability;
+    merge.network_overhead_ = network_overhead;
+    return merge;
   }
+
+  const common::SegmentSet& SegmentsToMerge() const {
+    return segments_to_merge_;
+  }
+
+  double CostDelta() const { return cost_delta_; }
 
   // This is the estimated smallest possible increase in a patch size as a
   // result of a merge (ie. assuming the added glyph(s) are redundant with the
@@ -68,18 +82,18 @@ struct CandidateMerge {
   bool operator==(const CandidateMerge& other) const {
     // base segment and segments to merge uniquely identify a candidate
     // merge operation.
-    return base_segment_index == other.base_segment_index &&
-           segments_to_merge == other.segments_to_merge;
+    return base_segment_index_ == other.base_segment_index_ &&
+           segments_to_merge_ == other.segments_to_merge_;
   }
 
   bool operator<(const CandidateMerge& other) const {
-    if (cost_delta != other.cost_delta) {
-      return cost_delta < other.cost_delta;
+    if (cost_delta_ != other.cost_delta_) {
+      return cost_delta_ < other.cost_delta_;
     }
-    if (base_segment_index != other.base_segment_index) {
-      return base_segment_index < other.base_segment_index;
+    if (base_segment_index_ != other.base_segment_index_) {
+      return base_segment_index_ < other.base_segment_index_;
     }
-    return segments_to_merge < other.segments_to_merge;
+    return segments_to_merge_ < other.segments_to_merge_;
   }
 
   // Given some candidate merge this computes the minimum probability an inert
@@ -105,15 +119,15 @@ struct CandidateMerge {
     // merged patches so that the new size is just the larger of the two patches
     // to be merged, plus the byte cost of adding at least one more gid into the
     // patch header.
-    double best_case_merged_size = std::max(base_size, (double)patch_size) +
-                                   network_overhead +
+    double best_case_merged_size = std::max(base_size_, (double)patch_size) +
+                                   network_overhead_ +
                                    BEST_CASE_MERGE_SIZE_DELTA;
-    double total_base_size = base_size + network_overhead;
+    double total_base_size = base_size_ + network_overhead_;
     double total_patch_size =
-        patch_size > 0 ? patch_size + network_overhead : 0;
+        patch_size > 0 ? patch_size + network_overhead_ : 0;
 
     double numerator = merged_probability * best_case_merged_size -
-                       base_probability * total_base_size - cost_delta;
+                       base_probability_ * total_base_size - cost_delta_;
     double min_p = std::min(std::max(numerator / total_patch_size, 0.0), 1.0);
     return min_p;
   }

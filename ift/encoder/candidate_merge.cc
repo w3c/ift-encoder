@@ -57,47 +57,47 @@ StatusOr<bool> CandidateMerge::IsPatchTooSmall(
 GlyphSet CandidateMerge::Apply(SegmentationContext& context) {
   const auto& segments = context.SegmentationInfo().Segments();
   uint32_t size_before =
-      segments[base_segment_index].Definition().codepoints.size();
+      segments[base_segment_index_].Definition().codepoints.size();
   uint32_t size_after =
-      context.AssignMergedSegment(base_segment_index, segments_to_merge,
-                                  merged_segment, new_segment_is_inert);
+      context.AssignMergedSegment(base_segment_index_, segments_to_merge_,
+                                  merged_segment_, new_segment_is_inert_);
 
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
-          << " codepoints for segment " << base_segment_index << "."
+          << " codepoints for segment " << base_segment_index_ << "."
           << std::endl
-          << "  New patch size " << new_patch_size << " bytes. " << std::endl
-          << "  Cost delta is " << cost_delta << "." << std::endl
+          << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
+          << "  Cost delta is " << cost_delta_ << "." << std::endl
           << "  New probability is "
-          << merged_segment.ProbabilityBound().ToString();
+          << merged_segment_.ProbabilityBound().ToString();
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
-  context.InvalidateGlyphInformation(invalidated_glyphs, segments_to_merge);
+  context.InvalidateGlyphInformation(invalidated_glyphs_, segments_to_merge_);
 
   // Remove the fallback segment or group, it will be fully recomputed by
   // GroupGlyphs. This needs to happen after invalidation because in some
   // cases invalidation may need to find conditions associated with the
   // fallback segment.
-  context.glyph_groupings.RemoveFallbackSegments(segments_to_merge);
+  context.glyph_groupings.RemoveFallbackSegments(segments_to_merge_);
 
-  if (new_segment_is_inert) {
+  if (new_segment_is_inert_) {
     // The newly formed segment will be inert which means we can construct the
     // new condition sets and glyph groupings here instead of using the
     // closure analysis to do it. The new segment is simply the union of all
     // glyphs associated with each segment that is part of the merge.
     // (gid_conditons_to_update)
-    for (glyph_id_t gid : invalidated_glyphs) {
-      context.glyph_condition_set.AddAndCondition(gid, base_segment_index);
+    for (glyph_id_t gid : invalidated_glyphs_) {
+      context.glyph_condition_set.AddAndCondition(gid, base_segment_index_);
     }
-    context.glyph_groupings.AddGlyphsToExclusiveGroup(base_segment_index,
-                                                      invalidated_glyphs);
+    context.glyph_groupings.AddGlyphsToExclusiveGroup(base_segment_index_,
+                                                      invalidated_glyphs_);
 
     // We've now fully updated information for these glyphs so don't need to
     // return them.
-    invalidated_glyphs.clear();
+    invalidated_glyphs_.clear();
   }
 
-  return invalidated_glyphs;
+  return invalidated_glyphs_;
 }
 
 static bool WouldMixFeaturesAndCodepoints(
@@ -440,27 +440,26 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessMerge(
   }
 
   if (best_merge_candidate.has_value() &&
-      cost_delta >= best_merge_candidate.value().cost_delta) {
+      cost_delta >= best_merge_candidate.value().cost_delta_) {
     // Our delta is not smaller, don't bother returning a candidate.
     return std::nullopt;
   }
 
-  auto candidate =
-      CandidateMerge{.base_segment_index = base_segment_index,
-                     .segments_to_merge = segments_to_merge,
-                     .merged_segment = std::move(merged_segment),
-                     .new_segment_is_inert = new_segment_is_inert,
-                     .new_patch_size = new_patch_size,
-                     .cost_delta = cost_delta,
-                     .invalidated_glyphs = gid_conditions_to_update};
+  CandidateMerge candidate(std::move(merged_segment));
+  candidate.base_segment_index_ = base_segment_index;
+  candidate.segments_to_merge_ = segments_to_merge;
+  candidate.new_segment_is_inert_ = new_segment_is_inert;
+  candidate.new_patch_size_ = new_patch_size;
+  candidate.cost_delta_ = cost_delta;
+  candidate.invalidated_glyphs_ = gid_conditions_to_update;
 
   if (context.GetMergeStrategy().UseCosts()) {
     const GlyphSet& base_segment_glyphs =
         context.glyph_condition_set.GlyphsWithSegment(base_segment_index);
-    candidate.base_size =
+    candidate.base_size_ =
         TRY(context.patch_size_cache->GetPatchSize(base_segment_glyphs));
-    candidate.base_probability = segments[base_segment_index].Probability();
-    candidate.network_overhead =
+    candidate.base_probability_ = segments[base_segment_index].Probability();
+    candidate.network_overhead_ =
         context.GetMergeStrategy().NetworkOverheadCost();
   }
 
