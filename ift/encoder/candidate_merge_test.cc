@@ -27,8 +27,42 @@ namespace ift::encoder {
 
 class CandidateMergeTest : public ::testing::Test {
  protected:
-  CandidateMergeTest() : roboto(make_hb_face(nullptr)) {
+  CandidateMergeTest()
+      : roboto(make_hb_face(nullptr)),
+        empty_segment({}, ProbabilityBound::Zero()),
+        a(empty_segment),
+        b(empty_segment),
+        c(empty_segment),
+        d(empty_segment) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
+
+    a.base_segment_index_ = 0;
+    a.segments_to_merge_ = {1};
+    a.merged_segment_ = empty_segment;
+    a.new_segment_is_inert_ = false;
+    a.new_patch_size_ = 0;
+    a.cost_delta_ = 100.0;
+
+    b.base_segment_index_ = 1;
+    b.segments_to_merge_ = {2};
+    b.merged_segment_ = empty_segment;
+    b.new_segment_is_inert_ = false;
+    b.new_patch_size_ = 0;
+    b.cost_delta_ = 100.0;
+
+    c.base_segment_index_ = 1;
+    c.segments_to_merge_ = {3};
+    c.merged_segment_ = empty_segment;
+    c.new_segment_is_inert_ = false;
+    c.new_patch_size_ = 0;
+    c.cost_delta_ = 100.0;
+
+    d.base_segment_index_ = 0;
+    d.segments_to_merge_ = {1};
+    d.merged_segment_ = empty_segment;
+    d.new_segment_is_inert_ = false;
+    d.new_patch_size_ = 0;
+    d.cost_delta_ = 200.0;
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
@@ -42,6 +76,11 @@ class CandidateMergeTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr roboto;
+  Segment empty_segment;
+  CandidateMerge a;
+  CandidateMerge b;
+  CandidateMerge c;
+  CandidateMerge d;
 };
 
 // This is a simpler test which doesn't verify exact cost calculations but
@@ -90,7 +129,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
-  ASSERT_LT(merge.cost_delta, 0);
+  ASSERT_LT(merge.CostDelta(), 0);
 
   // Case 2: merging a high and low frequency segment will signicantly increase
   // the probably of loading the low frequency bytes which will not outweigh the
@@ -99,8 +138,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
-  ASSERT_GT(merge.cost_delta, 0);
-  double prev_cost_delta = merge.cost_delta;
+  ASSERT_GT(merge.CostDelta(), 0);
+  double prev_cost_delta = merge.CostDelta();
 
   // Case 3: check that ordering (ie. what's 'base' and what's 'merged') does
   // not change the cost delta.
@@ -108,8 +147,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
-  ASSERT_GT(merge.cost_delta, 0);
-  ASSERT_EQ(merge.cost_delta, prev_cost_delta);
+  ASSERT_GT(merge.CostDelta(), 0);
+  ASSERT_EQ(merge.CostDelta(), prev_cost_delta);
 }
 
 TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
@@ -158,7 +197,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
-  ASSERT_LT(merge.cost_delta, 0);
+  ASSERT_LT(merge.CostDelta(), 0);
 
   // Case 2: merge high frequency segments {0, 1}. Best current merge is set at
   // -500, assess merge should not return a better candidate.
@@ -239,7 +278,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
-  EXPECT_NEAR(merge.cost_delta, expected_cost_delta, 1e-9);
+  EXPECT_NEAR(merge.CostDelta(), expected_cost_delta, 1e-9);
 }
 
 // More complex test that checks the actual computed cost value, includes a
@@ -289,36 +328,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
-  EXPECT_NEAR(merge.cost_delta, expected_cost_delta, 1e-9);
+  EXPECT_NEAR(merge.CostDelta(), expected_cost_delta, 1e-9);
 }
 
 TEST_F(CandidateMergeTest, OperatorLess) {
-  Segment empty_segment({}, ProbabilityBound::Zero());
-  CandidateMerge a{.base_segment_index = 0,
-                   .segments_to_merge = {1},
-                   .merged_segment = empty_segment,
-                   .new_segment_is_inert = false,
-                   .new_patch_size = 0,
-                   .cost_delta = 100.0};
-  CandidateMerge b{.base_segment_index = 1,
-                   .segments_to_merge = {2},
-                   .merged_segment = empty_segment,
-                   .new_segment_is_inert = false,
-                   .new_patch_size = 0,
-                   .cost_delta = 100.0};
-  CandidateMerge c{.base_segment_index = 1,
-                   .segments_to_merge = {3},
-                   .merged_segment = empty_segment,
-                   .new_segment_is_inert = false,
-                   .new_patch_size = 0,
-                   .cost_delta = 100.0};
-  CandidateMerge d{.base_segment_index = 0,
-                   .segments_to_merge = {1},
-                   .merged_segment = empty_segment,
-                   .new_segment_is_inert = false,
-                   .new_patch_size = 0,
-                   .cost_delta = 200.0};
-
   EXPECT_TRUE(a < b);
   EXPECT_TRUE(b < c);
   EXPECT_TRUE(a < c);
