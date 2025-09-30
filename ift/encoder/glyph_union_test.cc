@@ -74,8 +74,8 @@ TEST_F(GlyphUnionTest, GlyphsFor) {
 TEST_F(GlyphUnionTest, UnionWithEmptyOrSingleSet) {
   GlyphUnion gu(5);
 
-  ASSERT_TRUE(gu.Union({}).ok());
-  ASSERT_TRUE(gu.Union({2}).ok());
+  ASSERT_TRUE(gu.Union(GlyphSet {}).ok());
+  ASSERT_TRUE(gu.Union(GlyphSet {2}).ok());
 
   ASSERT_EQ(*gu.Find(0), 0);
   ASSERT_EQ(*gu.Find(1), 1);
@@ -102,7 +102,7 @@ TEST_F(GlyphUnionTest, OutOfBounds) {
   ASSERT_EQ(glyphs_for_status.status().code(), absl::StatusCode::kInvalidArgument);
 
   // Union
-  auto union_status = gu.Union({10});
+  auto union_status = gu.Union(GlyphSet {10});
   ASSERT_FALSE(union_status.ok());
   ASSERT_EQ(union_status.code(), absl::StatusCode::kInvalidArgument);
 
@@ -159,6 +159,43 @@ TEST_F(GlyphUnionTest, UnionPair) {
   ASSERT_EQ(*gu.Find(1), *gu.Find(5));
   ASSERT_EQ(*gu.Find(3), *gu.Find(5));
   ASSERT_NE(*gu.Find(1), *gu.Find(2));
+}
+
+TEST_F(GlyphUnionTest, UnionOtherUnion) {
+  GlyphUnion gu1(10);
+  GlyphUnion gu2(10);
+
+  ASSERT_TRUE(gu1.Union(gu2).ok());
+  ASSERT_EQ(*gu1.Find(3), 3);
+  ASSERT_EQ(*gu2.Find(3), 3);
+  ASSERT_EQ(*gu1.Find(8), 8);
+  ASSERT_EQ(*gu2.Find(8), 8);
+
+  ASSERT_TRUE(gu1.Union(1, 3).ok());
+  ASSERT_TRUE(gu1.Union(gu2).ok());
+
+  ASSERT_EQ(*gu1.Find(1), *gu1.Find(3));
+  ASSERT_EQ(*gu1.Find(8), 8);
+
+  ASSERT_TRUE(gu2.Union(7, 9).ok());
+  ASSERT_TRUE(gu2.Union(9, 8).ok());
+
+  ASSERT_TRUE(gu1.Union(gu2).ok());
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3}));
+  ASSERT_EQ(*gu1.GlyphsFor(8), (GlyphSet {7, 8, 9}));
+
+  GlyphUnion gu3(10);
+  ASSERT_TRUE(gu3.Union(3, 7).ok());
+
+  ASSERT_TRUE(gu1.Union(gu3).ok());
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3, 7, 8, 9}));
+}
+
+TEST_F(GlyphUnionTest, UnionOtherUnion_Invalid) {
+  GlyphUnion gu1(10);
+  GlyphUnion gu2(11);
+  ASSERT_TRUE(absl::IsInvalidArgument(gu1.Union(gu2)));
+  ASSERT_TRUE(absl::IsInvalidArgument(gu2.Union(gu1)));
 }
 
 }  // namespace ift::encoder
