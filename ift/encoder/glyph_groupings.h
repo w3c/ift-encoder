@@ -37,6 +37,7 @@ class GlyphGroupings {
   }
 
   bool operator==(const GlyphGroupings& other) {
+    // TODO XXXX include the expanded stuff.
     return and_glyph_groups_ == other.and_glyph_groups_ &&
            or_glyph_groups_ == other.or_glyph_groups_ &&
            exclusive_glyph_groups_ == other.exclusive_glyph_groups_;
@@ -66,6 +67,7 @@ class GlyphGroupings {
   }
 
   const common::GlyphSet& ExclusiveGlyphs(segment_index_t s) const {
+    // TODO XXXX use expanded groups (also check other public methods)
     static const common::GlyphSet empty{};
     auto it = exclusive_glyph_groups_.find(s);
     if (it != exclusive_glyph_groups_.end()) {
@@ -87,8 +89,7 @@ class GlyphGroupings {
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
-  void InvalidateGlyphInformation(const GlyphConditions& condition,
-                                  uint32_t gid);
+  void InvalidateGlyphInformation(const GlyphConditions& condition, uint32_t gid);
 
   // Remove a set of segments from the fallback segments set.
   // Invalidates any existing fallback segments or glyph group.
@@ -115,17 +116,12 @@ class GlyphGroupings {
     // doesn't need an update.
   }
 
+  // Specify that any patches containing glyphs from either a or b should be
+  // merged into one patch. Only affects exclusive and disjunctive patches.
+  //
+  // Automatically updates all of the groupings/conditions to reflect the changes.
   absl::Status UnionPatches(const common::GlyphSet& a,
-                            const common::GlyphSet& b) {
-    TRYV(glyph_union_.Union(a));
-    TRYV(glyph_union_.Union(b));
-    auto a_min = a.min();
-    auto b_min = b.min();
-    if (a_min.has_value() && b_min.has_value()) {
-      TRYV(glyph_union_.Union(*a_min, *b_min));
-    }
-    return absl::OkStatus();
-  }
+                            const common::GlyphSet& b);
 
   // Updates this glyph grouping for all glyphs in the 'glyphs' set to match
   // the associated conditions in 'glyph_condition_set'.
@@ -150,24 +146,23 @@ class GlyphGroupings {
   }
 
  private:
-  absl::Status ComputeReplacementConditions(
-      const GlyphUnion& glyph_unions,
-      const common::SegmentSet& modified_exclusive_segments,
-      const absl::btree_set<common::SegmentSet>& modified_or_groups,
-      absl::flat_hash_map<uint32_t, common::SegmentSet>& replacement_conditions)
-      const;
+  // XXXXX naming here isn't very helpful eg. how is ReplaceConditions different from UpdateExpandedConditions and
+  // UpdateReplacementConditions? may want to also indicate where applicable when something applies only to disjunctive
+  // stuff.
+  // XXXX method comments and so on.
+  absl::Status RecomputeExpandedConditions(const GlyphConditionSet& glyph_condition_set);
+  absl::Status ConditionsAffectedByUnion(
+    const GlyphConditionSet& glyph_condition_set,
+    common::SegmentSet& exclusive_segments,
+    absl::btree_set<common::SegmentSet>& or_conditions
+  ) const;
 
-  absl::Status ReplaceConditions(
-      const GlyphUnion& glyph_unions,
-      const absl::flat_hash_map<uint32_t, common::SegmentSet>&
-          replacement_conditions,
-      common::SegmentSet& modified_exclusive_segments,
-      absl::btree_set<common::SegmentSet>& modified_or_groups);
+  absl::Status ComputeConditionExpansionMap(
+    const common::SegmentSet& exclusive_segments,
+    const absl::btree_set<common::SegmentSet>& or_conditions,
+    absl::flat_hash_map<glyph_id_t, common::SegmentSet>& merged_conditions,
+    absl::flat_hash_map<glyph_id_t, common::GlyphSet>& merged_glyphs);
 
-  absl::Status ExpandConditions(
-      const GlyphUnion& glyph_unions,
-      common::SegmentSet& modified_exclusive_segments,
-      absl::btree_set<common::SegmentSet>& modified_or_groups);
 
   void AddConditionAndGlyphs(ActivationCondition condition,
                              common::GlyphSet glyphs) {
@@ -184,6 +179,8 @@ class GlyphGroupings {
       triggering_segment_to_conditions_[s].erase(condition);
     }
   }
+
+  void RemoveAllExpandedConditions();
 
   // Tracks patches that are should be merged directly together. Any disjunctive
   // or exclusive patches which belong to the same union group will be merged
@@ -209,11 +206,17 @@ class GlyphGroupings {
   //
   // Notice how the (s1), (s2 or s3) conditions/patches have been merged while
   // the s2 -> {g2} condition/patch is left untouched.
-  GlyphUnion glyph_union_;
+  GlyphUnion glyph_union_; // TODO XXXX don't need this as separate from disjunctive_partition_
 
   absl::btree_map<common::SegmentSet, common::GlyphSet> and_glyph_groups_;
   absl::btree_map<common::SegmentSet, common::GlyphSet> or_glyph_groups_;
   absl::btree_map<segment_index_t, common::GlyphSet> exclusive_glyph_groups_;
+
+  // TODO XXXX rename partition_to_activating_segments?
+  // This is a set of disjunctive conditions which have been expanded by the glyph union mechanism
+  // Does not store groupings which have not been modified the the mechanism.
+  absl::btree_map<common::SegmentSet, common::GlyphSet> expanded_or_glyph_groups_;
+  // TODO XXX renamed "expanded" to something more descriptive, maybe "merged"?
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
   absl::btree_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
