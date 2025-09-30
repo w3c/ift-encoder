@@ -165,6 +165,42 @@ TEST_F(GlyphGroupingsTest, GlyphUnion) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
+TEST_F(GlyphGroupingsTest, GlyphUnion_PartialUpdate) {
+  // Form grouping without union's
+  auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                         *glyph_conditions_, *closure_cache_,
+                                         glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+
+  // Then apply union and trigger update on one half of the union
+  // The updater should automatically update anything affected by the union.
+  sc = glyph_groupings_.UnionPatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    ToGlyphs({'g'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // s1 -> {c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s0 OR s3 OR s4 -> {a, b, g, h}
+  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
+      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+      {ActivationCondition::or_segments({0, 3, 4}, 0),
+       ToGlyphs({'a', 'b', 'g', 'h'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
 TEST_F(GlyphGroupingsTest, GlyphUnion_DoesntAffectConjunction) {
   auto sc = glyph_groupings_.UnionPatches(ToGlyphs({'d'}), ToGlyphs({'e'}));
   ASSERT_TRUE(sc.ok()) << sc;

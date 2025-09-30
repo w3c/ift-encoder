@@ -79,6 +79,9 @@ Status GlyphGroupings::GroupGlyphs(
     GlyphClosureCache& closure_cache, const GlyphSet& glyphs) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
 
+  // TODO XXXX when processing if glyphs intersects a glyph union we need to incorporate
+  //           all glyphs that interact with the union into the set of processed glyphs.
+
   // During the grouping process we also compute the "effective glyph union".
   // This takes manually supplied glyph unions (from the merging process)
   // and combines them with the gid partitioning specified by
