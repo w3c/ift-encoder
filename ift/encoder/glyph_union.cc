@@ -2,6 +2,7 @@
 
 #include <numeric>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "common/int_set.h"
 #include "common/try.h"
@@ -10,11 +11,12 @@
 using absl::Status;
 using absl::StatusOr;
 using common::GlyphSet;
+using absl::flat_hash_map;
 
 namespace ift::encoder {
 
 GlyphUnion::GlyphUnion(uint32_t num_glyphs)
-    : rank_(num_glyphs, 0), parent_(num_glyphs) {
+    : rank_(num_glyphs, 0), parent_(num_glyphs), rep_to_set_() {
   std::iota(parent_.begin(), parent_.end(), 0);
 }
 
@@ -79,6 +81,7 @@ Status GlyphUnion::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
       rank_[root1]++;
     }
   }
+  cache_valid_ = false;
   return absl::OkStatus();
 }
 
@@ -92,6 +95,29 @@ StatusOr<glyph_id_t> GlyphUnion::Find(glyph_id_t glyph) const {
     parent_[glyph] = TRY(Find(parent_[glyph]));
   }
   return parent_[glyph];
+}
+
+StatusOr<const GlyphSet&> GlyphUnion::GlyphsFor(glyph_id_t glyph) const {
+  if (glyph >= parent_.size()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("Glyph id %d is out of bounds.", glyph));
+  }
+
+  if (!cache_valid_) {
+    TRYV(RebuildCache());
+  }
+
+  glyph_id_t rep = TRY(Find(glyph));
+  return rep_to_set_[rep];
+}
+
+Status GlyphUnion::RebuildCache() const {
+  rep_to_set_.clear();
+  for (glyph_id_t i = 0; i < parent_.size(); ++i) {
+    rep_to_set_[TRY(Find(i))].insert(i);
+  }
+  cache_valid_ = true;
+  return absl::OkStatus();
 }
 
 }  // namespace ift::encoder

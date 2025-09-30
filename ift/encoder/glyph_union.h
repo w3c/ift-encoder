@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include "absl/container/node_hash_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
@@ -28,10 +28,16 @@ class GlyphUnion {
   absl::Status Union(glyph_id_t glyph1, glyph_id_t glyph2);
 
   absl::StatusOr<glyph_id_t> Find(glyph_id_t glyph) const;
+  absl::StatusOr<const common::GlyphSet&> GlyphsFor(glyph_id_t glyph) const;
 
  private:
+  absl::Status RebuildCache() const;
+
   std::vector<uint32_t> rank_;
   mutable std::vector<uint32_t> parent_;
+
+  mutable bool cache_valid_ = false;
+  mutable absl::flat_hash_map<glyph_id_t, common::GlyphSet> rep_to_set_;
 };
 
 }  // namespace ift::encoder
