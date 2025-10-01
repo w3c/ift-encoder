@@ -30,6 +30,7 @@ class GlyphUnion {
 
   absl::StatusOr<glyph_id_t> Find(glyph_id_t glyph) const;
   absl::StatusOr<const common::GlyphSet&> GlyphsFor(glyph_id_t glyph) const;
+  absl::StatusOr<absl::Span<const common::GlyphSet>> NonIdentityGroups() const;
 
  private:
   absl::Status RebuildCache() const;
@@ -39,6 +40,7 @@ class GlyphUnion {
 
   mutable bool cache_valid_ = false;
   mutable absl::flat_hash_map<glyph_id_t, common::GlyphSet> rep_to_set_;
+  mutable std::vector<common::GlyphSet> non_identity_groups_;
 };
 
 }  // namespace ift::encoder
