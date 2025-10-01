@@ -44,6 +44,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/types:span",
     ],
 )
 
@@ -242,6 +243,7 @@ cc_test(
     deps = [
         ":glyph_union",
         "//common",
+        "@abseil-cpp//absl/types:span",
         "@googletest//:gtest_main",
     ],
 )

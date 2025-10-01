@@ -3,11 +3,13 @@
 #include <numeric>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/types/span.h"
 #include "absl/strings/str_format.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/types.h"
 
+using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using common::GlyphSet;
@@ -123,11 +125,29 @@ StatusOr<const GlyphSet&> GlyphUnion::GlyphsFor(glyph_id_t glyph) const {
   return rep_to_set_[rep];
 }
 
+StatusOr<Span<const GlyphSet>> GlyphUnion::NonIdentityGroups() const {
+  if (!cache_valid_) {
+    TRYV(RebuildCache());
+  }
+  return non_identity_groups_;
+}
+
 Status GlyphUnion::RebuildCache() const {
   rep_to_set_.clear();
   for (glyph_id_t i = 0; i < parent_.size(); ++i) {
     rep_to_set_[TRY(Find(i))].insert(i);
   }
+
+  non_identity_groups_.clear();
+  for (const auto& [_, gids] : rep_to_set_) {
+    if (gids.size() > 1) {
+      non_identity_groups_.push_back(gids);
+    }
+  }
+
+  // Sort so the ordering is deterministic.
+  std::sort(non_identity_groups_.begin(), non_identity_groups_.end());
+
   cache_valid_ = true;
   return absl::OkStatus();
 }

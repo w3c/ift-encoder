@@ -1,6 +1,7 @@
 #include "ift/encoder/glyph_union.h"
 
 #include "absl/status/status.h"
+#include "absl/types/span.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 
@@ -50,6 +51,23 @@ TEST_F(GlyphUnionTest, BasicOperation) {
 
   // Check a glyph not in any union
   ASSERT_EQ(*gu.Find(9), 9);
+}
+
+TEST_F(GlyphUnionTest, NonIdentityGroups) {
+  GlyphUnion gu(10);
+
+  ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
+
+  std::vector<GlyphSet> expected = {
+    {1, 3, 5}
+  };
+
+  ASSERT_EQ(*gu.NonIdentityGroups(), absl::Span<const GlyphSet>(expected));
+
+  ASSERT_TRUE(gu.Union({2, 4}).ok());
+
+  expected.push_back({2, 4});
+  ASSERT_EQ(*gu.NonIdentityGroups(), absl::Span<const GlyphSet>(expected));
 }
 
 TEST_F(GlyphUnionTest, GlyphsFor) {
