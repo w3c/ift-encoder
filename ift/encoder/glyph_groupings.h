@@ -155,18 +155,7 @@ class GlyphGroupings {
 
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
-      const RequestedSegmentationInformation& segmentation_info) const {
-    GlyphSegmentation segmentation(
-        segmentation_info.InitFontSegmentWithoutDefaults(),
-        segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
-    segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
-
-    TRYV(GlyphSegmentation::GroupsToSegmentation(
-        and_glyph_groups_, or_glyph_groups_, exclusive_glyph_groups_,
-        fallback_segments_, segmentation));
-
-    return segmentation;
-  }
+      const RequestedSegmentationInformation& segmentation_info) const;
 
  private:
   // Looks at the requested combinations from combined_patches_ and
