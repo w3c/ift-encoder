@@ -125,7 +125,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
   // network overhead, Overall cost should be negative.
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1, 2}, std::nullopt);
+  auto r =
+      CandidateMerge::AssessSegmentMerge(*context, 0, {1, 2}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -134,7 +135,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   // Case 2: merging a high and low frequency segment will signicantly increase
   // the probably of loading the low frequency bytes which will not outweigh the
   // network overhead cost reduction. Overall cost should be positive.
-  r = CandidateMerge::AssessMerge(*context, 0, {1, 3}, std::nullopt);
+  r = CandidateMerge::AssessSegmentMerge(*context, 0, {1, 3}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
@@ -143,7 +144,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
   // Case 3: check that ordering (ie. what's 'base' and what's 'merged') does
   // not change the cost delta.
-  r = CandidateMerge::AssessMerge(*context, 3, {0, 1}, std::nullopt);
+  r = CandidateMerge::AssessSegmentMerge(*context, 3, {0, 1}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
@@ -189,7 +190,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
   // Case 1: merge high frequency segments {0, 1}. Best current merge is set at
   // 0, assess merge should return a better candidate.
-  auto r = CandidateMerge::AssessMerge(
+  auto r = CandidateMerge::AssessSegmentMerge(
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.95,
@@ -201,7 +202,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
   // Case 2: merge high frequency segments {0, 1}. Best current merge is set at
   // -500, assess merge should not return a better candidate.
-  r = CandidateMerge::AssessMerge(
+  r = CandidateMerge::AssessSegmentMerge(
       *context, 0, {1},
       CandidateMerge::BaselineCandidate(
           4, -500.0, base_size, 0.95,
@@ -213,7 +214,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   // the probably of loading the low frequency bytes which will not outweigh the
   // network overhead cost reduction. Overall cost should be positive. Baseline
   // is set at 0 so no candidate is expected from the return.
-  r = CandidateMerge::AssessMerge(
+  r = CandidateMerge::AssessSegmentMerge(
       *context, 0, {3},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.95,
@@ -224,7 +225,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   // Case 4: same as 4 but with order reversed, result should be the same.
   base_size =
       *context->patch_size_cache->GetPatchSize({'s', 't', 'u', 'v', 'w', 'x'});
-  r = CandidateMerge::AssessMerge(
+  r = CandidateMerge::AssessSegmentMerge(
       *context, 3, {0},
       CandidateMerge::BaselineCandidate(
           4, 0.0, base_size, 0.01,
@@ -274,7 +275,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       + p_f_or_i * (600 + 75);  // add cost of the new merged patch
 
   context->patch_size_cache.reset(size_cache);
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1}, std::nullopt);
+  auto r = CandidateMerge::AssessSegmentMerge(*context, 0, {1}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -324,7 +325,7 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       + p_a_or_f * (450 + 75);          // add cost of the new merged patch
 
   context->patch_size_cache.reset(size_cache);
-  auto r = CandidateMerge::AssessMerge(*context, 0, {1}, std::nullopt);
+  auto r = CandidateMerge::AssessSegmentMerge(*context, 0, {1}, std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -345,6 +346,102 @@ TEST_F(CandidateMergeTest, OperatorLess) {
   EXPECT_FALSE(d < a);
   EXPECT_FALSE(d < b);
   EXPECT_FALSE(d < c);
+}
+
+TEST_F(CandidateMergeTest, AssessPatchMerge) {
+  std::vector<Segment> segments = {
+      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
+      {{'C'}, ProbabilityBound{0.95, 0.95}},
+      {{'e'}, ProbabilityBound{0.95, 0.95}},
+      {{0xe9}, ProbabilityBound{0.01, 0.01}},   // eacute
+      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+  };
+  std::vector<Segment> segments_with_merges = {
+      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
+      {{'C'}, ProbabilityBound{0.95, 0.95}},
+      {{'e'}, ProbabilityBound{0.10, 0.10}},
+      {{0x0e9}, ProbabilityBound{0.01, 0.01}},
+      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+
+      // 1 + 4
+      {{'C', 0x106}, ProbabilityBound{0.95, 0.95}},
+
+      // 0 + 1 + 4
+      {{'A', 'B', 'C', 0x106}, ProbabilityBound{0.98, 0.98}},
+
+      // 2 + 3
+      {{'e', 0xe9}, ProbabilityBound{0.10, 0.10}},
+
+      // 0 + 2 + 3
+      {{'A', 'B', 'e', 0xe9}, ProbabilityBound{0.95, 0.95}},
+  };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+
+  ClosureGlyphSegmenter segmenter;
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1));
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  // Try merging the patch for {0} and {1 OR 4}.
+  auto r = CandidateMerge::AssessPatchMerge(*context, 0, {1, 4}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+
+  // This merge should be favourable. The combined probability is the same, so
+  // reduction of overhead makes the delta negative
+  ASSERT_LT(merge.CostDelta(), 0);
+
+  // Try merging the patch for {0} and {2 OR 3}.
+  r = CandidateMerge::AssessPatchMerge(*context, 0, {2, 3}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  merge = **r;
+
+  // This merge should be not favourable. The combined probability is higher
+  // then the combination.
+  ASSERT_GT(merge.CostDelta(), 0);
+}
+
+TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
+  std::vector<Segment> segments = {
+      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
+      {{'C'}, ProbabilityBound{0.95, 0.95}},
+      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+  };
+  std::vector<Segment> segments_with_merges = {
+      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
+      {{'C'}, ProbabilityBound{0.95, 0.95}},
+      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+
+      // 1 + 2
+      {{'C', 0x106}, ProbabilityBound{0.95, 0.95}},
+
+      // 0 + 1 + 2
+      {{'A', 'B', 'C', 0x106}, ProbabilityBound{0.98, 0.98}},
+  };
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+
+  ClosureGlyphSegmenter segmenter;
+  auto context = segmenter.InitializeSegmentationContext(
+      roboto.get(), {}, segments,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1));
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  // Try merging the patch for {0} and {1}.
+  auto r = CandidateMerge::AssessPatchMerge(*context, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  // segment 1 has no patch associated with it, so no merge is possible.
+  ASSERT_FALSE(r->has_value());
+
+  // Try merging the patch for {0} and {0 or 1}.
+  r = CandidateMerge::AssessPatchMerge(*context, 0, {0, 1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  // {0 or 1} has no patch associated with it, so no merge is possible.
+  ASSERT_FALSE(r->has_value());
 }
 
 }  // namespace ift::encoder

@@ -92,7 +92,7 @@ Status CheckForDisjointCodepoints(
 StatusOr<std::optional<GlyphSet>> TryMerge(
     SegmentationContext& context, segment_index_t base_segment_index,
     const SegmentSet& to_merge_segments_) {
-  auto maybe_candidate_merge = TRY(CandidateMerge::AssessMerge(
+  auto maybe_candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
       context, base_segment_index, to_merge_segments_, std::nullopt));
   if (!maybe_candidate_merge.has_value()) {
     return std::nullopt;
@@ -232,24 +232,21 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithHeuristic(
 Status CollectCompositeCandidateMerges(
     SegmentationContext& context, uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
-  // TODO(garretrieger): XXXX this should check all composite conditions
-  //   as candiate merges, not just those that interact with base. It's
-  //   common that a disjunction is acting effectively like a exclusive
-  //   segment and would make a good candidate for merging with base.
-  //   Ultimately it may be simpler to merge the Collect*CandidateMerges
-  //   functions into a single function that does a single pass over
-  //   conditions and just filters appropriately by active segments
-  //   and the cutoff. See the approach used in init font merging.
-
   if (base_segment_index >= context.OptimizationCutoffSegment()) {
     // We are at the optimization cutoff, so we won't evaluate any composite
     // candidates
     return absl::OkStatus();
   }
 
-  auto candidate_conditions =
-      context.glyph_groupings.TriggeringSegmentToConditions(base_segment_index);
-  for (ActivationCondition next_condition : candidate_conditions) {
+  // Composite conditions are always ordered after exclusive in the conditions
+  // list. So start iteration from the last possible exclusive condition.
+  ActivationCondition last_exclusive =
+      ActivationCondition::exclusive_segment(UINT32_MAX, 0);
+
+  for (auto it = context.glyph_groupings.ConditionsAndGlyphs().lower_bound(
+           last_exclusive);
+       it != context.glyph_groupings.ConditionsAndGlyphs().end(); it++) {
+    const auto& next_condition = it->first;
     if (next_condition.IsFallback() || next_condition.IsExclusive()) {
       // Merging the fallback will cause all segments to be merged into one,
       // which is undesirable so don't consider the fallback. Also skip
@@ -258,17 +255,29 @@ Status CollectCompositeCandidateMerges(
     }
 
     SegmentSet triggering_segments = next_condition.TriggeringSegments();
-    if (!triggering_segments.contains(base_segment_index)) {
+    if (!triggering_segments.intersects(context.ActiveSegments())) {
+      // At least one active segment must be present, otherwise we can assume
+      // the composites probability is too low to contribute significantly to
+      // cost optimization.
       continue;
     }
 
-    auto candidate_merge = TRY(CandidateMerge::AssessMerge(
+    auto candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
         context, base_segment_index, triggering_segments,
         smallest_candidate_merge));
-    if (candidate_merge.has_value() &&
-        (!smallest_candidate_merge.has_value() ||
-         *candidate_merge < *smallest_candidate_merge)) {
+    if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
+    }
+
+    if (next_condition.conditions().size() == 1) {
+      // For disjunctive composite patches, also consider merging just the
+      // patches together.
+      auto candidate_merge = TRY(CandidateMerge::AssessPatchMerge(
+          context, base_segment_index, triggering_segments,
+          smallest_candidate_merge));
+      if (candidate_merge.has_value()) {
+        smallest_candidate_merge = *candidate_merge;
+      }
     }
   }
   return absl::OkStatus();
@@ -302,12 +311,10 @@ Status CollectExclusiveCandidateMerges(
     }
 
     SegmentSet triggering_segments{segment_index};
-    auto candidate_merge = TRY(CandidateMerge::AssessMerge(
+    auto candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
         context, base_segment_index, triggering_segments,
         smallest_candidate_merge));
-    if (candidate_merge.has_value() &&
-        (!smallest_candidate_merge.has_value() ||
-         *candidate_merge < *smallest_candidate_merge)) {
+    if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
     }
   }
@@ -552,6 +559,12 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
        segment_index < context.SegmentationInfo().Segments().size();
        segment_index++) {
     TRY(non_incremental_context.ReprocessSegment(segment_index));
+  }
+
+  // Transfer over information on combined patches
+  for (const GlyphSet& group :
+       TRY(context.glyph_groupings.CombinedPatches().NonIdentityGroups())) {
+    TRYV(non_incremental_context.glyph_groupings.CombinePatches(group, {}));
   }
 
   GlyphSet all_glyphs;

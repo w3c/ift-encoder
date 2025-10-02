@@ -8,6 +8,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/segmentation_context.h"
+#include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
@@ -24,8 +25,10 @@ struct CandidateMerge {
   // The set of segments to be merged into the base_segment_index.
   common::SegmentSet segments_to_merge_;
 
-  // The result of merge the above segments.
-  Segment merged_segment_;
+  // The result of merge the above segments. If it's not present then
+  // that implies this merge is only a merge of the base segment patch
+  // and the disjunctive patch with the condition segments_to_merge_.
+  std::optional<Segment> merged_segment_;
 
   // If true the merge segment will be inert, that is it won't interact
   // with the closure.
@@ -48,6 +51,7 @@ struct CandidateMerge {
   double network_overhead_ = 0.0;
 
   CandidateMerge(Segment merged_segment) : merged_segment_(merged_segment) {}
+  CandidateMerge() : merged_segment_(std::nullopt) {}
 
  public:
   static CandidateMerge BaselineCandidate(uint32_t base_segment_index,
@@ -83,12 +87,17 @@ struct CandidateMerge {
     // base segment and segments to merge uniquely identify a candidate
     // merge operation.
     return base_segment_index_ == other.base_segment_index_ &&
-           segments_to_merge_ == other.segments_to_merge_;
+           segments_to_merge_ == other.segments_to_merge_ &&
+           merged_segment_.has_value() == other.merged_segment_.has_value();
   }
 
   bool operator<(const CandidateMerge& other) const {
     if (cost_delta_ != other.cost_delta_) {
       return cost_delta_ < other.cost_delta_;
+    }
+    if (merged_segment_.has_value() != other.merged_segment_.has_value()) {
+      // Preference segment merges over direct patch merging.
+      return merged_segment_.has_value();
     }
     if (base_segment_index_ != other.base_segment_index_) {
       return base_segment_index_ < other.base_segment_index_;
@@ -133,9 +142,33 @@ struct CandidateMerge {
   }
 
   // Applies this merge operation to the given SegmentationContext.
-  common::GlyphSet Apply(SegmentationContext& context);
+  absl::StatusOr<common::GlyphSet> Apply(SegmentationContext& context);
 
-  static absl::StatusOr<std::optional<CandidateMerge>> AssessMerge(
+ private:
+  absl::Status ApplyPatchMerge(SegmentationContext& context);
+
+ public:
+  // Assess the results of merge base_segment_index with segments_to_merge
+  // to produce a new combined segment.
+  //
+  // If the merge is not better than best_merge_candidate or not possible
+  // then nullopt will be returned.
+  //
+  // Returns a candidate merge object which stores information on the merge.
+  static absl::StatusOr<std::optional<CandidateMerge>> AssessSegmentMerge(
+      SegmentationContext& context, segment_index_t base_segment_index,
+      const common::SegmentSet& segments_to_merge_,
+      const std::optional<CandidateMerge>& best_merge_candidate);
+
+  // Assess the resutl of merging together exactly two patches:
+  // 1. The exclusive patch for base_segment_index.
+  // 2. The patch associated with the disjunctive segments_to_merge_ condition.
+  //
+  // If the merge is not better than best_merge_candidate or not possible
+  // then nullopt will be returned.
+  //
+  // Returns a candidate merge object which stores information on the merge.
+  static absl::StatusOr<std::optional<CandidateMerge>> AssessPatchMerge(
       SegmentationContext& context, segment_index_t base_segment_index,
       const common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
@@ -150,6 +183,13 @@ struct CandidateMerge {
       const SegmentationContext& context,
       const common::SegmentSet& merged_segments,
       std::optional<const Segment*> merged_segment, uint32_t new_patch_size);
+
+  static absl::StatusOr<double> ComputePatchMergeCostDelta(
+      const SegmentationContext& context, segment_index_t base_segment,
+      const common::GlyphSet& base_glyphs,
+      const common::SegmentSet& target_segments,
+      const common::GlyphSet& target_glyphs,
+      const common::GlyphSet& merged_glyphs);
 
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,

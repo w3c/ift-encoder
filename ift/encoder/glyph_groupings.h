@@ -66,6 +66,8 @@ class GlyphGroupings {
     return result;
   }
 
+  const GlyphPartition& CombinedPatches() const { return combined_patches_; }
+
   // Returns the set of glyphs that are exclusive to segment s.
   //
   // Exclusive means that set of glyphs that are needed if and only if

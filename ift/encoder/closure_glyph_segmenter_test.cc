@@ -563,7 +563,7 @@ TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
       << s.status();
 }
 
-TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_AvoidsEmptyBases) {
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   UnicodeFrequencies frequencies{
       {{' ', ' '}, 1000},
       {{'a', 'a'}, 1000},
@@ -578,28 +578,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_AvoidsEmptyBases) {
       *MergeStrategy::CostBased(std::move(frequencies), 75, 1));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  // With the current implementation we don't expect these segments to be merged
-  // together.
-  //
-  // {'!'} has no exclusive patch associated with it so it won't participate
-  // in the base merging checks. 0x203C won't be merged due to it's low
-  // frequency
-  //
-  // TODO(garretrieger): for this case to be correctly handled we need to check
-  //                     all composite conditions not just those that interact
-  //                     with the base segment. This will see the ('!' or
-  //                     0x203c) as a cost reducing merge candidate.
   std::vector<SubsetDefinition> expected_segments = {{'a'}, {'!'}, {0x203C}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid69 }
-p1: { gid989 }
-p2: { gid5 }
-if (s0) then p0
-if (s2) then p1
-if ((s1 OR s2)) then p2
+p0: { gid989 }
+p1: { gid5, gid69 }
+if (s2) then p0
+if ((s0 OR s1 OR s2)) then p1
 )");
 }
 
@@ -797,11 +784,6 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   // {A} -> p0
   // {B} -> p1
   // {C, Cacute} -> p2
-  // When merging then A should not consider merging with C
-  // since there is no exclusive patch associated with either.
-  // TODO(garretrieger): once the composite condition merging logic is improved
-  //  then this case will be correctly handled by the evaluation of merging
-  // {C, Cacute} with {A}.
   std::vector<SubsetDefinition> expected_segments = {
       {'A'},
       {'C'},
@@ -811,12 +793,10 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid37 }
-p1: { gid117, gid700 }
-p2: { gid39 }
-if (s0) then p0
-if (s2) then p1
-if ((s1 OR s2)) then p2
+p0: { gid117, gid700 }
+p1: { gid37, gid39 }
+if (s2) then p0
+if ((s0 OR s1 OR s2)) then p1
 )");
 }
 
