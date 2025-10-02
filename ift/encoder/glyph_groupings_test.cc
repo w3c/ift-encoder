@@ -289,11 +289,60 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-// TEST XXXX test of ExclusiveGlyphs where an exclusive segment has been expanded.
-// TEST XXXX of equality operator, should respect expanded diffs.
+TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+
+  GlyphGroupings other(segments_, hb_face_get_glyph_count(roboto_.get()));
+  sc = other.GroupGlyphs(*requested_segmentation_info_,
+                         *glyph_conditions_, *closure_cache_,
+                         glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // other does not have the same patch combinations and so should not be equal to glyph_groupings_
+  ASSERT_FALSE(glyph_groupings_ == other);
+
+  sc = other.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok());
+  sc = other.GroupGlyphs(*requested_segmentation_info_,
+                         *glyph_conditions_, *closure_cache_,
+                         glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Now that combined patches matches they should be equal.
+  ASSERT_TRUE(glyph_groupings_ == other);
+}
+
+TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // s1 -> {c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s0 OR s3 OR s4 -> {a, b, g, h}
+
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(0), (GlyphSet {}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(1), ToGlyphs({'c', 'd'}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(2), (GlyphSet {}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(3), ToGlyphs({'k'}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(10), (GlyphSet {}));
+}
+
 // TEST XXXX glyph union where two unioned glyphs are in the same segment (including with partial invalidation).
-// TEST XXXX single glyph invalidation and how it interactswith GroupGlyphs().
 // TEST XXXX change in the base segmentation (ie due to segment merge) and subsequent update to a unioned patch.
-// TEST XXXX of invalidation interacting with glyph union.
 
 }  // namespace ift::encoder

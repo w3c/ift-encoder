@@ -37,10 +37,10 @@ class GlyphGroupings {
   }
 
   bool operator==(const GlyphGroupings& other) {
-    // TODO XXXX include the expanded stuff.
     return and_glyph_groups_ == other.and_glyph_groups_ &&
            or_glyph_groups_ == other.or_glyph_groups_ &&
-           exclusive_glyph_groups_ == other.exclusive_glyph_groups_;
+           exclusive_glyph_groups_ == other.exclusive_glyph_groups_ &&
+           combined_or_glyph_groups_ == other.combined_or_glyph_groups_;
   }
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
@@ -71,8 +71,11 @@ class GlyphGroupings {
   // Exclusive means that set of glyphs that are needed if and only if
   // segment s is present.
   const common::GlyphSet& ExclusiveGlyphs(segment_index_t s) const {
-    // TODO XXXX use expanded groups (also check other public methods)
     static const common::GlyphSet empty{};
+    if (combined_exclusive_segments_.contains(s)) {
+      return empty;
+    }
+
     auto it = exclusive_glyph_groups_.find(s);
     if (it != exclusive_glyph_groups_.end()) {
       return it->second;
@@ -227,6 +230,10 @@ class GlyphGroupings {
   // This is a set of disjunctive conditions which have been combined by the CombinePatches()
   // mechanism. Does not store groupings which have not been modified the the mechanism.
   absl::btree_map<common::SegmentSet, common::GlyphSet> combined_or_glyph_groups_;
+
+  // This is a set of segments which are normally exclusive but have been combined
+  // via the patch combination mechanism and are no longer present.
+  common::SegmentSet combined_exclusive_segments_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
   absl::btree_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
