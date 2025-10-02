@@ -1,4 +1,4 @@
-#include "ift/encoder/glyph_union.h"
+#include "ift/encoder/glyph_partition.h"
 
 #include "absl/status/status.h"
 #include "absl/types/span.h"
@@ -9,16 +9,16 @@ using common::GlyphSet;
 
 namespace ift::encoder {
 
-class GlyphUnionTest : public ::testing::Test {};
+class GlyphPartitionTest : public ::testing::Test {};
 
-TEST_F(GlyphUnionTest, SingleGid) {
-  GlyphUnion gu(1);
+TEST_F(GlyphPartitionTest, SingleGid) {
+  GlyphPartition gu(1);
   ASSERT_TRUE(gu.Union(GlyphSet{0}).ok());
   ASSERT_EQ(*gu.Find(0), 0);
 }
 
-TEST_F(GlyphUnionTest, BasicOperation) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, BasicOperation) {
+  GlyphPartition gu(10);
 
   // Initially, all glyphs are in their own set.
   ASSERT_EQ(*gu.Find(0), 0);
@@ -53,8 +53,8 @@ TEST_F(GlyphUnionTest, BasicOperation) {
   ASSERT_EQ(*gu.Find(9), 9);
 }
 
-TEST_F(GlyphUnionTest, NonIdentityGroups) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, NonIdentityGroups) {
+  GlyphPartition gu(10);
 
   ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
 
@@ -70,8 +70,8 @@ TEST_F(GlyphUnionTest, NonIdentityGroups) {
   ASSERT_EQ(*gu.NonIdentityGroups(), absl::Span<const GlyphSet>(expected));
 }
 
-TEST_F(GlyphUnionTest, GlyphsFor) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, GlyphsFor) {
+  GlyphPartition gu(10);
 
   ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
   ASSERT_TRUE(gu.Union({2, 4}).ok());
@@ -89,8 +89,8 @@ TEST_F(GlyphUnionTest, GlyphsFor) {
   ASSERT_EQ(*gu.GlyphsFor(6), (GlyphSet {6}));
 }
 
-TEST_F(GlyphUnionTest, UnionWithEmptyOrSingleSet) {
-  GlyphUnion gu(5);
+TEST_F(GlyphPartitionTest, UnionWithEmptyOrSingleSet) {
+  GlyphPartition gu(5);
 
   ASSERT_TRUE(gu.Union(GlyphSet {}).ok());
   ASSERT_TRUE(gu.Union(GlyphSet {2}).ok());
@@ -102,8 +102,8 @@ TEST_F(GlyphUnionTest, UnionWithEmptyOrSingleSet) {
   ASSERT_EQ(*gu.Find(4), 4);
 }
 
-TEST_F(GlyphUnionTest, OutOfBounds) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, OutOfBounds) {
+  GlyphPartition gu(10);
 
   // Find
   auto status = gu.Find(10);
@@ -133,13 +133,13 @@ TEST_F(GlyphUnionTest, OutOfBounds) {
   ASSERT_EQ(union_status.code(), absl::StatusCode::kInvalidArgument);
 }
 
-TEST_F(GlyphUnionTest, Copy) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, Copy) {
+  GlyphPartition gu(10);
   ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
   ASSERT_TRUE(gu.Union({2, 4}).ok());
 
   // Test copy constructor
-  GlyphUnion gu2(gu);
+  GlyphPartition gu2(gu);
   ASSERT_EQ(*gu2.Find(1), *gu2.Find(3));
   ASSERT_EQ(*gu2.Find(1), *gu2.Find(5));
   ASSERT_EQ(*gu2.Find(3), *gu2.Find(5));
@@ -147,7 +147,7 @@ TEST_F(GlyphUnionTest, Copy) {
   ASSERT_NE(*gu2.Find(1), *gu2.Find(2));
 
   // Test copy assignment
-  GlyphUnion gu3(5);
+  GlyphPartition gu3(5);
   gu3 = gu;
   ASSERT_EQ(*gu3.Find(1), *gu3.Find(3));
   ASSERT_EQ(*gu3.Find(1), *gu3.Find(5));
@@ -162,8 +162,8 @@ TEST_F(GlyphUnionTest, Copy) {
   ASSERT_NE(*gu3.Find(1), *gu3.Find(2));
 }
 
-TEST_F(GlyphUnionTest, UnionPair) {
-  GlyphUnion gu(10);
+TEST_F(GlyphPartitionTest, UnionPair) {
+  GlyphPartition gu(10);
   ASSERT_TRUE(gu.Union(1, 3).ok());
   ASSERT_EQ(*gu.Find(1), *gu.Find(3));
   ASSERT_NE(*gu.Find(1), *gu.Find(2));
@@ -179,9 +179,9 @@ TEST_F(GlyphUnionTest, UnionPair) {
   ASSERT_NE(*gu.Find(1), *gu.Find(2));
 }
 
-TEST_F(GlyphUnionTest, UnionOtherUnion) {
-  GlyphUnion gu1(10);
-  GlyphUnion gu2(10);
+TEST_F(GlyphPartitionTest, UnionOtherUnion) {
+  GlyphPartition gu1(10);
+  GlyphPartition gu2(10);
 
   ASSERT_TRUE(gu1.Union(gu2).ok());
   ASSERT_EQ(*gu1.Find(3), 3);
@@ -202,16 +202,16 @@ TEST_F(GlyphUnionTest, UnionOtherUnion) {
   ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3}));
   ASSERT_EQ(*gu1.GlyphsFor(8), (GlyphSet {7, 8, 9}));
 
-  GlyphUnion gu3(10);
+  GlyphPartition gu3(10);
   ASSERT_TRUE(gu3.Union(3, 7).ok());
 
   ASSERT_TRUE(gu1.Union(gu3).ok());
   ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3, 7, 8, 9}));
 }
 
-TEST_F(GlyphUnionTest, UnionOtherUnion_Invalid) {
-  GlyphUnion gu1(10);
-  GlyphUnion gu2(11);
+TEST_F(GlyphPartitionTest, UnionOtherUnion_Invalid) {
+  GlyphPartition gu1(10);
+  GlyphPartition gu2(11);
   ASSERT_TRUE(absl::IsInvalidArgument(gu1.Union(gu2)));
   ASSERT_TRUE(absl::IsInvalidArgument(gu2.Union(gu1)));
 }

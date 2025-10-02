@@ -1,4 +1,4 @@
-#include "ift/encoder/glyph_union.h"
+#include "ift/encoder/glyph_partition.h"
 
 #include <numeric>
 
@@ -17,15 +17,15 @@ using absl::flat_hash_map;
 
 namespace ift::encoder {
 
-GlyphUnion::GlyphUnion(uint32_t num_glyphs)
+GlyphPartition::GlyphPartition(uint32_t num_glyphs)
     : rank_(num_glyphs, 0), parent_(num_glyphs), rep_to_set_() {
   std::iota(parent_.begin(), parent_.end(), 0);
 }
 
-GlyphUnion::GlyphUnion(const GlyphUnion& other)
+GlyphPartition::GlyphPartition(const GlyphPartition& other)
     : rank_(other.rank_), parent_(other.parent_) {}
 
-GlyphUnion& GlyphUnion::operator=(const GlyphUnion& other) {
+GlyphPartition& GlyphPartition::operator=(const GlyphPartition& other) {
   if (this == &other) {
     return *this;
   }
@@ -35,7 +35,7 @@ GlyphUnion& GlyphUnion::operator=(const GlyphUnion& other) {
   return *this;
 }
 
-Status GlyphUnion::Union(const GlyphSet& glyphs) {
+Status GlyphPartition::Union(const GlyphSet& glyphs) {
   if (glyphs.empty()) {
     return absl::OkStatus();
   }
@@ -60,7 +60,7 @@ Status GlyphUnion::Union(const GlyphSet& glyphs) {
   return absl::OkStatus();
 }
 
-Status GlyphUnion::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
+Status GlyphPartition::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
   if (glyph1 >= parent_.size()) {
     return absl::InvalidArgumentError(
         absl::StrFormat("Glyph id %d is out of bounds.", glyph1));
@@ -87,19 +87,19 @@ Status GlyphUnion::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
   return absl::OkStatus();
 }
 
-absl::Status GlyphUnion::Union(const GlyphUnion& other) {
+absl::Status GlyphPartition::Union(const GlyphPartition& other) {
   if (other.parent_.size() != parent_.size()) {
-    return absl::InvalidArgumentError("Glyph unions are not compatible, they must have the same number of elements.");
+    return absl::InvalidArgumentError("Glyph partitions are not compatible, they must have the same number of elements.");
   }
 
-  for (unsigned i = 0; i < other.parent_.size(); i++) {
-    TRYV(Union(i, other.parent_[i]));
+  for (const GlyphSet& set : TRY(other.NonIdentityGroups())) {
+    TRYV(Union(set));
   }
 
   return absl::OkStatus();
 }
 
-StatusOr<glyph_id_t> GlyphUnion::Find(glyph_id_t glyph) const {
+StatusOr<glyph_id_t> GlyphPartition::Find(glyph_id_t glyph) const {
   if (glyph >= parent_.size()) {
     return absl::InvalidArgumentError(
         absl::StrFormat("Glyph id %d is out of bounds.", glyph));
@@ -111,7 +111,7 @@ StatusOr<glyph_id_t> GlyphUnion::Find(glyph_id_t glyph) const {
   return parent_[glyph];
 }
 
-StatusOr<const GlyphSet&> GlyphUnion::GlyphsFor(glyph_id_t glyph) const {
+StatusOr<const GlyphSet&> GlyphPartition::GlyphsFor(glyph_id_t glyph) const {
   if (glyph >= parent_.size()) {
     return absl::InvalidArgumentError(
         absl::StrFormat("Glyph id %d is out of bounds.", glyph));
@@ -125,14 +125,14 @@ StatusOr<const GlyphSet&> GlyphUnion::GlyphsFor(glyph_id_t glyph) const {
   return rep_to_set_[rep];
 }
 
-StatusOr<Span<const GlyphSet>> GlyphUnion::NonIdentityGroups() const {
+StatusOr<Span<const GlyphSet>> GlyphPartition::NonIdentityGroups() const {
   if (!cache_valid_) {
     TRYV(RebuildCache());
   }
   return non_identity_groups_;
 }
 
-Status GlyphUnion::RebuildCache() const {
+Status GlyphPartition::RebuildCache() const {
   rep_to_set_.clear();
   for (glyph_id_t i = 0; i < parent_.size(); ++i) {
     rep_to_set_[TRY(Find(i))].insert(i);

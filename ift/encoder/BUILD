@@ -34,10 +34,10 @@ cc_library(
 )
 
 cc_library(
-    name = "glyph_union",
+    name = "glyph_partition",
     srcs = [
-        "glyph_union.h",
-        "glyph_union.cc",
+        "glyph_partition.h",
+        "glyph_partition.cc",
     ],
     deps = [
         ":common",
@@ -72,7 +72,7 @@ cc_library(
     visibility = [
     ],
     deps = [
-        ":glyph_union",
+        ":glyph_partition",
         ":common",
         ":activation_condition",
         "//ift/feature_registry",
@@ -238,10 +238,10 @@ cc_test(
 )
 
 cc_test(
-    name = "glyph_union_test",
-    srcs = ["glyph_union_test.cc"],
+    name = "glyph_partition_test",
+    srcs = ["glyph_partition_test.cc"],
     deps = [
-        ":glyph_union",
+        ":glyph_partition",
         "//common",
         "@abseil-cpp//absl/types:span",
         "@googletest//:gtest_main",
