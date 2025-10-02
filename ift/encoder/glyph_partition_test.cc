@@ -58,9 +58,7 @@ TEST_F(GlyphPartitionTest, NonIdentityGroups) {
 
   ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
 
-  std::vector<GlyphSet> expected = {
-    {1, 3, 5}
-  };
+  std::vector<GlyphSet> expected = {{1, 3, 5}};
 
   ASSERT_EQ(*gu.NonIdentityGroups(), absl::Span<const GlyphSet>(expected));
 
@@ -76,24 +74,24 @@ TEST_F(GlyphPartitionTest, GlyphsFor) {
   ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
   ASSERT_TRUE(gu.Union({2, 4}).ok());
 
-  ASSERT_EQ(*gu.GlyphsFor(1), (GlyphSet {1, 3, 5}));
-  ASSERT_EQ(*gu.GlyphsFor(3), (GlyphSet {1, 3, 5}));
-  ASSERT_EQ(*gu.GlyphsFor(5), (GlyphSet {1, 3, 5}));
-  ASSERT_EQ(*gu.GlyphsFor(2), (GlyphSet {2, 4}));
-  ASSERT_EQ(*gu.GlyphsFor(4), (GlyphSet {2, 4}));
-  ASSERT_EQ(*gu.GlyphsFor(6), (GlyphSet {6}));
+  ASSERT_EQ(*gu.GlyphsFor(1), (GlyphSet{1, 3, 5}));
+  ASSERT_EQ(*gu.GlyphsFor(3), (GlyphSet{1, 3, 5}));
+  ASSERT_EQ(*gu.GlyphsFor(5), (GlyphSet{1, 3, 5}));
+  ASSERT_EQ(*gu.GlyphsFor(2), (GlyphSet{2, 4}));
+  ASSERT_EQ(*gu.GlyphsFor(4), (GlyphSet{2, 4}));
+  ASSERT_EQ(*gu.GlyphsFor(6), (GlyphSet{6}));
 
   ASSERT_TRUE(gu.Union(3, 2).ok());
-  ASSERT_EQ(*gu.GlyphsFor(1), (GlyphSet {1, 2, 3, 4, 5}));
-  ASSERT_EQ(*gu.GlyphsFor(2), (GlyphSet {1, 2, 3, 4, 5}));
-  ASSERT_EQ(*gu.GlyphsFor(6), (GlyphSet {6}));
+  ASSERT_EQ(*gu.GlyphsFor(1), (GlyphSet{1, 2, 3, 4, 5}));
+  ASSERT_EQ(*gu.GlyphsFor(2), (GlyphSet{1, 2, 3, 4, 5}));
+  ASSERT_EQ(*gu.GlyphsFor(6), (GlyphSet{6}));
 }
 
 TEST_F(GlyphPartitionTest, UnionWithEmptyOrSingleSet) {
   GlyphPartition gu(5);
 
-  ASSERT_TRUE(gu.Union(GlyphSet {}).ok());
-  ASSERT_TRUE(gu.Union(GlyphSet {2}).ok());
+  ASSERT_TRUE(gu.Union(GlyphSet{}).ok());
+  ASSERT_TRUE(gu.Union(GlyphSet{2}).ok());
 
   ASSERT_EQ(*gu.Find(0), 0);
   ASSERT_EQ(*gu.Find(1), 1);
@@ -117,10 +115,11 @@ TEST_F(GlyphPartitionTest, OutOfBounds) {
   // GlyphsFor
   auto glyphs_for_status = gu.GlyphsFor(10);
   ASSERT_FALSE(glyphs_for_status.ok());
-  ASSERT_EQ(glyphs_for_status.status().code(), absl::StatusCode::kInvalidArgument);
+  ASSERT_EQ(glyphs_for_status.status().code(),
+            absl::StatusCode::kInvalidArgument);
 
   // Union
-  auto union_status = gu.Union(GlyphSet {10});
+  auto union_status = gu.Union(GlyphSet{10});
   ASSERT_FALSE(union_status.ok());
   ASSERT_EQ(union_status.code(), absl::StatusCode::kInvalidArgument);
 
@@ -199,14 +198,14 @@ TEST_F(GlyphPartitionTest, UnionOtherUnion) {
   ASSERT_TRUE(gu2.Union(9, 8).ok());
 
   ASSERT_TRUE(gu1.Union(gu2).ok());
-  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3}));
-  ASSERT_EQ(*gu1.GlyphsFor(8), (GlyphSet {7, 8, 9}));
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet{1, 3}));
+  ASSERT_EQ(*gu1.GlyphsFor(8), (GlyphSet{7, 8, 9}));
 
   GlyphPartition gu3(10);
   ASSERT_TRUE(gu3.Union(3, 7).ok());
 
   ASSERT_TRUE(gu1.Union(gu3).ok());
-  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet {1, 3, 7, 8, 9}));
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet{1, 3, 7, 8, 9}));
 }
 
 TEST_F(GlyphPartitionTest, UnionOtherUnion_Invalid) {
