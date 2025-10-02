@@ -22,7 +22,6 @@ using common::hb_face_unique_ptr;
 using common::make_hb_face;
 using freq::ProbabilityBound;
 
-// TODO XXXX better printing for condition comparison asserts. Add a PrintTo?
 void PrintTo(const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions, std::ostream* os) {
   *os << "conditions:\n";
   for (const auto& [c, gids] : conditions) {
@@ -150,8 +149,8 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-TEST_F(GlyphGroupingsTest, GlyphUnion) {
-  auto sc = glyph_groupings_.UnionPatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+TEST_F(GlyphGroupingsTest, CombinePatches) {
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
@@ -177,14 +176,14 @@ TEST_F(GlyphGroupingsTest, GlyphUnion) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-TEST_F(GlyphGroupingsTest, GlyphUnion_UnionPatchesInvalidates) {
+TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
                                          glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = glyph_groupings_.UnionPatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
@@ -211,14 +210,14 @@ TEST_F(GlyphGroupingsTest, GlyphUnion_UnionPatchesInvalidates) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-TEST_F(GlyphGroupingsTest, GlyphUnion_PartialUpdate) {
+TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
                                          glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = glyph_groupings_.UnionPatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now simulate a partial invalidation that intersects the merged patch
@@ -262,8 +261,8 @@ TEST_F(GlyphGroupingsTest, GlyphUnion_PartialUpdate) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-TEST_F(GlyphGroupingsTest, GlyphUnion_DoesntAffectConjunction) {
-  auto sc = glyph_groupings_.UnionPatches(ToGlyphs({'d'}), ToGlyphs({'e'}));
+TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'d'}), ToGlyphs({'e'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
@@ -291,10 +290,10 @@ TEST_F(GlyphGroupingsTest, GlyphUnion_DoesntAffectConjunction) {
 }
 
 // TEST XXXX test of ExclusiveGlyphs where an exclusive segment has been expanded.
+// TEST XXXX of equality operator, should respect expanded diffs.
 // TEST XXXX glyph union where two unioned glyphs are in the same segment (including with partial invalidation).
 // TEST XXXX single glyph invalidation and how it interactswith GroupGlyphs().
 // TEST XXXX change in the base segmentation (ie due to segment merge) and subsequent update to a unioned patch.
 // TEST XXXX of invalidation interacting with glyph union.
-// TEST XXXX of equality operator, should respect expanded diffs.
 
 }  // namespace ift::encoder
