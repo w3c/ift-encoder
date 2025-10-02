@@ -92,6 +92,43 @@ Status GlyphGroupings::CombinePatches(const GlyphSet& a, const GlyphSet& b) {
   return absl::OkStatus();
 }
 
+// Converts this grouping into a finalized GlyphSegmentation.
+StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
+    const RequestedSegmentationInformation& segmentation_info) const {
+  GlyphSegmentation segmentation(
+      segmentation_info.InitFontSegmentWithoutDefaults(),
+      segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
+  segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
+
+  // Recreate the glyph groups based on ConditionsAndGlyphs() which reflects
+  // the final state (including patch combinations).
+  btree_map<SegmentSet, GlyphSet> and_glyph_groups;
+  btree_map<SegmentSet, GlyphSet> or_glyph_groups;
+  btree_map<segment_index_t, GlyphSet> exclusive_glyph_groups;
+  for (const auto& [condition, glyphs] : ConditionsAndGlyphs()) {
+    if (condition.IsExclusive()) {
+      exclusive_glyph_groups[*condition.TriggeringSegments().begin()] = glyphs;
+    } else if (condition.conditions().size() == 1) {
+      SegmentSet segments = condition.TriggeringSegments();
+      or_glyph_groups[segments] = glyphs;
+    } else {
+      SegmentSet segments = condition.TriggeringSegments();
+      and_glyph_groups[segments] = glyphs;
+    }
+  }
+
+  auto fallback = or_glyph_groups_.find(fallback_segments_);
+  if (fallback != or_glyph_groups_.end()) {
+    or_glyph_groups[fallback_segments_] = fallback->second;
+  }
+
+  TRYV(GlyphSegmentation::GroupsToSegmentation(
+      and_glyph_groups, or_glyph_groups, exclusive_glyph_groups,
+      fallback_segments_, segmentation));
+
+  return segmentation;
+}
+
 Status GlyphGroupings::GroupGlyphs(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
