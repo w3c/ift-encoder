@@ -149,6 +149,75 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
+TEST_F(GlyphGroupingsTest, SegmentChange) {
+  auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Now in the glyph condition set combine segments s1 into s0
+  // the patch cominbation request
+  GlyphConditionSet new_conditions(hb_face_get_glyph_count(roboto_.get()));
+
+  // Exclusive glyphs for segment 0
+  new_conditions.AddAndCondition(cp_to_gid_['a'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['b'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['c'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['d'], 0);
+
+  // Exclusive glyphs for segment 3
+  new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
+  new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
+
+  // Conjunctive on segments 2 and 3
+  new_conditions.AddAndCondition(cp_to_gid_['e'], 2);
+  new_conditions.AddAndCondition(cp_to_gid_['e'], 3);
+  new_conditions.AddAndCondition(cp_to_gid_['f'], 2);
+  new_conditions.AddAndCondition(cp_to_gid_['f'], 3);
+
+  // Disjunctive on segments 3 and 4
+  new_conditions.AddOrCondition(cp_to_gid_['g'], 3);
+  new_conditions.AddOrCondition(cp_to_gid_['g'], 4);
+  new_conditions.AddOrCondition(cp_to_gid_['h'], 3);
+  new_conditions.AddOrCondition(cp_to_gid_['h'], 4);
+
+  // Disjunctive on segments 2 and 3
+  new_conditions.AddOrCondition(cp_to_gid_['j'], 2);
+  new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
+
+  // Recompute the grouping
+  GlyphConditions s0;
+  s0.and_segments = {0};
+  GlyphConditions s1;
+  s1.and_segments = {1};
+
+  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['a']);
+  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['b']);
+  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['c']);
+  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['d']);
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    new_conditions, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // s0 -> {a, b, c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s3 OR s4 -> {g, h}
+  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b', 'c', 'd'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
+      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+      {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
 TEST_F(GlyphGroupingsTest, CombinePatches) {
   auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
@@ -261,6 +330,34 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
+TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
+  auto sc = glyph_groupings_.CombinePatches({'a'}, {'b'});
+  ASSERT_TRUE(sc.ok()) << sc;
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // The combination is a noop since it only combines things already in the
+  // same patch. Expected condition map:
+  // s0 -> {a, b}
+  // s1 -> {c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s3 OR s4 -> {g, h}
+  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
+      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+      {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
 TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
   auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'d'}), ToGlyphs({'e'}));
   ASSERT_TRUE(sc.ok()) << sc;
@@ -284,6 +381,77 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
       {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
+TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Now in the glyph condition set combine segments s1 into s0
+  // the patch cominbation request
+  GlyphConditionSet new_conditions(hb_face_get_glyph_count(roboto_.get()));
+
+  // Exclusive glyphs for segment 0
+  new_conditions.AddAndCondition(cp_to_gid_['a'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['b'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['c'], 0);
+  new_conditions.AddAndCondition(cp_to_gid_['d'], 0);
+
+  // Exclusive glyphs for segment 3
+  new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
+  new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
+
+  // Conjunctive on segments 2 and 3
+  new_conditions.AddAndCondition(cp_to_gid_['e'], 2);
+  new_conditions.AddAndCondition(cp_to_gid_['e'], 3);
+  new_conditions.AddAndCondition(cp_to_gid_['f'], 2);
+  new_conditions.AddAndCondition(cp_to_gid_['f'], 3);
+
+  // Disjunctive on segments 3 and 4
+  new_conditions.AddOrCondition(cp_to_gid_['g'], 3);
+  new_conditions.AddOrCondition(cp_to_gid_['g'], 4);
+  new_conditions.AddOrCondition(cp_to_gid_['h'], 3);
+  new_conditions.AddOrCondition(cp_to_gid_['h'], 4);
+
+  // Disjunctive on segments 2 and 3
+  new_conditions.AddOrCondition(cp_to_gid_['j'], 2);
+  new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
+
+  // Recompute the grouping
+  GlyphConditions s0;
+  s0.and_segments = {0};
+  GlyphConditions s1;
+  s1.and_segments = {1};
+
+  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['a']);
+  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['b']);
+  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['c']);
+  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['d']);
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    new_conditions, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s0 OR s3 OR s4 -> {a, b, c, , d, g, h}
+  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
+      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+      {ActivationCondition::or_segments({0, 3, 4}, 0),
+       ToGlyphs({'a', 'b', 'c', 'd', 'g', 'h'})},
   };
 
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
@@ -341,8 +509,5 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(3), ToGlyphs({'k'}));
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(10), (GlyphSet {}));
 }
-
-// TEST XXXX glyph union where two unioned glyphs are in the same segment (including with partial invalidation).
-// TEST XXXX change in the base segmentation (ie due to segment merge) and subsequent update to a unioned patch.
 
 }  // namespace ift::encoder
