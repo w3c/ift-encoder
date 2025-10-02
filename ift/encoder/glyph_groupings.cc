@@ -73,6 +73,7 @@ void GlyphGroupings::RemoveAllCombinedConditions() {
     RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0));
   }
   combined_or_glyph_groups_.clear();
+  combined_exclusive_segments_.clear();
 }
 
 Status GlyphGroupings::CombinePatches(const GlyphSet& a,
@@ -280,6 +281,8 @@ Status GlyphGroupings::ComputeConditionExpansionMap(
       merged_conditions[rep].insert(s);
       merged_glyphs[rep].union_set(gids);
       RemoveConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0));
+      // Record s as having been removed via combination.
+      combined_exclusive_segments_.insert(s);
     } else {
       AddConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0), gids);
     }
