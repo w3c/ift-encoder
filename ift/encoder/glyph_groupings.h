@@ -96,7 +96,8 @@ class GlyphGroupings {
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
-  void InvalidateGlyphInformation(const GlyphConditions& condition, uint32_t gid);
+  void InvalidateGlyphInformation(const GlyphConditions& condition,
+                                  uint32_t gid);
 
   // Remove a set of segments from the fallback segments set.
   // Invalidates any existing fallback segments or glyph group.
@@ -138,8 +139,8 @@ class GlyphGroupings {
   // if (s0 OR s1 OR s2) -> {a, b, c, d, e}
   // if (s0 OR s2) -> {f, g}
   //
-  // Invalidates the current grouping, GroupGlyphs() will need to be called afterwards to
-  // realize the changes.
+  // Invalidates the current grouping, GroupGlyphs() will need to be called
+  // afterwards to realize the changes.
   absl::Status CombinePatches(const common::GlyphSet& a,
                               const common::GlyphSet& b);
 
@@ -174,24 +175,23 @@ class GlyphGroupings {
   //
   // The combined groupings are tracked separately in combined_or_glyph_groups_,
   // or_glyph_groups is not changed.
-  absl::Status RecomputeCombinedConditions(const GlyphConditionSet& glyph_condition_set);
+  absl::Status RecomputeCombinedConditions(
+      const GlyphConditionSet& glyph_condition_set);
 
   // Finds all conditions (exclusive and disjunctive) which may interact with
   // the specified patch combinations in combined_patches_.
   absl::Status ConditionsAffectedByCombination(
-    const GlyphConditionSet& glyph_condition_set,
-    common::SegmentSet& exclusive_segments,
-    absl::btree_set<common::SegmentSet>& or_conditions
-  ) const;
+      const GlyphConditionSet& glyph_condition_set,
+      common::SegmentSet& exclusive_segments,
+      absl::btree_set<common::SegmentSet>& or_conditions) const;
 
   // Computes a mapping from a representative glyph of each combined patch to
   // the set of segments and glyphs after combination.
   absl::Status ComputeConditionExpansionMap(
-    const common::SegmentSet& exclusive_segments,
-    const absl::btree_set<common::SegmentSet>& or_conditions,
-    absl::flat_hash_map<glyph_id_t, common::SegmentSet>& merged_conditions,
-    absl::flat_hash_map<glyph_id_t, common::GlyphSet>& merged_glyphs);
-
+      const common::SegmentSet& exclusive_segments,
+      const absl::btree_set<common::SegmentSet>& or_conditions,
+      absl::flat_hash_map<glyph_id_t, common::SegmentSet>& merged_conditions,
+      absl::flat_hash_map<glyph_id_t, common::GlyphSet>& merged_glyphs);
 
   void AddConditionAndGlyphs(ActivationCondition condition,
                              common::GlyphSet glyphs) {
@@ -227,12 +227,14 @@ class GlyphGroupings {
   absl::btree_map<common::SegmentSet, common::GlyphSet> or_glyph_groups_;
   absl::btree_map<segment_index_t, common::GlyphSet> exclusive_glyph_groups_;
 
-  // This is a set of disjunctive conditions which have been combined by the CombinePatches()
-  // mechanism. Does not store groupings which have not been modified the the mechanism.
-  absl::btree_map<common::SegmentSet, common::GlyphSet> combined_or_glyph_groups_;
+  // This is a set of disjunctive conditions which have been combined by the
+  // CombinePatches() mechanism. Does not store groupings which have not been
+  // modified the the mechanism.
+  absl::btree_map<common::SegmentSet, common::GlyphSet>
+      combined_or_glyph_groups_;
 
-  // This is a set of segments which are normally exclusive but have been combined
-  // via the patch combination mechanism and are no longer present.
+  // This is a set of segments which are normally exclusive but have been
+  // combined via the patch combination mechanism and are no longer present.
   common::SegmentSet combined_exclusive_segments_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.

@@ -22,7 +22,9 @@ using common::hb_face_unique_ptr;
 using common::make_hb_face;
 using freq::ProbabilityBound;
 
-void PrintTo(const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions, std::ostream* os) {
+void PrintTo(
+    const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions,
+    std::ostream* os) {
   *os << "conditions:\n";
   for (const auto& [c, gids] : conditions) {
     *os << "  " << c.ToString() << " => " << gids.ToString();
@@ -151,8 +153,8 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
 
 TEST_F(GlyphGroupingsTest, SegmentChange) {
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                         *glyph_conditions_, *closure_cache_,
+                                         glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now in the glyph condition set combine segments s1 into s0
@@ -208,7 +210,8 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
   absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
-      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b', 'c', 'd'})},
+      {ActivationCondition::exclusive_segment(0, 0),
+       ToGlyphs({'a', 'b', 'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
@@ -256,8 +259,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_,
-                                    {});
+                                    *glyph_conditions_, *closure_cache_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // UnionPatches + GroupGlyphs() will automatically invalidate and then fix
@@ -466,21 +468,19 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
                                     glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
-
   GlyphGroupings other(segments_, hb_face_get_glyph_count(roboto_.get()));
-  sc = other.GroupGlyphs(*requested_segmentation_info_,
-                         *glyph_conditions_, *closure_cache_,
-                         glyphs_to_group_);
+  sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
+                         *closure_cache_, glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  // other does not have the same patch combinations and so should not be equal to glyph_groupings_
+  // other does not have the same patch combinations and so should not be equal
+  // to glyph_groupings_
   ASSERT_FALSE(glyph_groupings_ == other);
 
   sc = other.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok());
-  sc = other.GroupGlyphs(*requested_segmentation_info_,
-                         *glyph_conditions_, *closure_cache_,
-                         glyphs_to_group_);
+  sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
+                         *closure_cache_, glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now that combined patches matches they should be equal.
@@ -503,11 +503,11 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
   // s2 OR s3 -> {j}
   // s0 OR s3 OR s4 -> {a, b, g, h}
 
-  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(0), (GlyphSet {}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(0), (GlyphSet{}));
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(1), ToGlyphs({'c', 'd'}));
-  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(2), (GlyphSet {}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(2), (GlyphSet{}));
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(3), ToGlyphs({'k'}));
-  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(10), (GlyphSet {}));
+  ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(10), (GlyphSet{}));
 }
 
 }  // namespace ift::encoder

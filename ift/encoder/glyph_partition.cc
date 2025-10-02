@@ -3,17 +3,17 @@
 #include <numeric>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/types/span.h"
 #include "absl/strings/str_format.h"
+#include "absl/types/span.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/types.h"
 
+using absl::flat_hash_map;
 using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using common::GlyphSet;
-using absl::flat_hash_map;
 
 namespace ift::encoder {
 
@@ -89,7 +89,9 @@ Status GlyphPartition::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
 
 absl::Status GlyphPartition::Union(const GlyphPartition& other) {
   if (other.parent_.size() != parent_.size()) {
-    return absl::InvalidArgumentError("Glyph partitions are not compatible, they must have the same number of elements.");
+    return absl::InvalidArgumentError(
+        "Glyph partitions are not compatible, they must have the same number "
+        "of elements.");
   }
 
   for (const GlyphSet& set : TRY(other.NonIdentityGroups())) {
