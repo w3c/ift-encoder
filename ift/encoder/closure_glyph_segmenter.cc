@@ -351,17 +351,6 @@ StatusOr<std::optional<GlyphSet>> MergeSegmentWithCosts(
   //   reductions can be realized. Can use a computaton budget to set a bound
   //   on how much time is spent here.
   //
-  // Additional areas for improvement:
-  // - Our input data has per segment (or codepoint) probability data, but does
-  //   not at the moment contain co-occurrence probabilities, so when assessing
-  //   segment probabilities we must either work with lower, upper probability
-  //   bounds, or make the assumption that probabilities are independent (which
-  //   is almost certainly not true). All three approaches result in a cost
-  //   function which is not fully accurate.
-  // - This approach could be modified to utilize code point pair probabilities
-  //   to produce more accurate bounds via Boole's Inequality
-  //   (https://en.wikipedia.org/wiki/Boole%27s_inequality)
-  //
   // Lastly, currently lacking a good set of frequency data for all unicode
   // codepoints this approach has not yet been thoroughly tested. Next steps
   // would be to gather some frequency data, test this approach as is, and then
@@ -436,67 +425,6 @@ MergeNextBaseSegment(SegmentationContext& context) {
   // init font. We should be able to compute an associated cost delta and
   // should proceed if it's negative. Will need to reprocess the segmentation
   // can utilize the existing ReassignInitSubset() method.
-
-  // TODO(garretrieger): merges are currently only done by merging two
-  // or more segment subset definitions together. However, there's a
-  // more granular type of merge possible where two patches are merged:
-  // the new patch has glyphs from both patches and it's conditions
-  // are a union of the two patches. However, the participating segment
-  // definitions aren't merged.
-  //
-  // To illustrate where this is useful consider this case:
-  //
-  // P(s1) = 100%
-  // P(s2) = 100%
-  // P(s3) =   1%
-  // P(s4) =   1%
-  //
-  // With patches
-  // s1 -> p0
-  // s3 -> p1
-  // s4 -> p2
-  // (s2 OR s3 OR s4) -> p3
-  //
-  // Ideally we want to merge p3 and p0 since both have 100% probability
-  // but we don't want to also pull in s3 and s4 with their associated
-  // patches as those are low probability. If we limit ourselves to
-  // only merging segment definitions then it's not possible to merge
-  // p3 and p0 without also merging in p1 and p2.
-  //
-  // However, if we take the more granular approach the mapping can be
-  // modifed to:
-  //
-  // P(s1) = 100%
-  // P(s2) = 100%
-  // P(s3) =   1%
-  // P(s4) =   1%
-  //
-  // With patches
-  // (s1 or s2 or s3 or s4) -> p0 + p3
-  // s3 -> p1
-  // s4 -> p2
-  //
-  // Here's a rough plan for how this capability could be added into the
-  // existing code:
-  // - Introduce a second type of merge that is considered called a "glyph
-  // union".
-  // - In the glyph groupings datastructure we keep a union find structure that
-  //   stores groupings of glyph ids.
-  // - When producing the or_glyphs groups if the glyph being categorized is
-  // part
-  //   of a group in the union find then expand the condidtion set to include
-  //   all conditions on all glyphs in the group.
-  // - In the above example we'd put the glyphs from p0 and p3 into a union
-  // - Then the conditions s1 -> p0, (s2 OR s3 OR s4) -> p3 will match the union
-  //   and both condition sets will be expanded out to the superset (s1 or s2 or
-  //   s3 or s4) creating a single combined patch.
-  // - Cost delta computation will need to be updated to be able to assess this
-  // case.
-  // - There's a small complication that glyph sets might change (eg. s1 get's
-  // expanded
-  //   so p0 gets bigger). All new glyphs in p0 will need to be considered to be
-  //   in the union. This can be handled by doing grouping in two phases, first
-  //   form the unmodified groupings, then expand them using the union find.
 
   // TODO(garretrieger): special casing for handling multiple script frequency
   // data sets when segmenting for multiple scripts (specifically disjoint ones)
