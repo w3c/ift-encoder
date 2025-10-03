@@ -73,15 +73,18 @@ Status GlyphPartition::Union(glyph_id_t glyph1, glyph_id_t glyph2) {
   glyph_id_t root1 = TRY(Find(glyph1));
   glyph_id_t root2 = TRY(Find(glyph2));
 
-  if (root1 != root2) {
-    if (rank_[root1] < rank_[root2]) {
-      parent_[root1] = root2;
-    } else if (rank_[root1] > rank_[root2]) {
-      parent_[root2] = root1;
-    } else {
-      parent_[root2] = root1;
-      rank_[root1]++;
-    }
+  if (root1 == root2) {
+    // Glyphs are already in the same group, so no change is needed.
+    return absl::OkStatus();
+  }
+
+  if (rank_[root1] < rank_[root2]) {
+    parent_[root1] = root2;
+  } else if (rank_[root1] > rank_[root2]) {
+    parent_[root2] = root1;
+  } else {
+    parent_[root2] = root1;
+    rank_[root1]++;
   }
   cache_valid_ = false;
   return absl::OkStatus();
