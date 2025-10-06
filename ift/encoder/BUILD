@@ -64,6 +64,8 @@ cc_library(
         "candidate_merge.h",
         "patch_size_cache.h",
         "merge_strategy.h",
+        "merger.cc",
+        "merger.h",
 
     ],
     copts = [

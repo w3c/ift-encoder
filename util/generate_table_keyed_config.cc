@@ -12,14 +12,14 @@
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
 
+using absl::StatusOr;
+using absl::StrCat;
+using common::CodepointSet;
 using common::FontData;
 using common::FontHelper;
-using common::CodepointSet;
 using common::hb_blob_unique_ptr;
 using common::make_hb_blob;
 using google::protobuf::TextFormat;
-using absl::StatusOr;
-using absl::StrCat;
 
 ABSL_FLAG(
     std::optional<std::string>, font, std::nullopt,
@@ -27,11 +27,12 @@ ABSL_FLAG(
     "additional segment if needed that covers any codepoints found in the font "
     "which are not covered by the input subset files.");
 
-ABSL_FLAG(
-    std::optional<std::string>, existing_segmentation_plan, std::nullopt,
-    "Optional, path to a segmentation plan. If provided the specified table keyed "
-    "codepoint sets will be added to the existing segmentation plan instead of a new "
-    "one. The combined plan is output to stdout.");
+ABSL_FLAG(std::optional<std::string>, existing_segmentation_plan, std::nullopt,
+          "Optional, path to a segmentation plan. If provided the specified "
+          "table keyed "
+          "codepoint sets will be added to the existing segmentation plan "
+          "instead of a new "
+          "one. The combined plan is output to stdout.");
 
 template <typename ProtoType>
 ProtoType ToSetProto(const CodepointSet& set) {
@@ -51,12 +52,11 @@ static StatusOr<FontData> load_file(const char* path) {
   return FontData(blob.get());
 }
 
-
-
 static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
   auto config_text = load_file(path);
   if (!config_text.ok()) {
-    return absl::NotFoundError(StrCat("Failed to load config file: ", config_text.status()));
+    return absl::NotFoundError(
+        StrCat("Failed to load config file: ", config_text.status()));
   }
 
   SegmentationPlan plan;
@@ -111,7 +111,8 @@ int main(int argc, char** argv) {
 
   std::vector<CodepointSet> sets;
   if (absl::GetFlag(FLAGS_existing_segmentation_plan).has_value()) {
-    auto plan = LoadSegmentationPlan(absl::GetFlag(FLAGS_existing_segmentation_plan)->c_str());
+    auto plan = LoadSegmentationPlan(
+        absl::GetFlag(FLAGS_existing_segmentation_plan)->c_str());
     if (!plan.ok()) {
       std::cerr << "Error: " << plan.status() << std::endl;
       return -1;
@@ -170,8 +171,6 @@ int main(int argc, char** argv) {
       sets.push_back(font_codepoints);
     }
   }
-
-
 
   bool initial = true;
   for (const auto& set : sets) {
