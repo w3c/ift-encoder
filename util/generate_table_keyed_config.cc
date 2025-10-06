@@ -14,8 +14,12 @@
 
 using common::FontData;
 using common::FontHelper;
-using common::IntSet;
+using common::CodepointSet;
+using common::hb_blob_unique_ptr;
+using common::make_hb_blob;
 using google::protobuf::TextFormat;
+using absl::StatusOr;
+using absl::StrCat;
 
 ABSL_FLAG(
     std::optional<std::string>, font, std::nullopt,
@@ -23,13 +27,45 @@ ABSL_FLAG(
     "additional segment if needed that covers any codepoints found in the font "
     "which are not covered by the input subset files.");
 
+ABSL_FLAG(
+    std::optional<std::string>, existing_segmentation_plan, std::nullopt,
+    "Optional, path to a segmentation plan. If provided the specified table keyed "
+    "codepoint sets will be added to the existing segmentation plan instead of a new "
+    "one. The combined plan is output to stdout.");
+
 template <typename ProtoType>
-ProtoType ToSetProto(const IntSet& set) {
+ProtoType ToSetProto(const CodepointSet& set) {
   ProtoType values;
   for (uint32_t v : set) {
     values.add_values(v);
   }
   return values;
+}
+
+static StatusOr<FontData> load_file(const char* path) {
+  hb_blob_unique_ptr blob =
+      make_hb_blob(hb_blob_create_from_file_or_fail(path));
+  if (!blob.get()) {
+    return absl::NotFoundError(StrCat("File ", path, " was not found."));
+  }
+  return FontData(blob.get());
+}
+
+
+
+static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
+  auto config_text = load_file(path);
+  if (!config_text.ok()) {
+    return absl::NotFoundError(StrCat("Failed to load config file: ", config_text.status()));
+  }
+
+  SegmentationPlan plan;
+  if (!google::protobuf::TextFormat::ParseFromString(config_text->str(),
+                                                     &plan)) {
+    return absl::InvalidArgumentError("Failed to parse input config.");
+  }
+
+  return plan;
 }
 
 /*
@@ -70,14 +106,30 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  std::vector<IntSet> sets;
-  bool first = true;
-  for (const char* arg : args) {
-    if (first) {
-      first = false;
-      continue;
+  SegmentationPlan config;
+  CodepointSet init_codepoints;
+
+  std::vector<CodepointSet> sets;
+  if (absl::GetFlag(FLAGS_existing_segmentation_plan).has_value()) {
+    auto plan = LoadSegmentationPlan(absl::GetFlag(FLAGS_existing_segmentation_plan)->c_str());
+    if (!plan.ok()) {
+      std::cerr << "Error: " << plan.status() << std::endl;
+      return -1;
     }
-    IntSet set;
+    config = *plan;
+    for (unsigned cp : plan->initial_codepoints().values()) {
+      init_codepoints.insert(cp);
+    }
+
+    CodepointSet empty;
+    sets.push_back(empty);
+  }
+
+  for (size_t i = 1; i < args.size(); i++) {
+    const char* arg = args[i];
+    std::string_view arg_str(arg);
+
+    CodepointSet cps;
     auto result = util::LoadCodepointsOrdered(arg);
     if (!result.ok()) {
       std::cerr << "Failed to load codepoints from " << arg << ": "
@@ -86,9 +138,14 @@ int main(int argc, char** argv) {
     }
 
     for (const auto& cp_and_freq : *result) {
-      set.insert(cp_and_freq.codepoint);
+      cps.insert(cp_and_freq.codepoint);
     }
-    sets.push_back(set);
+
+    if (!sets.empty()) {
+      cps.subtract(init_codepoints);
+    }
+
+    sets.push_back(cps);
   }
 
   std::optional<std::string> input_font = absl::GetFlag(FLAGS_font);
@@ -114,7 +171,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  SegmentationPlan config;
+
 
   bool initial = true;
   for (const auto& set : sets) {
