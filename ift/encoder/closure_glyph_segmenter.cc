@@ -29,6 +29,7 @@
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
@@ -53,6 +54,7 @@ using common::make_hb_set;
 using common::SegmentSet;
 using common::Woff2;
 using ift::GlyphKeyedDiff;
+using ift::freq::ProbabilityBound;
 using ift::freq::ProbabilityCalculator;
 
 namespace ift::encoder {
@@ -61,12 +63,12 @@ namespace ift::encoder {
 // be found in ../../docs/closure_glyph_segmentation.md.
 
 Status CheckForDisjointCodepoints(
-    const std::vector<SubsetDefinition>& subset_definitions) {
+    const std::vector<SubsetDefinition>& subset_definitions,
+    const SegmentSet& segments) {
   CodepointSet union_of_codepoints;
-  for (const auto& def : subset_definitions) {
-    CodepointSet intersection = def.codepoints;
-    intersection.intersect(union_of_codepoints);
-    if (!intersection.empty()) {
+  for (segment_index_t s : segments) {
+    const auto& def = subset_definitions[s];
+    if (def.codepoints.intersects(union_of_codepoints)) {
       return absl::InvalidArgumentError(
           "Input subset definitions must have disjoint codepoint sets when "
           "using cost-based merging.");
@@ -125,30 +127,162 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   return absl::OkStatus();
 }
 
-static StatusOr<std::vector<Segment>> ToSegments(
+static void ClassifySegments(
     const std::vector<SubsetDefinition>& subset_definitions,
-    const MergeStrategy& merge_strategy) {
-  auto calculator = merge_strategy.ProbabilityCalculator();
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    SegmentSet& ungrouped_segments, SegmentSet& shared_segments) {
+  std::vector<uint32_t> group_count(subset_definitions.size());
+  for (const auto& [segments, strategy] : merge_groups) {
+    for (unsigned s : segments) {
+      group_count[s]++;
+    }
+  }
+
+  for (unsigned s = 0; s < subset_definitions.size(); s++) {
+    if (group_count[s] == 0) {
+      ungrouped_segments.insert(s);
+    } else if (group_count[s] > 1) {
+      shared_segments.insert(s);
+    }
+  }
+}
+
+static std::vector<ProbabilityBound> ComputeSegmentProbabilities(
+    const std::vector<SubsetDefinition>& subset_definitions,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+  std::vector<ProbabilityBound> out(subset_definitions.size(),
+                                    ProbabilityBound::Zero());
+  for (const auto& [segments, strategy] : merge_groups) {
+    if (!strategy.UseCosts()) {
+      continue;
+    }
+
+    auto calculator = strategy.ProbabilityCalculator();
+    for (segment_index_t s : segments) {
+      ProbabilityBound p =
+          calculator->ComputeProbability(subset_definitions[s]);
+      if (p.Min() > out[s].Min()) {
+        out[s] = p;
+      }
+    }
+  }
+  return out;
+}
+
+struct SegmentOrdering {
+  unsigned group_index;
+  freq::ProbabilityBound probability;
+  unsigned original_index;
+
+  bool operator<(const SegmentOrdering& other) const {
+    if (group_index != other.group_index) {
+      return group_index < other.group_index;
+    }
+
+    if (probability.Min() != other.probability.Min()) {
+      // Probability descending.
+      return probability.Min() > other.probability.Min();
+    }
+
+    if (probability.Max() != other.probability.Max()) {
+      // Probability descending.
+      return probability.Max() > other.probability.Max();
+    }
+
+    return original_index < other.original_index;
+  }
+};
+
+// Converts the input subset definitions to a sorted list of segments, remaps
+// the merge_groups segment set keys to reflect the ordering changes.
+static StatusOr<std::vector<Segment>> ToOrderedSegments(
+    const std::vector<SubsetDefinition>& subset_definitions,
+    btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+  // This generates the following ordering:
+  //
+  // merge group 1 segments
+  // ...
+  // merge group n segments
+  // shared segments
+  // ungrouped segments
+  //
+  // Within a group segments are sorted by probability (determined by that
+  // groups frequency data) descending (with original ordering breaking ties).
+  // For merge groups that don't utilize cost, the original sorting order is
+  // used.
+
+  SegmentSet ungrouped_segments;
+  SegmentSet shared_segments;
+  ClassifySegments(subset_definitions, merge_groups, ungrouped_segments,
+                   shared_segments);
+
+  std::vector<ProbabilityBound> segment_probabilities =
+      ComputeSegmentProbabilities(subset_definitions, merge_groups);
+  std::vector<SegmentOrdering> ordering;
+  uint32_t group_index = 0;
+  for (const auto& [segments, strategy] : merge_groups) {
+    for (uint32_t s : segments) {
+      if (shared_segments.contains(s)) {
+        // shared segments are placed separately
+        continue;
+      }
+
+      ordering.push_back({
+          .group_index = group_index,
+          .probability = segment_probabilities[s],
+          .original_index = s,
+      });
+    }
+
+    group_index++;
+  }
+
+  for (segment_index_t s : shared_segments) {
+    ordering.push_back({
+        .group_index = group_index,
+        .probability = segment_probabilities[s],
+        .original_index = s,
+    });
+  }
+
+  group_index++;
+  for (segment_index_t s : ungrouped_segments) {
+    ordering.push_back({
+        .group_index = group_index,
+        .probability = ProbabilityBound::Zero(),
+        .original_index = s,
+    });
+  }
+
+  std::sort(ordering.begin(), ordering.end());
+
+  // maps from index in subset_definitions to the new ordering.
+  std::vector<uint32_t> segment_index_map(subset_definitions.size());
   std::vector<Segment> segments;
-  for (const auto& def : subset_definitions) {
-    auto probability = calculator->ComputeProbability(def);
-    segments.emplace_back(def, probability);
+  unsigned i = 0;
+  for (const auto& ordering : ordering) {
+    segments.push_back(Segment{subset_definitions[ordering.original_index],
+                               ordering.probability});
+    segment_index_map[ordering.original_index] = i++;
   }
-  if (merge_strategy.UseCosts()) {
-    // Cost based merging has probability data available for segments, use that
-    // to sort from highest to lowest. Later processing relies on this ordering.
-    std::sort(segments.begin(), segments.end(),
-              [](const Segment& a, const Segment& b) {
-                if (a.Probability() != b.Probability()) {
-                  return a.Probability() > b.Probability();
-                }
-                if (a.Definition().codepoints != b.Definition().codepoints) {
-                  return a.Definition().codepoints < b.Definition().codepoints;
-                }
-                return a.Definition().feature_tags <
-                       b.Definition().feature_tags;
-              });
+
+  btree_map<SegmentSet, MergeStrategy> new_merge_groups;
+  for (auto& [segments, strategy] : merge_groups) {
+    SegmentSet remapped;
+    for (segment_index_t s : segments) {
+      if (!shared_segments.contains(s)) {
+        remapped.insert(segment_index_map[s]);
+      }
+    }
+
+    if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
+             .second) {
+      return absl::InvalidArgumentError(
+          "Duplicate merge groups are not allowed.");
+    }
   }
+
+  merge_groups = std::move(new_merge_groups);
   return segments;
 }
 
@@ -156,43 +290,75 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
     std::optional<MergeStrategy> strategy, uint32_t brotli_quality) const {
-  MergeStrategy merge_strategy = MergeStrategy::None();
-  if (strategy.has_value()) {
-    merge_strategy = std::move(*strategy);
+  btree_map<SegmentSet, MergeStrategy> merge_groups;
+  if (!subset_definitions.empty() && strategy.has_value()) {
+    SegmentSet all;
+    all.insert_range(0, subset_definitions.size() - 1);
+    merge_groups = {{all, std::move(*strategy)}};
   }
 
-  if (merge_strategy.UseCosts()) {
-    TRYV(CheckForDisjointCodepoints(subset_definitions));
+  return CodepointToGlyphSegments(face, initial_segment, subset_definitions,
+                                  merge_groups, brotli_quality);
+}
+
+StatusOr<std::vector<Merger>> ToMergers(
+    SegmentationContext& context,
+    btree_map<SegmentSet, MergeStrategy> merge_groups) {
+  std::vector<Merger> mergers;
+  for (auto& [segments, strategy] : merge_groups) {
+    mergers.push_back(TRY(Merger::New(context, std::move(strategy), segments)));
+  }
+  return mergers;
+}
+
+StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
+    hb_face_t* face, SubsetDefinition initial_segment,
+    const std::vector<SubsetDefinition>& subset_definitions,
+    btree_map<SegmentSet, MergeStrategy> merge_groups,
+    uint32_t brotli_quality) const {
+  for (const auto& [segments, strategy] : merge_groups) {
+    if (strategy.UseCosts()) {
+      TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
+    }
   }
 
   std::vector<Segment> segments =
-      TRY(ToSegments(subset_definitions, merge_strategy));
+      TRY(ToOrderedSegments(subset_definitions, merge_groups));
   SegmentationContext context = TRY(InitializeSegmentationContext(
       face, initial_segment, std::move(segments), brotli_quality));
 
-  if (merge_strategy.IsNone()) {
+  if (merge_groups.empty()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
   }
 
-  // TODO XXXXX add support for having multiple merge strategies and mergers
-  // (eg. one per script)
-  Merger merger = TRY(Merger::New(context, std::move(merge_strategy)));
+  std::vector<Merger> mergers = TRY(ToMergers(context, merge_groups));
 
   // ### First phase of merging is to check for any patches which should be
-  // moved to the initial font
-  //     (eg. cases where the probability of a patch is ~1.0).
-  if (merger.Strategy().UseCosts() &&
-      merger.Strategy().InitFontMergeThreshold().has_value()) {
-    TRYV(merger.MoveSegmentsToInitFont());
+  // moved to the initial font (eg. cases where the probability of a patch is
+  // ~1.0). We only use the first merge group for this porition. This avoids
+  // having all high probability codepoints from all merge groups moved to the
+  // init font.
+  if (mergers[0].Strategy().UseCosts() &&
+      mergers[0].Strategy().InitFontMergeThreshold().has_value()) {
+    TRYV(mergers[0].MoveSegmentsToInitFont());
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
+  size_t merger_index = 0;
   segment_index_t last_merged_segment_index = 0;
+  VLOG(0) << "Starting merge selection for merge group " << merger_index;
   while (true) {
+    auto& merger = mergers[merger_index];
     auto merged = TRY(merger.TryNextMerge());
 
     if (!merged.has_value()) {
+      merger_index++;
+      if (merger_index < mergers.size()) {
+        VLOG(0) << "Merge group finished, starting next group " << merger_index;
+        continue;
+      }
+
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
       return context.ToGlyphSegmentation();

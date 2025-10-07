@@ -47,6 +47,12 @@ class ClosureGlyphSegmenter {
       std::optional<MergeStrategy> strategy = std::nullopt,
       uint32_t brotli_quality = 8) const;
 
+  absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      const std::vector<SubsetDefinition>& subset_definitions,
+      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups,
+      uint32_t brotli_quality) const;
+
   /*
    * Generates a segmentation context for the provided segmentation input.
    *

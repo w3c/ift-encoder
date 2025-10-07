@@ -93,6 +93,8 @@ Status Merger::MoveSegmentsToInitFont() {
     //   with codepoints but no interactions/patches).
     SegmentSet to_check_individually =
         Context().glyph_groupings.AllDisjunctiveSegments();
+    to_check_individually.intersect(candidate_segments_);
+
     SegmentSet excluded = CutoffSegments();
     to_check_individually.subtract(excluded);
 
@@ -134,7 +136,8 @@ Status Merger::MoveSegmentsToInitFont() {
 }
 
 Status Merger::ReassignInitSubset() {
-  candidate_segments_ = ComputeCandidateSegments(Context(), strategy_);
+  candidate_segments_ =
+      ComputeCandidateSegments(Context(), strategy_, inscope_segments_);
   TRYV(InitOptimizationCutoff());
   return absl::OkStatus();
 }
@@ -149,16 +152,17 @@ uint32_t Merger::AssignMergedSegment(segment_index_t base,
                                        is_inert);
 }
 
-SegmentSet Merger::ComputeCandidateSegments(SegmentationContext& context,
-                                            MergeStrategy strategy) {
+SegmentSet Merger::ComputeCandidateSegments(
+    SegmentationContext& context, const MergeStrategy& strategy,
+    const common::SegmentSet& inscope_segments) {
   SegmentSet candidate_segments;
-  // TODO XXXXX add a filter set to merge strategy to restrict active segments
-  // to a subset.
   for (unsigned i = 0; i < context.SegmentationInfo().Segments().size(); i++) {
-    if (!context.SegmentationInfo().Segments()[i].Definition().Empty()) {
+    if (!context.SegmentationInfo().Segments()[i].Definition().Empty() &&
+        inscope_segments.contains(i)) {
       candidate_segments.insert(i);
     }
   }
+
   return candidate_segments;
 }
 
