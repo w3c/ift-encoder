@@ -1,5 +1,7 @@
 edition = "2023";
 
+import "ift/proto/common.proto";
+
 // This message is used to configure an IFT compiler to generate and IFT encoding of some input font.
 //
 // Note: this is still a work in progress. Final naming and the specific structure is still being finalized.
@@ -95,7 +97,7 @@ message SegmentationPlan {
 
   // For table keyed patches the patch graph will be at most this many levels deep, or in other
   // words at most max depth round trips will ever be needed to reach any content in the font.
-  // 
+  //
   // This is implemented in the graph by having the nodes in the second last level contain
   // only a single patch which adds everything remaining.
   //
@@ -155,43 +157,6 @@ message SegmentationPlan {
 // f_1 AND f_2 AND ...
 message ActivationConditionProto {
   repeated SegmentsProto required_segments = 1;
-  
+
   uint32 activated_patch = 3;
-}
-
-// A list of codepoint set ids that reference sets in "EncoderConfig.codepoint_sets"
-message SegmentsProto {
-  repeated uint32 values = 1;
-}
-
-// A list of glyph ids
-message Glyphs {
-  repeated uint32 values = 1;
-}
-
-// A list of unicode code points.
-message Codepoints {
-  repeated uint32 values = 1;
-}
-
-// Matches when the subset definition intersects codepoints OR features.
-message SegmentProto {
-  Codepoints codepoints = 1;
-  Features features = 2;
-}
-
-// A list of open type layout feature tags.
-message Features {
-  repeated string values = 1;
-}
-
-// A variable font design space.
-message DesignSpace {
-  // Map from axis tag to range on that axis.
-  map<string, AxisRangeProto> ranges = 1;
-}
-
-message AxisRangeProto {
-  float start = 1;
-  float end = 2;
 }

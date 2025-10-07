@@ -1,0 +1,81 @@
+edition = "2023";
+
+import "ift/proto/common.proto";
+
+message SegmenterConfig {
+  // The set of segments the font is initially broken up into.
+  // The key in the map is an ID used to refer to the segment
+  // in other parts of the config. Segments must be disjoint.
+  map<uint32, SegmentProto> segments = 1;
+
+  // Merge groups specify how merging will be performed for groups of segments.
+  // Any segments that are not covered by any merge group will not be merged.
+  // Merge groups are not required to be disjoint and may have overlapping segments.
+  repeated MergeGroup merge_group = 2;
+}
+
+// For a given set of segments this configures how merging will be performed. Each merge group
+// is processed independently. Merges will only be made between things within the same group.
+// Each merge group has it's own configuration and frequency data.
+message MergeGroup {
+  // The set of segments that this merge group covers. May overlap with other merge groups.
+  SegmentsProto segment_ids = 1;
+
+  // When generating compressed patches (to evaluate their size) this is the brotli quality
+  // level used. Segmentation is typically bottle necked on brotli compression so higher values
+  // increase segmentation times, but yield more accurate results.
+  uint32 brotli_quality = 2 [default = 8];
+
+  oneof config {
+    HeuristicConfiguration heuristic_config = 3;
+    CostConfiguration cost_config = 4;
+  }
+}
+
+// The merger will choose segments to merge based on which combinations minimize a cost function.
+// Here the cost function used is the average number of bytes transferred by a given segmentation.
+// Codepoint frequency data is utilized to evaluate the cost function.
+message CostConfiguration {
+
+  // Path (relative to this configuration file) that points to Riegeli encoded frequency data
+  // (using unicode_count.proto) that will be used during the evaluation of the cost function
+  // for merging within this group. Must be provided.
+  string path_to_frequency_data = 1;
+
+  // By default the cost function used for merging will utilize only individual codepoint probabilities
+  // (ie. P(A)), when pair probabilities are needed it's assumed that individual probabilities are
+  // all independent (ie. pair probabilities are given by P(A and B) = P(A) * P(B))
+  //
+  // If use_bigrams is enabled and the supplied frequency data contains codepoint pair frequencies
+  // the the cost function will not assume independence and utilize the supplied pair frequencies.
+  // This is much more accurate, but increase the computational complexity of the cost analysis
+  // significantly.
+  bool use_bigrams = 2 [default = false];
+
+  // When evaluating the cost of each patch this is the estimated number of bytes of
+  // network overhead for making the network request for the patch. Higher values encourage
+  // more aggressive merging.
+  uint32 network_overhead_cost = 3 [default = 75];
+
+  // The minimum number of codepoints in each activation condition in the final segmentation.
+  uint32 min_group_size = 4 [default = 1];
+
+  // The set of segments whose total contributition to the total cost is less than this fraction
+  // will have optimization skipped. This saves spending computation on segments that have very
+  // little impact on the total cost of the segmentation.
+  double optimization_cutoff_fraction = 5 [default = 0.001];
+
+  // If a segment has a cost delta to be moved into the initial font less than this value then,
+  // it will be moved into the initial font. Units are bytes.
+  double init_font_merge_threshold = 6 [default = -70];
+}
+
+// The merger will choose segments to merge based on a heuristic which primarily utilizes
+// the input ordering of segments. It aims to get patch sizes somwhere between a supplied
+// min and max value. It assumes the input segments are in frequency order (from most to least)
+// by the given segment ids.
+message HeuristicConfiguration {
+  // Segments will be merged to try and get patch sizes between this min and max.
+  uint32 min_patch_size = 1 [default = 0];
+  uint32 max_patch_size = 2 [default = 4294967295];
+}
