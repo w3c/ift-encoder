@@ -1,0 +1,37 @@
+edition = "2023";
+
+// A list of unicode code points.
+message Codepoints {
+  repeated uint32 values = 1;
+}
+
+// A list of codepoint set ids that reference sets in "EncoderConfig.codepoint_sets"
+message SegmentsProto {
+  repeated uint32 values = 1;
+}
+
+// A list of glyph ids
+message Glyphs {
+  repeated uint32 values = 1;
+}
+
+// Matches when the subset definition intersects codepoints OR features.
+message SegmentProto {
+  Codepoints codepoints = 1;
+  Features features = 2;
+}
+// A list of open type layout feature tags.
+message Features {
+  repeated string values = 1;
+}
+
+// A variable font design space.
+message DesignSpace {
+  // Map from axis tag to range on that axis.
+  map<string, AxisRangeProto> ranges = 1;
+}
+
+message AxisRangeProto {
+  float start = 1;
+  float end = 2;
+}

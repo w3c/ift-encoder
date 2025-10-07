@@ -1,11 +1,16 @@
 proto_library(
     name = "segmentation_plan_proto",
     srcs = ["segmentation_plan.proto"],
+    deps = [
+        "//ift/proto:common_proto",
+    ],
 )
 
 cc_proto_library(
     name = "segmentation_plan_cc_proto",
-    deps = [":segmentation_plan_proto"],
+    deps = [
+        ":segmentation_plan_proto",
+    ],
     visibility = [
         "//ift/encoder:__pkg__",
     ]
