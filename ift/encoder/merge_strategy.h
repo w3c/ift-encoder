@@ -140,20 +140,6 @@ class MergeStrategy {
     init_font_merge_threshold_ = value;
   }
 
-  // Configures the brotli quality used when calculating patch sizes.
-  // Defaults to 8.
-  //
-  // Higher qualities will result in more accurate patch
-  // size calculations but can significantly increase calculation times.
-  //
-  // Inversely, lower qualities will result in less accurate patch size
-  // calculations, but can speed up calculation times.
-  void SetBrotliQuality(uint32_t value) {
-    brotli_quality_ = std::max(std::min(value, 11u), 1u);
-  }
-
-  uint32_t BrotliQuality() const { return brotli_quality_; }
-
  private:
   MergeStrategy(bool use_costs, uint32_t network_overhead_cost,
                 uint32_t min_group_size, uint32_t patch_size_min_bytes,
@@ -170,9 +156,6 @@ class MergeStrategy {
   uint32_t min_group_size_;
   uint32_t patch_size_min_bytes_;
   uint32_t patch_size_max_bytes_;
-  // 9 and above are quite slow given the number of compressions that need to be
-  // performed.
-  uint32_t brotli_quality_ = 8;
   double optimization_cutoff_fraction_ = 0.001;
   std::optional<double> init_font_merge_threshold_ = std::nullopt;
 

@@ -85,6 +85,8 @@ ABSL_FLAG(std::optional<double>, init_font_merge_threshold, std::nullopt,
           "Merge all segments into the init font where the cost delta is less "
           "than this threshold.");
 
+// TODO XXXX add flag controlling brotli quality.
+
 ABSL_FLAG(
     int, verbosity, 0,
     "Log verbosity level from. 0 is least verbose, higher values are more.");
