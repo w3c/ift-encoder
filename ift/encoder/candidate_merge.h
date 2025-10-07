@@ -7,12 +7,12 @@
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
 #include "ift/encoder/segment.h"
-#include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
 
+class Merger;
 class CandidateMergeTest;
 
 struct CandidateMerge {
@@ -142,10 +142,10 @@ struct CandidateMerge {
   }
 
   // Applies this merge operation to the given SegmentationContext.
-  absl::StatusOr<common::GlyphSet> Apply(SegmentationContext& context);
+  absl::StatusOr<common::GlyphSet> Apply(Merger& context);
 
  private:
-  absl::Status ApplyPatchMerge(SegmentationContext& context);
+  absl::Status ApplyPatchMerge(Merger& context);
 
  public:
   // Assess the results of merge base_segment_index with segments_to_merge
@@ -156,7 +156,7 @@ struct CandidateMerge {
   //
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessSegmentMerge(
-      SegmentationContext& context, segment_index_t base_segment_index,
+      Merger& context, segment_index_t base_segment_index,
       const common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
@@ -169,23 +169,22 @@ struct CandidateMerge {
   //
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessPatchMerge(
-      SegmentationContext& context, segment_index_t base_segment_index,
+      Merger& context, segment_index_t base_segment_index,
       const common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
   // Computes the estimated size of the patch for a segment and returns true if
   // it is below the minimum.
   static absl::StatusOr<bool> IsPatchTooSmall(
-      SegmentationContext& context, segment_index_t base_segment_index,
+      Merger& context, segment_index_t base_segment_index,
       const common::GlyphSet& glyphs);
 
   static absl::StatusOr<double> ComputeCostDelta(
-      const SegmentationContext& context,
-      const common::SegmentSet& merged_segments,
+      const Merger& context, const common::SegmentSet& merged_segments,
       std::optional<const Segment*> merged_segment, uint32_t new_patch_size);
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
-      const SegmentationContext& context, segment_index_t base_segment,
+      const Merger& context, segment_index_t base_segment,
       const common::GlyphSet& base_glyphs,
       const common::SegmentSet& target_segments,
       const common::GlyphSet& target_glyphs,

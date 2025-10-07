@@ -12,7 +12,6 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
@@ -42,18 +41,16 @@ class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments,
-                      MergeStrategy strategy)
-      : patch_size_cache(
-            new PatchSizeCacheImpl(face, strategy.BrotliQuality())),
+                      uint32_t brotli_quality)
+      : patch_size_cache(new PatchSizeCacheImpl(face, brotli_quality)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(segments, initial_segment, glyph_closure_cache),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(segments, hb_face_get_glyph_count(face)),
-        merge_strategy_(std::move(strategy)),
-        optimization_cutoff_segment_(UINT32_MAX) {
-    ComputeActiveSegments();
-  }
+        brotli_quality_(brotli_quality) {}
+
+  unsigned BrotliQuality() const { return brotli_quality_; }
 
   // Convert the information in this context into a finalized GlyphSegmentation
   // representation.
@@ -65,28 +62,7 @@ class SegmentationContext {
     return segmentation;
   }
 
-  const common::SegmentSet& ActiveSegments() const { return active_segments_; }
-
   const common::SegmentSet& InertSegments() const { return inert_segments_; }
-
-  segment_index_t OptimizationCutoffSegment() const {
-    return optimization_cutoff_segment_;
-  }
-
-  common::SegmentSet CutoffSegments() const {
-    common::SegmentSet result;
-
-    unsigned num_segments = SegmentationInfo().Segments().size();
-    segment_index_t start = OptimizationCutoffSegment();
-    if (!num_segments || start > num_segments - 1) {
-      return result;
-    }
-
-    result.insert_range(start, num_segments - 1);
-    return result;
-  }
-
-  const MergeStrategy& GetMergeStrategy() const { return merge_strategy_; }
 
   const RequestedSegmentationInformation& SegmentationInfo() const {
     return segmentation_info_;
@@ -99,8 +75,6 @@ class SegmentationContext {
                                const Segment& merged_segment, bool is_inert) {
     unsigned count =
         segmentation_info_.AssignMergedSegment(base, to_merge, merged_segment);
-    active_segments_.subtract(to_merge);
-    active_segments_.insert(base);
     inert_segments_.subtract(to_merge);
     if (is_inert) {
       inert_segments_.insert(base);
@@ -108,30 +82,6 @@ class SegmentationContext {
       inert_segments_.erase(base);
     }
     return count;
-  }
-
-  absl::Status InitOptimizationCutoff() {
-    if (GetMergeStrategy().UseCosts()) {
-      optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
-      if (optimization_cutoff_segment_ < segmentation_info_.Segments().size()) {
-        VLOG(0) << "Cutting off optimization at segment "
-                << optimization_cutoff_segment_ << ", P("
-                << optimization_cutoff_segment_ << ") = "
-                << segmentation_info_.Segments()[optimization_cutoff_segment_]
-                       .Probability();
-      } else {
-        VLOG(0) << "No optimization cutoff.";
-      }
-    }
-    return absl::OkStatus();
-  }
-
-  // Marks a segment as being finished being optimized.
-  //
-  // This will stop the merging iteration from doing any further
-  // processing on this segment.
-  void MarkFinished(segment_index_t segment) {
-    active_segments_.erase(segment);
   }
 
   /*
@@ -159,8 +109,6 @@ class SegmentationContext {
 
     segmentation_info_.ReassignInitSubset(glyph_closure_cache,
                                           std::move(new_def), removed_segments);
-    active_segments_.clear();
-    ComputeActiveSegments();
 
     // All segments depend on the init subset def, so we must reprocess
     // everything. First reset grouping information:
@@ -181,8 +129,6 @@ class SegmentationContext {
     TRYV(GroupGlyphs(all_glyphs));
     glyph_closure_cache.LogClosureCount(
         "Segmentation reprocess for init def change.");
-
-    TRYV(InitOptimizationCutoff());
 
     return absl::OkStatus();
   }
@@ -212,14 +158,6 @@ class SegmentationContext {
   }
 
  private:
-  void ComputeActiveSegments() {
-    for (unsigned i = 0; i < segmentation_info_.Segments().size(); i++) {
-      if (!segmentation_info_.Segments()[i].Definition().Empty()) {
-        active_segments_.insert(i);
-      }
-    }
-  }
-
   /*
    * Ensures that the produce segmentation is:
    * - Disjoint (no duplicated glyphs) and doesn't overlap what's in the initial
@@ -254,14 +192,11 @@ class SegmentationContext {
   GlyphGroupings glyph_groupings;
 
  private:
-  MergeStrategy merge_strategy_;
-
   // == Merging Segment metadata
   // segments that don't interact with anything
   common::SegmentSet inert_segments_;
-  // segments that are non-empty, and still need processing for merging.
-  common::SegmentSet active_segments_;
-  segment_index_t optimization_cutoff_segment_;
+
+  unsigned brotli_quality_;
 };
 
 }  // namespace ift::encoder

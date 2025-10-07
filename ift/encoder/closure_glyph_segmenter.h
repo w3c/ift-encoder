@@ -44,7 +44,8 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      std::optional<MergeStrategy> strategy = std::nullopt) const;
+      std::optional<MergeStrategy> strategy = std::nullopt,
+      uint32_t brotli_quality = 8) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.
@@ -54,7 +55,7 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<Segment> segments, MergeStrategy merge_strategy) const;
+      std::vector<Segment> segments, uint32_t brotli_quality = 8) const;
 
   /*
    * Computes the total cost (expected number of bytes transferred) for a given
@@ -63,9 +64,6 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<SegmentationCost> TotalCost(
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
       const freq::ProbabilityCalculator& probability_calculator) const;
-
- private:
-  absl::Status MoveSegmentsToInitFont(SegmentationContext& context) const;
 };
 
 }  // namespace ift::encoder

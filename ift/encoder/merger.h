@@ -1,6 +1,8 @@
 #ifndef IFT_ENCODER_MERGER_
 #define IFT_ENCODER_MERGER_
 
+#include <cstdint>
+
 #include "common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/merge_strategy.h"
@@ -16,13 +18,19 @@ namespace ift::encoder {
 // via a provided segmentation context.
 class Merger {
  public:
-  Merger(SegmentationContext& context, MergeStrategy strategy,
-         common::SegmentSet candidate_segments,
-         segment_index_t optimization_cutoff_segment)
-      : context_(&context),
-        strategy_(strategy),
-        candidate_segments_(candidate_segments),
-        optimization_cutoff_segment_(optimization_cutoff_segment) {}
+  static absl::StatusOr<Merger> New(SegmentationContext& context,
+                                    MergeStrategy strategy) {
+    Merger merger(context, strategy,
+                  ComputeCandidateSegments(context, strategy), UINT32_MAX);
+    TRYV(merger.InitOptimizationCutoff());
+    return merger;
+  }
+
+  const MergeStrategy& Strategy() const { return strategy_; }
+
+  const SegmentationContext& Context() const { return *context_; }
+
+  SegmentationContext& Context() { return *context_; }
 
   /*
    * Searches for a merge to perform and executes it if found. Does not trigger
@@ -36,7 +44,49 @@ class Merger {
   absl::StatusOr<std::optional<std::pair<segment_index_t, common::GlyphSet>>>
   TryNextMerge();
 
+  /*
+   * This method analyzes the segments and checks to see if any should be
+   * moved into the initial font.
+   *
+   * The common example where this is useful is for segments that have 100%
+   * probability. Since these are always needed, the most efficient thing to
+   * do is to move them into the initial font so they are already loaded
+   * without needing to be part of a patch.
+   *
+   * The approach is fairly straightforward: iterate through all of the
+   * conditions/patches and compute a cost delta for moving that patch
+   * into the init font. Move only those cases whose delta is below a
+   * configurable threshold.
+   */
+  absl::Status MoveSegmentsToInitFont();
+
+  /*
+   * Recompute the state of this merger to respect changes made to the
+   * segmentation context to reconfigure the init subset.
+   */
+  absl::Status ReassignInitSubset();
+
+  /*
+   * Merges to_merge segments with base. base is set to merged_segment.
+   */
+  uint32_t AssignMergedSegment(segment_index_t base,
+                               const common::SegmentSet& to_merge,
+                               const Segment& merged_segment, bool is_inert);
+
  private:
+  Merger(SegmentationContext& context, MergeStrategy strategy,
+         common::SegmentSet candidate_segments,
+         segment_index_t optimization_cutoff_segment)
+      : context_(&context),
+        strategy_(strategy),
+        candidate_segments_(candidate_segments),
+        optimization_cutoff_segment_(optimization_cutoff_segment) {}
+
+  static common::SegmentSet ComputeCandidateSegments(
+      SegmentationContext& context, MergeStrategy strategy);
+  absl::Status InitOptimizationCutoff();
+  absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
+
   absl::StatusOr<std::optional<common::GlyphSet>> MergeSegmentWithCosts(
       uint32_t base_segment_index);
 
@@ -68,7 +118,13 @@ class Merger {
       segment_index_t base_segment_index,
       const common::SegmentSet& to_merge_segments_);
 
+  common::SegmentSet CutoffSegments() const;
+
   void MarkFinished(segment_index_t s) { candidate_segments_.erase(s); }
+
+  absl::StatusOr<bool> CheckAndApplyInitFontMove(
+      const common::SegmentSet& candidate_segments,
+      SubsetDefinition& initial_segment);
 
   // Stores the broadeder complete segmentation.
   SegmentationContext* context_;

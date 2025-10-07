@@ -65,6 +65,171 @@ Merger::TryNextMerge() {
   return std::nullopt;
 }
 
+Status Merger::MoveSegmentsToInitFont() {
+  if (!strategy_.InitFontMergeThreshold().has_value()) {
+    return absl::FailedPreconditionError(
+        "Cannot be called when there is no merge threshold configured.");
+  }
+
+  VLOG(0) << "Checking if there are any segments which should be moved into "
+             "the initial font.";
+
+  SubsetDefinition initial_segment =
+      Context().SegmentationInfo().InitFontSegment();
+  bool change_made;
+  do {
+    // TODO(garretrieger): as an optimization probably want to avoid rechecking
+    //   segments that have previously been assessed for move into init font.
+    //   alternatively should be able to modify this to not immediately apply
+    //   the move, but scan all options and collect the set of segments to move
+    //   then repeat analysis until no changes.
+    // TODO(garretrieger): consider reworking this using gids instead of
+    //  codepoints. That is specify init font def in terms of gids. That will
+    //  more closely match the intention of merging a specific patch into the
+    //  init font. Will need to modify segmentation plan to support init font
+    //  gid set.
+    // TODO(garretrieger): should prune codepoints that are pulled into the init
+    //   font from the segments. Will avoid having noop segments (segments
+    //   with codepoints but no interactions/patches).
+    SegmentSet to_check_individually =
+        Context().glyph_groupings.AllDisjunctiveSegments();
+    SegmentSet excluded = CutoffSegments();
+    to_check_individually.subtract(excluded);
+
+    change_made = false;
+    for (segment_index_t s : to_check_individually) {
+      SegmentSet candidate_segments{s};
+      change_made =
+          TRY(CheckAndApplyInitFontMove(candidate_segments, initial_segment));
+      if (change_made) {
+        break;
+      }
+    }
+
+    if (change_made) {
+      continue;
+    }
+
+    for (const auto& [condition, _] :
+         Context().glyph_groupings.ConditionsAndGlyphs()) {
+      if (condition.conditions().size() <= 1 ||
+          condition.TriggeringSegments().intersects(excluded)) {
+        // All size 1 conditions are disjunctive and handled in the previous
+        // loop. Since this is conjunction, having an excluded segment in it's
+        // condition makes the probability near 0.
+        continue;
+      }
+
+      change_made = TRY(CheckAndApplyInitFontMove(
+          condition.TriggeringSegments(), initial_segment));
+      if (change_made) {
+        break;
+      }
+    }
+  } while (change_made);
+
+  VLOG(0) << "Initial font now has " << initial_segment.codepoints.size()
+          << " codepoints.";
+  return absl::OkStatus();
+}
+
+Status Merger::ReassignInitSubset() {
+  candidate_segments_ = ComputeCandidateSegments(Context(), strategy_);
+  TRYV(InitOptimizationCutoff());
+  return absl::OkStatus();
+}
+
+uint32_t Merger::AssignMergedSegment(segment_index_t base,
+                                     const common::SegmentSet& to_merge,
+                                     const Segment& merged_segment,
+                                     bool is_inert) {
+  candidate_segments_.subtract(to_merge);
+  candidate_segments_.insert(base);
+  return Context().AssignMergedSegment(base, to_merge, merged_segment,
+                                       is_inert);
+}
+
+SegmentSet Merger::ComputeCandidateSegments(SegmentationContext& context,
+                                            MergeStrategy strategy) {
+  SegmentSet candidate_segments;
+  // TODO XXXXX add a filter set to merge strategy to restrict active segments
+  // to a subset.
+  for (unsigned i = 0; i < context.SegmentationInfo().Segments().size(); i++) {
+    if (!context.SegmentationInfo().Segments()[i].Definition().Empty()) {
+      candidate_segments.insert(i);
+    }
+  }
+  return candidate_segments;
+}
+
+Status Merger::InitOptimizationCutoff() {
+  if (strategy_.UseCosts()) {
+    optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
+    if (optimization_cutoff_segment_ <
+        context_->SegmentationInfo().Segments().size()) {
+      VLOG(0) << "Cutting off optimization at segment "
+              << optimization_cutoff_segment_ << ", P("
+              << optimization_cutoff_segment_ << ") = "
+              << context_->SegmentationInfo()
+                     .Segments()[optimization_cutoff_segment_]
+                     .Probability();
+    } else {
+      VLOG(0) << "No optimization cutoff.";
+    }
+  }
+  return absl::OkStatus();
+}
+
+StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
+  // For this computation to keep things simple we consider only exclusive
+  // segments.
+  //
+  // Since this is just meant to compute a rough cutoff point below which
+  // probabilites are too small to have any real impact on the final costs,
+  // considering only exclusive segments is good enough for this calculation and
+  // significantly simplifies things.
+
+  // First compute the total cost for all active segments
+  double total_cost = 0.0;
+  double overhead = strategy_.NetworkOverheadCost();
+  for (segment_index_t s : candidate_segments_) {
+    auto segment_glyphs = context_->glyph_groupings.ExclusiveGlyphs(s);
+    if (segment_glyphs.empty()) {
+      continue;
+    }
+
+    double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
+    double probability =
+        context_->SegmentationInfo().Segments()[s].Probability();
+    total_cost += probability * (size + overhead);
+  }
+
+  double cutoff_tail_cost = total_cost * strategy_.OptimizationCutoffFraction();
+  segment_index_t previous_segment_index = UINT32_MAX;
+  for (auto it = candidate_segments_.rbegin(); it != candidate_segments_.rend();
+       it++) {
+    segment_index_t s = *it;
+    auto segment_glyphs = context_->glyph_groupings.ExclusiveGlyphs(s);
+    if (segment_glyphs.empty()) {
+      continue;
+    }
+
+    double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
+    double probability =
+        context_->SegmentationInfo().Segments()[s].Probability();
+    cutoff_tail_cost -= probability * (size + overhead);
+    if (cutoff_tail_cost < 0.0) {
+      // This segment puts us above the cutoff, so set the cutoff as the
+      // previous segment.
+      return previous_segment_index;
+    }
+
+    previous_segment_index = s;
+  }
+
+  return previous_segment_index;
+}
+
 StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
     uint32_t base_segment_index) {
   // TODO(garretrieger): what we are trying to solve here is effectively
@@ -145,7 +310,7 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
     return std::nullopt;
   }
 
-  return smallest_candidate_merge->Apply(*context_);
+  return smallest_candidate_merge->Apply(*this);
 }
 
 Status Merger::CollectExclusiveCandidateMerges(
@@ -177,7 +342,7 @@ Status Merger::CollectExclusiveCandidateMerges(
 
     SegmentSet triggering_segments{segment_index};
     auto candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
-        *context_, base_segment_index, triggering_segments,
+        *this, base_segment_index, triggering_segments,
         smallest_candidate_merge));
     if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
@@ -220,7 +385,7 @@ Status Merger::CollectCompositeCandidateMerges(
     }
 
     auto candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
-        *context_, base_segment_index, triggering_segments,
+        *this, base_segment_index, triggering_segments,
         smallest_candidate_merge));
     if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
@@ -230,7 +395,7 @@ Status Merger::CollectCompositeCandidateMerges(
       // For disjunctive composite patches, also consider merging just the
       // patches together.
       auto candidate_merge = TRY(CandidateMerge::AssessPatchMerge(
-          *context_, base_segment_index, triggering_segments,
+          *this, base_segment_index, triggering_segments,
           smallest_candidate_merge));
       if (candidate_merge.has_value()) {
         smallest_candidate_merge = *candidate_merge;
@@ -245,7 +410,7 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithHeuristic(
   auto base_segment_glyphs =
       context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
   if (base_segment_glyphs.empty() ||
-      !TRY(CandidateMerge::IsPatchTooSmall(*context_, base_segment_index,
+      !TRY(CandidateMerge::IsPatchTooSmall(*this, base_segment_index,
                                            base_segment_glyphs))) {
     // Patch is big enough, no merge is needed.
     return std::nullopt;
@@ -359,12 +524,51 @@ StatusOr<std::optional<GlyphSet>> Merger::TryMerge(
   // info (glyph conditions and glyph groupings) are invalidated. The set of
   // invalidated glyph ids is returned.
   auto maybe_candidate_merge = TRY(CandidateMerge::AssessSegmentMerge(
-      *context_, base_segment_index, to_merge_segments_, std::nullopt));
+      *this, base_segment_index, to_merge_segments_, std::nullopt));
   if (!maybe_candidate_merge.has_value()) {
     return std::nullopt;
   }
   auto& candidate_merge = maybe_candidate_merge.value();
-  return candidate_merge.Apply(*context_);
+  return candidate_merge.Apply(*this);
+}
+
+SegmentSet Merger::CutoffSegments() const {
+  common::SegmentSet result;
+
+  unsigned num_segments = context_->SegmentationInfo().Segments().size();
+  segment_index_t start = optimization_cutoff_segment_;
+  if (!num_segments || start > num_segments - 1) {
+    return result;
+  }
+
+  result.insert_range(start, num_segments - 1);
+  return result;
+}
+
+StatusOr<bool> Merger::CheckAndApplyInitFontMove(
+    const common::SegmentSet& candidate_segments,
+    SubsetDefinition& initial_segment) {
+  const double threshold = *strategy_.InitFontMergeThreshold();
+  const double delta = TRY(CandidateMerge::ComputeCostDelta(
+      *this, candidate_segments, std::nullopt, 0));
+
+  if (delta >= threshold * (double)candidate_segments.size()) {
+    // Merging doesn't improve cost, skip.
+    return false;
+  }
+
+  VLOG(0) << "  Moving segments " << candidate_segments.ToString()
+          << " into the initial font (cost delta = " << delta << ")";
+
+  for (segment_index_t s : candidate_segments) {
+    initial_segment.Union(
+        Context().SegmentationInfo().Segments()[s].Definition());
+  }
+
+  TRYV(Context().ReassignInitSubset(initial_segment, candidate_segments));
+  TRYV(ReassignInitSubset());
+
+  return true;
 }
 
 }  // namespace ift::encoder
