@@ -19,9 +19,9 @@ namespace ift::encoder {
 class Merger {
  public:
   static absl::StatusOr<Merger> New(SegmentationContext& context,
-                                    MergeStrategy strategy) {
-    Merger merger(context, strategy,
-                  ComputeCandidateSegments(context, strategy), UINT32_MAX);
+                                    MergeStrategy strategy,
+                                    common::SegmentSet inscope_segments) {
+    Merger merger(context, strategy, inscope_segments, UINT32_MAX);
     TRYV(merger.InitOptimizationCutoff());
     return merger;
   }
@@ -75,15 +75,19 @@ class Merger {
 
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
-         common::SegmentSet candidate_segments,
+         common::SegmentSet inscope_segments,
          segment_index_t optimization_cutoff_segment)
       : context_(&context),
         strategy_(strategy),
-        candidate_segments_(candidate_segments),
+        inscope_segments_(inscope_segments),
+        candidate_segments_(
+            ComputeCandidateSegments(*context_, strategy_, inscope_segments_)),
         optimization_cutoff_segment_(optimization_cutoff_segment) {}
 
   static common::SegmentSet ComputeCandidateSegments(
-      SegmentationContext& context, MergeStrategy strategy);
+      SegmentationContext& context, const MergeStrategy& strategy,
+      const common::SegmentSet& inscope_segments);
+
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
@@ -131,9 +135,10 @@ class Merger {
 
   // Stores the settings that configure how merging operations are
   // selected and performed.
-  MergeStrategy strategy_;
+  const MergeStrategy strategy_;
 
   // The current set of segments under consideration for being merged.
+  const common::SegmentSet inscope_segments_;
   common::SegmentSet candidate_segments_;
 
   // Segments greater than this value do not have optimization used when

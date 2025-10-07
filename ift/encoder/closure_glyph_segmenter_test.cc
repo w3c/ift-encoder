@@ -11,11 +11,13 @@
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
 
+using absl::btree_map;
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_face;
+using common::SegmentSet;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
 
@@ -951,6 +953,187 @@ p0: { gid37 }
 if (s1) then p0
 )");
 }
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
+  UnicodeFrequencies group1_freq{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 100}, {{'b', 'b'}, 100}, {{'c', 'c'}, 95},
+      {{'d', 'd'}, 95},  {{'e', 'e'}, 5},   {{'f', 'f'}, 5},   {{'o', 'o'}, 5}};
+
+  UnicodeFrequencies group2_freq{
+      {{' ', ' '}, 100}, {{'g', 'g'}, 100}, {{'h', 'h'}, 90},
+      {{'i', 'i'}, 90},  {{'j', 'j'}, 90},  {{'k', 'k'}, 5},
+      {{'l', 'l'}, 5},   {{'m', 'm'}, 5},   {{'n', 'n'}, 5},
+  };
+
+  // {a} is shared
+  // {b, g} is ungrouped
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 2, 3, 4, 5, 14},
+       *MergeStrategy::CostBased(std::move(group1_freq), 75, 1)},
+      {{0, 7, 8, 9, 10, 11, 12, 13},
+       *MergeStrategy::CostBased(std::move(group2_freq), 75, 2)},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {{'a'},
+                                                          {'b'},
+                                                          {'c'},
+                                                          {'d'},
+                                                          {'e'},
+                                                          {'f'},
+                                                          {'g'},
+                                                          {'h'},
+                                                          {'i'},
+                                                          {'j'},
+                                                          {'k'},
+                                                          {'l'},
+                                                          {'m'},
+                                                          {'n'},
+                                                          {'o'}},
+                                                         merge_groups, 8);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'c', 'd'},
+      {},
+      {'e'},
+      {'f'},
+      {'o'},
+      // Group 2
+      {'h', 'i', 'j'},
+      {},
+      {},
+      {'k', 'l'},
+      {},
+      {'m', 'n'},
+      {},
+      // Shared
+      {'a'},
+      // Ungrouped
+      {'b'},
+      {'g'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid71, gid72 }
+p1: { gid73 }
+p2: { gid74 }
+p3: { gid83 }
+p4: { gid76, gid77, gid78 }
+p5: { gid79, gid80 }
+p6: { gid81, gid82 }
+p7: { gid69 }
+p8: { gid70 }
+p9: { gid75 }
+p10: { gid444, gid446 }
+p11: { gid445, gid447 }
+if (s0) then p0
+if (s2) then p1
+if (s3) then p2
+if (s4) then p3
+if (s5) then p4
+if (s8) then p5
+if (s10) then p6
+if (s12) then p7
+if (s13) then p8
+if (s14) then p9
+if (s3 AND s5) then p10
+if (s3 AND s8) then p11
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
+  UnicodeFrequencies group1_freq{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 100}, {{'b', 'b'}, 100}, {{'c', 'c'}, 95},
+      {{'d', 'd'}, 95},  {{'e', 'e'}, 5},   {{'f', 'f'}, 5},   {{'o', 'o'}, 5}};
+
+  UnicodeFrequencies group2_freq{
+      {{' ', ' '}, 100}, {{'g', 'g'}, 100}, {{'h', 'h'}, 90},
+      {{'i', 'i'}, 90},  {{'j', 'j'}, 90},  {{'k', 'k'}, 5},
+      {{'l', 'l'}, 4},   {{'m', 'm'}, 3},   {{'n', 'n'}, 2},
+  };
+
+  // {a} is shared
+  // {b, g} is ungrouped
+  MergeStrategy s1 = *MergeStrategy::CostBased(std::move(group1_freq), 75, 1);
+  s1.SetInitFontMergeThreshold(-70);
+  MergeStrategy s2 = *MergeStrategy::CostBased(std::move(group2_freq), 75, 2);
+  s2.SetInitFontMergeThreshold(-70);
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1, 2, 3, 4, 5, 6}, s1},
+      {{7, 8, 9, 10, 11, 12, 13, 14}, s2},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {{'a'},
+                                                          {'b'},
+                                                          {'c'},
+                                                          {'d'},
+                                                          {'e'},
+                                                          {'f'},
+                                                          {'g'},
+                                                          {'h'},
+                                                          {'i'},
+                                                          {'j'},
+                                                          {'k'},
+                                                          {'l'},
+                                                          {'m'},
+                                                          {'n'},
+                                                          {'o'}},
+                                                         merge_groups, 8);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Only segments from the first group are eligible to be moved to the init font.
+  // so {g, h, i} will not be moved despite otherwise being good candidates.
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {},
+      {},
+      {},
+      {},
+      {'e'},
+      {'f'},
+      {'g'},
+      // Group 2
+      {'h', 'i', 'j'},
+      {},
+      {},
+      {'k', 'l'},
+      {},
+      {'m', 'n'},
+      {},
+      {'o'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69, gid70, gid71, gid72 }
+p0: { gid73 }
+p1: { gid74 }
+p2: { gid75 }
+p3: { gid76, gid77, gid78 }
+p4: { gid79, gid80 }
+p5: { gid81, gid82 }
+p6: { gid83 }
+p7: { gid444, gid446 }
+p8: { gid445, gid447 }
+if (s4) then p0
+if (s5) then p1
+if (s6) then p2
+if (s7) then p3
+if (s10) then p4
+if (s12) then p5
+if (s14) then p6
+if (s5 AND s7) then p7
+if (s5 AND s10) then p8
+)");
+}
+
+// TODO(garretrieger): test that segments are excluded by init font segment. ie. if a segment is present
+//                     in the init font then it should be cleared out in the segmentation.
 
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
