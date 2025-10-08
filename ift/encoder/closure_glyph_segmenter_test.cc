@@ -1086,8 +1086,9 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
                                                          merge_groups, 8);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  // Only segments from the first group are eligible to be moved to the init font.
-  // so {g, h, i} will not be moved despite otherwise being good candidates.
+  // Only segments from the first group are eligible to be moved to the init
+  // font. so {g, h, i} will not be moved despite otherwise being good
+  // candidates.
   std::vector<SubsetDefinition> expected_segments = {
       // Group 1
       {},
@@ -1132,8 +1133,101 @@ if (s5 AND s10) then p8
 )");
 }
 
-// TODO(garretrieger): test that segments are excluded by init font segment. ie. if a segment is present
-//                     in the init font then it should be cleared out in the segmentation.
+TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
+  UnicodeFrequencies group1_freq{
+      {{' ', ' '}, 100},
+      {{'f', 'f'}, 100},
+      {{'g', 'g'}, 5},
+  };
+
+  UnicodeFrequencies group2_freq{
+      {{' ', ' '}, 100},
+      {{'i', 'i'}, 100},
+      {{'j', 'j'}, 5},
+  };
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1}, *MergeStrategy::CostBased(std::move(group1_freq), 75, 1)},
+      {{2, 3}, *MergeStrategy::CostBased(std::move(group2_freq), 75, 1)},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {
+                                                             {'f'},
+                                                             {'g'},
+                                                             {'i'},
+                                                             {'j'},
+                                                         },
+                                                         merge_groups, 8);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // f + i would normally be a good merge, but here it's skipped since it
+  // spans merge groups.
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'f'},
+      {'g'},
+      {'i'},
+      {'j'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid74 }
+p1: { gid75 }
+p2: { gid77 }
+p3: { gid78 }
+p4: { gid444, gid446 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if (s0 AND s2) then p4
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_Heuristic) {
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1}, MergeStrategy::Heuristic(10000)},
+      {{2, 3}, MergeStrategy::Heuristic(10000)},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {
+                                                             {'f'},
+                                                             {'g'},
+                                                             {'i'},
+                                                             {'j'},
+                                                         },
+                                                         merge_groups, 8);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // f + i would normally be a good merge, but here it's skipped since it
+  // spans merge groups.
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'f', 'g'},
+      {},
+      {'i', 'j'},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid74, gid75 }
+p1: { gid77, gid78 }
+p2: { gid444, gid446 }
+if (s0) then p0
+if (s2) then p1
+if (s0 AND s2) then p2
+)");
+}
+
+// TODO XXXXX does composite merging respect the cost cutoff?
+
+// TODO(garretrieger): test that segments are excluded by init font segment. ie.
+// if a segment is present in the init font then it should be cleared out in the
+// segmentation.
 
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
