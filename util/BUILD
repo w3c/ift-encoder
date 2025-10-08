@@ -36,6 +36,7 @@ cc_binary(
         "//ift",
         "//ift/encoder",
         "//common",
+        ":load_codepoints",
         ":segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
@@ -70,6 +71,7 @@ cc_binary(
         "//ift",
         "//ift/encoder",
         "//ift/freq",
+        "//ift/proto:segmenter_config_cc_proto",
         "//common",
         ":segmentation_plan_cc_proto",
         ":load_codepoints",
@@ -162,6 +164,7 @@ cc_binary(
         "iftb2config.cc",
     ],
     deps = [
+        ":load_codepoints",
         ":convert_iftb",
         ":segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_set",

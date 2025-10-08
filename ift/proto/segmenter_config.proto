@@ -3,15 +3,37 @@ edition = "2023";
 import "ift/proto/common.proto";
 
 message SegmenterConfig {
+
+  // These two fields specify the set of codepoints and layout feature
+  // tags that should be placed into the initial font, and hence be always
+  // available.
+  SegmentProto initial_segment = 1;
+
   // The set of segments the font is initially broken up into.
   // The key in the map is an ID used to refer to the segment
   // in other parts of the config. Segments must be disjoint.
-  map<uint32, SegmentProto> segments = 1;
+  //
+  // If this is not specified then an initial segmentation where
+  // each codepoint in the font is placed into it's own segment
+  // will be used. In this case each segment id is the value of
+  // the codepoint in that segment
+  map<uint32, SegmentProto> segments = 2;
+
+  // When generating compressed patches (to evaluate their size) this is the brotli quality
+  // level used. Segmentation is typically bottle necked on brotli compression so higher values
+  // increase segmentation times, but yield more accurate results.
+  uint32 brotli_quality = 3 [default = 8];
+
+  // These base configs define the common config setings used by the merge groups.
+  // Each individual merge groups config is created by starting with the base config of the
+  // matching type and then overiding any fields specified in the merge group config.
+  HeuristicConfiguration base_heuristic_config = 4;
+  CostConfiguration base_cost_config = 5;
 
   // Merge groups specify how merging will be performed for groups of segments.
   // Any segments that are not covered by any merge group will not be merged.
   // Merge groups are not required to be disjoint and may have overlapping segments.
-  repeated MergeGroup merge_group = 2;
+  repeated MergeGroup merge_groups = 6;
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
@@ -19,16 +41,14 @@ message SegmenterConfig {
 // Each merge group has it's own configuration and frequency data.
 message MergeGroup {
   // The set of segments that this merge group covers. May overlap with other merge groups.
+  // If this is not specified and a heuristic config is used, then it will default to all segments.
+  // If this is not specified and a cost config is used, then this will default to the set of
+  // segments the provided frequency data covers.
   SegmentsProto segment_ids = 1;
 
-  // When generating compressed patches (to evaluate their size) this is the brotli quality
-  // level used. Segmentation is typically bottle necked on brotli compression so higher values
-  // increase segmentation times, but yield more accurate results.
-  uint32 brotli_quality = 2 [default = 8];
-
   oneof config {
-    HeuristicConfiguration heuristic_config = 3;
-    CostConfiguration cost_config = 4;
+    HeuristicConfiguration heuristic_config = 2;
+    CostConfiguration cost_config = 3;
   }
 }
 
@@ -74,6 +94,9 @@ message CostConfiguration {
 // the input ordering of segments. It aims to get patch sizes somwhere between a supplied
 // min and max value. It assumes the input segments are in frequency order (from most to least)
 // by the given segment ids.
+//
+// This will produce lower quality segmentations, but in many cases is much faster then cost
+// based analysis.
 message HeuristicConfiguration {
   // Segments will be merged to try and get patch sizes between this min and max.
   uint32 min_patch_size = 1 [default = 0];

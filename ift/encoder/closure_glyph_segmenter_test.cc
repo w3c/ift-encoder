@@ -1224,13 +1224,9 @@ if (s0 AND s2) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, CompositeMerge_Cutoff) {
-
   UnicodeFrequencies freq{
-      {{' ', ' '}, 100},
-      {{'g', 'g'}, 100},
-      {{'j', 'j'}, 100},
-      {{'f', 'f'}, 99},
-      {{'i', 'i'}, 99},
+      {{' ', ' '}, 100}, {{'g', 'g'}, 100}, {{'j', 'j'}, 100},
+      {{'f', 'f'}, 99},  {{'i', 'i'}, 99},
   };
 
   MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq), 75, 1);

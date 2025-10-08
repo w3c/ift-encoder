@@ -216,6 +216,16 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   ClassifySegments(subset_definitions, merge_groups, ungrouped_segments,
                    shared_segments);
 
+  VLOG(0) << "Segment classification: " << std::endl
+          << "  "
+          << subset_definitions.size() - ungrouped_segments.size() -
+                 shared_segments.size()
+          << " segments in exactly one merge groups" << std::endl
+          << "  " << shared_segments.size()
+          << " segments that in two or more merge groups" << std::endl
+          << "  " << ungrouped_segments.size()
+          << " segments that are ungrouped";
+
   std::vector<ProbabilityBound> segment_probabilities =
       ComputeSegmentProbabilities(subset_definitions, merge_groups);
   std::vector<SegmentOrdering> ordering;
