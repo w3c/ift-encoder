@@ -435,4 +435,22 @@ TEST_F(IntSetTest, Intersects) {
   ASSERT_TRUE(set5.intersects(set1));
 }
 
+TEST_F(IntSetTest, Invert) {
+  IntSet set{2, 9};
+  set.invert();
+
+  ASSERT_FALSE(set.contains(2));
+  ASSERT_FALSE(set.contains(9));
+
+  ASSERT_TRUE(set.contains(1));
+  ASSERT_TRUE(set.contains(3));
+  ASSERT_TRUE(set.contains(8));
+  ASSERT_TRUE(set.contains(10));
+
+  set.erase(20);
+
+  set.invert();
+  ASSERT_EQ(set, (IntSet{2, 9, 20}));
+}
+
 }  // namespace common
