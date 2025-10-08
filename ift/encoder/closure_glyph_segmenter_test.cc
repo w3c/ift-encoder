@@ -1223,7 +1223,48 @@ if (s0 AND s2) then p2
 )");
 }
 
-// TODO XXXXX does composite merging respect the cost cutoff?
+TEST_F(ClosureGlyphSegmenterTest, CompositeMerge_Cutoff) {
+
+  UnicodeFrequencies freq{
+      {{' ', ' '}, 100},
+      {{'g', 'g'}, 100},
+      {{'j', 'j'}, 100},
+      {{'f', 'f'}, 99},
+      {{'i', 'i'}, 99},
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.50);
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {
+                                                             {'f'},
+                                                             {'g'},
+                                                             {'i'},
+                                                             {'j'},
+                                                         },
+                                                         std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'g', 'j'},
+      {},
+      {'f'},
+      {'i'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid75, gid78 }
+p1: { gid74 }
+p2: { gid77 }
+p3: { gid444, gid446 }
+if (s0) then p0
+if (s2) then p1
+if (s3) then p2
+if (s2 AND s3) then p3
+)");
+}
 
 // TODO(garretrieger): test that segments are excluded by init font segment. ie.
 // if a segment is present in the init font then it should be cleared out in the

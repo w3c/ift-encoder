@@ -381,7 +381,15 @@ Status Merger::CollectCompositeCandidateMerges(
     }
 
     SegmentSet triggering_segments = next_condition.TriggeringSegments();
-    // TODO XXXX cutoff if all segments are above the cutoff threshold.
+
+    std::optional<unsigned> min = triggering_segments.min();
+    if (min.has_value() && min >= optimization_cutoff_segment_) {
+      // Don't consider merges where all triggering segment are cutoff
+      // the probability of these is too low to significantly impact overall
+      // cost
+      continue;
+    }
+
     if (!triggering_segments.intersects(candidate_segments_) ||
         !triggering_segments.is_subset_of(inscope_segments_)) {
       // At least one active segment must be present, otherwise this is a
