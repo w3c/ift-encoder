@@ -176,6 +176,21 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "segmenter_config_util_test",
+    size = "small",
+    srcs = [
+        "segmenter_config_util_test.cc",
+    ],
+    data = [
+        "testdata/test_freq_data.riegeli",
+    ],
+    deps = [
+        ":segmenter_config_util",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_binary(
     name = "iftb2config",
     srcs = [

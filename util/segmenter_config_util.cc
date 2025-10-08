@@ -1,19 +1,21 @@
 #include "util/segmenter_config_util.h"
 
+#include <cstdint>
+
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/merge_strategy.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "util/load_codepoints.h"
-#include "ift/encoder/subset_definition.h"
 
 using absl::btree_map;
 using absl::flat_hash_map;
 using absl::StatusOr;
 using common::CodepointSet;
 using common::SegmentSet;
-using ift::encoder::SubsetDefinition;
 using ift::encoder::MergeStrategy;
+using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
 
 namespace util {
@@ -55,11 +57,18 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
     return segments;
   }
 
+  // protobuf maps are unordered, so to get a consistent iteration order
+  // first convert to an ordered map (on id).
+  absl::btree_map<uint32_t, SegmentProto> ordered(config.segments().begin(),
+                                                  config.segments().end());
+
   std::vector<SubsetDefinition> segments;
   unsigned i = 0;
-  for (const auto& [id, segment] : config.segments()) {
+  for (const auto& [id, segment] : ordered) {
     segment_id_to_index[id] = i++;
-    segments.push_back(SegmentProtoToSubsetDefinition(segment));
+    SubsetDefinition def = SegmentProtoToSubsetDefinition(segment);
+    def.codepoints.intersect(font_codepoints);
+    segments.push_back(def);
   }
 
   return segments;
@@ -107,15 +116,16 @@ static SegmentSet MapToIndices(
   return mapped;
 }
 
- static MergeStrategy ProtoToStrategy(const HeuristicConfiguration& base,
-                                      const HeuristicConfiguration& config) {
+static MergeStrategy ProtoToStrategy(const HeuristicConfiguration& base,
+                                     const HeuristicConfiguration& config) {
   HeuristicConfiguration merged = base;
   merged.MergeFrom(config);
   return MergeStrategy::Heuristic(merged.min_patch_size(),
                                   merged.max_patch_size());
 }
 
-StatusOr<std::pair<SegmentSet, MergeStrategy>> SegmenterConfigUtil::ProtoToMergeGroup(
+StatusOr<std::pair<SegmentSet, MergeStrategy>>
+SegmenterConfigUtil::ProtoToMergeGroup(
     const std::vector<SubsetDefinition>& segments,
     const flat_hash_map<uint32_t, uint32_t>& id_to_index,
     const HeuristicConfiguration& base_heuristic,
@@ -152,7 +162,8 @@ StatusOr<std::pair<SegmentSet, MergeStrategy>> SegmenterConfigUtil::ProtoToMerge
   }
 }
 
-StatusOr<btree_map<SegmentSet, MergeStrategy>> SegmenterConfigUtil::ConfigToMergeGroups(
+StatusOr<btree_map<SegmentSet, MergeStrategy>>
+SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
     std::vector<SubsetDefinition>& segments) {
   flat_hash_map<uint32_t, uint32_t> segment_id_to_index;

@@ -64,6 +64,7 @@ cc_library(
         "candidate_merge.h",
         "patch_size_cache.h",
         "merge_strategy.h",
+        "merge_strategy.cc",
         "merger.cc",
         "merger.h",
 

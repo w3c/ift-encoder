@@ -77,9 +77,6 @@ using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
 using util::SegmenterConfigUtil;
 
-// TODO XXXX filter produced segments by font codepoints.
-// TODO XXXX unit tests for the config -> merge groups functionality.
-
 static StatusOr<SegmenterConfig> LoadConfig() {
   FontData config_text =
       TRY(util::LoadFile(absl::GetFlag(FLAGS_config).c_str()));

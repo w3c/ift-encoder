@@ -21,6 +21,8 @@ namespace ift::encoder {
 // parameters to that algorithm.
 class MergeStrategy {
  public:
+  friend void PrintTo(const MergeStrategy& strategy, std::ostream* os);
+
   // No merging will be performed, just produced the glyph segmentation based on
   // the provided input segments.
   static MergeStrategy None() { return Heuristic(0, UINT32_MAX); }
@@ -138,6 +140,17 @@ class MergeStrategy {
   }
   void SetInitFontMergeThreshold(std::optional<double> value) {
     init_font_merge_threshold_ = value;
+  }
+
+  bool operator==(const MergeStrategy& other) const {
+    return use_costs_ == other.use_costs_ &&
+           network_overhead_cost_ == other.network_overhead_cost_ &&
+           min_group_size_ == other.min_group_size_ &&
+           patch_size_min_bytes_ == other.patch_size_min_bytes_ &&
+           patch_size_max_bytes_ == other.patch_size_max_bytes_ &&
+           optimization_cutoff_fraction_ ==
+               other.optimization_cutoff_fraction_ &&
+           init_font_merge_threshold_ == other.init_font_merge_threshold_;
   }
 
  private:
