@@ -381,10 +381,13 @@ Status Merger::CollectCompositeCandidateMerges(
     }
 
     SegmentSet triggering_segments = next_condition.TriggeringSegments();
-    if (!triggering_segments.intersects(candidate_segments_)) {
-      // At least one active segment must be present, otherwise we can assume
-      // the composites probability is too low to contribute significantly to
-      // cost optimization.
+    // TODO XXXX cutoff if all segments are above the cutoff threshold.
+    if (!triggering_segments.intersects(candidate_segments_) ||
+        !triggering_segments.is_subset_of(inscope_segments_)) {
+      // At least one active segment must be present, otherwise this is a
+      // condition that's already been considered and rejected. Additionally,
+      // all triggering segments must be inscope otherwise this merge crosses
+      // merge group boundaries.
       continue;
     }
 
@@ -495,7 +498,8 @@ StatusOr<std::optional<GlyphSet>> Merger::TryMergingACompositeCondition(
     }
 
     SegmentSet triggering_segments = next_condition.TriggeringSegments();
-    if (!triggering_segments.contains(base_segment_index)) {
+    if (!triggering_segments.contains(base_segment_index) ||
+        !triggering_segments.is_subset_of(inscope_segments_)) {
       continue;
     }
 
