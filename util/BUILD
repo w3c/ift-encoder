@@ -74,6 +74,7 @@ cc_binary(
         "//ift/proto:segmenter_config_cc_proto",
         "//common",
         ":segmentation_plan_cc_proto",
+        ":segmenter_config_util",
         ":load_codepoints",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
@@ -118,6 +119,23 @@ cc_library(
         "@harfbuzz",
         "@riegeli//riegeli/bytes:fd_reader",
         "@riegeli//riegeli/records:record_reader",
+    ],
+)
+
+cc_library(
+    name = "segmenter_config_util",
+    srcs = [
+        "segmenter_config_util.cc",
+    ],
+    hdrs = [
+        "segmenter_config_util.h",
+    ],
+    deps = [
+        ":load_codepoints",
+        "//common",
+        "//ift/encoder",
+        "//ift/proto:segmenter_config_cc_proto",
+        "@abseil-cpp//absl/status:statusor",
     ],
 )
 
