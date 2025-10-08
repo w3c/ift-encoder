@@ -4,11 +4,32 @@
 #include <optional>
 #include <vector>
 
+#include "absl/container/btree_set.h"
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
+#include "common/font_helper.h"
+#include "common/int_set.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace util {
+
+template <typename T>
+common::IntSet Values(const T& proto_set) {
+  common::IntSet result;
+  for (uint32_t v : proto_set.values()) {
+    result.insert(v);
+  }
+  return result;
+}
+
+template <typename T>
+absl::btree_set<hb_tag_t> TagValues(const T& proto_set) {
+  absl::btree_set<hb_tag_t> result;
+  for (const auto& tag : proto_set.values()) {
+    result.insert(common::FontHelper::ToTag(tag));
+  }
+  return result;
+}
 
 // Loads the file at path and returns it's binary contents.
 absl::StatusOr<common::FontData> LoadFile(const char* path);

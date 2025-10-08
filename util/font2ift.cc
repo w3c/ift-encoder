@@ -21,6 +21,7 @@
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
+#include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
 
 /*
@@ -75,17 +76,8 @@ using ift::encoder::SubsetDefinition;
 //                     (all glyph ids covered by a patch, all codepoints, etc,
 //                     covered by non glyph segments).
 
-StatusOr<FontData> load_file(const char* path) {
-  hb_blob_unique_ptr blob =
-      make_hb_blob(hb_blob_create_from_file_or_fail(path));
-  if (!blob.get()) {
-    return absl::NotFoundError(StrCat("File ", path, " was not found."));
-  }
-  return FontData(blob.get());
-}
-
 StatusOr<hb_face_unique_ptr> load_font(const char* filename) {
-  return TRY(load_file(filename)).face();
+  return TRY(util::LoadFile(filename)).face();
 }
 
 Status write_file(const std::string& name, const FontData& data) {
@@ -135,24 +127,6 @@ int write_output(const Compiler::Encoding& encoding) {
   return 0;
 }
 
-template <typename T>
-IntSet values(const T& proto_set) {
-  IntSet result;
-  for (uint32_t v : proto_set.values()) {
-    result.insert(v);
-  }
-  return result;
-}
-
-template <typename T>
-btree_set<hb_tag_t> tag_values(const T& proto_set) {
-  btree_set<hb_tag_t> result;
-  for (const auto& tag : proto_set.values()) {
-    result.insert(FontHelper::ToTag(tag));
-  }
-  return result;
-}
-
 StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
   design_space_t result;
   for (const auto& [tag_str, range_proto] : proto.ranges()) {
@@ -180,7 +154,7 @@ ActivationCondition FromProto(const ActivationConditionProto& condition) {
 Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   // First configure the glyph keyed segments, including features deps
   for (const auto& [id, gids] : plan.glyph_patches()) {
-    TRYV(compiler.AddGlyphDataPatch(id, values(gids)));
+    TRYV(compiler.AddGlyphDataPatch(id, util::Values(gids)));
   }
 
   std::vector<ActivationCondition> activation_conditions;
@@ -207,9 +181,9 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   }
 
   // Initial subset definition
-  auto init_codepoints = values(plan.initial_codepoints());
-  auto init_features = tag_values(plan.initial_features());
-  auto init_segments = values(plan.initial_segments());
+  auto init_codepoints = util::Values(plan.initial_codepoints());
+  auto init_features = util::TagValues(plan.initial_features());
+  auto init_segments = util::Values(plan.initial_segments());
   auto init_design_space = TRY(to_design_space(plan.initial_design_space()));
 
   SubsetDefinition init_subset;
@@ -233,11 +207,11 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
 
   // Next configure the table keyed segments
   for (const auto& codepoints : plan.non_glyph_codepoint_segmentation()) {
-    compiler.AddNonGlyphDataSegment(values(codepoints));
+    compiler.AddNonGlyphDataSegment(util::Values(codepoints));
   }
 
   for (const auto& features : plan.non_glyph_feature_segmentation()) {
-    compiler.AddFeatureGroupSegment(tag_values(features));
+    compiler.AddFeatureGroupSegment(util::TagValues(features));
   }
 
   for (const auto& design_space_proto :
@@ -285,7 +259,7 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
 int main(int argc, char** argv) {
   auto args = absl::ParseCommandLine(argc, argv);
 
-  auto config_text = load_file(absl::GetFlag(FLAGS_plan).c_str());
+  auto config_text = util::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
   if (!config_text.ok()) {
     std::cerr << "Failed to load config file: " << config_text.status()
               << std::endl;

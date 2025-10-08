@@ -43,17 +43,8 @@ ProtoType ToSetProto(const CodepointSet& set) {
   return values;
 }
 
-static StatusOr<FontData> load_file(const char* path) {
-  hb_blob_unique_ptr blob =
-      make_hb_blob(hb_blob_create_from_file_or_fail(path));
-  if (!blob.get()) {
-    return absl::NotFoundError(StrCat("File ", path, " was not found."));
-  }
-  return FontData(blob.get());
-}
-
 static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
-  auto config_text = load_file(path);
+  auto config_text = util::LoadFile(path);
   if (!config_text.ok()) {
     return absl::NotFoundError(
         StrCat("Failed to load config file: ", config_text.status()));

@@ -17,6 +17,7 @@
 #include "common/font_data.h"
 #include "common/try.h"
 #include "util/convert_iftb.h"
+#include "util/load_codepoints.h"
 
 using absl::StatusOr;
 using absl::StrCat;
@@ -28,17 +29,8 @@ using common::make_hb_blob;
 ABSL_FLAG(std::string, font, "font.ttf",
           "The font file that corresponds to the IFTB dump.");
 
-StatusOr<FontData> load_file(const char* path) {
-  hb_blob_unique_ptr blob =
-      make_hb_blob(hb_blob_create_from_file_or_fail(path));
-  if (!blob.get()) {
-    return absl::NotFoundError(StrCat("File ", path, " was not found."));
-  }
-  return FontData(blob.get());
-}
-
 StatusOr<hb_face_unique_ptr> load_font(const char* filename) {
-  return TRY(load_file(filename)).face();
+  return TRY(util::LoadFile(filename)).face();
 }
 
 int main(int argc, char** argv) {

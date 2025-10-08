@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <utility>
 
+#include "common/int_set.h"
+
+using common::CodepointSet;
+
 namespace ift::freq {
 
 UnicodeFrequencies::UnicodeFrequencies(
@@ -56,6 +60,18 @@ double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2) const {
   // Since we don't have data  on P(cp1 n cp2), just assume the probabilities
   // for P(cp1) and P(cp2) are independent:
   return ProbabilityFor(cp1, cp1) * ProbabilityFor(cp2, cp2);
+}
+
+CodepointSet UnicodeFrequencies::CoveredCodepoints() const {
+  CodepointSet out;
+  for (const auto& [key, _] : probabilities_) {
+    uint32_t cp1 = key >> 32;
+    uint32_t cp2 = key & (uint64_t)0x00000000FFFFFFFF;
+    if (cp1 == cp2) {
+      out.insert(cp1);
+    }
+  }
+  return out;
 }
 
 }  // namespace ift::freq
