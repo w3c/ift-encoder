@@ -299,6 +299,8 @@ class IntSet {
     hb_set_symmetric_difference(set_.get(), other.set_.get());
   }
 
+  void invert() { hb_set_invert(set_.get()); }
+
   std::string ToString() const {
     std::stringstream out;
 
