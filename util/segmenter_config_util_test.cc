@@ -61,7 +61,8 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoMergeGroups) {
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{{10, 15}, {32}}));
 }
 
-TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_InitFontCodepointsExcluded) {
+TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_InitFontCodepointsExcluded) {
   SegmenterConfig config;
   config.mutable_initial_segment()->mutable_codepoints()->add_values(2);
   config.mutable_initial_segment()->mutable_codepoints()->add_values(8);

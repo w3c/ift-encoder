@@ -43,8 +43,7 @@ SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
 }
 
 std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
-    const SegmenterConfig& config,
-    const SubsetDefinition& init_segment,
+    const SegmenterConfig& config, const SubsetDefinition& init_segment,
     const CodepointSet& font_codepoints,
     flat_hash_map<uint32_t, uint32_t>& segment_id_to_index) {
   if (config.segments().empty()) {
@@ -171,11 +170,12 @@ StatusOr<btree_map<SegmentSet, MergeStrategy>>
 SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
     std::vector<SubsetDefinition>& segments) {
-
-  SubsetDefinition initial_segment = SegmentProtoToSubsetDefinition(config.initial_segment());
+  SubsetDefinition initial_segment =
+      SegmentProtoToSubsetDefinition(config.initial_segment());
 
   flat_hash_map<uint32_t, uint32_t> segment_id_to_index;
-  segments = ConfigToSegments(config, initial_segment, font_codepoints, segment_id_to_index);
+  segments = ConfigToSegments(config, initial_segment, font_codepoints,
+                              segment_id_to_index);
 
   btree_map<SegmentSet, MergeStrategy> merge_groups;
   for (const auto& merge_group : config.merge_groups()) {
