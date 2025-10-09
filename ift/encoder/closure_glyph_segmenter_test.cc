@@ -1061,7 +1061,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
   MergeStrategy s1 = *MergeStrategy::CostBased(std::move(group1_freq), 75, 1);
   s1.SetInitFontMergeThreshold(-70);
   MergeStrategy s2 = *MergeStrategy::CostBased(std::move(group2_freq), 75, 2);
-  s2.SetInitFontMergeThreshold(-70);
+  s2.SetInitFontMergeThreshold(std::nullopt);
   btree_map<SegmentSet, MergeStrategy> merge_groups{
       {{0, 1, 2, 3, 4, 5, 6}, s1},
       {{7, 8, 9, 10, 11, 12, 13, 14}, s2},
@@ -1086,9 +1086,9 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
                                                          merge_groups, 8);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  // Only segments from the first group are eligible to be moved to the init
-  // font. so {g, h, i} will not be moved despite otherwise being good
-  // candidates.
+  // Only segments from the groups that set a threshold are eligible to be moved
+  // to the init font. so {g, h, i} will not be moved despite otherwise being
+  // good candidates.
   std::vector<SubsetDefinition> expected_segments = {
       // Group 1
       {},

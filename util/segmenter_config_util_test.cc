@@ -1,5 +1,6 @@
 #include "util/segmenter_config_util.h"
 
+#include <optional>
 #include <vector>
 
 #include "absl/container/btree_map.h"
@@ -28,8 +29,9 @@ void AddSegment(SegmenterConfig& config, uint32_t id, CodepointSet codepoints) {
   }
 }
 
-MergeStrategy ExpectedCostStrategy(unsigned net_overhead,
-                                   int init_font_threshold) {
+MergeStrategy ExpectedCostStrategy(
+    unsigned net_overhead,
+    std::optional<int> init_font_threshold = std::nullopt) {
   UnicodeFrequencies freq;
   freq.Add(1, 1, 1);
 
@@ -174,6 +176,36 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsInferred_Cost) {
                               {0x47},
                           }));
 
+  ASSERT_EQ(
+      *groups,
+      (btree_map<SegmentSet, MergeStrategy>{{{2}, ExpectedCostStrategy(85)}}));
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_Cost_SetsInitFontThreshold) {
+  SegmenterConfig config;
+  auto* group = config.add_merge_groups();
+  group->mutable_cost_config()->set_path_to_frequency_data(
+      "test_freq_data.riegeli");
+  group->mutable_cost_config()->set_network_overhead_cost(85);
+  group->mutable_cost_config()->set_init_font_merge_threshold(-70);
+
+  CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb");
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              {0x40},
+                              {0x42},
+                              {0x43},
+                              {0x45},
+                              {0x47},
+                          }));
+
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
                          {{2}, ExpectedCostStrategy(85, -70)}}));
 }
@@ -253,9 +285,9 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsProvided_Cost) {
                           }));
 
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
-                         {{1}, ExpectedCostStrategy(10, -70)},
-                         {{2}, ExpectedCostStrategy(20, -70)},
-                         {{0, 2}, ExpectedCostStrategy(30, -70)},
+                         {{1}, ExpectedCostStrategy(10)},
+                         {{2}, ExpectedCostStrategy(20)},
+                         {{0, 2}, ExpectedCostStrategy(30)},
                      }));
 }
 
@@ -273,7 +305,6 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_CostRequiresFreqData) {
   ASSERT_TRUE(absl::IsInvalidArgument(groups.status())) << groups.status();
 }
 
-
 TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
   // This tests the optional addition of a catch all merge group.
   SegmenterConfig config;
@@ -285,7 +316,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
   auto* group = config.add_merge_groups();
   group->mutable_cost_config()->set_path_to_frequency_data(
       "test_freq_data.riegeli");
-    group->mutable_segment_ids()->add_values(1);
+  group->mutable_segment_ids()->add_values(1);
 
   group = config.add_merge_groups();
   group->mutable_cost_config()->set_path_to_frequency_data(
@@ -311,8 +342,8 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
                           }));
 
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
-                         {{0}, ExpectedCostStrategy(75, -70)},
-                         {{1}, ExpectedCostStrategy(75, -70)},
+                         {{0}, ExpectedCostStrategy(75)},
+                         {{1}, ExpectedCostStrategy(75)},
                          {{2, 3}, MergeStrategy::Heuristic(100)},
                      }));
 }
