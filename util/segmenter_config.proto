@@ -28,10 +28,17 @@ message SegmenterConfig {
   HeuristicConfiguration base_heuristic_config = 4;
   CostConfiguration base_cost_config = 5;
 
+  // If this is provided, then for any segments that are not covered by one of the merge groups
+  // the heuristic merger will be used to group them according to this config. The heuristic
+  // merger is used since for the ungrouped segments we do not have any available frequency data.
+  //
+  // Like the merge groups this config will be combined with base_heuristic_config.
+  HeuristicConfiguration ungrouped_config = 6;
+
   // Merge groups specify how merging will be performed for groups of segments.
   // Any segments that are not covered by any merge group will not be merged.
   // Merge groups are not required to be disjoint and may have overlapping segments.
-  repeated MergeGroup merge_groups = 6;
+  repeated MergeGroup merge_groups = 7;
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
