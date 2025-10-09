@@ -1,6 +1,6 @@
 edition = "2023";
 
-import "ift/proto/common.proto";
+import "util/common.proto";
 
 // This message is used to configure an IFT compiler to generate and IFT encoding of some input font.
 //

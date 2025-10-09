@@ -6,7 +6,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
-#include "ift/proto/segmenter_config.pb.h"
+#include "util/segmenter_config.pb.h"
 
 namespace util {
 

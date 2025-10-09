@@ -1,33 +1,3 @@
-proto_library(
-    name = "common_proto",
-    srcs = ["common.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
-)
-
-proto_library(
-    name = "segmenter_config_proto",
-    srcs = ["segmenter_config.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
-    deps = [
-        ":common_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "segmenter_config_cc_proto",
-    deps = [
-        ":segmenter_config_proto",
-    ],
-    visibility = [
-        "//ift/encoder:__pkg__",
-        "//util:__pkg__",
-    ]
-)
-
 cc_library(
   name = "proto",
   srcs = [
