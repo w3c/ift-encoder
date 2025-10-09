@@ -2,20 +2,18 @@ edition = "2023";
 
 import "util/common.proto";
 
+// This messages provides the configuration details for closure_glyph_keyed_segmenter_util
 message SegmenterConfig {
 
-  // These two fields specify the set of codepoints and layout feature
-  // tags that should be placed into the initial font, and hence be always
-  // available.
+  // Specifies the set of codepoints and layout feature tags that should be placed into the
+  // initial font, and hence be always available.
   SegmentProto initial_segment = 1;
 
-  // The set of segments the font is initially broken up into.
-  // The key in the map is an ID used to refer to the segment
-  // in other parts of the config. Segments must be disjoint.
+  // The set of segments the font is initially broken up into. The key in the map is an ID
+  // used to refer to the segment in other parts of the config. Segments must be disjoint.
   //
-  // If this is not specified then an initial segmentation where
-  // each codepoint in the font is placed into it's own segment
-  // will be used. In this case each segment id is the value of
+  // If this is not specified then an initial segmentation where each codepoint in the font
+  // is placed into it's own segment will be used. In this case each segment id is the value of
   // the codepoint in that segment
   map<uint32, SegmentProto> segments = 2;
 
@@ -82,11 +80,15 @@ message CostConfiguration {
 
   // The set of segments whose total contributition to the total cost is less than this fraction
   // will have optimization skipped. This saves spending computation on segments that have very
-  // little impact on the total cost of the segmentation.
+  // little impact on the total cost of the segmentation. Higher values will cause more segments
+  // to be cutoff.
   double optimization_cutoff_fraction = 5 [default = 0.001];
 
-  // If a segment has a cost delta to be moved into the initial font less than this value then,
-  // it will be moved into the initial font. Units are bytes.
+  // If the cost delta (bytes) to move a segment into the initial font is less than this value then,
+  // it will be moved into the initial font.
+  //
+  // Note: only the first listed merge group is eligible to have it's segments moved to the init
+  //       font.
   double init_font_merge_threshold = 6 [default = -70];
 }
 
@@ -95,7 +97,7 @@ message CostConfiguration {
 // min and max value. It assumes the input segments are in frequency order (from most to least)
 // by the given segment ids.
 //
-// This will produce lower quality segmentations, but in many cases is much faster then cost
+// This will often produce lower quality segmentations, but in many cases is much faster then cost
 // based analysis.
 message HeuristicConfiguration {
   // Segments will be merged to try and get patch sizes between this min and max.
