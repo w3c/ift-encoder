@@ -2,7 +2,7 @@ proto_library(
     name = "segmentation_plan_proto",
     srcs = ["segmentation_plan.proto"],
     deps = [
-        "//ift/proto:common_proto",
+        ":common_proto",
     ],
 )
 
@@ -25,6 +25,36 @@ cc_proto_library(
     name = "unicode_count_cc_proto",
     deps = [":unicode_count_proto"],
     visibility = ["//visibility:public"],
+)
+
+proto_library(
+    name = "common_proto",
+    srcs = ["common.proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+proto_library(
+    name = "segmenter_config_proto",
+    srcs = ["segmenter_config.proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        ":common_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "segmenter_config_cc_proto",
+    deps = [
+        ":segmenter_config_proto",
+    ],
+    visibility = [
+        "//ift/encoder:__pkg__",
+        "//util:__pkg__",
+    ]
 )
 
 cc_binary(
@@ -71,7 +101,7 @@ cc_binary(
         "//ift",
         "//ift/encoder",
         "//ift/freq",
-        "//ift/proto:segmenter_config_cc_proto",
+        ":segmenter_config_cc_proto",
         "//common",
         ":segmentation_plan_cc_proto",
         ":segmenter_config_util",
@@ -134,7 +164,7 @@ cc_library(
         ":load_codepoints",
         "//common",
         "//ift/encoder",
-        "//ift/proto:segmenter_config_cc_proto",
+        ":segmenter_config_cc_proto",
         "@abseil-cpp//absl/status:statusor",
     ],
 )

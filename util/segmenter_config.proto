@@ -1,6 +1,6 @@
 edition = "2023";
 
-import "ift/proto/common.proto";
+import "util/common.proto";
 
 message SegmenterConfig {
 

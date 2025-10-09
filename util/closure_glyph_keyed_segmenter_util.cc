@@ -23,9 +23,9 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
-#include "ift/proto/segmenter_config.pb.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
+#include "util/segmenter_config.pb.h"
 #include "util/segmenter_config_util.h"
 
 /*
