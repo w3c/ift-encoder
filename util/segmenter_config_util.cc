@@ -43,7 +43,9 @@ SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
 }
 
 std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
-    const SegmenterConfig& config, const CodepointSet& font_codepoints,
+    const SegmenterConfig& config,
+    const SubsetDefinition& init_segment,
+    const CodepointSet& font_codepoints,
     flat_hash_map<uint32_t, uint32_t>& segment_id_to_index) {
   if (config.segments().empty()) {
     // No segments provided set up our own. Each codepoint in the font is mapped
@@ -51,6 +53,9 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
     unsigned i = 0;
     std::vector<SubsetDefinition> segments;
     for (hb_codepoint_t cp : font_codepoints) {
+      if (init_segment.codepoints.contains(cp)) {
+        continue;
+      }
       segments.push_back(SubsetDefinition{cp});
       segment_id_to_index[cp] = i++;
     }
@@ -166,8 +171,11 @@ StatusOr<btree_map<SegmentSet, MergeStrategy>>
 SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
     std::vector<SubsetDefinition>& segments) {
+
+  SubsetDefinition initial_segment = SegmentProtoToSubsetDefinition(config.initial_segment());
+
   flat_hash_map<uint32_t, uint32_t> segment_id_to_index;
-  segments = ConfigToSegments(config, font_codepoints, segment_id_to_index);
+  segments = ConfigToSegments(config, initial_segment, font_codepoints, segment_id_to_index);
 
   btree_map<SegmentSet, MergeStrategy> merge_groups;
   for (const auto& merge_group : config.merge_groups()) {

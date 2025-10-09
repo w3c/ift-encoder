@@ -27,6 +27,7 @@ class SegmenterConfigUtil {
  private:
   std::vector<ift::encoder::SubsetDefinition> ConfigToSegments(
       const SegmenterConfig& config,
+      const ift::encoder::SubsetDefinition& init_segment,
       const common::CodepointSet& font_codepoints,
       absl::flat_hash_map<uint32_t, uint32_t>& segment_id_to_index);
 
