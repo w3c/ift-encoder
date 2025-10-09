@@ -184,6 +184,23 @@ SegmenterConfigUtil::ConfigToMergeGroups(
         config.base_cost_config(), merge_group)));
   }
 
+  // If provided add a final merge group that applies to any segments not yet covered.
+  if (!config.has_ungrouped_config() || segments.empty()) {
+    return merge_groups;
+  }
+
+  SegmentSet covered_segments;
+  for (const auto& [segments, _] : merge_groups) {
+    covered_segments.union_set(segments);
+  }
+
+  SegmentSet uncovered_segments;
+  uncovered_segments.insert_range(0, segments.size() - 1);
+  uncovered_segments.subtract(covered_segments);
+
+  MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(), config.ungrouped_config());
+  merge_groups.insert(std::make_pair(uncovered_segments, strategy));
+
   return merge_groups;
 }
 
