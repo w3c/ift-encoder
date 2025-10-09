@@ -92,11 +92,9 @@ message CostConfiguration {
   double optimization_cutoff_fraction = 5 [default = 0.001];
 
   // If the cost delta (bytes) to move a segment into the initial font is less than this value then,
-  // it will be moved into the initial font.
-  //
-  // Note: only the first listed merge group is eligible to have it's segments moved to the init
-  //       font.
-  double init_font_merge_threshold = 6 [default = -70];
+  // it will be moved into the initial font. If this is left unset then nothing will be moved to the
+  // init font for this group.
+  double init_font_merge_threshold = 6;
 }
 
 // The merger will choose segments to merge based on a heuristic which primarily utilizes
