@@ -85,6 +85,20 @@ class GlyphGroupings {
     return empty;
   }
 
+  // Returns the set of glyphs in the fallback (always loaded) patch.
+  common::GlyphSet FallbackGlyphs() const {
+    if (fallback_segments_.empty()) {
+      return common::GlyphSet{};
+    }
+
+    auto it = or_glyph_groups_.find(fallback_segments_);
+    if (it == or_glyph_groups_.end()) {
+      return common::GlyphSet{};
+    }
+
+    return it->second;
+  }
+
   // Returns a list of conditions which include segment.
   const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(
       segment_index_t segment) const {

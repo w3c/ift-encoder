@@ -66,6 +66,7 @@ Merger::TryNextMerge() {
 }
 
 Status Merger::MoveSegmentsToInitFont() {
+  // TODO XXXX implement fallback move to init.
   if (!strategy_.InitFontMergeThreshold().has_value()) {
     return absl::FailedPreconditionError(
         "Cannot be called when there is no merge threshold configured.");

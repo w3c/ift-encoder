@@ -51,7 +51,7 @@ class ClosureGlyphSegmenter {
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
       absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups,
-      uint32_t brotli_quality) const;
+      uint32_t brotli_quality, bool place_fallback_in_init) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.

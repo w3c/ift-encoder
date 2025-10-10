@@ -143,8 +143,8 @@ static Status Main(const std::vector<char*> args) {
 
   ClosureGlyphSegmenter segmenter;
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
-      font.get(), init_segment, segments, merge_groups,
-      config.brotli_quality()));
+      font.get(), init_segment, segments, merge_groups, config.brotli_quality(),
+      config.move_fallback_glyphs_into_initial_font()));
 
   if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
     SegmentationPlan plan = segmentation.ToSegmentationPlanProto();

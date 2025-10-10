@@ -397,6 +397,33 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
+      btree_map<SegmentSet, MergeStrategy>{}, 8, true);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 0);
+
+  ASSERT_EQ(
+      segmentation->ToString(),
+      R"(initial font: { gid0, gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
+p0: { gid3, gid9, gid155 }
+p1: { gid4, gid10, gid156 }
+p2: { gid5, gid6, gid11, gid157 }
+p3: { gid158 }
+p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
+p5: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if ((s0 OR s1)) then p4
+if ((s2 OR s3)) then p5
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   auto codepoints = common::FontHelper::ToCodepointsSet(roboto.get());
 
@@ -974,23 +1001,24 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
        *MergeStrategy::CostBased(std::move(group2_freq), 75, 2)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
-                                                         {{'a'},
-                                                          {'b'},
-                                                          {'c'},
-                                                          {'d'},
-                                                          {'e'},
-                                                          {'f'},
-                                                          {'g'},
-                                                          {'h'},
-                                                          {'i'},
-                                                          {'j'},
-                                                          {'k'},
-                                                          {'l'},
-                                                          {'m'},
-                                                          {'n'},
-                                                          {'o'}},
-                                                         merge_groups, 8);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {{'a'},
+                                          {'b'},
+                                          {'c'},
+                                          {'d'},
+                                          {'e'},
+                                          {'f'},
+                                          {'g'},
+                                          {'h'},
+                                          {'i'},
+                                          {'j'},
+                                          {'k'},
+                                          {'l'},
+                                          {'m'},
+                                          {'n'},
+                                          {'o'}},
+                                         merge_groups, 8, false);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1067,23 +1095,24 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
       {{7, 8, 9, 10, 11, 12, 13, 14}, s2},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
-                                                         {{'a'},
-                                                          {'b'},
-                                                          {'c'},
-                                                          {'d'},
-                                                          {'e'},
-                                                          {'f'},
-                                                          {'g'},
-                                                          {'h'},
-                                                          {'i'},
-                                                          {'j'},
-                                                          {'k'},
-                                                          {'l'},
-                                                          {'m'},
-                                                          {'n'},
-                                                          {'o'}},
-                                                         merge_groups, 8);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {{'a'},
+                                          {'b'},
+                                          {'c'},
+                                          {'d'},
+                                          {'e'},
+                                          {'f'},
+                                          {'g'},
+                                          {'h'},
+                                          {'i'},
+                                          {'j'},
+                                          {'k'},
+                                          {'l'},
+                                          {'m'},
+                                          {'n'},
+                                          {'o'}},
+                                         merge_groups, 8, false);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // Only segments from the groups that set a threshold are eligible to be moved
@@ -1151,14 +1180,15 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
       {{2, 3}, *MergeStrategy::CostBased(std::move(group2_freq), 75, 1)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
-                                                         {
-                                                             {'f'},
-                                                             {'g'},
-                                                             {'i'},
-                                                             {'j'},
-                                                         },
-                                                         merge_groups, 8);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'f'},
+                                             {'g'},
+                                             {'i'},
+                                             {'j'},
+                                         },
+                                         merge_groups, 8, false);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
@@ -1192,14 +1222,15 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_Heuristic) {
       {{2, 3}, MergeStrategy::Heuristic(10000)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
-                                                         {
-                                                             {'f'},
-                                                             {'g'},
-                                                             {'i'},
-                                                             {'j'},
-                                                         },
-                                                         merge_groups, 8);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'f'},
+                                             {'g'},
+                                             {'i'},
+                                             {'j'},
+                                         },
+                                         merge_groups, 8, false);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
