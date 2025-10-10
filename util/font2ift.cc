@@ -182,12 +182,14 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
 
   // Initial subset definition
   auto init_codepoints = util::Values(plan.initial_codepoints());
+  auto init_glyphs = util::Values(plan.initial_glyphs());
   auto init_features = util::TagValues(plan.initial_features());
   auto init_segments = util::Values(plan.initial_segments());
   auto init_design_space = TRY(to_design_space(plan.initial_design_space()));
 
   SubsetDefinition init_subset;
   init_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
+  init_subset.gids.insert(init_glyphs.begin(), init_glyphs.end());
 
   for (const auto segment_id : init_segments) {
     auto segment = segments.find(segment_id);

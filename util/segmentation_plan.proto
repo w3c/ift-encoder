@@ -121,6 +121,7 @@ message SegmentationPlan {
   // init_codepoint_sets contains codepoint set ids referencing "codepoint_sets". Each referenced set will be
   // unioned into initial_codepoints.
   Codepoints initial_codepoints = 8;
+  Glyphs initial_glyphs = 16;
   SegmentsProto initial_segments = 9;
   Features initial_features = 10;
   DesignSpace initial_design_space = 11;
@@ -148,6 +149,8 @@ message SegmentationPlan {
   // Parts of the fonts overall design space which the non glyph data in the font can be extended
   // for in a single jump.
   repeated DesignSpace non_glyph_design_space_segmentation = 15;
+
+  // next = 17
 }
 
 // Activated when at least one set in every group is matched and all required_features match.
