@@ -201,6 +201,10 @@ SegmenterConfigUtil::ConfigToMergeGroups(
   SegmentSet uncovered_segments;
   uncovered_segments.insert_range(0, segments.size() - 1);
   uncovered_segments.subtract(covered_segments);
+  if (uncovered_segments.empty()) {
+    // Final group is not needed.
+    return merge_groups;
+  }
 
   MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(),
                                                  config.ungrouped_config());
