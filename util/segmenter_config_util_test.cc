@@ -348,7 +348,8 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
                      }));
 }
 
-TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroupNotNeeded) {
+TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_FallbackMergeGroupNotNeeded) {
   // This tests the optional addition of a catch all merge group.
   SegmenterConfig config;
   AddSegment(config, 1, {0x41, 0x42});

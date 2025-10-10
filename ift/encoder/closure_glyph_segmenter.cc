@@ -308,7 +308,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return CodepointToGlyphSegments(face, initial_segment, subset_definitions,
-                                  merge_groups, brotli_quality);
+                                  merge_groups, brotli_quality, false);
 }
 
 StatusOr<std::vector<Merger>> ToMergers(
@@ -324,8 +324,8 @@ StatusOr<std::vector<Merger>> ToMergers(
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
-    btree_map<SegmentSet, MergeStrategy> merge_groups,
-    uint32_t brotli_quality) const {
+    btree_map<SegmentSet, MergeStrategy> merge_groups, uint32_t brotli_quality,
+    bool place_fallback_in_init) const {
   for (const auto& [segments, strategy] : merge_groups) {
     if (strategy.UseCosts()) {
       TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
@@ -337,11 +337,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   SegmentationContext context = TRY(InitializeSegmentationContext(
       face, initial_segment, std::move(segments), brotli_quality));
 
-  if (merge_groups.empty()) {
-    // No merging will be needed so we're done.
-    return context.ToGlyphSegmentation();
-  }
-
   std::vector<Merger> mergers = TRY(ToMergers(context, merge_groups));
 
   // ### First phase of merging is to check for any patches which should be
@@ -352,6 +347,23 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         merger.Strategy().InitFontMergeThreshold().has_value()) {
       TRYV(merger.MoveSegmentsToInitFont());
     }
+  }
+
+  // Once we've gotten standard segments placed into the initial font as needed,
+  // if requested any remaining fallback glyphs are also moved into the init
+  // font.
+  GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
+  if (place_fallback_in_init && !fallback_glyphs.empty()) {
+    VLOG(0) << "Moving " << fallback_glyphs.size()
+            << " fallback glyphs into the initial font." << std::endl;
+    SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
+    new_def.gids.union_set(fallback_glyphs);
+    TRYV(context.ReassignInitSubset(new_def, SegmentSet{}));
+  }
+
+  if (merge_groups.empty()) {
+    // No merging will be needed so we're done.
+    return context.ToGlyphSegmentation();
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
