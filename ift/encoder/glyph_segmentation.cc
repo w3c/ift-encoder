@@ -109,7 +109,7 @@ void output_set(const char* prefix, It begin, It end, std::stringstream& out) {
 std::string GlyphSegmentation::ToString() const {
   std::stringstream out;
   out << "initial font: ";
-  output_set("gid", InitialFontGlyphs().begin(), InitialFontGlyphs().end(),
+  output_set("gid", InitialFontGlyphClosure().begin(), InitialFontGlyphClosure().end(),
              out);
   out << std::endl;
 
@@ -173,6 +173,8 @@ SegmentationPlan GlyphSegmentation::ToSegmentationPlanProto() const {
       ToSetProto<Codepoints>(InitialFontSegment().codepoints);
   *config.mutable_initial_features() =
       TagsToSetProto<Features>(InitialFontSegment().feature_tags);
+  *config.mutable_initial_glyphs() =
+      ToSetProto<Glyphs>(InitialFontSegment().gids);
 
   return config;
 }

@@ -20,7 +20,7 @@ namespace ift::encoder {
 Status SegmentationContext::ValidateSegmentation(
     const GlyphSegmentation& segmentation) const {
   IntSet visited;
-  const auto& initial_closure = segmentation.InitialFontGlyphs();
+  const auto& initial_closure = segmentation.InitialFontGlyphClosure();
   for (const auto& [id, gids] : segmentation.GidSegments()) {
     for (glyph_id_t gid : gids) {
       if (initial_closure.contains(gid)) {

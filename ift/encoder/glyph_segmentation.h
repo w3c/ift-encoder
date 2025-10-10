@@ -30,10 +30,10 @@ namespace ift::encoder {
 class GlyphSegmentation {
  public:
   GlyphSegmentation(SubsetDefinition init_font_segment,
-                    common::GlyphSet init_font_glyphs,
+                    common::GlyphSet init_font_glyph_closure,
                     common::GlyphSet unmapped_glyphs)
       : init_font_segment_(init_font_segment),
-        init_font_glyphs_(init_font_glyphs),
+        init_font_glyph_closure_(init_font_glyph_closure),
         unmapped_glyphs_(unmapped_glyphs) {}
 
   /*
@@ -78,8 +78,8 @@ class GlyphSegmentation {
   /*
    * These glyphs should be included in the initial font.
    */
-  const common::GlyphSet& InitialFontGlyphs() const {
-    return init_font_glyphs_;
+  const common::GlyphSet& InitialFontGlyphClosure() const {
+    return init_font_glyph_closure_;
   };
 
   /*
@@ -105,7 +105,7 @@ class GlyphSegmentation {
 
  private:
   SubsetDefinition init_font_segment_;
-  common::GlyphSet init_font_glyphs_;
+  common::GlyphSet init_font_glyph_closure_;
   common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
   std::vector<SubsetDefinition> segments_;
