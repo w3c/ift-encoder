@@ -34,6 +34,19 @@ void PrintTo(const SubsetDefinition& def, std::ostream* os) {
 
   *os << "}";
 
+  if (!def.gids.empty()) {
+    *os << ", {";
+    first = true;
+    for (uint32_t gid : def.gids) {
+      if (!first) {
+        *os << ", ";
+      }
+      first = false;
+      *os << "g" << gid;
+    }
+    *os << "}";
+  }
+
   if (!def.feature_tags.empty()) {
     *os << ", {";
     bool first = true;
@@ -105,7 +118,7 @@ design_space_t subtract(const design_space_t& a, const design_space_t& b) {
 
 void SubsetDefinition::Subtract(const SubsetDefinition& other) {
   codepoints.subtract(other.codepoints);
-  gids.subtract(other.codepoints);
+  gids.subtract(other.gids);
   feature_tags = subtract(feature_tags, other.feature_tags);
   design_space = subtract(design_space, other.design_space);
 }
