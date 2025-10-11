@@ -5,6 +5,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
 
+using absl::btree_map;
 using absl::Status;
 using absl::StatusOr;
 using common::GlyphSet;
@@ -66,7 +67,6 @@ Merger::TryNextMerge() {
 }
 
 Status Merger::MoveSegmentsToInitFont() {
-  // TODO XXXX implement fallback move to init.
   if (!strategy_.InitFontMergeThreshold().has_value()) {
     return absl::FailedPreconditionError(
         "Cannot be called when there is no merge threshold configured.");
@@ -94,7 +94,8 @@ Status Merger::MoveSegmentsToInitFont() {
     //   with codepoints but no interactions/patches).
     SegmentSet to_check_individually =
         Context().glyph_groupings.AllDisjunctiveSegments();
-    to_check_individually.intersect(candidate_segments_);
+
+    to_check_individually.intersect(inscope_segments_for_init_move_);
 
     SegmentSet excluded = CutoffSegments();
     to_check_individually.subtract(excluded);

@@ -18,10 +18,12 @@ namespace ift::encoder {
 // via a provided segmentation context.
 class Merger {
  public:
-  static absl::StatusOr<Merger> New(SegmentationContext& context,
-                                    MergeStrategy strategy,
-                                    common::SegmentSet inscope_segments) {
-    Merger merger(context, strategy, inscope_segments, UINT32_MAX);
+  static absl::StatusOr<Merger> New(
+      SegmentationContext& context, MergeStrategy strategy,
+      common::SegmentSet inscope_segments,
+      common::SegmentSet inscope_segments_for_init_move) {
+    Merger merger(context, strategy, inscope_segments,
+                  inscope_segments_for_init_move, UINT32_MAX);
     TRYV(merger.InitOptimizationCutoff());
     return merger;
   }
@@ -76,12 +78,14 @@ class Merger {
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
          common::SegmentSet inscope_segments,
+         common::SegmentSet inscope_segments_for_init_move,
          segment_index_t optimization_cutoff_segment)
       : context_(&context),
         strategy_(strategy),
         inscope_segments_(inscope_segments),
         candidate_segments_(
             ComputeCandidateSegments(*context_, strategy_, inscope_segments_)),
+        inscope_segments_for_init_move_(inscope_segments_for_init_move),
         optimization_cutoff_segment_(optimization_cutoff_segment) {}
 
   static common::SegmentSet ComputeCandidateSegments(
@@ -140,6 +144,11 @@ class Merger {
   // The current set of segments under consideration for being merged.
   const common::SegmentSet inscope_segments_;
   common::SegmentSet candidate_segments_;
+
+  // This is the set of segments under consideration for being merged into the
+  // init font. Typically contains segments that were removed from
+  // inscope_segments_ for being shared with other groups.
+  const common::SegmentSet inscope_segments_for_init_move_;
 
   // Segments greater than this value do not have optimization used when
   // selecting merges. Merging is done via simple selection until minimum group

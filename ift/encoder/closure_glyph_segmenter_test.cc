@@ -1092,7 +1092,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
   s2.SetInitFontMergeThreshold(std::nullopt);
   btree_map<SegmentSet, MergeStrategy> merge_groups{
       {{0, 1, 2, 3, 4, 5, 6}, s1},
-      {{7, 8, 9, 10, 11, 12, 13, 14}, s2},
+      {{0, 1, 7, 8, 9, 10, 11, 12, 13, 14}, s2},
   };
 
   auto segmentation =
@@ -1117,25 +1117,27 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
 
   // Only segments from the groups that set a threshold are eligible to be moved
   // to the init font. so {g, h, i} will not be moved despite otherwise being
-  // good candidates.
+  // good candidates. Segments that appear in more than one merge group (ie, s0,
+  // s1) are still candidates to be moved to the init font.
   std::vector<SubsetDefinition> expected_segments = {
       // Group 1
-      {},
-      {},
-      {},
-      {},
+      {},  // c
+      {},  // d
       {'e'},
       {'f'},
       {'g'},
       // Group 2
       {'h', 'i', 'j'},
-      {},
-      {},
+      {},  // i
+      {},  // j
       {'k', 'l'},
-      {},
+      {},  // l
       {'m', 'n'},
-      {},
+      {},  // n
       {'o'},
+      // Shared
+      {},  // a
+      {},  // b
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -1150,15 +1152,15 @@ p5: { gid81, gid82 }
 p6: { gid83 }
 p7: { gid444, gid446 }
 p8: { gid445, gid447 }
-if (s4) then p0
-if (s5) then p1
-if (s6) then p2
-if (s7) then p3
-if (s10) then p4
-if (s12) then p5
-if (s14) then p6
-if (s5 AND s7) then p7
-if (s5 AND s10) then p8
+if (s2) then p0
+if (s3) then p1
+if (s4) then p2
+if (s5) then p3
+if (s8) then p4
+if (s10) then p5
+if (s12) then p6
+if (s3 AND s5) then p7
+if (s3 AND s8) then p8
 )");
 }
 
