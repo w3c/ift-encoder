@@ -1088,8 +1088,11 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
   // {b, g} is ungrouped
   MergeStrategy s1 = *MergeStrategy::CostBased(std::move(group1_freq), 75, 1);
   s1.SetInitFontMergeThreshold(-70);
+  s1.SetOptimizationCutoffFraction(0.50);
+
   MergeStrategy s2 = *MergeStrategy::CostBased(std::move(group2_freq), 75, 2);
   s2.SetInitFontMergeThreshold(std::nullopt);
+
   btree_map<SegmentSet, MergeStrategy> merge_groups{
       {{0, 1, 2, 3, 4, 5, 6}, s1},
       {{0, 1, 7, 8, 9, 10, 11, 12, 13, 14}, s2},
