@@ -98,6 +98,9 @@ Status Merger::MoveSegmentsToInitFont() {
     to_check_individually.intersect(inscope_segments_for_init_move_);
 
     SegmentSet excluded = CutoffSegments();
+    // Shared segments aren't subject to optimization cutoff.
+    excluded.intersect(inscope_segments_);
+
     to_check_individually.subtract(excluded);
 
     change_made = false;
