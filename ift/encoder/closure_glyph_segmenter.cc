@@ -197,7 +197,8 @@ struct SegmentOrdering {
 // the merge_groups segment set keys to reflect the ordering changes.
 static StatusOr<std::vector<Segment>> ToOrderedSegments(
     const std::vector<SubsetDefinition>& subset_definitions,
-    btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+    btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    btree_map<SegmentSet, SegmentSet>& with_shared) {
   // This generates the following ordering:
   //
   // merge group 1 segments
@@ -279,10 +280,13 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
   for (auto& [segments, strategy] : merge_groups) {
     SegmentSet remapped;
+    SegmentSet remapped_full;
     for (segment_index_t s : segments) {
+      segment_index_t s_prime = segment_index_map[s];
       if (!shared_segments.contains(s)) {
-        remapped.insert(segment_index_map[s]);
+        remapped.insert(s_prime);
       }
+      remapped_full.insert(s_prime);
     }
 
     if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
@@ -290,6 +294,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
       return absl::InvalidArgumentError(
           "Duplicate merge groups are not allowed.");
     }
+    with_shared[remapped] = remapped_full;
   }
 
   merge_groups = std::move(new_merge_groups);
@@ -313,10 +318,12 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
 StatusOr<std::vector<Merger>> ToMergers(
     SegmentationContext& context,
+    const btree_map<SegmentSet, SegmentSet>& with_shared,
     btree_map<SegmentSet, MergeStrategy> merge_groups) {
   std::vector<Merger> mergers;
   for (auto& [segments, strategy] : merge_groups) {
-    mergers.push_back(TRY(Merger::New(context, std::move(strategy), segments)));
+    mergers.push_back(TRY(Merger::New(context, std::move(strategy), segments,
+                                      with_shared.at(segments))));
   }
   return mergers;
 }
@@ -332,12 +339,14 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     }
   }
 
+  btree_map<SegmentSet, SegmentSet> with_shared;
   std::vector<Segment> segments =
-      TRY(ToOrderedSegments(subset_definitions, merge_groups));
+      TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
   SegmentationContext context = TRY(InitializeSegmentationContext(
       face, initial_segment, std::move(segments), brotli_quality));
 
-  std::vector<Merger> mergers = TRY(ToMergers(context, merge_groups));
+  std::vector<Merger> mergers =
+      TRY(ToMergers(context, with_shared, merge_groups));
 
   // ### First phase of merging is to check for any patches which should be
   // moved to the initial font (eg. cases where the probability of a patch is

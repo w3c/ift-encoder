@@ -128,7 +128,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all);
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
+      all);
 
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
@@ -193,7 +194,8 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all);
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
+      all);
 
   unsigned base_size =
       *context->patch_size_cache->GetPatchSize({'a', 'b', 'c', 'd', 'e', 'f'});
@@ -256,7 +258,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
-      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all);
+      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all,
+      all);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -307,7 +310,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
-      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all);
+      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all,
+      all);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -395,7 +399,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all);
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
+      all);
 
   // Try merging the patch for {0} and {1 OR 4}.
   auto r = CandidateMerge::AssessPatchMerge(merger, 0, {1, 4}, std::nullopt);
@@ -445,7 +450,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all);
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
+      all);
 
   // Try merging the patch for {0} and {1}.
   auto r = CandidateMerge::AssessPatchMerge(merger, 0, {1}, std::nullopt);
