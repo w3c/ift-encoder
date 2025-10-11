@@ -128,4 +128,30 @@ TEST_F(SubsetDefinitionTest, IsVariableFor) {
   }
 }
 
+TEST_F(SubsetDefinitionTest, Subtraction) {
+  {
+    SubsetDefinition a{1, 2, 3, 4};
+    SubsetDefinition b{3, 5, 6};
+    a.Subtract(b);
+    ASSERT_EQ(a, (SubsetDefinition{1, 2, 4}));
+  }
+
+  {
+    SubsetDefinition a{1, 2, 3, 4};
+    a.gids = {7, 8, 9};
+    a.feature_tags = {HB_TAG('f', 'o', 'o', ' '), HB_TAG('b', 'a', 'r', ' ')};
+
+    SubsetDefinition b{3, 5, 6};
+    b.gids = {8, 10};
+    b.feature_tags = {HB_TAG('f', 'o', 'o', ' ')};
+
+    SubsetDefinition c{1, 2, 4};
+    c.gids = {7, 9};
+    c.feature_tags = {HB_TAG('b', 'a', 'r', ' ')};
+
+    a.Subtract(b);
+    ASSERT_EQ(a, c);
+  }
+}
+
 }  // namespace ift::encoder
