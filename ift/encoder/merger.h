@@ -130,9 +130,8 @@ class Merger {
 
   void MarkFinished(segment_index_t s) { candidate_segments_.erase(s); }
 
-  absl::StatusOr<bool> CheckAndApplyInitFontMove(
-      const common::SegmentSet& candidate_segments,
-      SubsetDefinition& initial_segment);
+  absl::Status ApplyInitFontMove(const common::GlyphSet& glyphs_to_move,
+                                 double delta);
 
   // Stores the broadeder complete segmentation.
   SegmentationContext* context_;

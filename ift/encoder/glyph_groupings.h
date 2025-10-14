@@ -99,6 +99,10 @@ class GlyphGroupings {
     return it->second;
   }
 
+  const common::SegmentSet& FallbackSegments() const {
+    return fallback_segments_;
+  }
+
   // Returns a list of conditions which include segment.
   const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(
       segment_index_t segment) const {

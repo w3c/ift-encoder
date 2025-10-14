@@ -1,6 +1,8 @@
 #ifndef IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 #define IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 
+#include "common/font_helper.h"
+#include "common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/segment.h"
@@ -34,12 +36,7 @@ class RequestedSegmentationInformation {
   }
 
   void ReassignInitSubset(GlyphClosureCache& closure_cache,
-                          SubsetDefinition new_def,
-                          const common::SegmentSet& removed_segments) {
-    for (segment_index_t s : removed_segments) {
-      segments_[s].Clear();
-    }
-
+                          SubsetDefinition new_def) {
     init_font_segment_ = std::move(new_def);
 
     SubsetDefinition all;
@@ -49,15 +46,21 @@ class RequestedSegmentationInformation {
     }
 
     {
-      auto closure = closure_cache.GlyphClosure(init_font_segment_);
+      auto closure = closure_cache.GlyphClosure(all);
       if (closure.ok()) {
-        init_font_glyphs_ = std::move(*closure);
+        full_closure_ = std::move(*closure);
       }
     }
 
-    auto closure = closure_cache.GlyphClosure(all);
-    if (closure.ok()) {
-      full_closure_ = std::move(*closure);
+    while (ExpandInitClosure(closure_cache)) {
+      // Expand the init closure until it stops changing.
+    }
+
+    // Changing the init font subset may have caused additional codepoints to be
+    // moved to the init font. We need to update the segment definitions to
+    // remove these.
+    for (auto& s : segments_) {
+      s.Definition().codepoints.subtract(init_font_segment_.codepoints);
     }
   }
 
@@ -91,6 +94,29 @@ class RequestedSegmentationInformation {
   }
 
  private:
+  // Recomputes the init font glyph and codepoint closure, returns true
+  // if the init font segment was modified.
+  bool ExpandInitClosure(GlyphClosureCache& closure_cache) {
+    auto closure = closure_cache.GlyphClosure(init_font_segment_);
+    if (closure.ok()) {
+      init_font_glyphs_ = std::move(*closure);
+    }
+
+    // Changing the init font subset may have caused additional codepoints to be
+    // moved to the init font. We need to update the segment definitions to
+    // remove these.
+    common::CodepointSet init_font_codepoints =
+        common::FontHelper::GidsToUnicodes(closure_cache.Face(),
+                                           init_font_glyphs_);
+
+    if (init_font_codepoints.is_subset_of(init_font_segment_.codepoints)) {
+      return false;
+    }
+
+    init_font_segment_.codepoints.union_set(init_font_codepoints);
+    return true;
+  }
+
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;
   common::GlyphSet init_font_glyphs_;
