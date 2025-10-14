@@ -48,6 +48,11 @@ Status SegmentationContext::ValidateSegmentation(
 
 StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
     segment_index_t segment_index) {
+  if (segmentation_info_.Segments()[segment_index].Definition().Empty()) {
+    // Empty segment is a noop;
+    return GlyphSet{};
+  }
+
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;

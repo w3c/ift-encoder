@@ -49,6 +49,8 @@ class GlyphClosureCache {
     closure_count_delta_ = 0;
   }
 
+  hb_face_t* Face() { return preprocessed_face_.get(); }
+
  private:
   common::hb_face_unique_ptr preprocessed_face_;
   common::hb_face_unique_ptr original_face_;

@@ -103,12 +103,11 @@ class SegmentationContext {
   /*
    * Invalidates all grouping information and fully reprocesses all segments.
    */
-  absl::Status ReassignInitSubset(SubsetDefinition new_def,
-                                  const common::SegmentSet& removed_segments) {
+  absl::Status ReassignInitSubset(SubsetDefinition new_def) {
     unsigned glyph_count = hb_face_get_glyph_count(original_face.get());
 
     segmentation_info_.ReassignInitSubset(glyph_closure_cache,
-                                          std::move(new_def), removed_segments);
+                                          std::move(new_def));
 
     // All segments depend on the init subset def, so we must reprocess
     // everything. First reset grouping information:
@@ -121,6 +120,9 @@ class SegmentationContext {
     for (segment_index_t segment_index = 0;
          segment_index < SegmentationInfo().Segments().size();
          segment_index++) {
+      // TODO(garretrieger): when using this during the init font move
+      // processing we know exactly which gids are removed so we can do a
+      // partial instead of full invalidation.
       TRY(ReprocessSegment(segment_index));
     }
 

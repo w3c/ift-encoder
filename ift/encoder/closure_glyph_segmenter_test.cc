@@ -92,7 +92,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DropsUneededSegment) {
                                                          {{'b'}, {'c'}, {'a'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, {'a'}};
+  // Initial processing sees 'a' is in the init font and clears the segment.
+  std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   // Optional segment with 'a' isn't need as it's already included in the init,
@@ -856,7 +857,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitNoGlyphSegments_CostMerging) {
   std::vector<SubsetDefinition> expected_segments = {
       {'A', 'B'},
       {},
-      {'C'},  // C glyph was already pulled in to the init font, so no merge
+      {},  // C glyph was already pulled in to the init font, so no merge
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -968,7 +969,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   std::vector<SubsetDefinition> expected_segments = {
       {},
       {'A'},
-      {'C'},
+      {},
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 

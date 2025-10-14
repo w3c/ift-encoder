@@ -354,8 +354,16 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   for (Merger& merger : mergers) {
     if (merger.Strategy().UseCosts() &&
         merger.Strategy().InitFontMergeThreshold().has_value()) {
+      // make sure candidate segments is up to date before attempting to
+      // process.
+      TRYV(merger.ReassignInitSubset());
       TRYV(merger.MoveSegmentsToInitFont());
     }
+  }
+  for (Merger& merger : mergers) {
+    // Any init font moves above can cause segment removals that affect other
+    // mergers, recompute the candiate segments for all mergers.
+    TRYV(merger.ReassignInitSubset());
   }
 
   // Once we've gotten standard segments placed into the initial font as needed,
@@ -367,8 +375,12 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
             << " fallback glyphs into the initial font." << std::endl;
     SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
     new_def.gids.union_set(fallback_glyphs);
-    TRYV(context.ReassignInitSubset(new_def, SegmentSet{}));
+    TRYV(context.ReassignInitSubset(new_def));
   }
+
+  // Before we start merging, make sure the state after init font processing is
+  // correct.
+  TRYV(ValidateIncrementalGroupings(face, context));
 
   if (merge_groups.empty()) {
     // No merging will be needed so we're done.

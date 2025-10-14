@@ -1,9 +1,14 @@
 #include "ift/encoder/merger.h"
 
+#include <optional>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
+#include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 
 using absl::btree_map;
 using absl::Status;
@@ -75,67 +80,59 @@ Status Merger::MoveSegmentsToInitFont() {
   VLOG(0) << "Checking if there are any segments which should be moved into "
              "the initial font.";
 
-  SubsetDefinition initial_segment =
-      Context().SegmentationInfo().InitFontSegment();
-  bool change_made;
-  do {
-    // TODO(garretrieger): as an optimization probably want to avoid rechecking
-    //   segments that have previously been assessed for move into init font.
-    //   alternatively should be able to modify this to not immediately apply
-    //   the move, but scan all options and collect the set of segments to move
-    //   then repeat analysis until no changes.
-    // TODO(garretrieger): consider reworking this using gids instead of
-    //  codepoints. That is specify init font def in terms of gids. That will
-    //  more closely match the intention of merging a specific patch into the
-    //  init font. Will need to modify segmentation plan to support init font
-    //  gid set.
-    // TODO(garretrieger): should prune codepoints that are pulled into the init
-    //   font from the segments. Will avoid having noop segments (segments
-    //   with codepoints but no interactions/patches).
-    SegmentSet to_check_individually =
-        Context().glyph_groupings.AllDisjunctiveSegments();
+  // TODO(garretrieger): This implementation can be further optimized:
+  //   - Make ReassignInitSegment() an incremental update instead of a full
+  //   reprocessing.
 
-    to_check_individually.intersect(inscope_segments_for_init_move_);
+  do {
+    SegmentSet to_check = inscope_segments_for_init_move_;
 
     SegmentSet excluded = CutoffSegments();
-    // Shared segments aren't subject to optimization cutoff.
+    // Shared segments aren't subject to optimization cutoff. So only exclude
+    // those in inscope_segments_ (which is all of the non-shared segments)
     excluded.intersect(inscope_segments_);
 
-    to_check_individually.subtract(excluded);
+    to_check.subtract(excluded);
 
-    change_made = false;
-    for (segment_index_t s : to_check_individually) {
-      SegmentSet candidate_segments{s};
-      change_made =
-          TRY(CheckAndApplyInitFontMove(candidate_segments, initial_segment));
-      if (change_made) {
-        break;
-      }
-    }
+    uint32_t init_font_size = TRY(Context().patch_size_cache->GetPatchSize(
+        Context().SegmentationInfo().InitFontGlyphs()));
 
-    if (change_made) {
-      continue;
-    }
+    double lowest_delta = *strategy_.InitFontMergeThreshold();
+    std::optional<GlyphSet> glyphs_for_lowest = std::nullopt;
 
-    for (const auto& [condition, _] :
+    for (const auto& [condition, glyphs] :
          Context().glyph_groupings.ConditionsAndGlyphs()) {
-      if (condition.conditions().size() <= 1 ||
-          condition.TriggeringSegments().intersects(excluded)) {
-        // All size 1 conditions are disjunctive and handled in the previous
-        // loop. Since this is conjunction, having an excluded segment in it's
-        // condition makes the probability near 0.
+      // We only want to check conditions that use at least one segment which is
+      // inscope for moving to the init font.
+      if (!condition.TriggeringSegments().intersects(to_check)) {
         continue;
       }
 
-      change_made = TRY(CheckAndApplyInitFontMove(
-          condition.TriggeringSegments(), initial_segment));
-      if (change_made) {
-        break;
+      double best_case_delta = TRY(CandidateMerge::ComputeInitFontCostDelta(
+          *this, init_font_size, true, glyphs));
+      if (best_case_delta >= lowest_delta) {
+        // Filter by best case first which is much faster to compute.
+        continue;
+      }
+
+      double delta = TRY(CandidateMerge::ComputeInitFontCostDelta(
+          *this, init_font_size, false, glyphs));
+      if (delta < lowest_delta) {
+        lowest_delta = delta;
+        glyphs_for_lowest = glyphs;
       }
     }
-  } while (change_made);
 
-  VLOG(0) << "Initial font now has " << initial_segment.codepoints.size()
+    if (!glyphs_for_lowest.has_value()) {
+      // No more moves to make.
+      break;
+    }
+
+    TRYV(ApplyInitFontMove(*glyphs_for_lowest, lowest_delta));
+  } while (true);
+
+  VLOG(0) << "Initial font now has "
+          << Context().SegmentationInfo().InitFontSegment().codepoints.size()
           << " codepoints.";
   return absl::OkStatus();
 }
@@ -566,30 +563,18 @@ SegmentSet Merger::CutoffSegments() const {
   return result;
 }
 
-StatusOr<bool> Merger::CheckAndApplyInitFontMove(
-    const common::SegmentSet& candidate_segments,
-    SubsetDefinition& initial_segment) {
-  const double threshold = *strategy_.InitFontMergeThreshold();
-  const double delta = TRY(CandidateMerge::ComputeCostDelta(
-      *this, candidate_segments, std::nullopt, 0));
+Status Merger::ApplyInitFontMove(const GlyphSet& glyphs_to_move, double delta) {
+  VLOG(0) << "  Moving " << glyphs_to_move.size()
+          << " glyphs into the initial font (cost delta = " << delta << ")";
 
-  if (delta >= threshold * (double)candidate_segments.size()) {
-    // Merging doesn't improve cost, skip.
-    return false;
-  }
+  SubsetDefinition initial_segment =
+      Context().SegmentationInfo().InitFontSegmentWithoutDefaults();
+  initial_segment.gids.union_set(glyphs_to_move);
 
-  VLOG(0) << "  Moving segments " << candidate_segments.ToString()
-          << " into the initial font (cost delta = " << delta << ")";
-
-  for (segment_index_t s : candidate_segments) {
-    initial_segment.Union(
-        Context().SegmentationInfo().Segments()[s].Definition());
-  }
-
-  TRYV(Context().ReassignInitSubset(initial_segment, candidate_segments));
+  TRYV(Context().ReassignInitSubset(initial_segment));
   TRYV(ReassignInitSubset());
 
-  return true;
+  return absl::OkStatus();
 }
 
 }  // namespace ift::encoder
