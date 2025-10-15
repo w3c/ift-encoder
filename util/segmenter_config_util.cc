@@ -45,18 +45,27 @@ SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
 std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
     const SegmenterConfig& config, const SubsetDefinition& init_segment,
     const CodepointSet& font_codepoints,
-    flat_hash_map<uint32_t, uint32_t>& segment_id_to_index) {
+    flat_hash_map<SegmentId, uint32_t>& segment_id_to_index) {
+  std::vector<SubsetDefinition> segments;
+  unsigned index = 0;
+
+  for (const auto& [id, features] : config.feature_segments()) {
+    SubsetDefinition def;
+    def.feature_tags = util::TagValues(features);
+    segments.push_back(def);
+    segment_id_to_index[SegmentId{.feature = true, .id_value = id}] = index++;
+  }
+
   if (config.segments().empty()) {
     // No segments provided set up our own. Each codepoint in the font is mapped
     // to one segment. segment id's are the codepoint values.
-    unsigned i = 0;
-    std::vector<SubsetDefinition> segments;
     for (hb_codepoint_t cp : font_codepoints) {
       if (init_segment.codepoints.contains(cp)) {
         continue;
       }
+
       segments.push_back(SubsetDefinition{cp});
-      segment_id_to_index[cp] = i++;
+      segment_id_to_index[SegmentId{.id_value = cp}] = index++;
     }
     return segments;
   }
@@ -66,10 +75,8 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
   absl::btree_map<uint32_t, SegmentProto> ordered(config.segments().begin(),
                                                   config.segments().end());
 
-  std::vector<SubsetDefinition> segments;
-  unsigned i = 0;
   for (const auto& [id, segment] : ordered) {
-    segment_id_to_index[id] = i++;
+    segment_id_to_index[SegmentId{.id_value = id}] = index++;
     SubsetDefinition def = SegmentProtoToSubsetDefinition(segment);
     def.codepoints.intersect(font_codepoints);
     segments.push_back(def);
@@ -113,12 +120,12 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
   return strategy;
 }
 
-static SegmentSet MapToIndices(
+SegmentSet SegmenterConfigUtil::MapToIndices(
     const SegmentsProto& segments,
-    const flat_hash_map<uint32_t, uint32_t>& id_to_index) {
+    const flat_hash_map<SegmentId, uint32_t>& id_to_index) {
   SegmentSet mapped;
   for (uint32_t s_id : segments.values()) {
-    mapped.insert(id_to_index.at(s_id));
+    mapped.insert(id_to_index.at(SegmentId{.id_value = s_id}));
   }
   return mapped;
 }
@@ -134,17 +141,22 @@ static MergeStrategy ProtoToStrategy(const HeuristicConfiguration& base,
 StatusOr<std::pair<SegmentSet, MergeStrategy>>
 SegmenterConfigUtil::ProtoToMergeGroup(
     const std::vector<SubsetDefinition>& segments,
-    const flat_hash_map<uint32_t, uint32_t>& id_to_index,
+    const flat_hash_map<SegmentId, uint32_t>& id_to_index,
     const HeuristicConfiguration& base_heuristic,
     const CostConfiguration& base_cost, const MergeGroup& group) {
+  SegmentSet segment_indices;
+  for (uint32_t feature_group_id : group.feature_segment_ids().values()) {
+    segment_indices.insert(id_to_index.at(
+        SegmentId{.feature = true, .id_value = feature_group_id}));
+  }
+
   if (group.has_cost_config()) {
     CodepointSet covered_codepoints;
     MergeStrategy strategy = TRY(
         ProtoToStrategy(base_cost, group.cost_config(), covered_codepoints));
 
-    SegmentSet segment_indices;
-    if (!group.segment_ids().values().empty()) {
-      segment_indices = MapToIndices(group.segment_ids(), id_to_index);
+    if (group.has_segment_ids()) {
+      segment_indices.union_set(MapToIndices(group.segment_ids(), id_to_index));
     } else if (!id_to_index.empty()) {
       for (const auto& [_, index] : id_to_index) {
         if (segments[index].codepoints.intersects(covered_codepoints)) {
@@ -155,9 +167,8 @@ SegmenterConfigUtil::ProtoToMergeGroup(
 
     return std::make_pair(segment_indices, strategy);
   } else {
-    SegmentSet segment_indices;
-    if (!group.segment_ids().values().empty()) {
-      segment_indices = MapToIndices(group.segment_ids(), id_to_index);
+    if (group.has_segment_ids()) {
+      segment_indices.union_set(MapToIndices(group.segment_ids(), id_to_index));
     } else if (!id_to_index.empty()) {
       // For heuristic, the default segment set is just all segments.
       segment_indices.insert_range(0, id_to_index.size() - 1);
@@ -176,7 +187,7 @@ SegmenterConfigUtil::ConfigToMergeGroups(
   SubsetDefinition initial_segment =
       SegmentProtoToSubsetDefinition(config.initial_segment());
 
-  flat_hash_map<uint32_t, uint32_t> segment_id_to_index;
+  flat_hash_map<SegmentId, uint32_t> segment_id_to_index;
   segments = ConfigToSegments(config, initial_segment, font_codepoints,
                               segment_id_to_index);
 
