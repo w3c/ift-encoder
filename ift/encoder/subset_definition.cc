@@ -3,12 +3,16 @@
 #include <vector>
 
 #include "absl/container/btree_set.h"
+#include "common/axis_range.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 using absl::btree_set;
+using absl::flat_hash_map;
+using absl::StatusOr;
+using common::AxisRange;
 using common::FontHelper;
 using common::IntSet;
 using ift::proto::PatchEncoding;
@@ -206,6 +210,30 @@ std::vector<PatchMap::Entry> SubsetDefinition::ToEntries(
   }
 
   return entries;
+}
+
+StatusOr<bool> SubsetDefinition::IsVariableFor(hb_face_t* face) const {
+  flat_hash_map<hb_tag_t, AxisRange> face_design_space =
+      TRY(FontHelper::GetDesignSpace(face));
+
+  for (const auto& [tag, face_range] : face_design_space) {
+    auto it = design_space.find(tag);
+    if (it == design_space.end()) {
+      if (face_range.IsRange()) {
+        return true;
+      }
+      continue;
+    }
+
+    AxisRange subset_range = it->second;
+    std::optional<AxisRange> intersection =
+        subset_range.Intersection(face_range);
+    if (intersection.has_value() && intersection->IsRange()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace ift::encoder

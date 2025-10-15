@@ -1,9 +1,17 @@
 #include "ift/encoder/subset_definition.h"
 
+#include "common/axis_range.h"
+#include "common/font_data.h"
 #include "gtest/gtest.h"
+#include "hb.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
+using common::AxisRange;
+using common::hb_blob_unique_ptr;
+using common::hb_face_unique_ptr;
+using common::make_hb_blob;
+using common::make_hb_face;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
@@ -52,6 +60,72 @@ TEST_F(SubsetDefinitionTest, ToEntries_Composite) {
   auto expected = std::vector{e1, e2, e3};
   ASSERT_EQ(combined.ToEntries(PatchEncoding::GLYPH_KEYED, 5, 10, {11, 12}),
             expected);
+}
+
+TEST_F(SubsetDefinitionTest, IsVariableFor) {
+  hb_blob_unique_ptr blob = make_hb_blob(
+      hb_blob_create_from_file("common/testdata/Roboto[wdth,wght].abcd.ttf"));
+  ASSERT_GT(hb_blob_get_length(blob.get()), 0);
+  hb_face_unique_ptr face = make_hb_face(hb_face_create(blob.get(), 0));
+
+  blob = make_hb_blob(
+      hb_blob_create_from_file("common/testdata/Roboto-Regular.abcd.ttf"));
+  ASSERT_GT(hb_blob_get_length(blob.get()), 0);
+  hb_face_unique_ptr static_face = make_hb_face(hb_face_create(blob.get(), 0));
+
+  {
+    SubsetDefinition noop;
+    ASSERT_TRUE(*noop.IsVariableFor(face.get()));
+    ASSERT_FALSE(*noop.IsVariableFor(static_face.get()));
+  }
+
+  {
+    SubsetDefinition full;
+    full.design_space = {
+        {HB_TAG('w', 'g', 'h', 't'), AxisRange::Point(300)},
+        {HB_TAG('w', 'd', 't', 'h'), AxisRange::Point(80)},
+    };
+    ASSERT_FALSE(*full.IsVariableFor(face.get()));
+    ASSERT_FALSE(*full.IsVariableFor(static_face.get()));
+  }
+
+  {
+    SubsetDefinition partial;
+    partial.design_space = {
+        {HB_TAG('w', 'd', 't', 'h'), AxisRange::Point(80)},
+    };
+    ASSERT_TRUE(*partial.IsVariableFor(face.get()));
+    ASSERT_FALSE(*partial.IsVariableFor(static_face.get()));
+  }
+
+  {
+    SubsetDefinition partial_ranges;
+    partial_ranges.design_space = {
+        {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(300, 350)},
+        {HB_TAG('w', 'd', 't', 'h'), *AxisRange::Range(80, 85)},
+    };
+    ASSERT_TRUE(*partial_ranges.IsVariableFor(face.get()));
+    ASSERT_FALSE(*partial_ranges.IsVariableFor(static_face.get()));
+  }
+
+  {
+    SubsetDefinition point_intersection;
+    point_intersection.design_space = {
+        {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(900, 1000)},
+        {HB_TAG('w', 'd', 't', 'h'), AxisRange::Point(80)},
+    };
+    ASSERT_FALSE(*point_intersection.IsVariableFor(face.get()));
+    ASSERT_FALSE(*point_intersection.IsVariableFor(static_face.get()));
+  }
+
+  {
+    SubsetDefinition out_of_bounds;
+    out_of_bounds.design_space = {
+        {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(2000, 3000)},
+    };
+    ASSERT_TRUE(*out_of_bounds.IsVariableFor(face.get()));
+    ASSERT_FALSE(*out_of_bounds.IsVariableFor(static_face.get()));
+  }
 }
 
 }  // namespace ift::encoder

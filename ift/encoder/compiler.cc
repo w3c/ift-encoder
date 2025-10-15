@@ -229,33 +229,28 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
     // loca table to remain at the full length from the start.
     //
     // TODO(garretrieger): this unnecessarily includes the last gid in the
-    // subset,
-    //                     should update the subsetter to retain the glyph count
-    //                     but not actually keep the last gid.
+    //  subset, should update the subsetter to retain the glyph count
+    //  but not actually keep the last gid.
     //
     // TODO(garretrieger): instead of forcing max glyph count here we can
-    // utilize
-    //                     table keyed patches to change loca len/glyph count to
-    //                     the max for any currently reachable segments. This
-    //                     would improve efficiency slightly by avoid including
-    //                     extra space in the initial font. However, it would
-    //                     require us to examine conditions against each subset
-    //                     to determine patch reachability.
+    //  utilize table keyed patches to change loca len/glyph count to
+    //  the max for any currently reachable segments. This would improve
+    //  efficiency slightly by avoid including extra space in the initial
+    //  font. However, it would require us to examine conditions against
+    //  each subset to determine patch reachability.
     //
     // TODO(garretrieger): in the mean time we can use the max glyph id from
-    // fully
-    //                     expanded subset instead. this will at least prune
-    //                     glyphs not used at any extension level.
+    //  fully expanded subset instead. this will at least prune glyphs not
+    //  used at any extension level.
     uint32_t gid_count = hb_face_get_glyph_count(face_.get());
     if (gid_count > 0) context.init_subset_.gids.insert(gid_count - 1);
   }
 
   // TODO(garretrieger): when generating the fully expanded subset don't use
-  // retain
-  //                     gids. Save the resulting glyph mapping and use it to
-  //                     translate encoder config gids into the space used by
-  //                     fully expanded subset. This will optimize for cases
-  //                     that don't include the entire original font.
+  //  retain gids. Save the resulting glyph mapping and use it to translate
+  //  encoder config gids into the space used by fully expanded subset.
+  //  This will optimize for cases that don't include the entire original
+  //  font.
   context.force_long_loca_and_gvar_ = false;
   auto expanded = FullyExpandedSubset(context);
   if (!expanded.ok()) {
@@ -266,9 +261,8 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
   auto expanded_face = expanded->face();
 
   // TODO(garretrieger): we don't need to force long gvar anymore. The client is
-  // now capable of
-  //                     upgrading the offset size as needed. Forcing long loca
-  //                     is still needed though.
+  //  now capable of upgrading the offset size as needed. Forcing long loca
+  //  is still needed though.
   context.force_long_loca_and_gvar_ =
       FontHelper::HasLongLoca(expanded_face.get()) ||
       FontHelper::HasWideGvar(expanded_face.get());
@@ -856,7 +850,7 @@ StatusOr<FontData> Compiler::CutSubset(const ProcessingContext& context,
   }
 
   auto tags = FontHelper::GetTags(font);
-  if (generate_glyph_keyed_bases && def.IsVariable() &&
+  if (generate_glyph_keyed_bases && TRY(def.IsVariableFor(font)) &&
       tags.contains(FontHelper::kGvar)) {
     // In mixed mode glyph keyed patches handles gvar, except for when design
     // space is expanded, in which case a gvar table should be patched in that
