@@ -358,11 +358,11 @@ StatusOr<double> CandidateMerge::ComputeInitFontCostDelta(
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] :
        PatchesWithGlyphs(merger.Context(), glyph_closure_delta)) {
-    // TODO(garretrieger): Glyph removal from a patch could possibly influence the
-    // probability of that patch occuring (via removal of segments). Ideally we'd
-    // include that in this calculation. This should have only a minor impact
-    // on the computed delta's since the majority of cases we process here will
-    // just be full patch removals.
+    // TODO(garretrieger): Glyph removal from a patch could possibly influence
+    // the probability of that patch occuring (via removal of segments). Ideally
+    // we'd include that in this calculation. This should have only a minor
+    // impact on the computed delta's since the majority of cases we process
+    // here will just be full patch removals.
     double patch_probability = TRY(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
                               *merger.Strategy().ProbabilityCalculator()));
