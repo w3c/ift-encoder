@@ -9,7 +9,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "common/axis_range.h"
+#include "common/font_helper.h"
 #include "common/int_set.h"
+#include "common/try.h"
 #include "hb-subset.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -54,14 +56,12 @@ struct SubsetDefinition {
   absl::btree_set<hb_tag_t> feature_tags;
   design_space_t design_space;
 
-  bool IsVariable() const {
-    for (const auto& [tag, range] : design_space) {
-      if (range.IsRange()) {
-        return true;
-      }
-    }
-    return false;
-  }
+  // Returns true if the design space in this subset definition will result in
+  // a variable font when applied to face.
+  //
+  // This will be true if the design space leaves at least one axis from face as
+  // a range.
+  absl::StatusOr<bool> IsVariableFor(hb_face_t* face) const;
 
   bool Empty() const {
     return codepoints.empty() && gids.empty() && feature_tags.empty() &&

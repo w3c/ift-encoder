@@ -1,12 +1,14 @@
 #include "common/axis_range.h"
 
+#include <optional>
+
 #include "gtest/gtest.h"
 
 namespace common {
 
 class AxisRangeTest : public ::testing::Test {};
 
-TEST_F(AxisRangeTest, AxisRange_Intersection) {
+TEST_F(AxisRangeTest, AxisRange_Intersects) {
   auto a = AxisRange::Range(1, 4);
   auto b = AxisRange::Range(5, 9);
   ASSERT_FALSE(a->Intersects(*b));
@@ -31,6 +33,25 @@ TEST_F(AxisRangeTest, AxisRange_Intersection) {
 
   ASSERT_TRUE(f->Intersects(*g));
   ASSERT_TRUE(g->Intersects(*f));
+}
+
+TEST_F(AxisRangeTest, AxisRange_Intersection) {
+  auto a = AxisRange::Range(1, 4);
+  auto b = AxisRange::Range(2, 9);
+  auto c = AxisRange::Range(0, 5);
+  auto d = AxisRange::Range(4, 7);
+  auto e = AxisRange::Range(10, 12);
+
+  ASSERT_EQ(a->Intersection(*e), std::nullopt);
+
+  ASSERT_EQ(a->Intersection(*b), *AxisRange::Range(2, 4));
+  ASSERT_EQ(b->Intersection(*a), *AxisRange::Range(2, 4));
+
+  ASSERT_EQ(a->Intersection(*c), *AxisRange::Range(1, 4));
+  ASSERT_EQ(c->Intersection(*a), *AxisRange::Range(1, 4));
+
+  ASSERT_EQ(a->Intersection(*d), AxisRange::Point(4));
+  ASSERT_EQ(d->Intersection(*a), AxisRange::Point(4));
 }
 
 TEST_F(AxisRangeTest, AxisRange_Creation) {

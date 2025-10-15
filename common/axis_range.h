@@ -1,6 +1,8 @@
 #ifndef COMMON_AXIS_RANGE_H_
 #define COMMON_AXIS_RANGE_H_
 
+#include <optional>
+
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 
@@ -30,6 +32,15 @@ struct AxisRange {
 
   bool Intersects(const AxisRange& other) const {
     return other.end_ >= start_ && end_ >= other.start_;
+  }
+
+  std::optional<AxisRange> Intersection(const AxisRange& other) const {
+    if (!Intersects(other)) {
+      return std::nullopt;
+    }
+
+    return AxisRange(std::max(start_, other.start_),
+                     std::min(end_, other.end_));
   }
 
   AxisRange() : start_(0), end_(0) {}

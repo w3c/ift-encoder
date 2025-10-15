@@ -154,8 +154,12 @@ cc_test(
     srcs = [
         "subset_definition_test.cc",
     ],
+    data = [
+        "//common:testdata",
+    ],
     deps = [
         ":encoder",
+        "@harfbuzz",
         "@googletest//:gtest_main",
     ],
 )
