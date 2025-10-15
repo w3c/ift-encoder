@@ -25,11 +25,25 @@ class SegmenterConfigUtil {
                       std::vector<ift::encoder::SubsetDefinition>& segments);
 
  private:
+  struct SegmentId {
+    bool feature = false;
+    uint32_t id_value;
+
+    bool operator==(const SegmentId& other) const {
+      return feature == other.feature && id_value == other.id_value;
+    }
+
+    template <typename H>
+    friend H AbslHashValue(H h, const SegmentId& id) {
+      return H::combine(std::move(h), id.feature, id.id_value);
+    }
+  };
+
   std::vector<ift::encoder::SubsetDefinition> ConfigToSegments(
       const SegmenterConfig& config,
       const ift::encoder::SubsetDefinition& init_segment,
       const common::CodepointSet& font_codepoints,
-      absl::flat_hash_map<uint32_t, uint32_t>& segment_id_to_index);
+      absl::flat_hash_map<SegmentId, uint32_t>& segment_id_to_index);
 
   absl::StatusOr<ift::freq::UnicodeFrequencies> GetFrequencyData(
       const std::string& frequency_data_file_path);
@@ -40,10 +54,14 @@ class SegmenterConfigUtil {
 
   absl::StatusOr<std::pair<common::SegmentSet, ift::encoder::MergeStrategy>>
   ProtoToMergeGroup(const std::vector<ift::encoder::SubsetDefinition>& segments,
-                    const absl::flat_hash_map<uint32_t, uint32_t>& id_to_index,
+                    const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
                     const HeuristicConfiguration& base_heuristic,
                     const CostConfiguration& base_cost,
                     const MergeGroup& group);
+
+  static common::SegmentSet MapToIndices(
+      const SegmentsProto& segments,
+      const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index);
 
   std::string config_file_path_;
 };

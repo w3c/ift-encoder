@@ -90,6 +90,31 @@ TEST_F(SegmenterConfigUtilTest,
                          {{0, 1, 2}, MergeStrategy::Heuristic(101)}}));
 }
 
+TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoSegments_Heuristic) {
+  // Minimal config with one heuristic merge group that covers everything.
+  SegmenterConfig config;
+  auto* group = config.add_merge_groups();
+  group->mutable_segment_ids();
+  group->mutable_heuristic_config()->set_min_patch_size(101);
+
+  CodepointSet font_codepoints{1, 2, 4};
+
+  SegmenterConfigUtil util("");
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              {1},
+                              {2},
+                              {4},
+                          }));
+
+  ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
+                         {{}, MergeStrategy::Heuristic(101)}}));
+}
+
 TEST_F(SegmenterConfigUtilTest,
        ConfigToMergeGroups_SegmentsInferred_Heuristic) {
   // Minimal config with one heuristic merge group that covers everything.
@@ -113,6 +138,42 @@ TEST_F(SegmenterConfigUtilTest,
 
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
                          {{0, 1, 2}, MergeStrategy::Heuristic(101)}}));
+}
+
+TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegments) {
+  // Utilizes the additional feature segments mechanism.
+  SegmenterConfig config;
+
+  Features features;
+  features.add_values("foo ");
+  features.add_values("bar ");
+  config.mutable_feature_segments()->insert(std::make_pair(2, features));
+
+  auto* group = config.add_merge_groups();
+  group->mutable_heuristic_config()->set_min_patch_size(101);
+  group->mutable_feature_segment_ids()->add_values(2);
+
+  CodepointSet font_codepoints{1, 2, 4};
+
+  SegmenterConfigUtil util("");
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  SubsetDefinition def_with_features;
+  def_with_features.feature_tags = {HB_TAG('f', 'o', 'o', ' '),
+                                    HB_TAG('b', 'a', 'r', ' ')};
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              def_with_features,
+                              {1},
+                              {2},
+                              {4},
+                          }));
+
+  ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
+                         {{0, 1, 2, 3}, MergeStrategy::Heuristic(101)}}));
 }
 
 TEST_F(SegmenterConfigUtilTest,
