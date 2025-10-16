@@ -41,28 +41,28 @@ class CandidateMergeTest : public ::testing::Test {
     a.base_segment_index_ = 0;
     a.segments_to_merge_ = {1};
     a.merged_segment_ = empty_segment;
-    a.new_segment_is_inert_ = false;
+    a.input_segments_are_inert_ = false;
     a.new_patch_size_ = 0;
     a.cost_delta_ = 100.0;
 
     b.base_segment_index_ = 1;
     b.segments_to_merge_ = {2};
     b.merged_segment_ = empty_segment;
-    b.new_segment_is_inert_ = false;
+    b.input_segments_are_inert_ = false;
     b.new_patch_size_ = 0;
     b.cost_delta_ = 100.0;
 
     c.base_segment_index_ = 1;
     c.segments_to_merge_ = {3};
     c.merged_segment_ = empty_segment;
-    c.new_segment_is_inert_ = false;
+    c.input_segments_are_inert_ = false;
     c.new_patch_size_ = 0;
     c.cost_delta_ = 100.0;
 
     d.base_segment_index_ = 0;
     d.segments_to_merge_ = {1};
     d.merged_segment_ = empty_segment;
-    d.new_segment_is_inert_ = false;
+    d.input_segments_are_inert_ = false;
     d.new_patch_size_ = 0;
     d.cost_delta_ = 200.0;
 

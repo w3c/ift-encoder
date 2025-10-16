@@ -62,12 +62,28 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
     return GlyphSet{};
   }
 
+  // Upon application of this merger if all of the input segments were inert
+  // then it's likely that the new segment will also be inert (though not
+  // gauranteed). We can check for this case by running a closure analysis
+  // and checking there are no non-exclusive gids. If the input segments are
+  // inert and the new segment is inert then we can directly compute the result
+  // of the merge without needing to invalidate and reprocess.
+  bool new_segment_is_inert = false;
+  if (input_segments_are_inert_) {
+    SegmentSet segments_to_merge_with_base = segments_to_merge_;
+    segments_to_merge_with_base.insert(base_segment_index_);
+    GlyphSet and_gids, or_gids, exclusive_gids;
+    TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
+                                         or_gids, exclusive_gids));
+    new_segment_is_inert = (and_gids.empty() && or_gids.empty());
+  }
+
   const auto& segments = merger.Context().SegmentationInfo().Segments();
   uint32_t size_before =
       segments[base_segment_index_].Definition().codepoints.size();
   uint32_t size_after =
       merger.AssignMergedSegment(base_segment_index_, segments_to_merge_,
-                                 *merged_segment_, new_segment_is_inert_);
+                                 *merged_segment_, new_segment_is_inert);
 
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
           << " codepoints for segment " << base_segment_index_ << "."
@@ -88,7 +104,7 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
   // fallback segment.
   merger.Context().glyph_groupings.RemoveFallbackSegments(segments_to_merge_);
 
-  if (new_segment_is_inert_) {
+  if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the
     // new condition sets and glyph groupings here instead of using the
     // closure analysis to do it. The new segment is simply the union of all
@@ -552,7 +568,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
 
   bool segments_to_merge_are_inert =
       segments_to_merge.is_subset_of(merger.Context().InertSegments());
-  bool new_segment_is_inert =
+  bool segments_to_merge_and_base_are_inert =
       merger.Context().InertSegments().contains(base_segment_index) &&
       segments_to_merge_are_inert;
 
@@ -597,15 +613,16 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   }
 
   uint32_t new_patch_size = 0;
-  if (!new_segment_is_inert) {
+  if (!segments_to_merge_and_base_are_inert) {
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
     new_patch_size =
         TRY(merger.Context().patch_size_cache->GetPatchSize(exclusive_gids));
   } else {
-    // For inert patches we can precompute the glyph set saving a closure
-    // operation
+    // When the inputs to a merge are all inert then we can assume the merged
+    // patch is just a combination of the glyphs from the input segments. This
+    // saves a closure computation.
     GlyphSet merged_glyphs = gid_conditions_to_update;
     merged_glyphs.union_set(
         merger.Context().glyph_condition_set.GlyphsWithSegment(
@@ -635,7 +652,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   CandidateMerge candidate(std::move(merged_segment));
   candidate.base_segment_index_ = base_segment_index;
   candidate.segments_to_merge_ = segments_to_merge;
-  candidate.new_segment_is_inert_ = new_segment_is_inert;
+  candidate.input_segments_are_inert_ = segments_to_merge_and_base_are_inert;
   candidate.new_patch_size_ = new_patch_size;
   candidate.cost_delta_ = cost_delta;
   candidate.invalidated_glyphs_ = gid_conditions_to_update;
@@ -701,7 +718,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
   CandidateMerge candidate;
   candidate.base_segment_index_ = base_segment_index;
   candidate.segments_to_merge_ = segments_to_merge;
-  candidate.new_segment_is_inert_ = false;
+  candidate.input_segments_are_inert_ = false;
   candidate.new_patch_size_ = new_patch_size;
   candidate.cost_delta_ = cost_delta;
 
