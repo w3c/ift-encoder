@@ -113,6 +113,10 @@ initial_codepoints {
 }
 initial_features {
 }
+initial_glyphs {
+  values: 0
+  values: 69
+}
 )");
 }
 
@@ -250,6 +254,10 @@ initial_codepoints {
 initial_features {
   values: "dlig"
 }
+initial_glyphs {
+  values: 0
+  values: 69
+}
 )");
 }
 
@@ -356,6 +364,10 @@ initial_codepoints {
   values: 97
 }
 initial_features {
+}
+initial_glyphs {
+  values: 0
+  values: 69
 }
 )");
 }
@@ -471,6 +483,9 @@ glyph_patch_conditions {
 initial_codepoints {
 }
 initial_features {
+}
+initial_glyphs {
+  values: 0
 }
 )");
 }

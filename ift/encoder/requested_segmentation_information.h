@@ -109,12 +109,18 @@ class RequestedSegmentationInformation {
         common::FontHelper::GidsToUnicodes(closure_cache.Face(),
                                            init_font_glyphs_);
 
-    if (init_font_codepoints.is_subset_of(init_font_segment_.codepoints)) {
-      return false;
+    bool changed = false;
+    if (!init_font_glyphs_.is_subset_of(init_font_segment_.gids)) {
+      changed = true;
+      init_font_segment_.gids.union_set(init_font_glyphs_);
     }
 
-    init_font_segment_.codepoints.union_set(init_font_codepoints);
-    return true;
+    if (!init_font_codepoints.is_subset_of(init_font_segment_.codepoints)) {
+      changed = true;
+      init_font_segment_.codepoints.union_set(init_font_codepoints);
+    }
+
+    return changed;
   }
 
   std::vector<Segment> segments_;
