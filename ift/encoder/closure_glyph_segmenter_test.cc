@@ -1299,6 +1299,68 @@ if (s2 AND s3) then p3
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, ConjunctiveAdditionalConditions) {
+  // This test sets up a scenario where a conjunctive condition is subject to
+  // additional conditions which are uncovered by a merge. It ensures that the
+  // uncovered additional conditions are appropriately handled.
+
+  SubsetDefinition smcp;
+  smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  smcp.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {0xE4},
+                                                         {
+                                                             {0xD6},  // Ö
+                                                             {0xF6},  // ö
+                                                             smcp,
+                                                         },
+                                                         MergeStrategy::None());
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Note: gid839 is the small caps O dieresis, it's currently mapped with
+  // condition 'if {smcp}', the true condition is 'if {smcp} AND {Ö or ö}'
+  // but the closure segmenter does not currently discover composite conditions.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69, gid106, gid670 }
+p0: { gid51, gid660 }
+p1: { gid83, gid687 }
+p2: { gid477, gid563, gid822, gid839 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+)");
+
+  // Rerun segmentation with merging of Ö and ö allowed, should now get
+  // the true condition.
+  UnicodeFrequencies frequencies{
+      {{0xD6, 0xD6}, 100},  // Ö
+      {{0xF6, 0xF6}, 100},  // ö
+  };
+  segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {0xE4},
+      {
+          {0xD6},  // Ö
+          {0xF6},  // ö
+          smcp,
+      },
+      {
+          {{0, 1}, *MergeStrategy::CostBased(std::move(frequencies), 75, 3)},
+          {{2}, MergeStrategy::None()},
+      },
+      8, false);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69, gid106, gid670 }
+p0: { gid51, gid83, gid660, gid687 }
+p1: { gid563, gid822 }
+p2: { gid477, gid839 }
+if (s0) then p0
+if (s2) then p1
+if (s0 AND s2) then p2
+)");
+}
+
 // TODO(garretrieger): test that segments are excluded by init font segment. ie.
 // if a segment is present in the init font then it should be cleared out in the
 // segmentation.

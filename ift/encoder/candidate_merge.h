@@ -30,9 +30,8 @@ struct CandidateMerge {
   // and the disjunctive patch with the condition segments_to_merge_.
   std::optional<Segment> merged_segment_;
 
-  // If true the merge segment will be inert, that is it won't interact
-  // with the closure.
-  bool new_segment_is_inert_;
+  // If true the all of the segments participating in this merge are inert.
+  bool input_segments_are_inert_;
 
   // Estimated size of the patch after merging.
   uint32_t new_patch_size_;
@@ -61,7 +60,7 @@ struct CandidateMerge {
     CandidateMerge merge(Segment({}, freq::ProbabilityBound::Zero()));
     merge.base_segment_index_ = base_segment_index;
     merge.segments_to_merge_ = {base_segment_index};
-    merge.new_segment_is_inert_ = true;
+    merge.input_segments_are_inert_ = true;
     merge.new_patch_size_ = 0;
     merge.cost_delta_ = cost_delta;
     merge.invalidated_glyphs_ = {};
