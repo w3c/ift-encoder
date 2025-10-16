@@ -37,13 +37,13 @@ class GlyphClosureCache {
     double closure_hit_rate =
         100.0 * ((double)glyph_closure_cache_hit_) /
         ((double)(glyph_closure_cache_hit_ + glyph_closure_cache_miss_));
-    VLOG(0) << "Glyph closure cache hit rate: " << closure_hit_rate << "% ("
+    VLOG(1) << "Glyph closure cache hit rate: " << closure_hit_rate << "% ("
             << glyph_closure_cache_hit_ << " hits, "
             << glyph_closure_cache_miss_ << " misses)";
   }
 
   void LogClosureCount(absl::string_view operation) {
-    VLOG(0) << operation << ": cumulative number of glyph closures "
+    VLOG(1) << operation << ": cumulative number of glyph closures "
             << closure_count_cumulative_ << " (+" << closure_count_delta_
             << ")";
     closure_count_delta_ = 0;

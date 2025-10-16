@@ -137,10 +137,9 @@ Status CandidateMerge::ApplyPatchMerge(Merger& merger) {
                  .ToString()
           << " (" << base_glyphs.size() << " glyphs) with "
           << ActivationCondition::or_segments(segments_to_merge_, 0).ToString()
-          << " (" << other_glyphs.size() << " glyphs) with "
-          << "." << std::endl
+          << " (" << other_glyphs.size() << " glyphs)." << std::endl
           << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
-          << "  Cost delta is " << cost_delta_ << "." << std::endl;
+          << "  Cost delta is " << cost_delta_ << ".";
 
   // CombinePatches() will do invalidation as needed, so nothing else needs to
   // be done to apply this merge.
