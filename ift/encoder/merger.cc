@@ -173,14 +173,14 @@ Status Merger::InitOptimizationCutoff() {
     optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
     if (optimization_cutoff_segment_ <
         context_->SegmentationInfo().Segments().size()) {
-      VLOG(0) << "Cutting off optimization at segment "
+      VLOG(1) << "Cutting off optimization at segment "
               << optimization_cutoff_segment_ << ", P("
               << optimization_cutoff_segment_ << ") = "
               << context_->SegmentationInfo()
                      .Segments()[optimization_cutoff_segment_]
                      .Probability();
     } else {
-      VLOG(0) << "No optimization cutoff.";
+      VLOG(1) << "No optimization cutoff.";
     }
   }
   return absl::OkStatus();
@@ -560,6 +560,7 @@ SegmentSet Merger::CutoffSegments() const {
   }
 
   result.insert_range(start, num_segments - 1);
+  result.intersect(inscope_segments_);
   return result;
 }
 

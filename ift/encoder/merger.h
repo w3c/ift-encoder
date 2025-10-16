@@ -75,6 +75,14 @@ class Merger {
                                const common::SegmentSet& to_merge,
                                const Segment& merged_segment, bool is_inert);
 
+  uint32_t NumCutoffSegments() const {
+    return CutoffSegments().size();
+  }
+
+  uint32_t NumInscopeSegments() const {
+    return inscope_segments_.size();
+  }
+
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
          common::SegmentSet inscope_segments,
@@ -109,6 +117,8 @@ class Merger {
   absl::StatusOr<std::optional<common::GlyphSet>> MergeSegmentWithHeuristic(
       uint32_t base_segment_index);
 
+  common::SegmentSet CutoffSegments() const;
+
   /*
    * Search for a base segment after base_segment_index which can be merged into
    * base_segment_index without exceeding the maximum patch size.
@@ -125,8 +135,6 @@ class Merger {
   absl::StatusOr<std::optional<common::GlyphSet>> TryMerge(
       segment_index_t base_segment_index,
       const common::SegmentSet& to_merge_segments_);
-
-  common::SegmentSet CutoffSegments() const;
 
   void MarkFinished(segment_index_t s) { candidate_segments_.erase(s); }
 

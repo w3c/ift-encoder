@@ -390,15 +390,22 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // ### Iteratively merge segments and incrementally reprocess affected data.
   size_t merger_index = 0;
   segment_index_t last_merged_segment_index = 0;
-  VLOG(0) << "Starting merge selection for merge group " << merger_index;
+  VLOG(0) << "Starting merge selection for merge group " << merger_index << std::endl
+          << "  " << mergers[merger_index].NumInscopeSegments() << " inscope segments, "
+          << mergers[merger_index].NumCutoffSegments() << " have optimization disabled.";
+
   while (true) {
     auto& merger = mergers[merger_index];
     auto merged = TRY(merger.TryNextMerge());
 
+
+
     if (!merged.has_value()) {
       merger_index++;
       if (merger_index < mergers.size()) {
-        VLOG(0) << "Merge group finished, starting next group " << merger_index;
+        VLOG(0) << "Merge group finished, starting next group " << merger_index << std::endl
+          << "  " << mergers[merger_index].NumInscopeSegments() << " inscope segments, "
+          << mergers[merger_index].NumCutoffSegments() << " have optimization disabled.";
         continue;
       }
 
@@ -412,7 +419,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
     GlyphSet analysis_modified_gids;
     if (!context.InertSegments().contains(last_merged_segment_index)) {
-      VLOG(0) << "Re-analyzing segment " << last_merged_segment_index
+      VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
               << " due to merge.";
       analysis_modified_gids =
           TRY(context.ReprocessSegment(last_merged_segment_index));
