@@ -107,6 +107,27 @@ message CostConfiguration {
   // it will be moved into the initial font. If this is left unset then nothing will be moved to the
   // init font for this group.
   double init_font_merge_threshold = 6;
+
+  // By default merges under cost strategy are made by joining segments together, if this setting is
+  // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
+  // merge glyphs from two patches are merged together along with the conditions for those patches.
+  //
+  // WARNING: This is currently defaulted off since there are some known issues with this approach
+  // where shapers can make glyph substitutions that are not encoded in GSUB. When patch merges are
+  // used it's possible to have a glyph included a patch, but under some subset definitions the glyph
+  // is not actually reachable. Because it's not reachable it's dependencies may not have been loaded since
+  // they aren't technically needed. However, in some cases such glyphs can be reached in practice by shaper
+  // substitutions which the glyph closure doesn't take into acount (relevant harfbuzz issue:
+  // https://github.com/harfbuzz/harfbuzz/issues/2283).
+  //
+  // Segment merges don't run into this issue since they will only ever include reachable glyphs
+  // which means dependencies are always fully satisified. The shaper won't do substitutions if the appropriate
+  // glyph isn't present.
+  //
+  // Work is planned to fix this issue (either in the harfbuzz closure or with a workaround in the segmenter),
+  // until then it's recommended to not used this except for testing (or if appropriate care has been taken
+  // in producing the input segments to avoid this issue).
+  bool experimental_use_patch_merges = 7 [default = false];
 }
 
 // The merger will choose segments to merge based on a heuristic which primarily utilizes

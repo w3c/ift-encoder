@@ -598,14 +598,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
       {{' ', ' '}, 1000},
       {{'a', 'a'}, 1000},
       {{'!', '!'}, 999},
-      {{0x203C, 0x203C}, 1}  // !!
-                             // Everything unspecified defaults to a count of 1.
+      {{0x203C, 0x203C}, 1} // !!
   };
 
-  // Base line, nothing is merged
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  strategy.SetUsePatchMerges(true);
+
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'!'}, {0x203C}},
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 1));
+      strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'a'}, {'!'}, {0x203C}};
@@ -617,6 +618,33 @@ p0: { gid989 }
 p1: { gid5, gid69 }
 if (s2) then p0
 if ((s0 OR s1 OR s2)) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 1000},
+      {{'a', 'a'}, 1000},
+      {{'!', '!'}, 999},
+      {{0x203C, 0x203C}, 1} // !!
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  strategy.SetUsePatchMerges(false);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}},
+      strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Because the condition for ! OR !! has high probability it get's merged with a
+  std::vector<SubsetDefinition> expected_segments = {{'a', '!', 0x203c}, {}, {}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid5, gid69, gid989 }
+if (s0) then p0
 )");
 }
 
@@ -801,6 +829,7 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   MergeStrategy strategy =
       *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
+  strategy.SetUsePatchMerges(true);
 
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
