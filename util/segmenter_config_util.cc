@@ -111,6 +111,8 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
                                             merged.min_group_size()));
   }
 
+  strategy.SetUsePatchMerges(merged.experimental_use_patch_merges());
+
   strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
 
   if (merged.has_init_font_merge_threshold()) {

@@ -112,6 +112,8 @@ class MergeStrategy {
 
   bool IsNone() const { return !use_costs_ && patch_size_min_bytes_ == 0; }
   bool UseCosts() const { return use_costs_; }
+  bool UsePatchMerges() const { return use_patch_merges_; }
+
   uint32_t NetworkOverheadCost() const { return network_overhead_cost_; }
   uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
@@ -140,6 +142,10 @@ class MergeStrategy {
   }
   void SetInitFontMergeThreshold(std::optional<double> value) {
     init_font_merge_threshold_ = value;
+  }
+
+  void SetUsePatchMerges(bool value) {
+    use_patch_merges_ = value;
   }
 
   bool operator==(const MergeStrategy& other) const {
@@ -171,6 +177,7 @@ class MergeStrategy {
   uint32_t patch_size_max_bytes_;
   double optimization_cutoff_fraction_ = 0.001;
   std::optional<double> init_font_merge_threshold_ = std::nullopt;
+  bool use_patch_merges_ = false;
 
   std::shared_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };

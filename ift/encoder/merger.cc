@@ -408,9 +408,9 @@ Status Merger::CollectCompositeCandidateMerges(
       smallest_candidate_merge = *candidate_merge;
     }
 
-    if (next_condition.conditions().size() == 1) {
+    if (strategy_.UsePatchMerges() && next_condition.conditions().size() == 1) {
       // For disjunctive composite patches, also consider merging just the
-      // patches together.
+      // patches together (if enabled).
       auto candidate_merge = TRY(CandidateMerge::AssessPatchMerge(
           *this, base_segment_index, triggering_segments,
           smallest_candidate_merge));
