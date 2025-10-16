@@ -75,13 +75,9 @@ class Merger {
                                const common::SegmentSet& to_merge,
                                const Segment& merged_segment, bool is_inert);
 
-  uint32_t NumCutoffSegments() const {
-    return CutoffSegments().size();
-  }
+  uint32_t NumCutoffSegments() const { return CutoffSegments().size(); }
 
-  uint32_t NumInscopeSegments() const {
-    return inscope_segments_.size();
-  }
+  uint32_t NumInscopeSegments() const { return inscope_segments_.size(); }
 
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,

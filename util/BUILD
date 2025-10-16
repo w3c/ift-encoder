@@ -115,6 +115,23 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "trace_segmentation_plan",
+    srcs = [
+        "trace_segmentation_plan.cc",
+    ],
+    deps = [
+        ":segmentation_plan_cc_proto",
+        ":load_codepoints",
+        "//common",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/status:status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/log:initialize",
+    ],
+)
+
 cc_library(
     name = "convert_iftb",
     srcs = [
