@@ -313,7 +313,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
   return result;
 }
 
-StatusOr<double> CandidateMerge::ComputeInitFontCostDelta(
+StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     Merger& merger, uint32_t existing_init_font_size, bool best_case,
     const GlyphSet& moved_glyphs) {
   VLOG(1) << "cost_delta for move of glyphs " << moved_glyphs.ToString()
@@ -407,7 +407,7 @@ StatusOr<double> CandidateMerge::ComputeInitFontCostDelta(
 
   VLOG(1) << "    = " << total_delta;
 
-  return total_delta;
+  return std::make_pair(total_delta, glyph_closure_delta);
 }
 
 StatusOr<double> CandidateMerge::ComputeCostDelta(

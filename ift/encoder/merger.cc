@@ -71,19 +71,19 @@ Merger::TryNextMerge() {
   return std::nullopt;
 }
 
-Status Merger::MoveSegmentsToInitFont() {
-  if (!strategy_.InitFontMergeThreshold().has_value()) {
-    return absl::FailedPreconditionError(
-        "Cannot be called when there is no merge threshold configured.");
-  }
+SegmentSet Merger::InitFontSegmentsToCheck(const SegmentSet& inscope) const {
+  SegmentSet to_check = inscope;
 
-  VLOG(0) << "Checking if there are any segments which should be moved into "
-             "the initial font.";
+  SegmentSet excluded = CutoffSegments();
+  // Shared segments aren't subject to optimization cutoff. So only exclude
+  // those in inscope_segments_ (which is all of the non-shared segments)
+  excluded.intersect(inscope_segments_);
+  to_check.subtract(excluded);
 
-  // TODO(garretrieger): This implementation can be further optimized:
-  //   - Make ReassignInitSegment() an incremental update instead of a full
-  //     reprocessing.
+  return to_check;
+}
 
+SegmentSet Merger::InitFontApplyProbabilityThreshold() const {
   SegmentSet below_threshold;
   if (strategy_.InitFontMergeProbabilityThreshold().has_value()) {
     for (segment_index_t s : inscope_segments_for_init_move_) {
@@ -96,60 +96,120 @@ Status Merger::MoveSegmentsToInitFont() {
 
   SegmentSet inscope = inscope_segments_for_init_move_;
   inscope.subtract(below_threshold);
-  VLOG(0) << inscope.size() << " inscope segments, " << below_threshold.size() << " skipped for being below the probability threshold.";
 
+  VLOG(0) << inscope.size() << " inscope segments, " << below_threshold.size()
+          << " skipped for being below the probability threshold.";
+  return inscope;
+}
+
+btree_map<ActivationCondition, GlyphSet> Merger::InitFontConditionsToCheck(
+    const SegmentSet& to_check, bool batch_mode) const {
+  // We only want to check conditions that use at least one segment which is
+  // inscope for moving to the init font.
+  btree_map<ActivationCondition, GlyphSet> conditions;
+  for (segment_index_t s : to_check) {
+    for (const auto& c :
+         Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
+      if (conditions.contains(c)) {
+        continue;
+      }
+
+      if (batch_mode) {
+        SegmentSet triggering_segments = c.TriggeringSegments();
+        if (triggering_segments.size() != 1 ||
+            !Context().InertSegments().contains(*triggering_segments.begin())) {
+          // Non-inert conditions are skipped during the batch processing.
+          continue;
+        }
+      }
+
+      GlyphSet glyphs = Context().glyph_groupings.ConditionsAndGlyphs().at(c);
+      conditions.insert(std::make_pair(c, glyphs));
+    }
+  }
+  return conditions;
+}
+
+Status Merger::MoveSegmentsToInitFont() {
+  if (!strategy_.InitFontMergeThreshold().has_value()) {
+    return absl::FailedPreconditionError(
+        "Cannot be called when there is no merge threshold configured.");
+  }
+
+  VLOG(0) << "Checking if there are any segments which should be moved into "
+             "the initial font.";
+
+  SegmentSet inscope = InitFontApplyProbabilityThreshold();
+
+  // Init move processing works in two phases:
+  //
+  // First is batch mode. In batch mode only inert segments are checked
+  // for move. Any segments that are below the threshold are moved to the
+  // init font in a single operation. Because inert segments are not
+  // expected to interact we don't need to reform the closure analysis
+  // after each individual move to get an accurate cost delta.
+  //
+  // Once batch processing has no more moves left, the processing switches
+  // to non-batch processing where all candidate conditions are checked
+  // and moved one at a time.
+
+  bool batch_mode = true;
+  VLOG(0) << " batch checking inert segments for move to init font.";
   do {
-    SegmentSet to_check = inscope;
-
-    SegmentSet excluded = CutoffSegments();
-    // Shared segments aren't subject to optimization cutoff. So only exclude
-    // those in inscope_segments_ (which is all of the non-shared segments)
-    excluded.intersect(inscope_segments_);
-
-    to_check.subtract(excluded);
+    SegmentSet to_check = InitFontSegmentsToCheck(inscope);
 
     uint32_t init_font_size = TRY(Context().patch_size_cache->GetPatchSize(
         Context().SegmentationInfo().InitFontGlyphs()));
 
+    double total_delta = 0.0;
     double lowest_delta = *strategy_.InitFontMergeThreshold();
     std::optional<GlyphSet> glyphs_for_lowest = std::nullopt;
 
-    // We only want to check conditions that use at least one segment which is
-    // inscope for moving to the init font.
-    btree_map<ActivationCondition, GlyphSet> conditions;
-    for (segment_index_t s : to_check) {
-      for (const auto& c : Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
-        if (conditions.contains(c)) {
-          continue;
-        }
-
-        GlyphSet glyphs = Context().glyph_groupings.ConditionsAndGlyphs().at(c);
-        conditions.insert(std::make_pair(c, glyphs));
-      }
-    }
+    btree_map<ActivationCondition, GlyphSet> conditions =
+        InitFontConditionsToCheck(to_check, batch_mode);
 
     for (const auto& [condition, glyphs] : conditions) {
-      double best_case_delta = TRY(CandidateMerge::ComputeInitFontCostDelta(
+      auto [best_case_delta, _] = TRY(CandidateMerge::ComputeInitFontCostDelta(
           *this, init_font_size, true, glyphs));
       if (best_case_delta >= lowest_delta) {
         // Filter by best case first which is much faster to compute.
         continue;
       }
 
-      double delta = TRY(CandidateMerge::ComputeInitFontCostDelta(
+      auto [delta, all_glyphs] = TRY(CandidateMerge::ComputeInitFontCostDelta(
           *this, init_font_size, false, glyphs));
-      if (delta < lowest_delta) {
+      if (delta >= lowest_delta) {
+        continue;
+      }
+
+      if (batch_mode) {
+        // In batch mode we accept any merges under the threshold instead of
+        // finding the lowest.
+        if (!glyphs_for_lowest.has_value()) {
+          glyphs_for_lowest = GlyphSet{};
+        }
+        total_delta += delta;
+        glyphs_for_lowest->union_set(all_glyphs);
+      } else {
         lowest_delta = delta;
-        glyphs_for_lowest = glyphs;
+        total_delta = delta;
+        glyphs_for_lowest = all_glyphs;
       }
     }
 
     if (!glyphs_for_lowest.has_value()) {
-      // No more moves to make.
-      break;
+      if (batch_mode) {
+        // Batch mode processing done, move on to non-batch processing.
+        batch_mode = false;
+        VLOG(0) << " switching to checking individually.";
+        continue;
+      } else {
+        // No more moves to make.
+        break;
+      }
     }
 
-    TRYV(ApplyInitFontMove(*glyphs_for_lowest, lowest_delta));
+    TRYV(ApplyInitFontMove(*glyphs_for_lowest, total_delta));
   } while (true);
 
   VLOG(0) << "Initial font now has "
@@ -179,10 +239,21 @@ SegmentSet Merger::ComputeCandidateSegments(
     SegmentationContext& context, const MergeStrategy& strategy,
     const common::SegmentSet& inscope_segments) {
   SegmentSet candidate_segments;
-  for (unsigned i = 0; i < context.SegmentationInfo().Segments().size(); i++) {
-    if (!context.SegmentationInfo().Segments()[i].Definition().Empty() &&
-        inscope_segments.contains(i)) {
-      candidate_segments.insert(i);
+
+  if (inscope_segments.size() < context.SegmentationInfo().Segments().size()) {
+    for (segment_index_t s : inscope_segments) {
+      if (s < context.SegmentationInfo().Segments().size() &&
+          !context.SegmentationInfo().Segments()[s].Definition().Empty()) {
+        candidate_segments.insert(s);
+      }
+    }
+  } else {
+    for (segment_index_t s = 0;
+         s < context.SegmentationInfo().Segments().size(); s++) {
+      if (inscope_segments.contains(s) &&
+          !context.SegmentationInfo().Segments()[s].Definition().Empty()) {
+        candidate_segments.insert(s);
+      }
     }
   }
 
