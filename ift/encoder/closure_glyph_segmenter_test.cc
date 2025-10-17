@@ -899,6 +899,8 @@ if (s0) then p0
 )");
 }
 
+// TODO XXXX InitFontMerging w/ Probability Threshold
+
 TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
   // In this test we enable merging of segments into the init font
   UnicodeFrequencies frequencies{
