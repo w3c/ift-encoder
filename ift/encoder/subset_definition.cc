@@ -1,5 +1,6 @@
 #include "ift/encoder/subset_definition.h"
 
+#include <optional>
 #include <vector>
 
 #include "absl/container/btree_set.h"
@@ -88,6 +89,38 @@ S subtract(const S& a, const S& b) {
   return c;
 }
 
+std::optional<AxisRange> subtract(const AxisRange& a, const AxisRange& b) {
+  // Result of subtraction must be a single continous range, since subset
+  // defs store one range per axis.
+
+  // There are four cases we need to handle:
+  // 1. ranges do not intersect, the subtraction is a noop.
+  // 2. range b is a superset of a. This removes range a.
+  // 3. range a is a strict superset of b (on both bounds). Since we can't split
+  // a, this is also a noop.
+  // 4. ranges intersect, the intersecting portion is removed from a.
+
+  if (!a.Intersects(b)) {
+    return a;
+  }
+
+  // B superset
+  if (b.start() <= a.start() && b.end() >= a.end()) {
+    return std::nullopt;
+  }
+
+  // A strict superset
+  if (a.start() < b.start() && a.end() > b.end()) {
+    return a;
+  }
+
+  if (a.start() < b.start()) {
+    return *AxisRange::Range(a.start(), b.start());
+  } else {
+    return *AxisRange::Range(b.end(), a.end());
+  }
+}
+
 design_space_t subtract(const design_space_t& a, const design_space_t& b) {
   design_space_t c;
 
@@ -98,19 +131,10 @@ design_space_t subtract(const design_space_t& a, const design_space_t& b) {
       continue;
     }
 
-    if (e->second.IsPoint()) {
-      // range minus a point, does nothing.
-      c[tag] = range;
+    std::optional<AxisRange> new_range = subtract(range, e->second);
+    if (new_range.has_value()) {
+      c[tag] = *new_range;
     }
-
-    // TODO(garretrieger): this currently operates only at the axis
-    //  level. Partial ranges within an axis are not supported.
-    //  to implement this we'll need to subtract the two ranges
-    //  from each other. However, this can produce two resulting ranges
-    //  instead of one.
-    //
-    //  It's likely that we'll forbid disjoint ranges, so we can simply
-    //  error out if a configuration would result in one.
   }
 
   return c;
@@ -135,15 +159,12 @@ void SubsetDefinition::Union(const SubsetDefinition& other) {
       continue;
     }
 
-    // TODO(garretrieger): this is a simplified implementation that
-    //  only allows expanding a point to a range. This needs to be
-    //  updated to handle a generic union.
-    //
-    //  It's likely that we'll forbid disjoint ranges, so we can simply
-    //  error out if a configuration would result in one.
-    if (existing->second.IsPoint() && range.IsRange()) {
-      design_space[tag] = range;
-    }
+    // For axis space we only suppport a single continous interval so if
+    // we have two disjoint intervals then form a new single interval that
+    // is a super set of the two input intervals.
+    float min = std::min(range.start(), existing->second.start());
+    float max = std::max(range.end(), existing->second.end());
+    design_space[tag] = *AxisRange::Range(min, max);
   }
 }
 

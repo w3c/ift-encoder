@@ -289,10 +289,7 @@ TEST_F(CompilerTest, OutgoingEdges_DesignSpace_AddAxis_OverlappingAxisRange) {
   SubsetDefinition s1{3, 4};
 
   SubsetDefinition s2{};
-  // TODO(garretrieger): since the current subtract implementation is limited
-  //   we don't support partially subtracting a range. Once support is
-  //   available this case can be updated to check wght range is partially
-  //   subtracted instead of being ignored.
+  s2.design_space[kWght] = *AxisRange::Range(500, 700);
   s2.design_space[kWdth] = *AxisRange::Range(300, 400);
 
   auto combos = compiler.OutgoingEdges(base, 2);
