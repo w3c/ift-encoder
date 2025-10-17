@@ -119,6 +119,10 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
     strategy.SetInitFontMergeThreshold(merged.init_font_merge_threshold());
   }
 
+  if (merged.has_init_font_merge_probability_threshold()) {
+    strategy.SetInitFontMergeProbabilityThreshold(merged.init_font_merge_probability_threshold());
+  }
+
   return strategy;
 }
 

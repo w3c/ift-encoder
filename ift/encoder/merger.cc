@@ -82,10 +82,24 @@ Status Merger::MoveSegmentsToInitFont() {
 
   // TODO(garretrieger): This implementation can be further optimized:
   //   - Make ReassignInitSegment() an incremental update instead of a full
-  //   reprocessing.
+  //     reprocessing.
+
+  SegmentSet below_threshold;
+  if (strategy_.InitFontMergeProbabilityThreshold().has_value()) {
+    for (segment_index_t s : inscope_segments_for_init_move_) {
+      const auto& seg = Context().SegmentationInfo().Segments().at(s);
+      if (seg.Probability() < strategy_.InitFontMergeProbabilityThreshold()) {
+        below_threshold.insert(s);
+      }
+    }
+  }
+
+  SegmentSet inscope = inscope_segments_for_init_move_;
+  inscope.subtract(below_threshold);
+  VLOG(0) << inscope.size() << " inscope segments, " << below_threshold.size() << " skipped for being below the probability threshold.";
 
   do {
-    SegmentSet to_check = inscope_segments_for_init_move_;
+    SegmentSet to_check = inscope;
 
     SegmentSet excluded = CutoffSegments();
     // Shared segments aren't subject to optimization cutoff. So only exclude
@@ -100,14 +114,21 @@ Status Merger::MoveSegmentsToInitFont() {
     double lowest_delta = *strategy_.InitFontMergeThreshold();
     std::optional<GlyphSet> glyphs_for_lowest = std::nullopt;
 
-    for (const auto& [condition, glyphs] :
-         Context().glyph_groupings.ConditionsAndGlyphs()) {
-      // We only want to check conditions that use at least one segment which is
-      // inscope for moving to the init font.
-      if (!condition.TriggeringSegments().intersects(to_check)) {
-        continue;
-      }
+    // We only want to check conditions that use at least one segment which is
+    // inscope for moving to the init font.
+    btree_map<ActivationCondition, GlyphSet> conditions;
+    for (segment_index_t s : to_check) {
+      for (const auto& c : Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
+        if (conditions.contains(c)) {
+          continue;
+        }
 
+        GlyphSet glyphs = Context().glyph_groupings.ConditionsAndGlyphs().at(c);
+        conditions.insert(std::make_pair(c, glyphs));
+      }
+    }
+
+    for (const auto& [condition, glyphs] : conditions) {
       double best_case_delta = TRY(CandidateMerge::ComputeInitFontCostDelta(
           *this, init_font_size, true, glyphs));
       if (best_case_delta >= lowest_delta) {

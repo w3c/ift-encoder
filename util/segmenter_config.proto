@@ -108,6 +108,12 @@ message CostConfiguration {
   // init font for this group.
   double init_font_merge_threshold = 6;
 
+  // Segments below this probability will no be considered for moving into the initial font. This is
+  // useful to prune segments from the analysis that are unlikely to be beneficial for moving.
+  //
+  // Value is from [0, 1].
+  double init_font_merge_probability_threshold = 7;
+
   // By default merges under cost strategy are made by joining segments together, if this setting is
   // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
   // merge glyphs from two patches are merged together along with the conditions for those patches.
@@ -127,7 +133,7 @@ message CostConfiguration {
   // Work is planned to fix this issue (either in the harfbuzz closure or with a workaround in the segmenter),
   // until then it's recommended to not used this except for testing (or if appropriate care has been taken
   // in producing the input segments to avoid this issue).
-  bool experimental_use_patch_merges = 7 [default = false];
+  bool experimental_use_patch_merges = 8 [default = false];
 }
 
 // The merger will choose segments to merge based on a heuristic which primarily utilizes

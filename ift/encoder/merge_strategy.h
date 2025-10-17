@@ -140,8 +140,17 @@ class MergeStrategy {
   std::optional<double> InitFontMergeThreshold() const {
     return init_font_merge_threshold_;
   }
+
+  std::optional<double> InitFontMergeProbabilityThreshold() const {
+    return init_font_merge_probability_threshold_;
+  }
+
   void SetInitFontMergeThreshold(std::optional<double> value) {
     init_font_merge_threshold_ = value;
+  }
+
+  void SetInitFontMergeProbabilityThreshold(std::optional<double> value) {
+    init_font_merge_probability_threshold_ = value;
   }
 
   void SetUsePatchMerges(bool value) {
@@ -177,6 +186,7 @@ class MergeStrategy {
   uint32_t patch_size_max_bytes_;
   double optimization_cutoff_fraction_ = 0.001;
   std::optional<double> init_font_merge_threshold_ = std::nullopt;
+  std::optional<double> init_font_merge_probability_threshold_ = std::nullopt;
   bool use_patch_merges_ = false;
 
   std::shared_ptr<freq::ProbabilityCalculator> probability_calculator_;
