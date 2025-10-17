@@ -99,12 +99,6 @@ StatusOr<FontData> Compiler::FullyExpandedSubset(
     all.gids.insert(gids.begin(), gids.end());
   }
 
-  // Union doesn't work completely correctly with respect to design spaces so
-  // clear out design space which will just include the full original design
-  // space.
-  // TODO(garretrieger): once union works correctly remove this.
-  all.design_space.clear();
-
   return CutSubset(context, face_.get(), all, false);
 }
 
@@ -131,14 +125,6 @@ std::vector<Compiler::Edge> Compiler::OutgoingEdges(
     AddCombinations(input, i, result);
   }
 
-  return result;
-}
-
-SubsetDefinition Compiler::Combine(const SubsetDefinition& s1,
-                                   const SubsetDefinition& s2) const {
-  SubsetDefinition result;
-  result.Union(s1);
-  result.Union(s2);
   return result;
 }
 

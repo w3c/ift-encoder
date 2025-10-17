@@ -261,9 +261,6 @@ class Compiler {
     return out;
   }
 
-  SubsetDefinition Combine(const SubsetDefinition& s1,
-                           const SubsetDefinition& s2) const;
-
   /*
    * Create an IFT encoded version of 'font' that initially supports
    * 'base_subset' but can be extended via patches to support any combination of

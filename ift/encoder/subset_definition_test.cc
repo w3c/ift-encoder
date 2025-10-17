@@ -1,5 +1,7 @@
 #include "ift/encoder/subset_definition.h"
 
+#include <optional>
+
 #include "common/axis_range.h"
 #include "common/font_data.h"
 #include "gtest/gtest.h"
@@ -152,6 +154,172 @@ TEST_F(SubsetDefinitionTest, Subtraction) {
     a.Subtract(b);
     ASSERT_EQ(a, c);
   }
+}
+
+void TestDesignSpaceSubtraction(hb_tag_t tag_a, AxisRange a, hb_tag_t tag_b,
+                                AxisRange b,
+                                std::optional<AxisRange> expected) {
+  SubsetDefinition sa;
+  sa.design_space = {{tag_a, a}};
+
+  SubsetDefinition sb;
+  sb.design_space = {{tag_b, b}};
+
+  sa.Subtract(sb);
+
+  if (expected.has_value()) {
+    ASSERT_EQ(sa.design_space.at(tag_a), *expected);
+  } else {
+    ASSERT_FALSE(sa.design_space.contains(tag_a));
+  }
+}
+
+void TestDesignSpaceSubtraction(AxisRange a, AxisRange b,
+                                std::optional<AxisRange> expected) {
+  hb_tag_t tag = HB_TAG('a', 'b', 'c', 'd');
+  TestDesignSpaceSubtraction(tag, a, tag, b, expected);
+}
+
+TEST_F(SubsetDefinitionTest, SubtractDesignSpace) {
+  // Case 1 disjoint
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(200, 300),
+                             *AxisRange::Range(100, 200));
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(201, 300),
+                             *AxisRange::Range(100, 200));
+
+  // Case 2 'b' super set
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(100, 200), std::nullopt);
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(100, 300), std::nullopt);
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(90, 200), std::nullopt);
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(90, 300), std::nullopt);
+
+  // Case 3 'a' strict super set
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(101, 199),
+                             *AxisRange::Range(100, 200));
+
+  // Case 4 everything else
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(150, 200),
+                             *AxisRange::Range(100, 150));
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(150, 300),
+                             *AxisRange::Range(100, 150));
+
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(100, 150),
+                             *AxisRange::Range(150, 200));
+  TestDesignSpaceSubtraction(*AxisRange::Range(100, 200),
+                             *AxisRange::Range(50, 150),
+                             *AxisRange::Range(150, 200));
+
+  // Different tags
+  TestDesignSpaceSubtraction(
+      HB_TAG('f', 'o', 'o', ' '), *AxisRange::Range(100, 200),
+      HB_TAG('b', 'a', 'r', ' '), *AxisRange::Range(150, 250),
+      *AxisRange::Range(100, 200));
+}
+
+void TestUnion(SubsetDefinition a, SubsetDefinition b, SubsetDefinition ab) {
+  SubsetDefinition u = a;
+  u.Union(b);
+  ASSERT_EQ(u, ab);
+
+  u = b;
+  u.Union(a);
+  ASSERT_EQ(u, ab);
+}
+
+TEST_F(SubsetDefinitionTest, Union) {
+  SubsetDefinition a{1, 2, 3, 4};
+  a.feature_tags = {
+      HB_TAG('f', 'o', 'o', ' '),
+  };
+  a.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), AxisRange::Point(300)},
+  };
+
+  SubsetDefinition b{2, 8, 9};
+  b.feature_tags = {
+      HB_TAG('b', 'a', 'r', ' '),
+  };
+  b.design_space = {
+      {HB_TAG('w', 'd', 't', 'h'), AxisRange::Point(75)},
+  };
+
+  SubsetDefinition ab{1, 2, 3, 4, 8, 9};
+  ab.feature_tags = {
+      HB_TAG('f', 'o', 'o', ' '),
+      HB_TAG('b', 'a', 'r', ' '),
+  };
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), AxisRange::Point(300)},
+      {HB_TAG('w', 'd', 't', 'h'), AxisRange::Point(75)},
+  };
+
+  TestUnion(a, b, ab);
+}
+
+TEST_F(SubsetDefinitionTest, UnionDesignSpace) {
+  SubsetDefinition a;
+  a.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), AxisRange::Point(300)},
+  };
+
+  SubsetDefinition b;
+  b.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), AxisRange::Point(700)},
+  };
+
+  SubsetDefinition ab;
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(300, 700)},
+  };
+
+  // Point - Point
+  TestUnion(a, b, ab);
+
+  // Point - Range
+  b.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(100, 200)},
+  };
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(100, 300)},
+  };
+  TestUnion(a, b, ab);
+
+  // Range - Range
+  a.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(300, 600)},
+  };
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(100, 600)},
+  };
+  TestUnion(a, b, ab);
+
+  // Range - Range
+  a.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(50, 350)},
+  };
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(50, 350)},
+  };
+  TestUnion(a, b, ab);
+
+  // Range - Range
+  b.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(200, 400)},
+  };
+  ab.design_space = {
+      {HB_TAG('w', 'g', 'h', 't'), *AxisRange::Range(50, 400)},
+  };
+  TestUnion(a, b, ab);
 }
 
 }  // namespace ift::encoder
