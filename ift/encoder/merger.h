@@ -137,6 +137,13 @@ class Merger {
   absl::Status ApplyInitFontMove(const common::GlyphSet& glyphs_to_move,
                                  double delta);
 
+  common::SegmentSet InitFontApplyProbabilityThreshold() const;
+  common::SegmentSet InitFontSegmentsToCheck(
+      const common::SegmentSet& inscope) const;
+  absl::btree_map<ActivationCondition, common::GlyphSet>
+  InitFontConditionsToCheck(const common::SegmentSet& to_check,
+                            bool batch_mode) const;
+
   // Stores the broadeder complete segmentation.
   SegmentationContext* context_;
 

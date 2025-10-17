@@ -120,9 +120,6 @@ class SegmentationContext {
     for (segment_index_t segment_index = 0;
          segment_index < SegmentationInfo().Segments().size();
          segment_index++) {
-      // TODO(garretrieger): when using this during the init font move
-      // processing we know exactly which gids are removed so we can do a
-      // partial instead of full invalidation.
       TRY(ReprocessSegment(segment_index));
     }
 

@@ -153,9 +153,7 @@ class MergeStrategy {
     init_font_merge_probability_threshold_ = value;
   }
 
-  void SetUsePatchMerges(bool value) {
-    use_patch_merges_ = value;
-  }
+  void SetUsePatchMerges(bool value) { use_patch_merges_ = value; }
 
   bool operator==(const MergeStrategy& other) const {
     return use_costs_ == other.use_costs_ &&

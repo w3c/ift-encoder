@@ -598,15 +598,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
       {{' ', ' '}, 1000},
       {{'a', 'a'}, 1000},
       {{'!', '!'}, 999},
-      {{0x203C, 0x203C}, 1} // !!
+      {{0x203C, 0x203C}, 1}  // !!
   };
 
-  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy =
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
   strategy.SetUsePatchMerges(true);
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}},
-      strategy);
+      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'a'}, {'!'}, {0x203C}};
@@ -626,19 +626,21 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
       {{' ', ' '}, 1000},
       {{'a', 'a'}, 1000},
       {{'!', '!'}, 999},
-      {{0x203C, 0x203C}, 1} // !!
+      {{0x203C, 0x203C}, 1}  // !!
   };
 
-  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy =
+      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
   strategy.SetUsePatchMerges(false);
 
   auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}},
-      strategy);
+      roboto.get(), {}, {{'a'}, {'!'}, {0x203C}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  // Because the condition for ! OR !! has high probability it get's merged with a
-  std::vector<SubsetDefinition> expected_segments = {{'a', '!', 0x203c}, {}, {}};
+  // Because the condition for ! OR !! has high probability it get's merged with
+  // a
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', '!', 0x203c}, {}, {}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -899,8 +901,6 @@ if (s0) then p0
 )");
 }
 
-// TODO XXXX InitFontMerging w/ Probability Threshold
-
 TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
   // In this test we enable merging of segments into the init font
   UnicodeFrequencies frequencies{
@@ -935,6 +935,44 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
             R"(initial font: { gid0, gid69, gid72 }
 p0: { gid70, gid71 }
 if (s2) then p0
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_WithProbabilityThreshold) {
+  // In this test we enable merging of segments into the init font
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 97},
+      {{'c', 'c'}, 97},
+      {{'d', 'd'}, 97},
+
+      // b and c co-occur
+      {{'b', 'c'}, 97},
+  };
+
+  MergeStrategy strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies));
+  strategy.SetInitFontMergeThreshold(-75);
+  strategy.SetInitFontMergeProbabilityThreshold(0.98);
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'a' will be moved to the init font, leaving the other segments
+  // to be merged together.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},
+      {'b', 'c', 'd'},
+      {},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid70, gid71, gid72 }
+if (s1) then p0
 )");
 }
 
