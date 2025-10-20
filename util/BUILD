@@ -269,3 +269,17 @@ cc_binary(
         "@riegeli//riegeli/records:record_writer",
     ],
 )
+
+cc_binary(
+    name = "freq_data_to_sorted_codepoints",
+    srcs = [
+        "freq_data_to_sorted_codepoints.cc",
+    ],
+    deps = [
+        ":load_codepoints",
+        "//ift/freq",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
