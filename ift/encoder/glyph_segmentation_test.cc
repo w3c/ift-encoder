@@ -50,7 +50,7 @@ class GlyphSegmentationTest : public ::testing::Test {
 };
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter;
+  ClosureGlyphSegmenter segmenter(8, 11);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -121,7 +121,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter;
+  ClosureGlyphSegmenter segmenter(8, 11);
 
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
@@ -262,7 +262,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter;
+  ClosureGlyphSegmenter segmenter(8, 11);
   UnicodeFrequencies freq;
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
@@ -375,7 +375,7 @@ initial_glyphs {
 TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
-  ClosureGlyphSegmenter segmenter;
+  ClosureGlyphSegmenter segmenter(8, 11);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                          {

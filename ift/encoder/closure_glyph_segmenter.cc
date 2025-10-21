@@ -88,7 +88,7 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
   SegmentationContext non_incremental_context(
       face, context.SegmentationInfo().InitFontSegment(),
-      context.SegmentationInfo().Segments(), 1);
+      context.SegmentationInfo().Segments(), 1, 1);
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
@@ -304,7 +304,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
-    std::optional<MergeStrategy> strategy, uint32_t brotli_quality) const {
+    std::optional<MergeStrategy> strategy) const {
   btree_map<SegmentSet, MergeStrategy> merge_groups;
   if (!subset_definitions.empty() && strategy.has_value()) {
     SegmentSet all;
@@ -313,7 +313,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return CodepointToGlyphSegments(face, initial_segment, subset_definitions,
-                                  merge_groups, brotli_quality, false);
+                                  merge_groups, false);
 }
 
 StatusOr<std::vector<Merger>> ToMergers(
@@ -331,7 +331,7 @@ StatusOr<std::vector<Merger>> ToMergers(
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
-    btree_map<SegmentSet, MergeStrategy> merge_groups, uint32_t brotli_quality,
+    btree_map<SegmentSet, MergeStrategy> merge_groups,
     bool place_fallback_in_init) const {
   for (const auto& [segments, strategy] : merge_groups) {
     if (strategy.UseCosts()) {
@@ -343,7 +343,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   std::vector<Segment> segments =
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
   SegmentationContext context = TRY(InitializeSegmentationContext(
-      face, initial_segment, std::move(segments), brotli_quality));
+      face, initial_segment, std::move(segments)));
 
   std::vector<Merger> mergers =
       TRY(ToMergers(context, with_shared, merge_groups));
@@ -440,7 +440,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 StatusOr<SegmentationContext>
 ClosureGlyphSegmenter::InitializeSegmentationContext(
     hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> segments, uint32_t brotli_quality) const {
+    std::vector<Segment> segments) const {
   uint32_t glyph_count = hb_face_get_glyph_count(face);
   if (!glyph_count) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
@@ -451,7 +451,8 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   AddInitSubsetDefaults(initial_segment);
 
   // No merging is done during init.
-  SegmentationContext context(face, initial_segment, segments, brotli_quality);
+  SegmentationContext context(face, initial_segment, segments, brotli_quality_,
+                              init_font_merging_brotli_quality_);
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

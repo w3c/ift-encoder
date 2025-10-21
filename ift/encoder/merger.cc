@@ -158,8 +158,9 @@ Status Merger::MoveSegmentsToInitFont() {
   do {
     SegmentSet to_check = InitFontSegmentsToCheck(inscope);
 
-    uint32_t init_font_size = TRY(Context().patch_size_cache->GetPatchSize(
-        Context().SegmentationInfo().InitFontGlyphs()));
+    uint32_t init_font_size =
+        TRY(Context().patch_size_cache_for_init_font->GetPatchSize(
+            Context().SegmentationInfo().InitFontGlyphs()));
 
     double total_delta = 0.0;
     double lowest_delta = *strategy_.InitFontMergeThreshold();

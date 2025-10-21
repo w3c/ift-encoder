@@ -356,7 +356,8 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   } else {
     double before = existing_init_font_size;
     double after =
-        TRY(merger.Context().patch_size_cache->GetPatchSize(new_glyph_closure));
+        TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
+            new_glyph_closure));
     if (after > before) {
       // case where after is < before happen occasionally as the result of
       // running with lower brotli compression quality. Ignores these in order
@@ -382,7 +383,8 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
                               *merger.Strategy().ProbabilityCalculator()));
     double patch_size_before =
-        TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs)) +
+        TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
+            glyphs)) +
         per_request_overhead;
 
     GlyphSet new_glyphs = glyphs;
@@ -395,7 +397,8 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
 
     if (!new_glyphs.empty()) {
       double patch_size_after =
-          TRY(merger.Context().patch_size_cache->GetPatchSize(new_glyphs)) +
+          TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
+              new_glyphs)) +
           per_request_overhead;
       double cost_after = patch_probability * patch_size_after;
 

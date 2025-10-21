@@ -33,6 +33,11 @@ struct SegmentationCost {
  */
 class ClosureGlyphSegmenter {
  public:
+  ClosureGlyphSegmenter(uint32_t brotli_quality,
+                        uint32_t init_font_merging_brotli_quality)
+      : brotli_quality_(brotli_quality),
+        init_font_merging_brotli_quality_(init_font_merging_brotli_quality) {}
+
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
    * a GlyphSegmentation which will satisfy the "glyph closure requirement" for
@@ -44,14 +49,13 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      std::optional<MergeStrategy> strategy = std::nullopt,
-      uint32_t brotli_quality = 8) const;
+      std::optional<MergeStrategy> strategy = std::nullopt) const;
 
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
       absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups,
-      uint32_t brotli_quality, bool place_fallback_in_init) const;
+      bool place_fallback_in_init) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.
@@ -61,7 +65,7 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<Segment> segments, uint32_t brotli_quality = 8) const;
+      std::vector<Segment> segments) const;
 
   /*
    * Computes the total cost (expected number of bytes transferred) for a given
@@ -70,6 +74,10 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<SegmentationCost> TotalCost(
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
       const freq::ProbabilityCalculator& probability_calculator) const;
+
+ private:
+  uint32_t brotli_quality_;
+  uint32_t init_font_merging_brotli_quality_;
 };
 
 }  // namespace ift::encoder
