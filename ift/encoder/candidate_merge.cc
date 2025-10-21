@@ -612,20 +612,21 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   }
 
   uint32_t new_patch_size = 0;
-  if (!segments_to_merge_and_base_are_inert) {
+  if (!segments_to_merge_are_inert) {
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
     new_patch_size =
         TRY(merger.Context().patch_size_cache->GetPatchSize(exclusive_gids));
   } else {
-    // When the inputs to a merge are all inert then we can assume the merged
-    // patch is just a combination of the glyphs from the input segments. This
-    // saves a closure computation.
+    // When the segments being added to base are all inert then we can assume
+    // the merged patch is just a combination of the glyphs from the base and
+    // the input segments. Since the segments being added are intert we know
+    // that they won't interact with base and will just bring along their own
+    // glyphs.
     GlyphSet merged_glyphs = gid_conditions_to_update;
     merged_glyphs.union_set(
-        merger.Context().glyph_condition_set.GlyphsWithSegment(
-            base_segment_index));
+        merger.Context().glyph_groupings.ExclusiveGlyphs(base_segment_index));
     new_patch_size =
         TRY(merger.Context().patch_size_cache->GetPatchSize(merged_glyphs));
   }
