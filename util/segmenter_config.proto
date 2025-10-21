@@ -31,23 +31,29 @@ message SegmenterConfig {
   // increase segmentation times, but yield more accurate results.
   uint32 brotli_quality = 5 [default = 8];
 
+  // During processing to determine which segments to move into the initial font this is
+  // the brotli quality used for generating compressed patches (to evaluate their size).
+  // The init font merge is more sensitive to lower brotli qualities, so this allows a higher
+  // brotli quality to be used in this phase if desired.
+  uint32 brotli_quality_for_init_font_merge = 6 [default = 11];
+
   // These base configs define the common config setings used by the merge groups.
   // Each individual merge groups config is created by starting with the base config of the
   // matching type and then overiding any fields specified in the merge group config.
-  HeuristicConfiguration base_heuristic_config = 6;
-  CostConfiguration base_cost_config = 7;
+  HeuristicConfiguration base_heuristic_config = 7;
+  CostConfiguration base_cost_config = 8;
 
   // If this is provided, then for any segments that are not covered by one of the merge groups
   // the heuristic merger will be used to group them according to this config. The heuristic
   // merger is used since for the ungrouped segments we do not have any available frequency data.
   //
   // Like the merge groups this config will be combined with base_heuristic_config.
-  HeuristicConfiguration ungrouped_config = 8;
+  HeuristicConfiguration ungrouped_config = 9;
 
   // Merge groups specify how merging will be performed for groups of segments.
   // Any segments that are not covered by any merge group will not be merged.
   // Merge groups are not required to be disjoint and may have overlapping segments.
-  repeated MergeGroup merge_groups = 9;
+  repeated MergeGroup merge_groups = 10;
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
