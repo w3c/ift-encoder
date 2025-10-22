@@ -13,6 +13,7 @@
 #include "hb-ot.h"
 #include "hb-subset.h"
 #include "hb.h"
+#include "common/try.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -46,6 +47,7 @@ bool FontHelper::HasWideGvar(const hb_face_t* face) {
 
   return (((uint8_t)gvar.str()[gvar_flags_offset]) & 0x01);
 }
+
 
 absl::StatusOr<string_view> FontHelper::GlyfData(const hb_face_t* face,
                                                  uint32_t gid) {
@@ -122,6 +124,33 @@ FontData FontHelper::Cff2Data(hb_face_t* face, uint32_t gid) {
   FontData data(data_blob);
   hb_blob_destroy(data_blob);
   return data;
+}
+
+StatusOr<uint32_t> FontHelper::TotalGlyphData(hb_face_t* face, const GlyphSet& gids) {
+  auto tags = FontHelper::GetTags(face);
+
+  uint32_t total = 0;
+  for (uint32_t gid : gids) {
+    // TODO(grieger): write this using indexed data readers instead so we can
+    // avoid the per glyph setup overhead incurred by the *Data() methods.
+    if (tags.contains(FontHelper::kGlyf)) {
+      total += TRY(FontHelper::GlyfData(face, gid)).size();
+    }
+
+    if (tags.contains(FontHelper::kGvar)) {
+      total += TRY(FontHelper::GvarData(face, gid)).size();
+    }
+
+    if (tags.contains(FontHelper::kCFF)) {
+      total += FontHelper::CffData(face, gid).size();
+    }
+
+    if (tags.contains(FontHelper::kCFF2)) {
+      total += FontHelper::Cff2Data(face, gid).size();
+    }
+  }
+
+  return total;
 }
 
 Status FontHelper::Cff2GetCharstrings(hb_face_t* face,

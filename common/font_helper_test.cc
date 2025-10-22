@@ -618,6 +618,48 @@ TEST_F(FontHelperTest, GlyfData_ShortOverflowSynthetic) {
   ASSERT_EQ(*data, expected);
 }
 
+TEST_F(FontHelperTest, TotalGlyphData_GlyfGvar) {
+  auto size = FontHelper::TotalGlyphData(roboto_vf.get(), GlyphSet {78, 83, 95});
+  ASSERT_TRUE(size.ok()) << size.status();
+
+  uint32_t expected =
+    FontHelper::GlyfData(roboto_vf.get(), 78)->size() +
+    FontHelper::GlyfData(roboto_vf.get(), 83)->size() +
+    FontHelper::GlyfData(roboto_vf.get(), 95)->size() +
+    FontHelper::GvarData(roboto_vf.get(), 78)->size() +
+    FontHelper::GvarData(roboto_vf.get(), 83)->size() +
+    FontHelper::GvarData(roboto_vf.get(), 95)->size();
+
+  ASSERT_GT(*size, 0);
+  ASSERT_EQ(*size, expected);
+}
+
+TEST_F(FontHelperTest, TotalGlyphData_Cff) {
+  auto size = FontHelper::TotalGlyphData(noto_sans_jp_otf.get(), GlyphSet {78, 83, 95});
+  ASSERT_TRUE(size.ok()) << size.status();
+
+  uint32_t expected =
+    FontHelper::CffData(noto_sans_jp_otf.get(), 78).size() +
+    FontHelper::CffData(noto_sans_jp_otf.get(), 83).size() +
+    FontHelper::CffData(noto_sans_jp_otf.get(), 95).size();
+
+  ASSERT_GT(*size, 0);
+  ASSERT_EQ(*size, expected);
+}
+
+TEST_F(FontHelperTest, TotalGlyphData_Cff2) {
+  auto size = FontHelper::TotalGlyphData(noto_sans_vf_jp_otf.get(), GlyphSet {34, 35, 46});
+  ASSERT_TRUE(size.ok()) << size.status();
+
+  uint32_t expected =
+    FontHelper::Cff2Data(noto_sans_vf_jp_otf.get(), 34).size() +
+    FontHelper::Cff2Data(noto_sans_vf_jp_otf.get(), 35).size() +
+    FontHelper::Cff2Data(noto_sans_vf_jp_otf.get(), 46).size();
+
+  ASSERT_GT(*size, 0);
+  ASSERT_EQ(*size, expected);
+}
+
 // TODO test BuildFont...
 
 }  // namespace common
