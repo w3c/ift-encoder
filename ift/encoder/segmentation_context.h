@@ -8,6 +8,7 @@
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/encoder/estimated_patch_size_cache.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_groupings.h"
@@ -43,9 +44,9 @@ class SegmentationContext {
                       const std::vector<Segment>& segments,
                       uint32_t brotli_quality,
                       uint32_t init_font_brotli_quality)
-      : patch_size_cache(new PatchSizeCacheImpl(face, brotli_quality)),
+      : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
         patch_size_cache_for_init_font(
-            new PatchSizeCacheImpl(face, init_font_brotli_quality)),
+            NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(segments, initial_segment, glyph_closure_cache),
@@ -174,6 +175,16 @@ class SegmentationContext {
   // considered to be the place where the potentional upside of optimization is
   // too small to be worthwhile.
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
+
+  static std::unique_ptr<PatchSizeCache> NewPatchSizeCache(hb_face_t* face, uint32_t brotli_quality) {
+    if (brotli_quality == 0) {
+      auto cache = EstimatedPatchSizeCache::New(face);
+      if (cache.ok()) {
+        return std::move(*cache);
+      }
+    }
+    return std::unique_ptr<PatchSizeCache>(new PatchSizeCacheImpl(face, brotli_quality));
+  }
 
  public:
   // Caches and logging

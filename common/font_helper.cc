@@ -10,13 +10,14 @@
 #include "common/hb_set_unique_ptr.h"
 #include "common/indexed_data_reader.h"
 #include "common/int_set.h"
+#include "common/try.h"
 #include "hb-ot.h"
 #include "hb-subset.h"
 #include "hb.h"
-#include "common/try.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
+using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -47,7 +48,6 @@ bool FontHelper::HasWideGvar(const hb_face_t* face) {
 
   return (((uint8_t)gvar.str()[gvar_flags_offset]) & 0x01);
 }
-
 
 absl::StatusOr<string_view> FontHelper::GlyfData(const hb_face_t* face,
                                                  uint32_t gid) {
@@ -126,8 +126,9 @@ FontData FontHelper::Cff2Data(hb_face_t* face, uint32_t gid) {
   return data;
 }
 
-StatusOr<uint32_t> FontHelper::TotalGlyphData(hb_face_t* face, const GlyphSet& gids) {
-  auto tags = FontHelper::GetTags(face);
+StatusOr<uint32_t> FontHelper::TotalGlyphData(hb_face_t* face,
+                                              const GlyphSet& gids) {
+  flat_hash_set<hb_tag_t> tags = FontHelper::GetTags(face);
 
   uint32_t total = 0;
   for (uint32_t gid : gids) {
