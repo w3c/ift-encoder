@@ -63,6 +63,8 @@ cc_library(
         "candidate_merge.cc",
         "candidate_merge.h",
         "patch_size_cache.h",
+        "estimated_patch_size_cache.h",
+        "estimated_patch_size_cache.cc",
         "merge_strategy.h",
         "merge_strategy.cc",
         "merger.cc",
@@ -251,6 +253,19 @@ cc_test(
         ":glyph_partition",
         "//common",
         "@abseil-cpp//absl/types:span",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "estimated_patch_size_cache_test",
+    srcs = ["estimated_patch_size_cache_test.cc"],
+    data = [
+        "//common:testdata",
+    ],
+    deps = [
+        ":segmentation_context",
+        "//common",
         "@googletest//:gtest_main",
     ],
 )

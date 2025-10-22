@@ -29,6 +29,10 @@ message SegmenterConfig {
   // When generating compressed patches (to evaluate their size) this is the brotli quality
   // level used. Segmentation is typically bottle necked on brotli compression so higher values
   // increase segmentation times, but yield more accurate results.
+  //
+  // If quality is set to '0' this disables brotli compression and instead estimates the
+  // effect of compression using a fixed compression ratio calculated based on how well
+  // the glyph data in the input font compresses.
   uint32 brotli_quality = 5 [default = 8];
 
   // During processing to determine which segments to move into the initial font this is
