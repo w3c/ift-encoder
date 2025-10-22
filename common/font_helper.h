@@ -145,6 +145,10 @@ class FontHelper {
 
   static FontData Cff2Data(hb_face_t* face, uint32_t gid);
 
+  // Counts up the total size of all glyph data (gvar, glyf, cff, cff2)
+  // for the provided set of gids.
+  static absl::StatusOr<uint32_t> TotalGlyphData(hb_face_t* face, const GlyphSet& gids);
+
   static absl::Status Cff2GetCharstrings(hb_face_t* face,
                                          FontData& non_charstrings,
                                          FontData& charstrings);
