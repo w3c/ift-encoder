@@ -4,6 +4,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 using absl::Status;
@@ -63,6 +64,37 @@ StatusOr<GlyphSet> GlyphClosureCache::CodepointsToOrGids(
   return or_gids;
 }
 
+// This generates the subset definition that contains all segments except for
+// those listed in segment_ids.
+SubsetDefinition ComputExceptSegment(
+    const RequestedSegmentationInformation& segmentation_info,
+    const SegmentSet& segment_ids, const SubsetDefinition& combined) {
+  if (segmentation_info.SegmentsAreDisjoint() &&
+      (segment_ids.size() == 1 ||
+       segment_ids.size() < (segmentation_info.Segments().size() / 2))) {
+    // Approach that is optimzied for the case where input segments are disjoint
+    // and the number of segment ids is smallish.
+    SubsetDefinition except_segment = segmentation_info.FullDefinition();
+    except_segment.Subtract(combined);
+    return except_segment;
+  }
+
+  // Otherwise this approach will always work even with non-disjoint segments
+  SegmentSet except_segment_ids = segment_ids;
+  except_segment_ids.invert();
+
+  uint32_t num_segments = segmentation_info.Segments().size();
+  SubsetDefinition except_segment = segmentation_info.InitFontSegment();
+  for (segment_index_t s : except_segment_ids) {
+    if (s >= num_segments) {
+      break;
+    }
+    except_segment.Union(segmentation_info.Segments()[s].Definition());
+  }
+
+  return except_segment;
+}
+
 Status GlyphClosureCache::AnalyzeSegment(
     const RequestedSegmentationInformation& segmentation_info,
     const SegmentSet& segment_ids, GlyphSet& and_gids, GlyphSet& or_gids,
@@ -95,20 +127,19 @@ Status GlyphClosureCache::AnalyzeSegment(
   // * I - D: the activation conditions for these glyphs is s_i OR …
   //          Where … is one or more additional segments.
   // * D intersection I: the activation conditions for these glyphs is only s_i
-  SubsetDefinition except_segment = segmentation_info.InitFontSegment();
-  for (uint32_t s = 0; s < segmentation_info.Segments().size(); s++) {
-    if (segment_ids.contains(s)) {
-      continue;
-    }
-    except_segment.Union(segmentation_info.Segments()[s].Definition());
+
+  SubsetDefinition
+      combined;  // This is the subset definition of the unions of segment_ids.
+  for (segment_index_t s_id : segment_ids) {
+    combined.Union(segmentation_info.Segments()[s_id].Definition());
   }
 
+  SubsetDefinition except_segment =
+      ComputExceptSegment(segmentation_info, segment_ids, combined);
   auto B_except_segment_closure = TRY(GlyphClosure(except_segment));
 
-  SubsetDefinition only_segment = segmentation_info.InitFontSegment();
-  for (segment_index_t s_id : segment_ids) {
-    only_segment.Union(segmentation_info.Segments()[s_id].Definition());
-  }
+  SubsetDefinition only_segment = combined;
+  only_segment.Union(segmentation_info.InitFontSegment());
 
   auto I_only_segment_closure = TRY(GlyphClosure(only_segment));
   I_only_segment_closure.subtract(segmentation_info.InitFontGlyphs());
