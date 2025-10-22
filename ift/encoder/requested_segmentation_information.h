@@ -83,6 +83,10 @@ class RequestedSegmentationInformation {
 
   const common::GlyphSet& FullClosure() const { return full_closure_; }
 
+  const SubsetDefinition& FullDefinition() const { return full_definition_; }
+
+  bool SegmentsAreDisjoint() const { return segments_disjoint_; }
+
   const std::vector<Segment>& Segments() const { return segments_; }
 
   const std::vector<SubsetDefinition> SegmentSubsetDefinitions() const {
@@ -125,8 +129,10 @@ class RequestedSegmentationInformation {
 
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;
+  SubsetDefinition full_definition_;
   common::GlyphSet init_font_glyphs_;
   common::GlyphSet full_closure_;
+  bool segments_disjoint_;
 };
 
 }  // namespace ift::encoder

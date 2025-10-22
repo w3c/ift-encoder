@@ -176,14 +176,16 @@ class SegmentationContext {
   // too small to be worthwhile.
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
-  static std::unique_ptr<PatchSizeCache> NewPatchSizeCache(hb_face_t* face, uint32_t brotli_quality) {
+  static std::unique_ptr<PatchSizeCache> NewPatchSizeCache(
+      hb_face_t* face, uint32_t brotli_quality) {
     if (brotli_quality == 0) {
       auto cache = EstimatedPatchSizeCache::New(face);
       if (cache.ok()) {
         return std::move(*cache);
       }
     }
-    return std::unique_ptr<PatchSizeCache>(new PatchSizeCacheImpl(face, brotli_quality));
+    return std::unique_ptr<PatchSizeCache>(
+        new PatchSizeCacheImpl(face, brotli_quality));
   }
 
  public:

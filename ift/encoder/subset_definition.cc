@@ -79,14 +79,23 @@ void PrintTo(const SubsetDefinition& def, std::ostream* os) {
 }
 
 template <typename S>
-S subtract(const S& a, const S& b) {
-  S c;
-  for (uint32_t v : a) {
-    if (!b.contains(v)) {
-      c.insert(v);
+void subtract_sets(S& a, const S& b) {
+  // Depending on which set is bigger use the implementation
+  // that iterates the fewest elements.
+  if (a.size() < b.size()) {
+    for (auto it = a.begin(); it != a.end();) {
+      if (b.contains(*it)) {
+        it = a.erase(it);
+      } else {
+        ++it;
+      }
     }
+    return;
   }
-  return c;
+
+  for (uint32_t v : b) {
+    a.erase(v);
+  }
 }
 
 std::optional<AxisRange> subtract(const AxisRange& a, const AxisRange& b) {
@@ -143,7 +152,7 @@ design_space_t subtract(const design_space_t& a, const design_space_t& b) {
 void SubsetDefinition::Subtract(const SubsetDefinition& other) {
   codepoints.subtract(other.codepoints);
   gids.subtract(other.gids);
-  feature_tags = subtract(feature_tags, other.feature_tags);
+  subtract_sets(feature_tags, other.feature_tags);
   design_space = subtract(design_space, other.design_space);
 }
 

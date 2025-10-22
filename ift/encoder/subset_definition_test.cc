@@ -141,18 +141,28 @@ TEST_F(SubsetDefinitionTest, Subtraction) {
   {
     SubsetDefinition a{1, 2, 3, 4};
     a.gids = {7, 8, 9};
-    a.feature_tags = {HB_TAG('f', 'o', 'o', ' '), HB_TAG('b', 'a', 'r', ' ')};
+    a.feature_tags = {HB_TAG('f', 'o', 'o', ' '), HB_TAG('b', 'a', 'r', ' '),
+                      HB_TAG('b', 'a', 'z', ' ')};
 
     SubsetDefinition b{3, 5, 6};
     b.gids = {8, 10};
-    b.feature_tags = {HB_TAG('f', 'o', 'o', ' ')};
+    b.feature_tags = {HB_TAG('f', 'o', 'o', ' '), HB_TAG('a', 'b', 'c', 'd')};
 
     SubsetDefinition c{1, 2, 4};
     c.gids = {7, 9};
-    c.feature_tags = {HB_TAG('b', 'a', 'r', ' ')};
+    c.feature_tags = {HB_TAG('b', 'a', 'r', ' '), HB_TAG('b', 'a', 'z', ' ')};
 
-    a.Subtract(b);
-    ASSERT_EQ(a, c);
+    SubsetDefinition def = a;
+    def.Subtract(b);
+    ASSERT_EQ(def, c);
+
+    SubsetDefinition d{5, 6};
+    d.gids = {10};
+    d.feature_tags = {HB_TAG('a', 'b', 'c', 'd')};
+
+    def = b;
+    def.Subtract(a);
+    ASSERT_EQ(def, d);
   }
 }
 
