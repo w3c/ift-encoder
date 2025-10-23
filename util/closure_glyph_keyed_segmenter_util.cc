@@ -142,7 +142,7 @@ static Status Main(const std::vector<char*> args) {
       TRY(config_util.ConfigToMergeGroups(config, font_codepoints, segments));
 
   ClosureGlyphSegmenter segmenter(config.brotli_quality(),
-                                  config.brotli_quality_for_init_font_merge());
+                                  config.brotli_quality_for_initial_font_merging());
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       font.get(), init_segment, segments, merge_groups,
       config.move_fallback_glyphs_into_initial_font()));
