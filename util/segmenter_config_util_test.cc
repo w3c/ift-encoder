@@ -249,7 +249,7 @@ TEST_F(SegmenterConfigUtilTest,
   group->mutable_cost_config()->set_path_to_frequency_data(
       "test_freq_data.riegeli");
   group->mutable_cost_config()->set_network_overhead_cost(85);
-  group->mutable_cost_config()->set_init_font_merge_threshold(-70);
+  group->mutable_cost_config()->set_initial_font_merge_threshold(-70);
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
 
@@ -274,7 +274,7 @@ TEST_F(SegmenterConfigUtilTest,
 TEST_F(SegmenterConfigUtilTest,
        ConfigToMergeGroups_SegmentsInferred_MergeGroupsSpecified_Cost) {
   SegmenterConfig config;
-  config.mutable_base_cost_config()->set_init_font_merge_threshold(-90);
+  config.mutable_base_cost_config()->set_initial_font_merge_threshold(-90);
 
   auto* group = config.add_merge_groups();
   group->mutable_cost_config()->set_path_to_frequency_data(

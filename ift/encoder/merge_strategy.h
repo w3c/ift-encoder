@@ -145,6 +145,22 @@ class MergeStrategy {
     return init_font_merge_probability_threshold_;
   }
 
+  uint32_t PreClosureGroupSize() const {
+    return pre_closure_group_size_;
+  }
+
+  double PreClosureProbabilityThreshold() const {
+    return pre_closure_probability_threshold_;
+  }
+
+  void SetPreClosureGroupSize(uint32_t value) {
+    pre_closure_group_size_ = value;
+  }
+
+  void SetPreClosureProbabilityThreshold(double value) {
+    pre_closure_probability_threshold_ = value;
+  }
+
   void SetInitFontMergeThreshold(std::optional<double> value) {
     init_font_merge_threshold_ = value;
   }
@@ -186,6 +202,9 @@ class MergeStrategy {
   std::optional<double> init_font_merge_threshold_ = std::nullopt;
   std::optional<double> init_font_merge_probability_threshold_ = std::nullopt;
   bool use_patch_merges_ = false;
+
+  uint32_t pre_closure_group_size_ = 1;
+  double pre_closure_probability_threshold_ = 0.0;
 
   std::shared_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };

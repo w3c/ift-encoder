@@ -1427,6 +1427,78 @@ if (s0 AND s2) then p2
 )");
 }
 
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
+  UnicodeFrequencies freq{
+    {{' ', ' '}, 100},
+    {{'d', 'd'}, 100},
+    {{'a', 'a'}, 60},
+    {{'e', 'e'}, 30},
+    {{'b', 'b'}, 29},
+    {{'f', 'f'}, 28},
+    {{'c', 'c'}, 10},
+    {{'g', 'g'}, 9},
+    {{'h', 'h'}, 5},
+    {{'i', 'i'}, 1}, // 8
+  };
+
+  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  costs.SetPreClosureProbabilityThreshold(0.55);
+  costs.SetPreClosureGroupSize(3);
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1, 2, 3, 4, 5, 6, 7, 8}, costs},
+      {{7, 8}, MergeStrategy::Heuristic(1)},
+  };
+
+  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                         {
+                                                             {'a'},
+                                                             {'b'},
+                                                             {'c'},
+                                                             {'d'},
+                                                             {'e'},
+                                                             {'f'},
+                                                             {'g'},
+                                                             {'h'},
+                                                             {'i'},
+                                                         },
+                                                         merge_groups, false);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // d, a are above the pregrouping threshold so aren't grouped.
+  // e, b, f, c, and g are below so are grouped into sets of 3.
+  // h, i are shared between merge groups so don't participate in pregrouping.
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'d'},
+      {'a'},
+      {'e', 'b', 'f'}, // pre merge
+      {'c', 'g'},      // pre merge
+      // Shared
+      {'h'},
+      {'i'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid72 }
+p1: { gid69 }
+p2: { gid70, gid73, gid74 }
+p3: { gid71, gid75 }
+p4: { gid76 }
+p5: { gid77 }
+p6: { gid444, gid446 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if (s4) then p4
+if (s5) then p5
+if (s2 AND s5) then p6
+)");
+}
+
 // TODO(garretrieger): test that segments are excluded by init font segment. ie.
 // if a segment is present in the init font then it should be cleared out in the
 // segmentation.

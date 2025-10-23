@@ -115,13 +115,13 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
 
   strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
 
-  if (merged.has_init_font_merge_threshold()) {
-    strategy.SetInitFontMergeThreshold(merged.init_font_merge_threshold());
+  if (merged.has_initial_font_merge_threshold()) {
+    strategy.SetInitFontMergeThreshold(merged.initial_font_merge_threshold());
   }
 
-  if (merged.has_init_font_merge_probability_threshold()) {
+  if (merged.has_initial_font_merge_probability_threshold()) {
     strategy.SetInitFontMergeProbabilityThreshold(
-        merged.init_font_merge_probability_threshold());
+        merged.initial_font_merge_probability_threshold());
   }
 
   return strategy;
@@ -172,6 +172,9 @@ SegmenterConfigUtil::ProtoToMergeGroup(
       }
     }
 
+    strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
+    strategy.SetPreClosureProbabilityThreshold(group.preprocess_merging_probability_threshold());
+
     return std::make_pair(segment_indices, strategy);
   } else {
     if (group.has_segment_ids()) {
@@ -183,6 +186,10 @@ SegmenterConfigUtil::ProtoToMergeGroup(
 
     MergeStrategy strategy =
         ::util::ProtoToStrategy(base_heuristic, group.heuristic_config());
+
+    strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
+    strategy.SetPreClosureProbabilityThreshold(1.0);
+
     return std::make_pair(segment_indices, strategy);
   }
 }
@@ -226,6 +233,9 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
   MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(),
                                                  config.ungrouped_config());
+  strategy.SetPreClosureGroupSize(config.preprocess_merging_group_size_for_ungrouped());
+  strategy.SetPreClosureProbabilityThreshold(1.0);
+
   merge_groups.insert(std::make_pair(uncovered_segments, strategy));
 
   return merge_groups;

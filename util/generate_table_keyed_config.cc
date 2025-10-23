@@ -81,22 +81,6 @@ static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
 int main(int argc, char** argv) {
   auto args = absl::ParseCommandLine(argc, argv);
 
-  if (args.size() <= 1) {
-    std::cerr << "Usage:" << std::endl
-              << "generate_table_keyed_config <initial font subset fil> "
-                 "<table keyed subset 1 file> [... <table keyed subset file n>]"
-              << std::endl
-              << std::endl
-              << "Where a subset file lists one codepoint per line in "
-                 "hexadecimal format: 0xXXXX"
-              << std::endl
-              << std::endl
-              << "If you don't want the config to contain an initial codepoint "
-                 "set, pass an empty file as the first argument."
-              << std::endl;
-    return -1;
-  }
-
   SegmentationPlan config;
   CodepointSet init_codepoints;
 
@@ -115,6 +99,20 @@ int main(int argc, char** argv) {
 
     CodepointSet empty;
     sets.push_back(empty);
+  } else if (args.size() <= 1) {
+    std::cerr << "Usage:" << std::endl
+              << "generate_table_keyed_config <initial font subset file> "
+                 "<table keyed subset 1 file> [... <table keyed subset file n>]"
+              << std::endl
+              << std::endl
+              << "Where a subset file lists one codepoint per line in "
+                 "hexadecimal format: 0xXXXX"
+              << std::endl
+              << std::endl
+              << "If you don't want the config to contain an initial codepoint "
+                 "set, pass an empty file as the first argument."
+              << std::endl;
+    return -1;
   }
 
   for (size_t i = 1; i < args.size(); i++) {

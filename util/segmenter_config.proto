@@ -3,32 +3,64 @@ edition = "2023";
 import "util/common.proto";
 
 // This messages provides the configuration details for closure_glyph_keyed_segmenter_util
+//
+// The closure_glyph_keyed_segmenter_util is used to turn a series of codepoint/feature based
+// segments into a set of glyph based patches and activation conditions which respect a font's
+// glyph substitution rules. This means that no matter what codepoints being rendered as long
+// as the provided activation conditions are followed all needed glyphs will always be present.
+//
+// In addition to organizing the glyphs to respect substitution behaviour, the segmenter can
+// also optionally try to optimize a glyph segmentation by selectively merging glyph patches
+// together to reduce to the total number of patches and in turn the network overhead for loading
+// them. In this configuration merging behaviour is primarily configured via the merge groups.
+//
+// Merging (if enabled) is done is three distinct phases (each is configured separately):
+// 1. Preprocess merging: prior to glyph segmentation adjacent segments are merged together.
+//    Configuration specifies how many input segments are merged to form each merged segment.
+//    This is the cheapest type of merging, and since it happens prior to glyph segmentation
+//    it reduces the computation cost of all subsequent operations.
+//
+// 2. Initial font merging: when enabled, after glyph segmentation all of the patches are
+//    evaluated to see if it is beneficial to move their glyphs into the initial font and
+//    remove the patch. For example consider a patch that is expected to be needed 100% of
+//    the time. The overhead associated with the patch can be eliminated by moving it into
+//    the initial font.
+//
+// 3. Patch merging: lastly, any remaining patches are evaluated to find cases where segments
+//    can be merged together to improve the performance of the overall glyph segmentation.
+//    Two different merge selection algorithms are currently supported: cost based and heuristic
+//    The cost based approach evaluates potential merges agaisnt a cost function which utilizes
+//    codepoint frequency data. Heuristic is a much faster appraoch, but does not make use of
+//    frequency data. As a result it typically produces less optimal results. Primarily useful
+//    when frequency data is not available.
 message SegmenterConfig {
 
   // Specifies the set of codepoints and layout feature tags that should be placed into the
   // initial font, and hence be always available.
   SegmentProto initial_segment = 1;
 
-  // When set any glyphs that would be in the fallback segment (ie. glyphs that are always loaded)
-  // are moved into the initial font.
+  // When set any glyphs that would be in the fallback patch (ie. glyphs that are always loaded)
+  // are instead moved into the initial font.
   bool move_fallback_glyphs_into_initial_font = 2 [default = true];
 
   // The set of segments the font is initially broken up into. The key in the map is an ID
   // used to refer to the segment in other parts of the config. Segments must be disjoint.
   //
-  // If this is not specified then an initial segmentation where each codepoint in the font
-  // is placed into it's own segment will be used. In this case each segment id is the value of
+  // If this is not specified then a segmentation where each codepoint in the font is placed
+  // into it's own segment will be used. In this case each segment id is the value of
   // the codepoint in that segment
   map<uint32, SegmentProto> segments = 3;
 
   // When utilizing automated segment generation ('segments' is unspecified), this provides
   // a list of feature groups that should be added to the automated segment list. Each group
-  // will be one segment. These use their own id space from segments.
+  // will be one segment. These use their own id space separate from segments.
   map<uint32, Features> feature_segments = 4;
 
   // When generating compressed patches (to evaluate their size) this is the brotli quality
-  // level used. Segmentation is typically bottle necked on brotli compression so higher values
-  // increase segmentation times, but yield more accurate results.
+  // level used. Merge selection is typically bottle necked on brotli compression so higher
+  // values increase processing times, but yield more accurate results.
+  //
+  // Value can from from 0 to 11. Higher numbers represent higher quality.
   //
   // If quality is set to '0' this disables brotli compression and instead estimates the
   // effect of compression using a fixed compression ratio calculated based on how well
@@ -39,10 +71,10 @@ message SegmenterConfig {
   // the brotli quality used for generating compressed patches (to evaluate their size).
   // The init font merge is more sensitive to lower brotli qualities, so this allows a higher
   // brotli quality to be used in this phase if desired.
-  uint32 brotli_quality_for_init_font_merge = 6 [default = 11];
+  uint32 brotli_quality_for_initial_font_merging = 6 [default = 11];
 
   // These base configs define the common config setings used by the merge groups.
-  // Each individual merge groups config is created by starting with the base config of the
+  // Each individual merge group's config is created by starting with the base config of the
   // matching type and then overiding any fields specified in the merge group config.
   HeuristicConfiguration base_heuristic_config = 7;
   CostConfiguration base_cost_config = 8;
@@ -54,10 +86,15 @@ message SegmenterConfig {
   // Like the merge groups this config will be combined with base_heuristic_config.
   HeuristicConfiguration ungrouped_config = 9;
 
+  // This is the group size (number of segments merged together) used in preprocess merging
+  // of any segments not covered by a merge group. Setting to 1 disables preprocess merging
+  // of ungrouped segments.
+  uint32 preprocess_merging_group_size_for_ungrouped = 10 [default = 1];
+
   // Merge groups specify how merging will be performed for groups of segments.
   // Any segments that are not covered by any merge group will not be merged.
   // Merge groups are not required to be disjoint and may have overlapping segments.
-  repeated MergeGroup merge_groups = 10;
+  repeated MergeGroup merge_groups = 11;
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
@@ -73,9 +110,20 @@ message MergeGroup {
   // Adds in segments provided in the 'feature_segments' mapping.
   SegmentsProto feature_segment_ids = 2;
 
+  // This is the group size (number of segments merged together) used in preprocess merging
+  // of any segments covered by this merge group. Setting to 1 disables preprocess merging
+  // of ungrouped segments.
+  uint32 preprocess_merging_group_size = 3 [default = 1];
+
+  // If frequency data is available only segments with probability less than this will
+  // be included in the preprocess merging phase. Setting this to 1.0 will make preprocess
+  // merging apply to all segments. Has no effect if this merge group is using heuristic
+  // merging.
+  double preprocess_merging_probability_threshold = 4 [default = 1.0];
+
   oneof config {
-    HeuristicConfiguration heuristic_config = 3;
-    CostConfiguration cost_config = 4;
+    HeuristicConfiguration heuristic_config = 5;
+    CostConfiguration cost_config = 6;
   }
 }
 
@@ -116,13 +164,13 @@ message CostConfiguration {
   // If the cost delta (bytes) to move a segment into the initial font is less than this value then,
   // it will be moved into the initial font. If this is left unset then nothing will be moved to the
   // init font for this group.
-  double init_font_merge_threshold = 6;
+  double initial_font_merge_threshold = 6;
 
   // Segments below this probability will no be considered for moving into the initial font. This is
   // useful to prune segments from the analysis that are unlikely to be beneficial for moving.
   //
   // Value is from [0, 1].
-  double init_font_merge_probability_threshold = 7;
+  double initial_font_merge_probability_threshold = 7;
 
   // By default merges under cost strategy are made by joining segments together, if this setting is
   // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
