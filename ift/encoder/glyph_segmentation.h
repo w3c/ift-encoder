@@ -89,6 +89,9 @@ class GlyphSegmentation {
     return init_font_segment_;
   };
 
+  static void SubsetDefinitionToSegment(const SubsetDefinition& def,
+                                        SegmentProto& segment_proto);
+
   SegmentationPlan ToSegmentationPlanProto() const;
 
   static absl::Status GroupsToSegmentation(

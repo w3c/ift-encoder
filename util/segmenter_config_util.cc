@@ -173,7 +173,8 @@ SegmenterConfigUtil::ProtoToMergeGroup(
     }
 
     strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
-    strategy.SetPreClosureProbabilityThreshold(group.preprocess_merging_probability_threshold());
+    strategy.SetPreClosureProbabilityThreshold(
+        group.preprocess_merging_probability_threshold());
 
     return std::make_pair(segment_indices, strategy);
   } else {
@@ -233,7 +234,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
   MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(),
                                                  config.ungrouped_config());
-  strategy.SetPreClosureGroupSize(config.preprocess_merging_group_size_for_ungrouped());
+  strategy.SetPreClosureGroupSize(
+      config.preprocess_merging_group_size_for_ungrouped());
   strategy.SetPreClosureProbabilityThreshold(1.0);
 
   merge_groups.insert(std::make_pair(uncovered_segments, strategy));
