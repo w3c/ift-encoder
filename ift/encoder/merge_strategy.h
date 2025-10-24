@@ -145,9 +145,7 @@ class MergeStrategy {
     return init_font_merge_probability_threshold_;
   }
 
-  uint32_t PreClosureGroupSize() const {
-    return pre_closure_group_size_;
-  }
+  uint32_t PreClosureGroupSize() const { return pre_closure_group_size_; }
 
   double PreClosureProbabilityThreshold() const {
     return pre_closure_probability_threshold_;

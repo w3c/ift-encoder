@@ -127,6 +127,39 @@ static Status Analysis(hb_face_t* font,
   return absl::OkStatus();
 }
 
+static void AddTableKeyedSegments(
+    SegmentationPlan& plan,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const std::vector<SubsetDefinition>& segments,
+    const SubsetDefinition& init_segment) {
+  std::vector<SubsetDefinition> table_keyed_segments;
+  for (const auto& [segment_ids, _] : merge_groups) {
+    SubsetDefinition new_segment;
+    for (uint32_t s : segment_ids) {
+      new_segment.Union(segments.at(s));
+    }
+    new_segment.Subtract(init_segment);
+    table_keyed_segments.push_back(new_segment);
+  }
+
+  uint32_t max_id = 0;
+  for (const auto& [id, _] : plan.segments()) {
+    if (id > max_id) {
+      max_id = id;
+    }
+  }
+
+  uint32_t next_id = max_id + 1;
+  auto* plan_segments = plan.mutable_segments();
+  for (const SubsetDefinition& def : table_keyed_segments) {
+    GlyphSegmentation::SubsetDefinitionToSegment(def,
+                                                 (*plan_segments)[next_id]);
+    SegmentsProto* segment_ids = plan.add_non_glyph_segments();
+    segment_ids->add_values(next_id);
+    next_id++;
+  }
+}
+
 static Status Main(const std::vector<char*> args) {
   hb_face_unique_ptr font =
       TRY(LoadFont(absl::GetFlag(FLAGS_input_font).c_str()));
@@ -137,12 +170,14 @@ static Status Main(const std::vector<char*> args) {
   CodepointSet font_codepoints = FontHelper::ToCodepointsSet(font.get());
   SubsetDefinition init_segment =
       config_util.SegmentProtoToSubsetDefinition(config.initial_segment());
+
   std::vector<SubsetDefinition> segments;
   btree_map<SegmentSet, MergeStrategy> merge_groups =
       TRY(config_util.ConfigToMergeGroups(config, font_codepoints, segments));
 
-  ClosureGlyphSegmenter segmenter(config.brotli_quality(),
-                                  config.brotli_quality_for_initial_font_merging());
+  ClosureGlyphSegmenter segmenter(
+      config.brotli_quality(),
+      config.brotli_quality_for_initial_font_merging());
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       font.get(), init_segment, segments, merge_groups,
       config.move_fallback_glyphs_into_initial_font()));
@@ -152,6 +187,10 @@ static Status Main(const std::vector<char*> args) {
     if (!absl::GetFlag(FLAGS_include_initial_codepoints_in_config)) {
       // Requested to not include init codepoints in the generated config.
       plan.clear_initial_codepoints();
+    }
+
+    if (config.generate_table_keyed_segments()) {
+      AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
     }
 
     // TODO(garretrieger): assign a basic (single segment) table keyed config.

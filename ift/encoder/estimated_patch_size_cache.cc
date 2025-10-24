@@ -3,8 +3,8 @@
 #include "common/int_set.h"
 #include "common/try.h"
 
-using absl::StatusOr;
 using absl::flat_hash_set;
+using absl::StatusOr;
 using common::GlyphSet;
 
 namespace ift::encoder {

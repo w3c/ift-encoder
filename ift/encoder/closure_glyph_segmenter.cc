@@ -193,11 +193,10 @@ struct SegmentOrdering {
 };
 
 static std::vector<Segment> PreGroupSegments(
-  const btree_map<SegmentSet, MergeStrategy>& merge_groups,
-  const std::vector<SegmentOrdering>& ordering,
-  const std::vector<SubsetDefinition>& subset_definitions,
-  std::vector<uint32_t>& segment_index_map
-) {
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const std::vector<SegmentOrdering>& ordering,
+    const std::vector<SubsetDefinition>& subset_definitions,
+    std::vector<uint32_t>& segment_index_map) {
   segment_index_map.resize(subset_definitions.size());
   std::vector<Segment> segments;
 
@@ -206,9 +205,10 @@ static std::vector<Segment> PreGroupSegments(
   auto merge_group_it = merge_groups.begin();
   auto ordering_it = ordering.begin();
 
-  while (ordering_it != ordering.end())  {
+  while (ordering_it != ordering.end()) {
     const auto& o = *ordering_it;
-    if (o.group_index != last_group_index && merge_group_it != merge_groups.end()) {
+    if (o.group_index != last_group_index &&
+        merge_group_it != merge_groups.end()) {
       merge_group_it++;
     }
 
@@ -217,11 +217,11 @@ static std::vector<Segment> PreGroupSegments(
       strategy = &(merge_group_it->second);
     }
 
-    Segment segment = Segment{subset_definitions[o.original_index], o.probability};
+    Segment segment =
+        Segment{subset_definitions[o.original_index], o.probability};
     ordering_it++;
 
-    if (strategy == nullptr ||
-        strategy->PreClosureGroupSize() <= 1 ||
+    if (strategy == nullptr || strategy->PreClosureGroupSize() <= 1 ||
         o.probability.Max() > strategy->PreClosureProbabilityThreshold()) {
       segment_index_map[o.original_index] = i;
     } else {
@@ -232,7 +232,8 @@ static std::vector<Segment> PreGroupSegments(
           break;
         }
 
-        segment.Definition().Union(subset_definitions[ordering_it->original_index]);
+        segment.Definition().Union(
+            subset_definitions[ordering_it->original_index]);
         segment_index_map[ordering_it->original_index] = i;
 
         ordering_it++;
@@ -240,7 +241,9 @@ static std::vector<Segment> PreGroupSegments(
       }
 
       if (strategy->UseCosts()) {
-        segment.SetProbability(strategy->ProbabilityCalculator()->ComputeProbability(segment.Definition()));
+        segment.SetProbability(
+            strategy->ProbabilityCalculator()->ComputeProbability(
+                segment.Definition()));
       }
     }
 
@@ -328,7 +331,8 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
 
   // maps from index in subset_definitions to the new ordering.
   std::vector<uint32_t> segment_index_map;
-  std::vector<Segment> segments = PreGroupSegments(merge_groups, ordering, subset_definitions, segment_index_map);
+  std::vector<Segment> segments = PreGroupSegments(
+      merge_groups, ordering, subset_definitions, segment_index_map);
   VLOG(0) << segments.size() << " segments after pregrouping.";
 
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
@@ -344,8 +348,8 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
       remapped_full.insert(s_prime);
     }
 
-
-    VLOG(0) << "  Merge group " << group_index << " has " << remapped.size() << " segments.";
+    VLOG(0) << "  Merge group " << group_index << " has " << remapped.size()
+            << " segments.";
     group_index++;
 
     if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
