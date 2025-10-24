@@ -193,12 +193,15 @@ static Status Main(const std::vector<char*> args) {
       AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
     }
 
+    SegmentationPlan combined = config.base_segmentation_plan();
+    combined.MergeFrom(plan);
+
     // TODO(garretrieger): assign a basic (single segment) table keyed config.
     // Later on the input to this util should include information on how the
     // segments should be grouped together for the table keyed portion of the
     // font.
     std::string config_string;
-    TextFormat::PrintToString(plan, &config_string);
+    TextFormat::PrintToString(combined, &config_string);
     std::cout << config_string;
   } else {
     // No config requested, just output a simplified plain text representation
