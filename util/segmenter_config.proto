@@ -1,5 +1,6 @@
 edition = "2023";
 
+import "util/segmentation_plan.proto";
 import "util/common.proto";
 
 // This messages provides the configuration details for closure_glyph_keyed_segmenter_util
@@ -100,6 +101,9 @@ message SegmenterConfig {
   // Any segments that are not covered by any merge group will not be merged.
   // Merge groups are not required to be disjoint and may have overlapping segments.
   repeated MergeGroup merge_groups = 12;
+
+  // When provide the generated segmentation plan will be merged onto this base plan.
+  SegmentationPlan base_segmentation_plan = 13;
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
