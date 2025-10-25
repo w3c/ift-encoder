@@ -114,6 +114,18 @@ class MergeStrategy {
   bool UseCosts() const { return use_costs_; }
   bool UsePatchMerges() const { return use_patch_merges_; }
 
+  std::optional<absl::string_view> Name() const {
+    if (name_.has_value()) {
+      return name_;
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  void SetName(std::string name) {
+    name_ = name;
+  }
+
   uint32_t NetworkOverheadCost() const { return network_overhead_cost_; }
   uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
@@ -191,6 +203,7 @@ class MergeStrategy {
         patch_size_max_bytes_(patch_size_max_bytes),
         probability_calculator_(nullptr) {}
 
+  std::optional<std::string> name_ = std::nullopt;
   bool use_costs_;
   uint32_t network_overhead_cost_;
   uint32_t min_group_size_;

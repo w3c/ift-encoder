@@ -110,29 +110,32 @@ message SegmenterConfig {
 // is processed independently. Merges will only be made between things within the same group.
 // Each merge group has it's own configuration and frequency data.
 message MergeGroup {
+  // Used to identify the group in logging.
+  string name = 1;
+
   // The set of segments that this merge group covers. May overlap with other merge groups.
   // If this is not specified and a heuristic config is used, then it will default to all segments.
   // If this is not specified and a cost config is used, then this will default to the set of
   // segments the provided frequency data covers.
-  SegmentsProto segment_ids = 1;
+  SegmentsProto segment_ids = 2;
 
   // Adds in segments provided in the 'feature_segments' mapping.
-  SegmentsProto feature_segment_ids = 2;
+  SegmentsProto feature_segment_ids = 3;
 
   // This is the group size (number of segments merged together) used in preprocess merging
   // of any segments covered by this merge group. Setting to 1 disables preprocess merging
   // of ungrouped segments.
-  uint32 preprocess_merging_group_size = 3 [default = 1];
+  uint32 preprocess_merging_group_size = 4 [default = 1];
 
   // If frequency data is available only segments with probability less than this will
   // be included in the preprocess merging phase. Setting this to 1.0 will make preprocess
   // merging apply to all segments. Has no effect if this merge group is using heuristic
   // merging.
-  double preprocess_merging_probability_threshold = 4 [default = 1.0];
+  double preprocess_merging_probability_threshold = 5 [default = 1.0];
 
   oneof config {
-    HeuristicConfiguration heuristic_config = 5;
-    CostConfiguration cost_config = 6;
+    HeuristicConfiguration heuristic_config = 6;
+    CostConfiguration cost_config = 7;
   }
 }
 
