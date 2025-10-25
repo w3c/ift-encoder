@@ -42,6 +42,7 @@ proto_library(
         "//visibility:public",
     ],
     deps = [
+        ":segmentation_plan_proto",
         ":common_proto",
     ],
 )

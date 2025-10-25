@@ -2,6 +2,7 @@
 #define IFT_ENCODER_ESTIMATED_PATCH_SIZE_CACHE_H_
 
 #include <memory>
+
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -18,14 +19,13 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
  public:
   static absl::StatusOr<std::unique_ptr<PatchSizeCache>> New(hb_face_t* face) {
     double compression_ratio = TRY(EstimateCompressionRatio(face));
-    return std::unique_ptr<PatchSizeCache>(new EstimatedPatchSizeCache(face, compression_ratio));
+    return std::unique_ptr<PatchSizeCache>(
+        new EstimatedPatchSizeCache(face, compression_ratio));
   }
 
   absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override;
 
-  double CompressionRatio() const {
-    return compression_ratio_;
-  }
+  double CompressionRatio() const { return compression_ratio_; }
 
  private:
   explicit EstimatedPatchSizeCache(hb_face_t* original_face,

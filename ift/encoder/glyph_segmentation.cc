@@ -2,13 +2,11 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <optional>
 #include <sstream>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
@@ -144,6 +142,14 @@ ProtoType TagsToSetProto(const btree_set<hb_tag_t>& set) {
   return values;
 }
 
+void GlyphSegmentation::SubsetDefinitionToSegment(const SubsetDefinition& def,
+                                                  SegmentProto& segment_proto) {
+  (*segment_proto.mutable_codepoints()) =
+      ToSetProto<Codepoints>(def.codepoints);
+  (*segment_proto.mutable_features()) =
+      TagsToSetProto<Features>(def.feature_tags);
+}
+
 SegmentationPlan GlyphSegmentation::ToSegmentationPlanProto() const {
   SegmentationPlan config;
 
@@ -151,10 +157,7 @@ SegmentationPlan GlyphSegmentation::ToSegmentationPlanProto() const {
   for (const auto& s : Segments()) {
     if (!s.Empty()) {
       SegmentProto segment_proto;
-      (*segment_proto.mutable_codepoints()) =
-          ToSetProto<Codepoints>(s.codepoints);
-      (*segment_proto.mutable_features()) =
-          TagsToSetProto<Features>(s.feature_tags);
+      SubsetDefinitionToSegment(s, segment_proto);
       (*config.mutable_segments())[set_index++] = segment_proto;
     } else {
       set_index++;

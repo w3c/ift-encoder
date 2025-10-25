@@ -1427,19 +1427,11 @@ if (s0 AND s2) then p2
 )");
 }
 
-
 TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
   UnicodeFrequencies freq{
-    {{' ', ' '}, 100},
-    {{'d', 'd'}, 100},
-    {{'a', 'a'}, 60},
-    {{'e', 'e'}, 30},
-    {{'b', 'b'}, 29},
-    {{'f', 'f'}, 28},
-    {{'c', 'c'}, 10},
-    {{'g', 'g'}, 9},
-    {{'h', 'h'}, 5},
-    {{'i', 'i'}, 1}, // 8
+      {{' ', ' '}, 100}, {{'d', 'd'}, 100}, {{'a', 'a'}, 60}, {{'e', 'e'}, 30},
+      {{'b', 'b'}, 29},  {{'f', 'f'}, 28},  {{'c', 'c'}, 10}, {{'g', 'g'}, 9},
+      {{'h', 'h'}, 5},   {{'i', 'i'}, 1},  // 8
   };
 
   MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
@@ -1473,8 +1465,8 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
       // Group 1
       {'d'},
       {'a'},
-      {'e', 'b', 'f'}, // pre merge
-      {'c', 'g'},      // pre merge
+      {'e', 'b', 'f'},  // pre merge
+      {'c', 'g'},       // pre merge
       // Shared
       {'h'},
       {'i'},
