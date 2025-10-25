@@ -157,9 +157,11 @@ SegmenterConfigUtil::ProtoToMergeGroup(
         SegmentId{.feature = true, .id_value = feature_group_id}));
   }
 
+  MergeStrategy strategy = MergeStrategy::None();
+
   if (group.has_cost_config()) {
     CodepointSet covered_codepoints;
-    MergeStrategy strategy = TRY(
+    strategy = TRY(
         ProtoToStrategy(base_cost, group.cost_config(), covered_codepoints));
 
     if (group.has_segment_ids()) {
@@ -175,8 +177,6 @@ SegmenterConfigUtil::ProtoToMergeGroup(
     strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
     strategy.SetPreClosureProbabilityThreshold(
         group.preprocess_merging_probability_threshold());
-
-    return std::make_pair(segment_indices, strategy);
   } else {
     if (group.has_segment_ids()) {
       segment_indices.union_set(MapToIndices(group.segment_ids(), id_to_index));
@@ -185,14 +185,18 @@ SegmenterConfigUtil::ProtoToMergeGroup(
       segment_indices.insert_range(0, id_to_index.size() - 1);
     }
 
-    MergeStrategy strategy =
+    strategy =
         ::util::ProtoToStrategy(base_heuristic, group.heuristic_config());
 
     strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
     strategy.SetPreClosureProbabilityThreshold(1.0);
-
-    return std::make_pair(segment_indices, strategy);
   }
+
+  if (group.has_name()) {
+    strategy.SetName(group.name());
+  }
+
+  return std::make_pair(segment_indices, strategy);
 }
 
 StatusOr<btree_map<SegmentSet, MergeStrategy>>
@@ -234,6 +238,7 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
   MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(),
                                                  config.ungrouped_config());
+  strategy.SetName("Ungrouped");
   strategy.SetPreClosureGroupSize(
       config.preprocess_merging_group_size_for_ungrouped());
   strategy.SetPreClosureProbabilityThreshold(1.0);

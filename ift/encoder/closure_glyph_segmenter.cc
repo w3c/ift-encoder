@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "absl/container/btree_map.h"
@@ -348,7 +349,12 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
       remapped_full.insert(s_prime);
     }
 
-    VLOG(0) << "  Merge group " << group_index << " has " << remapped.size()
+    std::string name = std::to_string(group_index);
+    if (strategy.Name().has_value()) {
+      name = *strategy.Name();
+    }
+
+    VLOG(0) << "  Merge group " << name << " has " << remapped.size()
             << " segments.";
     group_index++;
 
@@ -396,6 +402,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     const std::vector<SubsetDefinition>& subset_definitions,
     btree_map<SegmentSet, MergeStrategy> merge_groups,
     bool place_fallback_in_init) const {
+
   for (const auto& [segments, strategy] : merge_groups) {
     if (strategy.UseCosts()) {
       TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
@@ -452,8 +459,13 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
   size_t merger_index = 0;
+  std::string merger_name = std::to_string(merger_index);
+  if (mergers[merger_index].Strategy().Name().has_value()) {
+    merger_name = *mergers[merger_index].Strategy().Name();
+  }
+
   segment_index_t last_merged_segment_index = 0;
-  VLOG(0) << "Starting merge selection for merge group " << merger_index
+  VLOG(0) << "Starting merge selection for merge group " << merger_name
           << std::endl
           << "  " << mergers[merger_index].NumInscopeSegments()
           << " inscope segments, " << mergers[merger_index].NumCutoffSegments()
@@ -465,8 +477,13 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
     if (!merged.has_value()) {
       merger_index++;
+
       if (merger_index < mergers.size()) {
-        VLOG(0) << "Merge group finished, starting next group " << merger_index
+        std::string merger_name = std::to_string(merger_index);
+        if (mergers[merger_index].Strategy().Name().has_value()) {
+          merger_name = *mergers[merger_index].Strategy().Name();
+        }
+        VLOG(0) << "Merge group finished, starting next group " << merger_name
                 << std::endl
                 << "  " << mergers[merger_index].NumInscopeSegments()
                 << " inscope segments, "
