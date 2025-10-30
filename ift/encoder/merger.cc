@@ -24,23 +24,6 @@ Merger::TryNextMerge() {
     return std::nullopt;
   }
 
-  // TODO(garretrieger): also consider moving the fallback segment into the
-  // init font. We should be able to compute an associated cost delta and
-  // should proceed if it's negative. Will need to reprocess the segmentation
-  // can utilize the existing ReassignInitSubset() method.
-
-  // TODO(garretrieger): special casing for handling multiple script frequency
-  // data sets when segmenting for multiple scripts (specifically disjoint ones)
-  // we essentially want to consider their frequencies in isolation from the
-  // other scripts. For example if greek has a codepoint with 100% probability
-  // and cyrillic has a codepoint with 100% probability those would normally be
-  // considered a good candidate to merge, but we likely don't want to merge
-  // those as most users in practice will be encountering only one of those two
-  // scripts at a time. Very roughly I think this can be solved by keeping
-  // multiple active segment sets (one per script) and during merging only
-  // consider one set at a time. This will prevent merges across scripts. Idea
-  // is early stage and definitely needs some more development.
-
   // TODO(garretrieger): there's also the problem of overlapping scripts (eg.
   // CJK) that will need special casing. Very broad strokes idea is to assess
   // cost for each script individually and use the sum of the individual costs

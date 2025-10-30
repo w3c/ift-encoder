@@ -416,6 +416,12 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
 StatusOr<double> CandidateMerge::ComputeCostDelta(
     const Merger& merger, const SegmentSet& merged_segments,
     const Segment& merged_segment, uint32_t new_patch_size) {
+
+  // TODO(garretrieger): the accuracy of this can be improved by factoring
+  // in the new exclusive glyph set for the merged segment. These glyphs
+  // can be subtracted from any existing patches that contain them.
+  // We'll also need to check against fallback glyphs (there's a possibility
+  // some of them will be moved into the new merged patch)
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
 
   // These are conditions which will be removed by appying the merge.
@@ -619,6 +625,8 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
+    // TODO(garretrieger): should we compute another best case threshold here
+    // to try and skip computing the real patch size?
     new_patch_size =
         TRY(merger.Context().patch_size_cache->GetPatchSize(exclusive_gids));
   } else {
