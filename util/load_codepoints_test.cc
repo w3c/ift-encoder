@@ -86,10 +86,73 @@ TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli) {
   EXPECT_EQ(result->ProbabilityFor(0x44, 0x45), 0.25);
 }
 
+TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded) {
+  auto result =
+      util::LoadFrequenciesFromRiegeli("util/testdata/sharded/test_freq_data.riegeli@*");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  EXPECT_EQ(result->ProbabilityFor(0x43, 0x43), 1.0);
+  EXPECT_EQ(result->ProbabilityFor(0x44, 0x44), 75.0 / 200.0);
+
+  EXPECT_EQ(result->ProbabilityFor(0x41, 0x42), 0.5);
+  EXPECT_EQ(result->ProbabilityFor(0x44, 0x45), 0.25);
+}
+
+TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded_DoesNotExist) {
+  auto result =
+      util::LoadFrequenciesFromRiegeli("util/testdata/sharded/notfound.riegeli@*");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+}
+
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_BadData) {
   auto result = util::LoadFrequenciesFromRiegeli(
       "util/testdata/invalid_test_freq_data.riegeli");
   ASSERT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(LoadCodepointsTest, ExpandShardedPath) {
+  auto result = ExpandShardedPath("util/testdata/test_freq_data.riegeli");
+  ASSERT_TRUE(result.ok()) << result.status();
+  ASSERT_EQ(*result,
+            (std::vector<std::string>{"util/testdata/test_freq_data.riegeli"}));
+
+  result = ExpandShardedPath("util/testdata/test_freq_data.riegeli@*");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+
+  result = ExpandShardedPath("util/testdata/sharded/BadSuffix@*");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+
+  result = ExpandShardedPath("does/not/exist.file@*");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+
+  result = ExpandShardedPath("util/testdata/sharded/notfound.file@*");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+
+  result = ExpandShardedPath("does/not/exist.file");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
+
+  result = ExpandShardedPath("util/testdata/sharded/Language_ja.riegeli@*");
+  ASSERT_TRUE(result.ok()) << result.status();
+  ASSERT_EQ(*result,
+            (std::vector<std::string>{
+                "util/testdata/sharded/Language_ja.riegeli-00000-of-00003",
+                "util/testdata/sharded/Language_ja.riegeli-00001-of-00003",
+                "util/testdata/sharded/Language_ja.riegeli-00002-of-00003",
+            }));
+
+  result = ExpandShardedPath("util/testdata/sharded/Language_ko.riegeli@*");
+  ASSERT_TRUE(result.ok()) << result.status();
+  ASSERT_EQ(*result,
+            (std::vector<std::string>{
+                "util/testdata/sharded/Language_ko.riegeli-00000-of-00100",
+                "util/testdata/sharded/Language_ko.riegeli-00008-of-00100",
+                "util/testdata/sharded/Language_ko.riegeli-00011-of-00100",
+                "util/testdata/sharded/Language_ko.riegeli-00013-of-00100",
+                "util/testdata/sharded/Language_ko.riegeli-00020-of-00100",
+            }));
+
+  result = ExpandShardedPath("util/testdata/sharded/Language_ja.riegeli");
+  ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
 }
 
 }  // namespace util

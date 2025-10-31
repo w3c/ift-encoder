@@ -1,8 +1,11 @@
 #include "load_codepoints.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <regex>
 #include <sstream>
 
 #include "absl/strings/str_cat.h"
@@ -14,6 +17,7 @@
 #include "riegeli/records/record_reader.h"
 #include "util/unicode_count.pb.h"
 
+using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
@@ -122,8 +126,53 @@ StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
   return out;
 }
 
-StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
-  UnicodeFrequencies frequencies;
+StatusOr<std::vector<std::string>> ExpandShardedPath(const char* path) {
+  std::string full_path(path);
+
+  if (!full_path.ends_with("@*")) {
+    if (!std::filesystem::exists(full_path)) {
+      return absl::NotFoundError(StrCat("Path does not exist: ", full_path));
+    }
+    return std::vector<std::string>{full_path};
+  }
+
+  std::filesystem::path file_path = full_path.substr(0, full_path.size() - 2);
+  std::string base_name = file_path.filename();
+  std::filesystem::path directory = file_path.parent_path();
+
+  // Find the list of files matching the pattern:
+  // <base name>-?????-of-?????
+  std::regex file_pattern("^.*-[0-9]{5}-of-[0-9]{5}$");
+
+  if (!std::filesystem::exists(directory) ||
+      !std::filesystem::is_directory(directory)) {
+    return absl::NotFoundError(StrCat(
+        "Path does not exist or is not a directory: ", directory.string()));
+  }
+
+  // Collect into a set to ensure the output is sorted.
+  absl::btree_set<std::string> files;
+  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    std::string name = entry.path().filename();
+    if (!name.starts_with(base_name)) {
+      continue;
+    }
+
+    if (std::regex_match(name, file_pattern)) {
+      files.insert(entry.path());
+    }
+  }
+
+  if (files.empty()) {
+    return absl::NotFoundError(StrCat("No files matched the shard pattern: ", full_path));
+  }
+
+  return std::vector<std::string>(files.begin(), files.end());
+}
+
+static Status LoadFrequenciesFromRiegeliIndividual(
+  const char* path, UnicodeFrequencies& frequencies
+) {
   riegeli::RecordReader reader{riegeli::FdReader(path)};
   if (!reader.ok()) {
     return absl::InvalidArgumentError(
@@ -143,6 +192,15 @@ StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
   }
   if (!reader.Close()) {
     return absl::InternalError(reader.status().message());
+  }
+  return absl::OkStatus();
+}
+
+StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
+  auto paths = TRY(ExpandShardedPath(path));
+  UnicodeFrequencies frequencies;
+  for (const auto& path : paths) {
+    TRYV(LoadFrequenciesFromRiegeliIndividual(path.c_str(), frequencies));
   }
   return frequencies;
 }

@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <locale>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -40,7 +41,11 @@ int main(int argc, char** argv) {
 
   if (args.size() != 2) {
     std::cerr << "Usage:" << std::endl
-              << "freq_data_to_sorted_codepoints <riegeli_file>" << std::endl;
+              << "freq_data_to_sorted_codepoints <riegeli_file>" << std::endl
+              << std::endl
+              << "Append @* to the file name to load sharded data files. "
+              << "For example \"<path>@*\" will load all files of the form <path>-?????-of-?????"
+              << std::endl;
     return -1;
   }
 
