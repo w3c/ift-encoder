@@ -144,10 +144,16 @@ message MergeGroup {
 // Codepoint frequency data is utilized to evaluate the cost function.
 message CostConfiguration {
 
-  // Path (relative to this configuration file) that points to Riegeli encoded frequency data
-  // (using unicode_count.proto) that will be used during the evaluation of the cost function
-  // for merging within this group. Must be provided.
-  string path_to_frequency_data = 1;
+  oneof freq_data {
+    // Path (relative to this configuration file) that points to Riegeli encoded frequency data
+    // (using unicode_count.proto) that will be used during the evaluation of the cost function
+    // for merging within this group. Must be provided.
+    string path_to_frequency_data = 1;
+
+    // Name (eg. "Script_latin.riegeli") of one of the data files from https://github.com/w3c/ift-encoder-data
+    // For sharded files append a "@*" (eg. "Script_japanese.riegeli@*").
+    string built_in_freq_data_name = 2;
+  }
 
   // By default the cost function used for merging will utilize only individual codepoint probabilities
   // (ie. P(A)), when pair probabilities are needed it's assumed that individual probabilities are
@@ -157,32 +163,32 @@ message CostConfiguration {
   // the the cost function will not assume independence and utilize the supplied pair frequencies.
   // This is much more accurate, but increase the computational complexity of the cost analysis
   // significantly.
-  bool use_bigrams = 2 [default = false];
+  bool use_bigrams = 3 [default = false];
 
   // When evaluating the cost of each patch this is the estimated number of bytes of
   // network overhead for making the network request for the patch. Higher values encourage
   // more aggressive merging.
-  uint32 network_overhead_cost = 3 [default = 75];
+  uint32 network_overhead_cost = 4 [default = 75];
 
   // The minimum number of codepoints in each activation condition in the final segmentation.
-  uint32 min_group_size = 4 [default = 1];
+  uint32 min_group_size = 5 [default = 1];
 
   // The set of segments whose total contributition to the total cost is less than this fraction
   // will have optimization skipped. This saves spending computation on segments that have very
   // little impact on the total cost of the segmentation. Higher values will cause more segments
   // to be cutoff.
-  double optimization_cutoff_fraction = 5 [default = 0.001];
+  double optimization_cutoff_fraction = 6 [default = 0.001];
 
   // If the cost delta (bytes) to move a segment into the initial font is less than this value then,
   // it will be moved into the initial font. If this is left unset then nothing will be moved to the
   // init font for this group.
-  double initial_font_merge_threshold = 6;
+  double initial_font_merge_threshold = 7;
 
   // Segments below this probability will no be considered for moving into the initial font. This is
   // useful to prune segments from the analysis that are unlikely to be beneficial for moving.
   //
   // Value is from [0, 1].
-  double initial_font_merge_probability_threshold = 7;
+  double initial_font_merge_probability_threshold = 8;
 
   // By default merges under cost strategy are made by joining segments together, if this setting is
   // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
@@ -203,7 +209,7 @@ message CostConfiguration {
   // Work is planned to fix this issue (either in the harfbuzz closure or with a workaround in the segmenter),
   // until then it's recommended to not used this except for testing (or if appropriate care has been taken
   // in producing the input segments to avoid this issue).
-  bool experimental_use_patch_merges = 8 [default = false];
+  bool experimental_use_patch_merges = 9 [default = false];
 }
 
 // The merger will choose segments to merge based on a heuristic which primarily utilizes

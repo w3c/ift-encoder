@@ -15,6 +15,10 @@ bazel_dep(name = "rules_rust", version = "0.64.0")
 bazel_dep(name = "glib", version = "2.82.2.bcr.5")
 bazel_dep(name = "brotli", version = "1.1.0")
 
+# Frequency Data
+bazel_dep(name = "ift_encoder_data", version = "git")
+git_override(module_name = "ift_encoder_data", remote = "https://github.com/w3c/ift-encoder-data.git", commit = "317ea02ac68d45004aa842f831c65ed33c891701")
+
 # Non Bazel Modules
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
