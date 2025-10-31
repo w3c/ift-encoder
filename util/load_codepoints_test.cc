@@ -155,4 +155,14 @@ TEST_F(LoadCodepointsTest, ExpandShardedPath) {
   ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
 }
 
+TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
+  auto result =
+      util::LoadBuiltInFrequencies("Script_latin.riegeli");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  EXPECT_EQ(result->ProbabilityFor(0x20, 0x20), 1.0);
+  EXPECT_LT(result->ProbabilityFor(0x20, 'Z'), 1.0);
+  EXPECT_EQ(result->CoveredCodepoints().size(), 1363);
+}
+
 }  // namespace util

@@ -98,6 +98,9 @@ cc_binary(
     srcs = [
         "closure_glyph_keyed_segmenter_util.cc",
     ],
+    data = [
+        "@ift_encoder_data//:freq_data",
+    ],
     deps = [
         "//ift",
         "//ift/encoder",
@@ -214,9 +217,10 @@ cc_test(
         "testdata/codepoints_invalid_1.txt",
         "testdata/codepoints_invalid_2.txt",
         "testdata/codepoints_with_freq.txt",
-         "testdata/codepoints_with_freq_invalid.txt",
-         "testdata/test_freq_data.riegeli",
-         "testdata/invalid_test_freq_data.riegeli",
+        "testdata/codepoints_with_freq_invalid.txt",
+        "testdata/test_freq_data.riegeli",
+        "testdata/invalid_test_freq_data.riegeli",
+        "@ift_encoder_data//:freq_data",
     ] + glob([
         "testdata/sharded/*",
     ]),
