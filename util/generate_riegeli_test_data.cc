@@ -6,13 +6,17 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "riegeli/bytes/fd_writer.h"
 #include "riegeli/records/record_writer.h"
 #include "util/unicode_count.pb.h"
 
+using absl::StrCat;
+
 ABSL_FLAG(std::string, output_path, "", "Path to write the output file.");
 
 ABSL_FLAG(bool, include_invalid_record, false, "If set add an invalid record.");
+ABSL_FLAG(bool, shard, false, "If set shard into multiple files.");
 
 namespace {
 
@@ -41,24 +45,44 @@ absl::Status Main() {
   message4.add_codepoints(0x44);
   message4.set_count(75);
 
-  riegeli::RecordWriter writer{riegeli::FdWriter(output_path)};
-  writer.WriteRecord(message1);
-  writer.WriteRecord(message2);
-  writer.WriteRecord(message3);
-  writer.WriteRecord(message4);
+  if (!absl::GetFlag(FLAGS_shard)) {
+    riegeli::RecordWriter writer{riegeli::FdWriter(output_path)};
+    writer.WriteRecord(message1);
+    writer.WriteRecord(message2);
+    writer.WriteRecord(message3);
+    writer.WriteRecord(message4);
 
-  if (absl::GetFlag(FLAGS_include_invalid_record)) {
-    CodepointCount message5;
-    message5.add_codepoints(0x46);
-    message5.add_codepoints(0x46);
-    message5.add_codepoints(0x46);
-    message5.set_count(75);
-    writer.WriteRecord(message5);
+    if (absl::GetFlag(FLAGS_include_invalid_record)) {
+      CodepointCount message5;
+      message5.add_codepoints(0x46);
+      message5.add_codepoints(0x46);
+      message5.add_codepoints(0x46);
+      message5.set_count(75);
+      writer.WriteRecord(message5);
+    }
+
+    if (!writer.Close()) {
+      return writer.status();
+    }
+  } else {
+    {
+      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00000-of-00003"))};
+      writer.WriteRecord(message1);
+      writer.WriteRecord(message2);
+      writer.Close();
+    }
+    {
+      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00001-of-00003"))};
+      writer.WriteRecord(message3);
+      writer.Close();
+    }
+    {
+      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00002-of-00003"))};
+      writer.WriteRecord(message4);
+      writer.Close();
+    }
   }
 
-  if (!writer.Close()) {
-    return writer.status();
-  }
   return absl::OkStatus();
 }
 

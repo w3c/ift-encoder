@@ -217,7 +217,9 @@ cc_test(
          "testdata/codepoints_with_freq_invalid.txt",
          "testdata/test_freq_data.riegeli",
          "testdata/invalid_test_freq_data.riegeli",
-    ],
+    ] + glob([
+        "testdata/sharded/*",
+    ]),
     deps = [
         ":load_codepoints",
         "@googletest//:gtest_main",

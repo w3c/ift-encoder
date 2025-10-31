@@ -36,8 +36,20 @@ absl::StatusOr<common::FontData> LoadFile(const char* path);
 
 // Loads a Riegeli file of CodepointCount protos and returns a
 // UnicodeFrequencies instance.
+//
+// Append "@*" to the path to load all sharded files for this path.
+// For example "FrequencyData.riegeli@*" will load all files of the
+// form FrequencyData.riegeli-*-of-* into the frequency data set.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
     const char* path);
+
+// Given a filepath if it ends with @* this will expand the path into
+// the list of paths matching the pattern: <path>-?????-of-?????
+// Otherwise returns just the input path.
+//
+// Checks that the input path exists and will return a NotFoundError if
+// it does not.
+absl::StatusOr<std::vector<std::string>> ExpandShardedPath(const char* path);
 
 struct CodepointAndFrequency {
   uint32_t codepoint;
