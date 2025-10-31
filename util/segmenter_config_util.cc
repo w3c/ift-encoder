@@ -23,7 +23,13 @@ namespace util {
 // Loads unicode frequency data from either a dedicated frequency data file or
 // from the codepoint and frequency entries if no data file is given.
 StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
-    const std::string& frequency_data_file_path) {
+    const std::string& frequency_data_file_path,
+    bool built_in
+  ) {
+  if (built_in) {
+    return util::LoadBuiltInFrequencies(frequency_data_file_path.c_str());
+  }
+
   std::filesystem::path freq_path = frequency_data_file_path;
   std::filesystem::path resolved_path = freq_path;
   if (freq_path.is_relative()) {
@@ -91,13 +97,15 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
   CostConfiguration merged = base;
   merged.MergeFrom(config);
 
-  if (merged.path_to_frequency_data().empty()) {
+  if (merged.path_to_frequency_data().empty() && merged.built_in_freq_data_name().empty()) {
     return absl::InvalidArgumentError(
         "Path to frequency data must be provided.");
   }
 
-  UnicodeFrequencies freq =
-      TRY(GetFrequencyData(merged.path_to_frequency_data()));
+  UnicodeFrequencies freq = config.has_built_in_freq_data_name() ?
+    TRY(GetFrequencyData(merged.built_in_freq_data_name(), true)) :
+    TRY(GetFrequencyData(merged.path_to_frequency_data(), false));
+
   covered_codepoints = freq.CoveredCodepoints();
 
   MergeStrategy strategy = MergeStrategy::None();

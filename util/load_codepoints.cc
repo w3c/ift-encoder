@@ -205,4 +205,9 @@ StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
   return frequencies;
 }
 
+StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(const char* name) {
+  std::string path = StrCat("../ift_encoder_data+/data/", name);
+  return LoadFrequenciesFromRiegeli(path.c_str());
+}
+
 }  // namespace util
