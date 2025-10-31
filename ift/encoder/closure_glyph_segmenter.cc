@@ -458,6 +458,8 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
+  // See ../../docs/experimental/closure_glyph_segmentation_merging.md for more
+  // details on how merging works.
   size_t merger_index = 0;
   std::string merger_name = std::to_string(merger_index);
   if (mergers[merger_index].Strategy().Name().has_value()) {

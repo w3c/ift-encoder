@@ -1,7 +1,8 @@
 # Converting Unicode Code Point to Glyph Keyed Segmentations during IFT Encoding using Subsetter Glyph Closure
 
 Author: Garret Rieger  
-Date: Jan 27, 2025
+Date: Jan 27, 2025  
+Updated: Oct 27, 2025
 
 ## Introduction
 
@@ -46,34 +47,39 @@ procedures work in practice.
 
 ## Status
 
-Development of a robust glyph segmentation process that produces performant, low over head
-segmentations is an area of active development in the ift encoder. The current prototype
-implementation in [closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) can produce
-segmentations that satisfy the closure requirement, but does not yet necessarily produce ones that
-are performant.
+The current prototype implementation in
+[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) can produce segmentations
+that satisfy the closure requirement and are performant (via merging).  The approach laid
+out in this document is just one possible approach to solving the problem. This document aims
+primarily to describe how the prototype implementation in
+[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) functions, and is not
+intended to present the final (or only) solution to the problem. There are several unsolved problems
+and remaining areas for development in this particular approach:
 
-The approach laid out in this document is just one possible approach to solving the problem. This
-document aims primarily to describe how the prototype implementation in
-[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) functions, and is not intended to
-present the final (or only) solution to the problem. There are several unsolved problems and
-remaining areas for development in this particular approach:
-
-* Input segmentation generation: selecting good quality input code point segmentations is critically
-  important to achieving high quality glyph segmentations. A high quality code point segmentation
-  will need to balance keeping interacting code points together with also keeping code points that
-  are commonly used together. This document and the implementation make no attempt to solve this
-  problem yet.
-
-* Patch merging: is the process of combining patches from a found segmentation together in order to
-  reduce overall overhead (eg. if there was a patch containing only one glyph the overhead cost of
-  the patch format and network transfer would dominate, therefore it may make sense to merge into
-  another similar patch). A very basic patch merging process has been included in the implementation
-  but there is lots of room for improvement. Notably, it does not yet handle conditional patch
-  merging.  Additionally, a more advanced heuristic is needed for selecting which patches to merge.
+* Much of the ongoing work is on the "merger" which is a sub-problem of producing segmentations.
+  That's discussed in the separate
+  [closure_glyph_segmentation_merging.md](closure_glyph_segmentation_merging.md) document.
+  See the implementation status and areas for further development sections for more specifics.
+  
+* Running the segmenter currently requires manual configuration to get good results. Configuration
+  is needed to select appropriate frequency data and settings for parameters controlling merger
+  behaviour. The goal is to get to the point where good results can be produced with zero
+  configuration.
+  
+* Support for merging segmentations involving multiple overlapping scripts is not yet implemented
+  (for example creating a segmentation that supports Chinese and Japanese simultaneously).
 
 * [Multi segment analysis](#multi-segment-dependencies): the current implementation only does single
   segment analysis which in some cases leaves sizable fallback glyph sets. How to implement multi
   segment analysis is an open question and more development is needed.
+  
+* Input segmentation generation: the glyph segmentation process starts with an existing
+  codepoint/feature based segmentation. Good results can be achieved by starting with one input
+  segment per codepoint/feature and letting merging join segments as needed. However, there is still
+  value in starting with a good quality input segmentation that places commonly used codepoints
+  together. This can significantly reduce the amount of work the merger needs to do. Therefore it
+  may be useful to develop functionality that creates a first pass input segmentation based on
+  codepoint frequency data.
   
 * Incorporating dependency information: whatever produces the input code point segments will likely
   have discovered dependency information related to those code points. That information can be
@@ -81,11 +87,11 @@ remaining areas for development in this particular approach:
   analysis. Future work will look at adding dependency information as an optional input to this
   procedure.
 
-One of the main down sides to this approach is it's reliance on a subsetting closure function which
-are computationally costly. Complex fonts which can require hundreds of closure operation which as a
-result can be slow to process. So another area of open research is if a non closure based approach
-could be developed that is computationally cheaper (for example by producing a segmentation by
-working directly with the substitution and dependencies encoded in a font).
+* One of the main down sides to this approach is it's reliance on a subsetting closure function which
+  are computationally costly. Complex fonts which can require hundreds of closure operation which as a
+  result can be slow to process. So another area of open research is if a non closure based approach
+  could be developed that is computationally cheaper (for example by producing a segmentation by
+  working directly with the substitution and dependencies encoded in a font).
 
 ## Goals
 
@@ -100,12 +106,15 @@ The segmentation procedure described in this document aims to achieve the follow
   values. The input unicode code point segmentations are used to form the conditions.
 
 * Optimize for minimal data transfer by avoiding duplicating glyphs across patches where possible.
+  
+* Support optimization of a generated segmentation via merging to reduce network overhead.
 
 * The chosen glyph segmentation and activation conditions must satisfy the closure requirement:
 
   The set of glyphs contained in patches loaded for a font subset definition (a set of Unicode
   code points and a set of layout feature tags) through the patch map tables must be a superset of
   those in the glyph closure of the font subset definition.
+    
   
 ## Subsetter Glyph Closures
 
@@ -227,90 +236,19 @@ data in the initial font. In these cases leaving them in the fallback patch may 
 
 ## Merging
 
-In some cases the patch set produced above may result in some patches that contain a small number of
-glyphs. Because there is a per patch overhead cost (from network and patch format overhead) it may
-be desirable to merge some patches together in order to meet some minimum size target. Patches can
-be merged so long as it's done in a way that preserves the glyph closure requirement.
+When starting with an input segmentation that is fine grained (for example using one segment per
+code point) the resulting glyph segmentation may involve a large number of patches. This results in
+excessive network overhead when loading the patches. Performance can be increased by selectively merging
+patches together to reduce overhead. This is a complex problem as it needs to be done in a way that
+avoids excessive transfers of glyph data that isn't needed.
 
-There are two types of patches that can be merged: exclusive and conditional. The procedure for
-merging is dependent on the type.  The next two sections provide some guidelines for merging the two
-types together.
+The segmenter currently implements a cost based merging algorithm which selects merges that minimize
+an overall cost function. This process is documented in detail in
+[closure_glyph_segmentation_merging.md](closure_glyph_segmentation_merging.md).
 
-### Merging Input Segments
-
-This section outlines a procedure to find and merge input code point segments in order to increase
-the sizes of one or more exclusive patches. It searches for other input segments that interact with
-the one that needs to be enlarged. Keeping interacting code points together in a single segment since
-it reduces the number of conditional patches needed, thereby reducing overall overhead.
-
-Starting with:
-
-* A set of patches and activation conditions produced by the "Segmenting Glyphs Based on Closure
-  Analysis" procedure.
-* A desired minimum and maximum patch size in bytes.
-
-Then, for each segment $s_i$ in $s_1$ through $s_n$ ordered by expected frequency of use (high to low):
-
-1. If the associated exclusive patch does not exist or it is larger than the minimum size skip this segment.
-
-2. Locate one or more segments to merge:
-
-   a. Sort all glyph patches by their conditions. First on the number of segments in the condition ascending and
-      then by the segment frequency (high to low).
-      
-   b. Return the set of segments in the condition of the first patch from that list where $s_i$
-   appears somewhere in the patch’s condition.
-   
-   c. If no such patch was found then instead select another exclusive patch which has the closest
-   frequency to $s_i$ and return the associated segment.
-
-3. Generate a new $s'_i$ which is the union of $s_i$ and all returned segments from step 2. Add it
-   to the input segment list.
-
-4. Remove the $s_i$ and all segments from step 2 from all per glyph conditions and the input segment list.
-
-5. Re-run the "Segment Closure Analysis" closure test on $s'_i$ and update per glyph conditions as needed.
-
-6. Based on the updated per glyph conditions, recompute the overall patch and condition sets
-   following "Segmenting Glyphs Based on Closure Analysis".  If the new patch for $s'_i$ is larger
-   than the maximum allowed size, undo the changes from steps 3-6 and go back to step 2 to continue
-   searching for more candidate segments. Ignore the previously selected group.
-
-7. Re-run this process to find and fix the next patch which is too small. If none remain then the
-   process is finished.
-
-
-### Merging Conditional Patches
-
-At a high level two conditional patches can be merged together by creating a new patch containing
-the union of the glyphs in the two and assigning a new condition with is a super set of the two
-original conditions. Merging patches in this way avoids duplicating glyphs, but results in more
-relaxed overall activation conditions meaning some of the glyphs will be loaded when not strictly
-needed.
-
-Merged conditions for conditional patches can be created by adding a disjunction between the two
-overall conditions. For example if the two conditions were ($s_1 \wedge s_2$), ($s_2 \wedge s_3$)
-then a new condition $(s_1 \wedge s_2) \vee (s_2 \wedge s_3)$ could be used for a combined
-patch. This condition will activate the combined patch when either of the original conditions would
-have matched. When selecting patches to merge, patches that have a smaller symmetric difference
-between the segments in their conditions should be prioritized as that will minimize the widening of
-the activation condition.
-
-There are also two other options for merging conditional patches, though these are generally less
-preferable than the merging procedure described above:
-
-1. Move the patch's glyphs into the initial font or merge with the fallback patch. This removes the
-   patch at the cost of always loading the glyph's data. This may be useful when there is a very
-   small patch with a wide activation condition. In this case it may not be desirable to merge with
-   other larger conditional patches due to excessive widening of their activation conditions.
-   
-2. Duplicate the patch's glyphs into the segments that make up the patch's condition. This
-   eliminates the patch at the cost of duplicating glyph data. It may be useful in cases of small
-   patches with narrow activation conditions.
-   
-More research is needed in this area, and ultimately its likely that a selection heuristic which
-takes into account segment frequency to assess the impact of condition widening will need to be
-developed.
+The best segmentation results so far have been obtained by starting with one input segment per
+code point in the font and then letting the merger figure out how to best place them together in a way
+that minimizes overall cost.
 
 ## Multi Segment Dependencies
 
