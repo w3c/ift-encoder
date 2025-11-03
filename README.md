@@ -85,10 +85,13 @@ In this repo 3 options are currently provided:
     ```sh
     bazel run -c opt util:closure_glyph_keyed_segmenter_util  -- \
       --input_font=$(pwd)/myfont.ttf \
-      --number_of_segments=20 \
-      --codepoints_file=$(pwd)/all_cps.txt \
+      --config=path/to/config.textpb
+      --include_initial_codepoints_in_config \
       --output_segmentation_plan > glyph_keyed.txtpb
     ```
+
+    The closure glyph segmenter is configured via an input configuration file using the
+    [segmenter_config.proto](util/segmenter_config.proto) schema, see the comments there for more details.
 
     Note: this utility is under active development and still very experimental. See
     [the status section](docs/experimental/closure_glyph_segmentation.md#status) for more details.
@@ -110,6 +113,10 @@ cat glyph_keyed.txtpb table_keyed.txtpb > segmentation_plan.txtpb
 ```
 
 Additional tools for generating encoder configs are planned to be added in the future.
+
+For concrete examples of how to generate IFT fonts, see the [IFT Demo](https://github.com/garretrieger/ift-demo).
+In particular the [Makefile](https://github.com/garretrieger/ift-demo/blob/main/Makefile) and the
+[segmenter configs](https://github.com/garretrieger/ift-demo/tree/main/config) may be helpful.
 
 ### Generating an IFT Encoding
 
