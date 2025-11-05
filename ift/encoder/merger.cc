@@ -395,9 +395,36 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
   return smallest_candidate_merge->Apply(*this);
 }
 
+double Merger::BestCaseInertProbabilityThreshold(
+  uint32_t base_patch_size, double base_probability, double lowest_cost_delta
+) const {
+  // For a merge of an inert base patch with any other inert segment, this
+  // computes the minimum probability the other segment must have for
+  // it to be possible to produce a delta lower than lowest_cost_delta.
+  //
+  // This formula is derived by making the following assumptions:
+  // - The probability of the merged segment = base_probability.
+  // - The size of the merged patch is (base_patch_size + BEST_CASE_MERGE_SIZE_DELTA)
+  //
+  // These two assumptions give the best possible cost delta for the merge.
+  base_patch_size += Strategy().NetworkOverheadCost();
+  return std::min(1.0, std::max(0.0,
+    (((double) BEST_CASE_MERGE_SIZE_DELTA) * base_probability - lowest_cost_delta) / ((double) base_patch_size)));
+}
+
 Status Merger::CollectExclusiveCandidateMerges(
     uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
+  auto base_glyphs =
+        context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
+  uint32_t base_size = TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
+  double base_probability = Context().SegmentationInfo().Segments().at(base_segment_index).Probability();
+
+  double inert_threshold = -1.0;
+  if (smallest_candidate_merge.has_value()) {
+    inert_threshold = BestCaseInertProbabilityThreshold(base_size, base_probability, smallest_candidate_merge->CostDelta());
+  }
+
   for (auto it = candidate_segments_.lower_bound(base_segment_index);
        it != candidate_segments_.end(); it++) {
     if (*it == base_segment_index) {
@@ -414,6 +441,13 @@ Status Merger::CollectExclusiveCandidateMerges(
       return absl::OkStatus();
     }
 
+    if (context_->InertSegments().contains(segment_index) &&
+        context_->SegmentationInfo().Segments().at(segment_index).Probability() <= inert_threshold) {
+      // Since we iteration is in probability order from highest to lowest, once one segment fails
+      // the threshold then we know all further ones will as well.
+      break;
+    }
+
     auto segment_glyphs =
         context_->glyph_groupings.ExclusiveGlyphs(segment_index);
     if (segment_glyphs.empty()) {
@@ -428,8 +462,10 @@ Status Merger::CollectExclusiveCandidateMerges(
         smallest_candidate_merge));
     if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
+      inert_threshold = BestCaseInertProbabilityThreshold(base_size, base_probability, smallest_candidate_merge->CostDelta());
     }
   }
+
   return absl::OkStatus();
 }
 

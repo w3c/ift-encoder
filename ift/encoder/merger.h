@@ -28,6 +28,12 @@ class Merger {
     return merger;
   }
 
+  // This is the estimated smallest possible increase in a patch size as a
+  // result of a merge (ie. assuming the added glyph(s) are redundant with the
+  // base and cost 0 to encode). This is roughly the number of bytes that would
+  // be added by including a single extra gid into the patch header.
+  static constexpr unsigned BEST_CASE_MERGE_SIZE_DELTA = 6;
+
   const MergeStrategy& Strategy() const { return strategy_; }
 
   const SegmentationContext& Context() const { return *context_; }
@@ -136,6 +142,12 @@ class Merger {
 
   absl::Status ApplyInitFontMove(const common::GlyphSet& glyphs_to_move,
                                  double delta);
+
+  // Computes the minimum probability an inert segment must have for it to be possible
+  // to have a lower cost delta than lowest_cost_delta when merged with the inert base patch.
+  double BestCaseInertProbabilityThreshold(
+    uint32_t base_patch_size, double base_probability, double lowest_cost_delta
+  ) const;
 
   common::SegmentSet InitFontApplyProbabilityThreshold() const;
   common::SegmentSet InitFontSegmentsToCheck(
