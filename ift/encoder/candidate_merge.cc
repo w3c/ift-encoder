@@ -415,7 +415,7 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
 
 StatusOr<double> CandidateMerge::ComputeCostDelta(
     const Merger& merger, const SegmentSet& merged_segments,
-    const Segment& merged_segment, uint32_t new_patch_size) {
+    const Segment& merged_segment, std::optional<uint32_t> maybe_new_patch_size) {
 
   // TODO(garretrieger): the accuracy of this can be improved by factoring
   // in the new exclusive glyph set for the merged segment. These glyphs
@@ -439,6 +439,19 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
 
   TRYV(FindModifiedConditions(merger, merged_segments, removed_conditions,
                               modified_conditions));
+
+  uint32_t new_patch_size = 0;
+  if (maybe_new_patch_size.has_value()) {
+    new_patch_size = *maybe_new_patch_size;
+  } else {
+    // In the best case the merged patch size is equal to that of the largest removed patch.
+    // All removed patches will be joined into the new merged segment, and the best case is
+    // that all of their data is completely redundant as much as possible.
+    for (const auto& [_, removed_size] : removed_conditions) {
+      new_patch_size = std::max(removed_size, new_patch_size);
+    }
+    new_patch_size += Merger::BEST_CASE_MERGE_SIZE_DELTA;
+  }
 
   double cost_delta = 0.0;
   VLOG(1) << "cost_delta for merge of " << merged_segments.ToString() << " =";
@@ -470,6 +483,16 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
             << " [modified patch " << c.ToString() << "]";
     cost_delta -= d;
   }
+
+  // TODO(garretrieger): rework this to account for glyphs added via closure to the new exclusive patch.
+  //  - A new exclusive patch is introduced with a known set of glyphs.
+  //  - Patches that are effected are either those with merge segments in their conditions.
+  //  - Or those containing glyphs that are in the new patch (includes fallback), this part would be new.
+  //  - For those that intersect the new exclusive glyphs, we need to either remove them or
+  //    compute new size as a result of glyph removal.
+  //  - An index from gid -> activation condition would be useful here.
+  //    Can be done currently by going gid -> (via glyph condition set) segments -> (via triggering segments) conditions,
+  //    but that will currently over select conditions.
 
   // Lastly add back the costs associated with the modified version of each
   // segment.
@@ -585,24 +608,13 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   Segment merged_segment = segments[base_segment_index];
   MergeSegments(merger, segments_to_merge, merged_segment);
 
-  if (merger.Strategy().UseCosts() && segments_to_merge_are_inert &&
-      segments_to_merge.size() == 1 && best_merge_candidate.has_value()) {
-    // Given an existing best merge candidate we can compute a probability
-    // threshold on the segments to be merged that will allow us to quickly
-    // discard merges which can't possibily beat the current best.
-    unsigned segment_to_merge = segments_to_merge.min().value();
-    const GlyphSet& glyphs =
-        merger.Context().glyph_condition_set.GlyphsWithSegment(
-            segment_to_merge);
-    unsigned segment_to_merge_size = 0;
-    if (!glyphs.empty()) {
-      segment_to_merge_size =
-          TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs));
-    }
-    double threshold = best_merge_candidate->InertProbabilityThreshold(
-        segment_to_merge_size, merged_segment.Probability());
-    if (segments[segment_to_merge].Probability() <= threshold) {
-      // No chance for this merge to beat the current best.
+  if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
+    // Before doing a full assessment check a "best case" cost delta.
+    // If that doesn't beat the current smallest there's no need to
+    // do more indepth analysis.
+    double best_case_delta = TRY(ComputeCostDelta(merger, segments_to_merge_with_base, merged_segment, std::nullopt));
+    if (best_case_delta >= best_merge_candidate->CostDelta()) {
+      // We can't possibly beat the current lowest delta.
       return std::nullopt;
     }
   }
@@ -622,11 +634,10 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
 
   uint32_t new_patch_size = 0;
   if (!segments_to_merge_are_inert) {
+    // TODO(garretrieger): XXXX utilize and/or_gids to improve the cost computation.
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
-    // TODO(garretrieger): should we compute another best case threshold here
-    // to try and skip computing the real patch size?
     new_patch_size =
         TRY(merger.Context().patch_size_cache->GetPatchSize(exclusive_gids));
   } else {

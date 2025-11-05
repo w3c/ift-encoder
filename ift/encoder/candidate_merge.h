@@ -76,11 +76,6 @@ struct CandidateMerge {
 
   double CostDelta() const { return cost_delta_; }
 
-  // This is the estimated smallest possible increase in a patch size as a
-  // result of a merge (ie. assuming the added glyph(s) are redundant with the
-  // base and cost 0 to encode). This is roughly the number of bytes that would
-  // be added by including a single extra gid into the patch header.
-  static constexpr unsigned BEST_CASE_MERGE_SIZE_DELTA = 6;
 
   bool operator==(const CandidateMerge& other) const {
     // base segment and segments to merge uniquely identify a candidate
@@ -102,42 +97,6 @@ struct CandidateMerge {
       return base_segment_index_ < other.base_segment_index_;
     }
     return segments_to_merge_ < other.segments_to_merge_;
-  }
-
-  // Given some candidate merge this computes the minimum probability an inert
-  // segment must have for it to be possible to have a lower cost delta than
-  // this one. Used to prefilter merges and avoid expensive cost delta
-  // calculations.
-  double InertProbabilityThreshold(uint32_t patch_size,
-                                   double merged_probability) const {
-    // The threshold calculation here was worked out by hand by considering the
-    // equation:
-    //
-    // minimum cost delta > best case merged size * merge probability
-    //                      - total base size * base probability
-    //                      - total patch size * patch probability
-    //
-    // The threshold is then found by solving for patch probability in the above
-    // inequality.
-    //
-    // Note: because the to be merged patch is inert we need to only consider
-    // the contributions of the base patch and the to be merged patch.
-
-    // For the best case merged size we assume complete overlap between the two
-    // merged patches so that the new size is just the larger of the two patches
-    // to be merged, plus the byte cost of adding at least one more gid into the
-    // patch header.
-    double best_case_merged_size = std::max(base_size_, (double)patch_size) +
-                                   network_overhead_ +
-                                   BEST_CASE_MERGE_SIZE_DELTA;
-    double total_base_size = base_size_ + network_overhead_;
-    double total_patch_size =
-        patch_size > 0 ? patch_size + network_overhead_ : 0;
-
-    double numerator = merged_probability * best_case_merged_size -
-                       base_probability_ * total_base_size - cost_delta_;
-    double min_p = std::min(std::max(numerator / total_patch_size, 0.0), 1.0);
-    return min_p;
   }
 
   // Applies this merge operation to the given SegmentationContext.
@@ -180,9 +139,12 @@ struct CandidateMerge {
 
   // Computes the predicted change to the total cost if merged_segments
   // are joined together into a new segment, merged_segment.
+  //
+  // If new_patch_size is not provided then this computes a "best case" delta
+  // where the new patch size is choosen to produce the best achievable delta.
   static absl::StatusOr<double> ComputeCostDelta(
-      const Merger& context, const common::SegmentSet& merged_segments,
-      const Segment& merged_segment, uint32_t new_patch_size);
+      const Merger& merger, const common::SegmentSet& merged_segments,
+      const Segment& merged_segment, std::optional<uint32_t> new_patch_size);
 
   // Computes the predicted change to the toal cost if moved_glyphs are
   // moved from patches into the initial font.
