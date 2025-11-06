@@ -25,6 +25,8 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
 
   absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override;
 
+  void LogBrotliCallCount() const override {}
+
   double CompressionRatio() const { return compression_ratio_; }
 
  private:

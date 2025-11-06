@@ -20,6 +20,8 @@ class MockPatchSizeCache : public PatchSizeCache {
     return 100;
   }
 
+  void LogBrotliCallCount() const override {}
+
   void SetPatchSize(const common::GlyphSet& gids, uint32_t size) {
     patch_sizes_[gids] = size;
   }

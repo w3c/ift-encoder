@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -19,6 +20,7 @@ class PatchSizeCache {
   virtual ~PatchSizeCache() = default;
   virtual absl::StatusOr<uint32_t> GetPatchSize(
       const common::GlyphSet& gids) = 0;
+  virtual void LogBrotliCallCount() const = 0;
 };
 
 // Computes estimated sizes of patches (based on the contained glyphs),
@@ -40,10 +42,15 @@ class PatchSizeCacheImpl : public PatchSizeCache {
       return it->second;
     }
 
+    brotli_call_count_++;
     auto patch_data = TRY(differ_.CreatePatch(gids));
     uint32_t size = patch_data.size();
     cache_[gids] = size;
     return size;
+  }
+
+  void LogBrotliCallCount() const override {
+    VLOG(0) << "Total number of calls to brotli = " << brotli_call_count_;
   }
 
  private:
@@ -51,6 +58,7 @@ class PatchSizeCacheImpl : public PatchSizeCache {
   common::CompatId id_;
   GlyphKeyedDiff differ_;
   absl::flat_hash_map<common::GlyphSet, uint32_t> cache_;
+  uint64_t brotli_call_count_ = 0;
 };
 
 }  // namespace ift::encoder
