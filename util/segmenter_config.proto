@@ -190,6 +190,30 @@ message CostConfiguration {
   // Value is from [0, 1].
   double initial_font_merge_probability_threshold = 8;
 
+  // The merger prunes patch pairs from evaluation by looking at a "best case" cost reduction. During
+  // this calculation the size of the merged patch is estimated using the size of the individual patches
+  // being merged. The following forumula is used:
+  //
+  // merged_size =
+  //   largest_individual_patch_size +
+  //   best_case_size_reduction_fraction * sum of remaining patch sizes
+  //
+  // Where the individual patch sizes used are post compression. In affect this sets the lower bound for
+  // how much merged data can shrink beyond it's initial compressed size (for the best case computation).
+  //
+  // The value is from [0, 1.0]. Lower values make best case pruning less aggressive, which means slower
+  // run time but may lead to lower final segmentation costs. Higher values make best case pruning more
+  // aggressive, which means faster run time but if it's set too high the merger may miss good merges.
+  //
+  // The current default value of 0.5 was selected by looking at the distribution of size reductions
+  // in some example fonts. It was found (using brotli 9) that a only 0.2% of pairs have a reduction
+  // less than 0.5. So 0.5 should typically have minimal impact on the final cost, while offering
+  // a signficant run time speedup.
+  //
+  // TODO(garretrieger): evaluate this accross a larger sampling of fonts and brotli qualities to find a
+  // more general default value.
+  double best_case_size_reduction_fraction = 9 [default = 0.5];
+
   // By default merges under cost strategy are made by joining segments together, if this setting is
   // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
   // merge glyphs from two patches are merged together along with the conditions for those patches.
@@ -209,7 +233,7 @@ message CostConfiguration {
   // Work is planned to fix this issue (either in the harfbuzz closure or with a workaround in the segmenter),
   // until then it's recommended to not used this except for testing (or if appropriate care has been taken
   // in producing the input segments to avoid this issue).
-  bool experimental_use_patch_merges = 9 [default = false];
+  bool experimental_use_patch_merges = 10 [default = false];
 }
 
 // The merger will choose segments to merge based on a heuristic which primarily utilizes

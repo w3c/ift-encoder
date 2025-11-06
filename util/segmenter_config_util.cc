@@ -122,6 +122,7 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
   strategy.SetUsePatchMerges(merged.experimental_use_patch_merges());
 
   strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
+  strategy.SetBestCaseSizeReductionFraction(merged.best_case_size_reduction_fraction());
 
   if (merged.has_initial_font_merge_threshold()) {
     strategy.SetInitFontMergeThreshold(merged.initial_font_merge_threshold());

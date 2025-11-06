@@ -142,8 +142,21 @@ class MergeStrategy {
   double OptimizationCutoffFraction() const {
     return optimization_cutoff_fraction_;
   }
+
   void SetOptimizationCutoffFraction(double value) {
     optimization_cutoff_fraction_ = value;
+  }
+
+  // For best case size reduction computations this sets the assumed smallest
+  // possible reduction in data (post compression) added to a base patch.
+  //
+  // See the comment in segmenter_config.proto for more details.
+  double BestCaseSizeReductionFraction() const {
+    return best_case_size_reduction_fraction_;
+  }
+
+  void SetBestCaseSizeReductionFraction(double value) {
+    best_case_size_reduction_fraction_ = std::max(0.0, std::min(1.0, value));
   }
 
   // Configures the threshold (cost delta) for when to merge a segment into
@@ -189,7 +202,12 @@ class MergeStrategy {
            patch_size_max_bytes_ == other.patch_size_max_bytes_ &&
            optimization_cutoff_fraction_ ==
                other.optimization_cutoff_fraction_ &&
-           init_font_merge_threshold_ == other.init_font_merge_threshold_;
+           best_case_size_reduction_fraction_ == other.best_case_size_reduction_fraction_ &&
+           init_font_merge_threshold_ == other.init_font_merge_threshold_ &&
+           init_font_merge_probability_threshold_ == other.init_font_merge_probability_threshold_ &&
+           use_patch_merges_ == other.use_patch_merges_ &&
+           pre_closure_group_size_ == other.pre_closure_group_size_ &&
+           pre_closure_probability_threshold_ == other.pre_closure_probability_threshold_;
   }
 
  private:
@@ -210,12 +228,13 @@ class MergeStrategy {
   uint32_t patch_size_min_bytes_;
   uint32_t patch_size_max_bytes_;
   double optimization_cutoff_fraction_ = 0.001;
+  double best_case_size_reduction_fraction_ = 0.5;
   std::optional<double> init_font_merge_threshold_ = std::nullopt;
   std::optional<double> init_font_merge_probability_threshold_ = std::nullopt;
   bool use_patch_merges_ = false;
 
   uint32_t pre_closure_group_size_ = 1;
-  double pre_closure_probability_threshold_ = 0.0;
+  double pre_closure_probability_threshold_ = 1.0;
 
   std::shared_ptr<freq::ProbabilityCalculator> probability_calculator_;
 };
