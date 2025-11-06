@@ -17,6 +17,7 @@ struct ProbabilityBound {
 
   double Min() const { return min_; }
   double Max() const { return max_; }
+  double Average() const { return (min_ + max_) / 2.0; }
 
   bool operator==(const ProbabilityBound& other) const {
     return min_ == other.min_ && max_ == other.max_;

@@ -176,19 +176,16 @@ struct SegmentOrdering {
 
   bool operator<(const SegmentOrdering& other) const {
     if (group_index != other.group_index) {
+      // Group index ascending.
       return group_index < other.group_index;
     }
 
-    if (probability.Min() != other.probability.Min()) {
-      // Probability descending.
-      return probability.Min() > other.probability.Min();
+    if (probability.Average() != other.probability.Average()) {
+      // Segment probability descending.
+      return probability.Average() > other.probability.Average();
     }
 
-    if (probability.Max() != other.probability.Max()) {
-      // Probability descending.
-      return probability.Max() > other.probability.Max();
-    }
-
+    // Break ties with original segment index ascending.
     return original_index < other.original_index;
   }
 };
@@ -595,7 +592,7 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   double incremental_size =
       non_ift_font_size / (double)non_ift.codepoints.size();
   for (unsigned cp : non_ift.codepoints) {
-    double Pcp = probability_calculator.ComputeProbability({cp}).Min();
+    double Pcp = probability_calculator.ComputeProbability({cp}).Average();
     ideal_cost += Pcp * incremental_size;
   }
 
