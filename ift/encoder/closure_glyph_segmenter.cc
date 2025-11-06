@@ -496,6 +496,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
+      context.patch_size_cache->LogBrotliCallCount();
       return context.ToGlyphSegmentation();
     }
 
