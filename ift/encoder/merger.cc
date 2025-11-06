@@ -398,15 +398,29 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
 double Merger::BestCaseInertProbabilityThreshold(
   uint32_t base_patch_size, double base_probability, double lowest_cost_delta
 ) const {
-  // For a merge of an inert base patch with any other inert segment, this
-  // computes the minimum probability the other segment must have for
-  // it to be possible to produce a delta lower than lowest_cost_delta.
+  // The following assumptions are made:
+  // - P(base) >= P(other)
+  // - the best case merged size is max(base_size, other_size) + k
   //
-  // This formula is derived by making the following assumptions:
-  // - The probability of the merged segment = base_probability.
-  // - The size of the merged patch is (base_patch_size + BEST_CASE_MERGE_SIZE_DELTA)
+  // Then if we start with the formula for the  cost delta of an inert merge:
   //
-  // These two assumptions give the best possible cost delta for the merge.
+  // P(merged) * merged_size - P(base) * base_size - P(other) * other_size
+  //
+  // (here all sizes include the network overhead delta).
+  //
+  // And consider what valid values of P(merged), and other_size will produce the
+  // lowest total delta we find that this happens when:
+  // - P(merged) = P(base)
+  // - other_size = base_size
+  // - merged_size = base_size + k
+  //
+  // From that we find that the smallest possible delta is:
+  //
+  // min(cost delta) = P(base) * k - P(other) * base_size
+  //
+  // From which we find that:
+  //
+  // P(other) > (k * P(base) - lowest_cost_delta) / base_size
   base_patch_size += Strategy().NetworkOverheadCost();
   return std::min(1.0, std::max(0.0,
     (((double) BEST_CASE_MERGE_SIZE_DELTA) * base_probability - lowest_cost_delta) / ((double) base_patch_size)));
