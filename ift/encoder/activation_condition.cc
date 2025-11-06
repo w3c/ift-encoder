@@ -371,10 +371,10 @@ StatusOr<double> ActivationCondition::Probability(
     }
 
     // TODO(garretrieger): The full probability bound should be utilized here.
-    return calculator.ComputeMergedProbability(union_segments).Min();
+    return calculator.ComputeMergedProbability(union_segments).Average();
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Min();
+  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Average();
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
@@ -431,10 +431,10 @@ StatusOr<double> ActivationCondition::MergedProbability(
       union_segments.push_back(&merged_segment);
     }
 
-    return calculator.ComputeMergedProbability(union_segments).Min();
+    return calculator.ComputeMergedProbability(union_segments).Average();
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Min();
+  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Average();
 }
 
 }  // namespace ift::encoder

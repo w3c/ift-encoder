@@ -10,7 +10,7 @@ struct Segment {
   Segment(SubsetDefinition definition, freq::ProbabilityBound probability)
       : definition(std::move(definition)), probability(probability) {}
 
-  double Probability() const { return probability.Min(); }
+  double Probability() const { return probability.Average(); }
   const freq::ProbabilityBound& ProbabilityBound() const { return probability; }
 
   const SubsetDefinition& Definition() const { return definition; }
