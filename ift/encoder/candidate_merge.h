@@ -143,7 +143,7 @@ struct CandidateMerge {
   // If new_patch_size is not provided then this computes a "best case" delta
   // where the new patch size is choosen to produce the best achievable delta.
   static absl::StatusOr<double> ComputeCostDelta(
-      const Merger& merger, const common::SegmentSet& merged_segments,
+      Merger& merger, const common::SegmentSet& merged_segments,
       const Segment& merged_segment, std::optional<uint32_t> new_patch_size);
 
   // Computes the predicted change to the toal cost if moved_glyphs are

@@ -445,10 +445,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     TRYV(context.ReassignInitSubset(new_def));
   }
 
-  // Before we start merging, make sure the state after init font processing is
-  // correct.
-  TRYV(ValidateIncrementalGroupings(face, context));
-
   if (merge_groups.empty()) {
     // No merging will be needed so we're done.
     return context.ToGlyphSegmentation();
@@ -494,6 +490,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
       context.patch_size_cache->LogBrotliCallCount();
+      for (const auto& merger : mergers) {
+        merger.LogMergedSizeHistogram();
+      }
+
       return context.ToGlyphSegmentation();
     }
 

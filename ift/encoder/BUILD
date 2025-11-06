@@ -84,6 +84,7 @@ cc_library(
         "//ift",
         "//ift/freq",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/container:flat_hash_map",

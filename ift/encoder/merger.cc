@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
@@ -16,7 +17,14 @@ using absl::StatusOr;
 using common::GlyphSet;
 using common::SegmentSet;
 
+ABSL_FLAG(bool, record_merged_size_reductions, false,
+          "When enabled the merger will record the percent size reductions of each assessed merge.");
+
 namespace ift::encoder {
+
+bool Merger::ShouldRecordMergedSizeReductions() const {
+  return absl::GetFlag(FLAGS_record_merged_size_reductions);
+}
 
 StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
 Merger::TryNextMerge() {
@@ -702,6 +710,20 @@ Status Merger::ApplyInitFontMove(const GlyphSet& glyphs_to_move, double delta) {
   TRYV(ReassignInitSubset());
 
   return absl::OkStatus();
+}
+
+void Merger::LogMergedSizeHistogram() const {
+  if (!ShouldRecordMergedSizeReductions()) {
+    return;
+  }
+
+  std::stringstream histogram_string;
+  histogram_string << "reduction_percent, count" << std::endl;
+  for (const auto [percent, count] : merged_size_reduction_histogram_) {
+    histogram_string << percent << ", " << count << std::endl;
+  }
+  VLOG(0) << "Merged Size Reduction Histogram for " << strategy_.Name().value_or("unamed") << std::endl
+          << histogram_string.str();
 }
 
 }  // namespace ift::encoder

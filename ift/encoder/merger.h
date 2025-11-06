@@ -2,6 +2,7 @@
 #define IFT_ENCODER_MERGER_
 
 #include <cstdint>
+#include <sstream>
 
 #include "common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
@@ -84,6 +85,15 @@ class Merger {
   uint32_t NumCutoffSegments() const { return CutoffSegments().size(); }
 
   uint32_t NumInscopeSegments() const { return inscope_segments_.size(); }
+
+  void RecordMergedSizeReduction(double size_reduction) {
+    int32_t reduction_percent = 100.0 * size_reduction;
+    merged_size_reduction_histogram_[reduction_percent]++;
+  }
+
+  bool ShouldRecordMergedSizeReductions() const;
+
+  void LogMergedSizeHistogram() const;
 
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
@@ -180,6 +190,9 @@ class Merger {
   // selecting merges. Merging is done via simple selection until minimum group
   // sizes are met.
   segment_index_t optimization_cutoff_segment_;
+
+  // Percent reduction of data beyond the single largest input patch.
+  absl::btree_map<int32_t, uint32_t> merged_size_reduction_histogram_;
 };
 
 }  // namespace ift::encoder

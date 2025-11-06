@@ -447,3 +447,30 @@ TEST_F(SegmenterConfigUtilTest,
                          {{1}, ExpectedCostStrategy(75)},
                      }));
 }
+
+TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_OptimizationSettings) {
+  SegmenterConfig config;
+  auto* group = config.add_merge_groups();
+  group->mutable_cost_config()->set_path_to_frequency_data(
+      "test_freq_data.riegeli");
+
+  group->mutable_cost_config()->set_optimization_cutoff_fraction(0.12);
+  group->mutable_cost_config()->set_best_case_size_reduction_fraction(0.34);
+
+  CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb");
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+
+  MergeStrategy expected = ExpectedCostStrategy(75);
+  expected.SetOptimizationCutoffFraction(0.12);
+  expected.SetBestCaseSizeReductionFraction(0.34);
+
+  ASSERT_EQ(
+      *groups,
+      (btree_map<SegmentSet, MergeStrategy>{{{2}, expected}}));
+}
