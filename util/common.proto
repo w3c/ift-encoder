@@ -35,3 +35,16 @@ message AxisRangeProto {
   float start = 1;
   float end = 2;
 }
+
+// This enum is used to specify how unmapped glyphs are handled in the produced segmentation.
+enum UnmappedGlyphHandling {
+  // All unmapped glyphs will be placed into a patch which is always loaded.
+  PATCH = 0;
+
+  // All unmapped glyphs will be moved into the initial font.
+  MOVE_TO_INIT_FONT = 1;
+
+  // Advanced condition analysis will be used (expensive) to discover the conditions
+  // for unmapped glyphs.
+  FIND_CONDITIONS = 2;
+}

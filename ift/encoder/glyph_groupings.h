@@ -173,6 +173,14 @@ class GlyphGroupings {
       const GlyphConditionSet& glyph_condition_set,
       GlyphClosureCache& closure_cache, const common::GlyphSet& glyphs);
 
+  // Perform a more detailed analysis to try and find more granular conditions
+  // for fallback glyphs. Will replace the fallback glyphs with any found
+  // conditions.
+  absl::Status FindFallbackGlyphConditions(
+      const RequestedSegmentationInformation& segmentation_info,
+      const GlyphConditionSet& glyph_condition_set,
+      GlyphClosureCache& closure_cache);
+
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const;
