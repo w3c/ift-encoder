@@ -403,7 +403,7 @@ TEST_F(ClosureGlyphSegmenterTest,
        UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
-      btree_map<SegmentSet, MergeStrategy>{}, true);
+      btree_map<SegmentSet, MergeStrategy>{}, MOVE_TO_INIT_FONT);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 0);
@@ -1088,7 +1088,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
                                                           {'m'},
                                                           {'n'},
                                                           {'o'}},
-                                                         merge_groups, false);
+                                                         merge_groups, PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1184,7 +1184,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
                                                           {'m'},
                                                           {'n'},
                                                           {'o'}},
-                                                         merge_groups, false);
+                                                         merge_groups, PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // Only segments from the groups that set a threshold are eligible to be moved
@@ -1261,7 +1261,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
                                                              {'i'},
                                                              {'j'},
                                                          },
-                                                         merge_groups, false);
+                                                         merge_groups, PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
@@ -1302,7 +1302,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_Heuristic) {
                                                              {'i'},
                                                              {'j'},
                                                          },
-                                                         merge_groups, false);
+                                                         merge_groups, PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
@@ -1413,7 +1413,7 @@ if (s2) then p2
           {{0, 1}, *MergeStrategy::CostBased(std::move(frequencies), 75, 3)},
           {{2}, MergeStrategy::None()},
       },
-      false);
+      PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_EQ(segmentation->ToString(),
@@ -1455,7 +1455,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
                                                              {'h'},
                                                              {'i'},
                                                          },
-                                                         merge_groups, false);
+                                                         merge_groups, PATCH);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // d, a are above the pregrouping threshold so aren't grouped.

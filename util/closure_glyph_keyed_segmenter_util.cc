@@ -53,8 +53,9 @@ ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
 ABSL_FLAG(bool, output_segmentation_analysis, true,
           "If set an analysis of the segmentation will be output to stderr.");
 
-ABSL_FLAG(bool, output_fallback_glyph_count, false,
-          "If set the number of fallback glyphs in the segmentation will be output.");
+ABSL_FLAG(
+    bool, output_fallback_glyph_count, false,
+    "If set the number of fallback glyphs in the segmentation will be output.");
 
 ABSL_FLAG(
     int, verbosity, 0,
@@ -67,9 +68,9 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using common::CodepointSet;
-using common::GlyphSet;
 using common::FontData;
 using common::FontHelper;
+using common::GlyphSet;
 using common::hb_face_unique_ptr;
 using common::SegmentSet;
 using google::protobuf::TextFormat;
@@ -165,14 +166,14 @@ static void AddTableKeyedSegments(
   }
 }
 
-static Status OutputFallbackGlyphCount(
-  hb_face_t* original_face,
-  const ClosureGlyphSegmenter& segmenter,
-  const GlyphSegmentation& segmentation) {
+static Status OutputFallbackGlyphCount(hb_face_t* original_face,
+                                       const ClosureGlyphSegmenter& segmenter,
+                                       const GlyphSegmentation& segmentation) {
   uint32_t num_fallback_glyphs = segmentation.UnmappedGlyphs().size();
   uint32_t fallback_glyphs_size = 0;
   uint32_t all_glyphs_size = 0;
-  TRYV(segmenter.FallbackCost(original_face, segmentation, fallback_glyphs_size, all_glyphs_size));
+  TRYV(segmenter.FallbackCost(original_face, segmentation, fallback_glyphs_size,
+                              all_glyphs_size));
 
   GlyphSet all_glyphs;
   for (const auto& [_, gids] : segmentation.GidSegments()) {
@@ -180,9 +181,9 @@ static Status OutputFallbackGlyphCount(
   }
 
   uint32_t num_glyphs = all_glyphs.size() + num_fallback_glyphs;
-  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", " << num_glyphs
-    << ", " << fallback_glyphs_size << ", " << all_glyphs_size
-    << std::endl;
+  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", "
+            << num_glyphs << ", " << fallback_glyphs_size << ", "
+            << all_glyphs_size << std::endl;
 
   return absl::OkStatus();
 }
@@ -201,14 +202,15 @@ static Status Main(const std::vector<char*> args) {
 
   std::vector<SubsetDefinition> segments;
   btree_map<SegmentSet, MergeStrategy> merge_groups =
-      TRY(config_util.ConfigToMergeGroups(config, font_codepoints, font_features, segments));
+      TRY(config_util.ConfigToMergeGroups(config, font_codepoints,
+                                          font_features, segments));
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(),
       config.brotli_quality_for_initial_font_merging());
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       font.get(), init_segment, segments, merge_groups,
-      config.move_fallback_glyphs_into_initial_font()));
+      config.unmapped_glyph_handling()));
 
   if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
     SegmentationPlan plan = segmentation.ToSegmentationPlanProto();

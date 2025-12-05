@@ -35,6 +35,12 @@ proto_library(
     ],
 )
 
+cc_proto_library(
+    name = "common_cc_proto",
+    deps = [":common_proto"],
+    visibility = ["//visibility:public"],
+)
+
 proto_library(
     name = "segmenter_config_proto",
     srcs = ["segmenter_config.proto"],

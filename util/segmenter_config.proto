@@ -40,9 +40,9 @@ message SegmenterConfig {
   // initial font, and hence be always available.
   SegmentProto initial_segment = 1;
 
-  // When set any glyphs that would be in the fallback patch (ie. glyphs that are always loaded)
-  // are instead moved into the initial font.
-  bool move_fallback_glyphs_into_initial_font = 2 [default = true];
+  // Specifies what to do with unmapped glyphs. Unmapped glyphs are glyphs in which the analysis
+  // is unable to determine activation conditions for.
+  UnmappedGlyphHandling unmapped_glyph_handling = 2 [default = MOVE_TO_INIT_FONT];
 
   // If enabled then the generated segmentation plan will include a set of table keyed segments.
   // One table keyed segment will be generated per merge group, including the auto generated
