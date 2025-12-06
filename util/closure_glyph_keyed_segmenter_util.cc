@@ -53,16 +53,21 @@ ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
 ABSL_FLAG(bool, output_segmentation_analysis, true,
           "If set an analysis of the segmentation will be output to stderr.");
 
+ABSL_FLAG(bool, output_fallback_glyph_count, false,
+          "If set the number of fallback glyphs in the segmentation will be output.");
+
 ABSL_FLAG(
     int, verbosity, 0,
     "Log verbosity level from. 0 is least verbose, higher values are more.");
 
 using absl::btree_map;
+using absl::btree_set;
 using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using common::CodepointSet;
+using common::GlyphSet;
 using common::FontData;
 using common::FontHelper;
 using common::hb_face_unique_ptr;
@@ -160,6 +165,17 @@ static void AddTableKeyedSegments(
   }
 }
 
+static void OutputFallbackGlyphCount(const GlyphSegmentation& segmentation) {
+  uint32_t num_fallback_glyphs = segmentation.UnmappedGlyphs().size();
+
+  GlyphSet all_glyphs;
+  for (const auto& [_, gids] : segmentation.GidSegments()) {
+    all_glyphs.union_set(gids);
+  }
+  uint32_t num_glyphs = all_glyphs.size() + num_fallback_glyphs;
+  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", " << num_glyphs << std::endl;
+}
+
 static Status Main(const std::vector<char*> args) {
   hb_face_unique_ptr font =
       TRY(LoadFont(absl::GetFlag(FLAGS_input_font).c_str()));
@@ -168,12 +184,13 @@ static Status Main(const std::vector<char*> args) {
   SegmenterConfigUtil config_util(absl::GetFlag(FLAGS_config));
 
   CodepointSet font_codepoints = FontHelper::ToCodepointsSet(font.get());
+  btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(font.get());
   SubsetDefinition init_segment =
       config_util.SegmentProtoToSubsetDefinition(config.initial_segment());
 
   std::vector<SubsetDefinition> segments;
   btree_map<SegmentSet, MergeStrategy> merge_groups =
-      TRY(config_util.ConfigToMergeGroups(config, font_codepoints, segments));
+      TRY(config_util.ConfigToMergeGroups(config, font_codepoints, font_features, segments));
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(),
@@ -207,6 +224,10 @@ static Status Main(const std::vector<char*> args) {
     // No config requested, just output a simplified plain text representation
     // of the segmentation.
     std::cout << segmentation.ToString() << std::endl;
+  }
+
+  if (absl::GetFlag(FLAGS_output_fallback_glyph_count)) {
+    OutputFallbackGlyphCount(segmentation);
   }
 
   if (!absl::GetFlag(FLAGS_output_segmentation_analysis)) {

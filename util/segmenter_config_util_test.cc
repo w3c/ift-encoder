@@ -11,6 +11,7 @@
 #include "ift/freq/unicode_frequencies.h"
 
 using absl::btree_map;
+using absl::btree_set;
 using common::CodepointSet;
 using common::SegmentSet;
 using ift::encoder::MergeStrategy;
@@ -56,7 +57,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoMergeGroups) {
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_TRUE(groups->empty());
@@ -77,7 +78,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -102,7 +103,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoSegments_Heuristic) {
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -127,7 +128,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -158,7 +159,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegments) {
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   SubsetDefinition def_with_features;
@@ -174,6 +175,46 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegments) {
 
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
                          {{0, 1, 2, 3}, MergeStrategy::Heuristic(101)}}));
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_FeatureSegmentsInferred) {
+  // Minimal config with one heuristic merge group that covers everything.
+  SegmenterConfig config;
+  config.set_generate_feature_segments(true);
+
+  CodepointSet font_codepoints{1, 2, 4};
+  btree_set<hb_tag_t> font_features {
+    HB_TAG('f', 'o', 'o', ' '),
+    HB_TAG('b', 'a', 'r', ' '),
+    HB_TAG('c', 'u', 'r', 's')
+  };
+
+  SegmenterConfigUtil util("");
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, font_features, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  SubsetDefinition foo;
+  foo.feature_tags = {
+    HB_TAG('f', 'o', 'o', ' '),
+  };
+
+  SubsetDefinition bar;
+  bar.feature_tags = {
+    HB_TAG('b', 'a', 'r', ' '),
+  };
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              bar,
+                              foo,
+                              {1},
+                              {2},
+                              {4},
+                          }));
+
+  ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{}));
 }
 
 TEST_F(SegmenterConfigUtilTest,
@@ -200,7 +241,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -226,7 +267,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsInferred_Cost) {
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -256,7 +297,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
   ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
@@ -287,7 +328,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
 
   ASSERT_TRUE(groups.ok()) << groups.status();
 
@@ -335,7 +376,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsProvided_Cost) {
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
 
   ASSERT_TRUE(groups.ok()) << groups.status();
 
@@ -362,7 +403,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_CostRequiresFreqData) {
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(absl::IsInvalidArgument(groups.status())) << groups.status();
 }
 
@@ -391,7 +432,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
 
   ASSERT_TRUE(groups.ok()) << groups.status();
 
@@ -433,7 +474,7 @@ TEST_F(SegmenterConfigUtilTest,
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
 
   ASSERT_TRUE(groups.ok()) << groups.status();
 
@@ -462,7 +503,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_OptimizationSettings) {
   SegmenterConfigUtil util("util/testdata/config.txtpb");
 
   std::vector<SubsetDefinition> segments_out;
-  auto groups = util.ConfigToMergeGroups(config, font_codepoints, segments_out);
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
   ASSERT_TRUE(groups.ok()) << groups.status();
 
 
@@ -474,3 +515,5 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_OptimizationSettings) {
       *groups,
       (btree_map<SegmentSet, MergeStrategy>{{{2}, expected}}));
 }
+
+// TODO test for feature segment auto generation.
