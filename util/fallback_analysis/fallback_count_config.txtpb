@@ -1,0 +1,19 @@
+# This config is used to run the closure segmenter to test how many fallback glyphs result from
+# segmenting a font with one codepoint per segment.
+
+# Don't move fallback glyphs to init font
+move_fallback_glyphs_into_initial_font: false
+
+# Add segments for all non-default features
+generate_feature_segments: true
+
+# Brotli shouldn't be used, but just in case set to lowest quality.
+brotli_quality: 1
+brotli_quality_for_initial_font_merging: 1
+
+# Ensure there is no merging.
+preprocess_merging_group_size_for_ungrouped: 1
+ungrouped_config {
+  min_patch_size: 0
+  max_patch_size: 4294967295
+}
