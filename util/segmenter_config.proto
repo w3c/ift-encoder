@@ -62,6 +62,9 @@ message SegmenterConfig {
   // will be one segment. These use their own id space separate from segments.
   map<uint32, Features> feature_segments = 5;
 
+  // If true and feature_segments is not specified then TODO...
+  bool generate_feature_segments = 14;
+
   // When generating compressed patches (to evaluate their size) this is the brotli quality
   // level used. Merge selection is typically bottle necked on brotli compression so higher
   // values increase processing times, but yield more accurate results.
@@ -104,6 +107,8 @@ message SegmenterConfig {
 
   // When provide the generated segmentation plan will be merged onto this base plan.
   SegmentationPlan base_segmentation_plan = 13;
+
+  // next = 15
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group

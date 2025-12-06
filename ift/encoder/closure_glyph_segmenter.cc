@@ -418,19 +418,24 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // ### First phase of merging is to check for any patches which should be
   // moved to the initial font (eg. cases where the probability of a patch is
   // ~1.0). Do this only for strategies that have opted in.
+  bool init_font_changed = false;
   for (Merger& merger : mergers) {
     if (merger.Strategy().UseCosts() &&
         merger.Strategy().InitFontMergeThreshold().has_value()) {
       // make sure candidate segments is up to date before attempting to
       // process.
+      init_font_changed = true;
       TRYV(merger.ReassignInitSubset());
       TRYV(merger.MoveSegmentsToInitFont());
     }
   }
-  for (Merger& merger : mergers) {
-    // Any init font moves above can cause segment removals that affect other
-    // mergers, recompute the candiate segments for all mergers.
-    TRYV(merger.ReassignInitSubset());
+
+  if (init_font_changed) {
+    for (Merger& merger : mergers) {
+      // Any init font moves above can cause segment removals that affect other
+      // mergers, recompute the candiate segments for all mergers.
+      TRYV(merger.ReassignInitSubset());
+    }
   }
 
   // Once we've gotten standard segments placed into the initial font as needed,

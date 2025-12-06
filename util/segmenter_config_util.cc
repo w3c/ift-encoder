@@ -8,8 +8,10 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "util/load_codepoints.h"
+#include "ift/feature_registry/feature_registry.h"
 
 using absl::btree_map;
+using absl::btree_set;
 using absl::flat_hash_map;
 using absl::StatusOr;
 using common::CodepointSet;
@@ -17,6 +19,7 @@ using common::SegmentSet;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
+using ift::feature_registry::DefaultFeatureTags;
 
 namespace util {
 
@@ -51,15 +54,29 @@ SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
 std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
     const SegmenterConfig& config, const SubsetDefinition& init_segment,
     const CodepointSet& font_codepoints,
+    const btree_set<hb_tag_t>& font_features,
     flat_hash_map<SegmentId, uint32_t>& segment_id_to_index) {
   std::vector<SubsetDefinition> segments;
   unsigned index = 0;
 
-  for (const auto& [id, features] : config.feature_segments()) {
-    SubsetDefinition def;
-    def.feature_tags = util::TagValues(features);
-    segments.push_back(def);
-    segment_id_to_index[SegmentId{.feature = true, .id_value = id}] = index++;
+  if (!config.feature_segments().empty()) {
+    for (const auto& [id, features] : config.feature_segments()) {
+      SubsetDefinition def;
+      def.feature_tags = util::TagValues(features);
+      segments.push_back(def);
+      segment_id_to_index[SegmentId{.feature = true, .id_value = id}] = index++;
+    }
+  } else if (config.generate_feature_segments()) {
+    uint32_t id = 0;
+    for (hb_tag_t tag : font_features) {
+      if (DefaultFeatureTags().contains(tag)) {
+        continue;
+      }
+      SubsetDefinition def;
+      def.feature_tags = {tag};
+      segments.push_back(def);
+      segment_id_to_index[SegmentId{.feature = true, .id_value = id++}] = index++;
+    }
   }
 
   if (config.segments().empty()) {
@@ -211,12 +228,13 @@ SegmenterConfigUtil::ProtoToMergeGroup(
 StatusOr<btree_map<SegmentSet, MergeStrategy>>
 SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
+    const btree_set<hb_tag_t>& font_features,
     std::vector<SubsetDefinition>& segments) {
   SubsetDefinition initial_segment =
       SegmentProtoToSubsetDefinition(config.initial_segment());
 
   flat_hash_map<SegmentId, uint32_t> segment_id_to_index;
-  segments = ConfigToSegments(config, initial_segment, font_codepoints,
+  segments = ConfigToSegments(config, initial_segment, font_codepoints, font_features,
                               segment_id_to_index);
 
   btree_map<SegmentSet, MergeStrategy> merge_groups;

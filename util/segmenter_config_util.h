@@ -22,6 +22,7 @@ class SegmenterConfigUtil {
       absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy>>
   ConfigToMergeGroups(const SegmenterConfig& config,
                       const common::CodepointSet& font_codepoints,
+                      const absl::btree_set<hb_tag_t>& font_features,
                       std::vector<ift::encoder::SubsetDefinition>& segments);
 
  private:
@@ -43,6 +44,7 @@ class SegmenterConfigUtil {
       const SegmenterConfig& config,
       const ift::encoder::SubsetDefinition& init_segment,
       const common::CodepointSet& font_codepoints,
+      const absl::btree_set<hb_tag_t>& font_features,
       absl::flat_hash_map<SegmentId, uint32_t>& segment_id_to_index);
 
   absl::StatusOr<ift::freq::UnicodeFrequencies> GetFrequencyData(
