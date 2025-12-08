@@ -165,15 +165,26 @@ static void AddTableKeyedSegments(
   }
 }
 
-static void OutputFallbackGlyphCount(const GlyphSegmentation& segmentation) {
+static Status OutputFallbackGlyphCount(
+  hb_face_t* original_face,
+  const ClosureGlyphSegmenter& segmenter,
+  const GlyphSegmentation& segmentation) {
   uint32_t num_fallback_glyphs = segmentation.UnmappedGlyphs().size();
+  uint32_t fallback_glyphs_size = 0;
+  uint32_t all_glyphs_size = 0;
+  TRYV(segmenter.FallbackCost(original_face, segmentation, fallback_glyphs_size, all_glyphs_size));
 
   GlyphSet all_glyphs;
   for (const auto& [_, gids] : segmentation.GidSegments()) {
     all_glyphs.union_set(gids);
   }
+
   uint32_t num_glyphs = all_glyphs.size() + num_fallback_glyphs;
-  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", " << num_glyphs << std::endl;
+  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", " << num_glyphs
+    << ", " << fallback_glyphs_size << ", " << all_glyphs_size
+    << std::endl;
+
+  return absl::OkStatus();
 }
 
 static Status Main(const std::vector<char*> args) {
@@ -227,7 +238,7 @@ static Status Main(const std::vector<char*> args) {
   }
 
   if (absl::GetFlag(FLAGS_output_fallback_glyph_count)) {
-    OutputFallbackGlyphCount(segmentation);
+    TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }
 
   if (!absl::GetFlag(FLAGS_output_segmentation_analysis)) {
