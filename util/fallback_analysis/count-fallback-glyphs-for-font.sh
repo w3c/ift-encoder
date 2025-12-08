@@ -8,4 +8,4 @@ FONT_NAME=$(basename $1)
     --nooutput_segmentation_analysis \
     --nooutput_segmentation_plan \
     --output_fallback_glyph_count 2> /dev/null | grep num_fallback_glyphs | \
-      awk "{print \"$FONT_NAME,\", \$2, \$3 }"
+      awk "BEGIN {FS=\",\"; OFS=\";\"} {print \"$FONT_NAME\", \$2, \$3, \$4, \$5}"

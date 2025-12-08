@@ -608,4 +608,23 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   };
 }
 
+Status ClosureGlyphSegmenter::FallbackCost(
+      hb_face_t* original_face, const GlyphSegmentation& segmentation,
+      uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size
+    ) const {
+
+  GlyphSet all_glyphs = segmentation.InitialFontGlyphClosure();
+  for (const auto& [_, gids] : segmentation.GidSegments()) {
+    all_glyphs.union_set(gids);
+  }
+
+  GlyphSet fallback_glyphs = segmentation.UnmappedGlyphs();
+
+  PatchSizeCacheImpl patch_sizer(original_face, 11);
+  all_glyphs_size = TRY(patch_sizer.GetPatchSize(all_glyphs));
+  fallback_glyphs_size = TRY(patch_sizer.GetPatchSize(fallback_glyphs));
+
+  return absl::OkStatus();
+}
+
 }  // namespace ift::encoder

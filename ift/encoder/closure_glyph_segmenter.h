@@ -75,6 +75,14 @@ class ClosureGlyphSegmenter {
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
       const freq::ProbabilityCalculator& probability_calculator) const;
 
+  /*
+   * Computes the total cost of the fallback patch (expected number of bytes transferred)
+   */
+  absl::Status FallbackCost(
+      hb_face_t* original_face, const GlyphSegmentation& segmentation,
+      uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size
+    ) const;
+
  private:
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
