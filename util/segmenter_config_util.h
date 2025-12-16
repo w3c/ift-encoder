@@ -48,9 +48,7 @@ class SegmenterConfigUtil {
       absl::flat_hash_map<SegmentId, uint32_t>& segment_id_to_index);
 
   absl::StatusOr<ift::freq::UnicodeFrequencies> GetFrequencyData(
-      const std::string& frequency_data_file_path,
-      bool built_in
-  );
+      const std::string& frequency_data_file_path, bool built_in);
 
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToStrategy(
       const CostConfiguration& base, const CostConfiguration& config,

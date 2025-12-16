@@ -66,18 +66,21 @@ absl::Status Main() {
     }
   } else {
     {
-      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00000-of-00003"))};
+      riegeli::RecordWriter writer{
+          riegeli::FdWriter(StrCat(output_path, "-00000-of-00003"))};
       writer.WriteRecord(message1);
       writer.WriteRecord(message2);
       writer.Close();
     }
     {
-      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00001-of-00003"))};
+      riegeli::RecordWriter writer{
+          riegeli::FdWriter(StrCat(output_path, "-00001-of-00003"))};
       writer.WriteRecord(message3);
       writer.Close();
     }
     {
-      riegeli::RecordWriter writer{riegeli::FdWriter(StrCat(output_path, "-00002-of-00003"))};
+      riegeli::RecordWriter writer{
+          riegeli::FdWriter(StrCat(output_path, "-00002-of-00003"))};
       writer.WriteRecord(message4);
       writer.Close();
     }

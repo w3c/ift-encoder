@@ -18,7 +18,8 @@ using common::GlyphSet;
 using common::SegmentSet;
 
 ABSL_FLAG(bool, record_merged_size_reductions, false,
-          "When enabled the merger will record the percent size reductions of each assessed merge.");
+          "When enabled the merger will record the percent size reductions of "
+          "each assessed merge.");
 
 namespace ift::encoder {
 
@@ -404,8 +405,8 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
 }
 
 double Merger::BestCaseInertProbabilityThreshold(
-  uint32_t base_patch_size, double base_probability, double lowest_cost_delta
-) const {
+    uint32_t base_patch_size, double base_probability,
+    double lowest_cost_delta) const {
   // The following assumptions are made:
   // - P(base) >= P(other)
   // - the best case merged size is max(base_size, other_size) + k
@@ -416,8 +417,8 @@ double Merger::BestCaseInertProbabilityThreshold(
   //
   // (here all sizes include the network overhead delta).
   //
-  // And consider what valid values of P(merged), and other_size will produce the
-  // lowest total delta we find that this happens when:
+  // And consider what valid values of P(merged), and other_size will produce
+  // the lowest total delta we find that this happens when:
   // - P(merged) = P(base)
   // - other_size = base_size
   // - merged_size = base_size + k
@@ -430,21 +431,29 @@ double Merger::BestCaseInertProbabilityThreshold(
   //
   // P(other) > (k * P(base) - lowest_cost_delta) / base_size
   base_patch_size += Strategy().NetworkOverheadCost();
-  return std::min(1.0, std::max(0.0,
-    (((double) BEST_CASE_MERGE_SIZE_DELTA) * base_probability - lowest_cost_delta) / ((double) base_patch_size)));
+  return std::min(1.0, std::max(0.0, (((double)BEST_CASE_MERGE_SIZE_DELTA) *
+                                          base_probability -
+                                      lowest_cost_delta) /
+                                         ((double)base_patch_size)));
 }
 
 Status Merger::CollectExclusiveCandidateMerges(
     uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
   auto base_glyphs =
-        context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
-  uint32_t base_size = TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
-  double base_probability = Context().SegmentationInfo().Segments().at(base_segment_index).Probability();
+      context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
+  uint32_t base_size =
+      TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
+  double base_probability = Context()
+                                .SegmentationInfo()
+                                .Segments()
+                                .at(base_segment_index)
+                                .Probability();
 
   double inert_threshold = -1.0;
   if (smallest_candidate_merge.has_value()) {
-    inert_threshold = BestCaseInertProbabilityThreshold(base_size, base_probability, smallest_candidate_merge->CostDelta());
+    inert_threshold = BestCaseInertProbabilityThreshold(
+        base_size, base_probability, smallest_candidate_merge->CostDelta());
   }
 
   for (auto it = candidate_segments_.lower_bound(base_segment_index);
@@ -464,9 +473,13 @@ Status Merger::CollectExclusiveCandidateMerges(
     }
 
     if (context_->InertSegments().contains(segment_index) &&
-        context_->SegmentationInfo().Segments().at(segment_index).Probability() <= inert_threshold) {
-      // Since we iteration is in probability order from highest to lowest, once one segment fails
-      // the threshold then we know all further ones will as well.
+        context_->SegmentationInfo()
+                .Segments()
+                .at(segment_index)
+                .Probability() <= inert_threshold) {
+      // Since we iteration is in probability order from highest to lowest, once
+      // one segment fails the threshold then we know all further ones will as
+      // well.
       break;
     }
 
@@ -484,7 +497,8 @@ Status Merger::CollectExclusiveCandidateMerges(
         smallest_candidate_merge));
     if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
-      inert_threshold = BestCaseInertProbabilityThreshold(base_size, base_probability, smallest_candidate_merge->CostDelta());
+      inert_threshold = BestCaseInertProbabilityThreshold(
+          base_size, base_probability, smallest_candidate_merge->CostDelta());
     }
   }
 
@@ -722,7 +736,8 @@ void Merger::LogMergedSizeHistogram() const {
   for (const auto [percent, count] : merged_size_reduction_histogram_) {
     histogram_string << percent << ", " << count << std::endl;
   }
-  VLOG(0) << "Merged Size Reduction Histogram for " << strategy_.Name().value_or("unamed") << std::endl
+  VLOG(0) << "Merged Size Reduction Histogram for "
+          << strategy_.Name().value_or("unamed") << std::endl
           << histogram_string.str();
 }
 

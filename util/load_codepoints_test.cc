@@ -87,8 +87,8 @@ TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli) {
 }
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded) {
-  auto result =
-      util::LoadFrequenciesFromRiegeli("util/testdata/sharded/test_freq_data.riegeli@*");
+  auto result = util::LoadFrequenciesFromRiegeli(
+      "util/testdata/sharded/test_freq_data.riegeli@*");
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x43, 0x43), 1.0);
@@ -99,8 +99,8 @@ TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded) {
 }
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded_DoesNotExist) {
-  auto result =
-      util::LoadFrequenciesFromRiegeli("util/testdata/sharded/notfound.riegeli@*");
+  auto result = util::LoadFrequenciesFromRiegeli(
+      "util/testdata/sharded/notfound.riegeli@*");
   ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
 }
 
@@ -156,8 +156,7 @@ TEST_F(LoadCodepointsTest, ExpandShardedPath) {
 }
 
 TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
-  auto result =
-      util::LoadBuiltInFrequencies("Script_latin.riegeli");
+  auto result = util::LoadBuiltInFrequencies("Script_latin.riegeli");
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x20, 0x20), 1.0);

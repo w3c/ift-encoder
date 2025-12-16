@@ -374,7 +374,8 @@ StatusOr<double> ActivationCondition::Probability(
     return calculator.ComputeMergedProbability(union_segments).Average();
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Average();
+  return calculator.ComputeConjunctiveProbability(conjunctive_segments)
+      .Average();
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
@@ -434,7 +435,8 @@ StatusOr<double> ActivationCondition::MergedProbability(
     return calculator.ComputeMergedProbability(union_segments).Average();
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments).Average();
+  return calculator.ComputeConjunctiveProbability(conjunctive_segments)
+      .Average();
 }
 
 }  // namespace ift::encoder
