@@ -164,15 +164,15 @@ StatusOr<std::vector<std::string>> ExpandShardedPath(const char* path) {
   }
 
   if (files.empty()) {
-    return absl::NotFoundError(StrCat("No files matched the shard pattern: ", full_path));
+    return absl::NotFoundError(
+        StrCat("No files matched the shard pattern: ", full_path));
   }
 
   return std::vector<std::string>(files.begin(), files.end());
 }
 
 static Status LoadFrequenciesFromRiegeliIndividual(
-  const char* path, UnicodeFrequencies& frequencies
-) {
+    const char* path, UnicodeFrequencies& frequencies) {
   riegeli::RecordReader reader{riegeli::FdReader(path)};
   if (!reader.ok()) {
     return absl::InvalidArgumentError(

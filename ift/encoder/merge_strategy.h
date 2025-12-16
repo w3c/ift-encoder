@@ -122,9 +122,7 @@ class MergeStrategy {
     }
   }
 
-  void SetName(std::string name) {
-    name_ = name;
-  }
+  void SetName(std::string name) { name_ = name; }
 
   uint32_t NetworkOverheadCost() const { return network_overhead_cost_; }
   uint32_t MinimumGroupSize() const { return min_group_size_; }
@@ -202,12 +200,15 @@ class MergeStrategy {
            patch_size_max_bytes_ == other.patch_size_max_bytes_ &&
            optimization_cutoff_fraction_ ==
                other.optimization_cutoff_fraction_ &&
-           best_case_size_reduction_fraction_ == other.best_case_size_reduction_fraction_ &&
+           best_case_size_reduction_fraction_ ==
+               other.best_case_size_reduction_fraction_ &&
            init_font_merge_threshold_ == other.init_font_merge_threshold_ &&
-           init_font_merge_probability_threshold_ == other.init_font_merge_probability_threshold_ &&
+           init_font_merge_probability_threshold_ ==
+               other.init_font_merge_probability_threshold_ &&
            use_patch_merges_ == other.use_patch_merges_ &&
            pre_closure_group_size_ == other.pre_closure_group_size_ &&
-           pre_closure_probability_threshold_ == other.pre_closure_probability_threshold_;
+           pre_closure_probability_threshold_ ==
+               other.pre_closure_probability_threshold_;
   }
 
  private:

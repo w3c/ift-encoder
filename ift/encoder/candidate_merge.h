@@ -76,7 +76,6 @@ struct CandidateMerge {
 
   double CostDelta() const { return cost_delta_; }
 
-
   bool operator==(const CandidateMerge& other) const {
     // base segment and segments to merge uniquely identify a candidate
     // merge operation.

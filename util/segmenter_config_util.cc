@@ -6,9 +6,9 @@
 #include "common/try.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/feature_registry/feature_registry.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "util/load_codepoints.h"
-#include "ift/feature_registry/feature_registry.h"
 
 using absl::btree_map;
 using absl::btree_set;
@@ -18,17 +18,15 @@ using common::CodepointSet;
 using common::SegmentSet;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
-using ift::freq::UnicodeFrequencies;
 using ift::feature_registry::DefaultFeatureTags;
+using ift::freq::UnicodeFrequencies;
 
 namespace util {
 
 // Loads unicode frequency data from either a dedicated frequency data file or
 // from the codepoint and frequency entries if no data file is given.
 StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
-    const std::string& frequency_data_file_path,
-    bool built_in
-  ) {
+    const std::string& frequency_data_file_path, bool built_in) {
   if (built_in) {
     return util::LoadBuiltInFrequencies(frequency_data_file_path.c_str());
   }
@@ -75,7 +73,8 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
       SubsetDefinition def;
       def.feature_tags = {tag};
       segments.push_back(def);
-      segment_id_to_index[SegmentId{.feature = true, .id_value = id++}] = index++;
+      segment_id_to_index[SegmentId{.feature = true, .id_value = id++}] =
+          index++;
     }
   }
 
@@ -114,14 +113,16 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
   CostConfiguration merged = base;
   merged.MergeFrom(config);
 
-  if (merged.path_to_frequency_data().empty() && merged.built_in_freq_data_name().empty()) {
+  if (merged.path_to_frequency_data().empty() &&
+      merged.built_in_freq_data_name().empty()) {
     return absl::InvalidArgumentError(
         "Path to frequency data must be provided.");
   }
 
-  UnicodeFrequencies freq = config.has_built_in_freq_data_name() ?
-    TRY(GetFrequencyData(merged.built_in_freq_data_name(), true)) :
-    TRY(GetFrequencyData(merged.path_to_frequency_data(), false));
+  UnicodeFrequencies freq =
+      config.has_built_in_freq_data_name()
+          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true))
+          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false));
 
   covered_codepoints = freq.CoveredCodepoints();
 
@@ -139,7 +140,8 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
   strategy.SetUsePatchMerges(merged.experimental_use_patch_merges());
 
   strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
-  strategy.SetBestCaseSizeReductionFraction(merged.best_case_size_reduction_fraction());
+  strategy.SetBestCaseSizeReductionFraction(
+      merged.best_case_size_reduction_fraction());
 
   if (merged.has_initial_font_merge_threshold()) {
     strategy.SetInitFontMergeThreshold(merged.initial_font_merge_threshold());
@@ -234,8 +236,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
       SegmentProtoToSubsetDefinition(config.initial_segment());
 
   flat_hash_map<SegmentId, uint32_t> segment_id_to_index;
-  segments = ConfigToSegments(config, initial_segment, font_codepoints, font_features,
-                              segment_id_to_index);
+  segments = ConfigToSegments(config, initial_segment, font_codepoints,
+                              font_features, segment_id_to_index);
 
   btree_map<SegmentSet, MergeStrategy> merge_groups;
   for (const auto& merge_group : config.merge_groups()) {

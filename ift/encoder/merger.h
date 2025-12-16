@@ -153,15 +153,15 @@ class Merger {
   absl::Status ApplyInitFontMove(const common::GlyphSet& glyphs_to_move,
                                  double delta);
 
-  // For a merge of an inert base patch with any other possible inert segment, this
-  // computes the minimum probability the other segment must have for
-  // it to be possible to produce a delta lower than lowest_cost_delta
-  // (regardless of it's probability or size).
+  // For a merge of an inert base patch with any other possible inert segment,
+  // this computes the minimum probability the other segment must have for it to
+  // be possible to produce a delta lower than lowest_cost_delta (regardless of
+  // it's probability or size).
   //
   // This assumes that P(base) >= P(other)
-  double BestCaseInertProbabilityThreshold(
-    uint32_t base_patch_size, double base_probability, double lowest_cost_delta
-  ) const;
+  double BestCaseInertProbabilityThreshold(uint32_t base_patch_size,
+                                           double base_probability,
+                                           double lowest_cost_delta) const;
 
   common::SegmentSet InitFontApplyProbabilityThreshold() const;
   common::SegmentSet InitFontSegmentsToCheck(

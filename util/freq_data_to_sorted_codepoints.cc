@@ -44,7 +44,8 @@ int main(int argc, char** argv) {
               << "freq_data_to_sorted_codepoints <riegeli_file>" << std::endl
               << std::endl
               << "Append @* to the file name to load sharded data files. "
-              << "For example \"<path>@*\" will load all files of the form <path>-?????-of-?????"
+              << "For example \"<path>@*\" will load all files of the form "
+                 "<path>-?????-of-?????"
               << std::endl;
     return -1;
   }

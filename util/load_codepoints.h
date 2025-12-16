@@ -47,7 +47,8 @@ absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
 //
 // name is the file name to load.
 // Append "@*" to the name to load all sharded files for a name.
-absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(const char* name);
+absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
+    const char* name);
 
 // Given a filepath if it ends with @* this will expand the path into
 // the list of paths matching the pattern: <path>-?????-of-?????
