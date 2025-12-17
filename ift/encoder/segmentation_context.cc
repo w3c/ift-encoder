@@ -19,7 +19,7 @@ namespace ift::encoder {
 
 Status SegmentationContext::ValidateSegmentation(
     const GlyphSegmentation& segmentation) const {
-  IntSet visited;
+  GlyphSet visited;
   const auto& initial_closure = segmentation.InitialFontGlyphClosure();
   for (const auto& [id, gids] : segmentation.GidSegments()) {
     for (glyph_id_t gid : gids) {
@@ -35,12 +35,15 @@ Status SegmentationContext::ValidateSegmentation(
     }
   }
 
-  IntSet full_minus_initial = segmentation_info_.FullClosure();
+  GlyphSet full_minus_initial = segmentation_info_.FullClosure();
   full_minus_initial.subtract(initial_closure);
 
   if (full_minus_initial != visited) {
+    GlyphSet missing = full_minus_initial;
+    missing.subtract(visited);
     return absl::FailedPreconditionError(
-        "Not all glyphs in the full closure have been placed.");
+        "Not all glyphs in the full closure have been placed. Missing: " +
+        missing.ToString());
   }
 
   return absl::OkStatus();

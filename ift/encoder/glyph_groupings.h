@@ -219,6 +219,14 @@ class GlyphGroupings {
     }
   }
 
+  void UnionConditionAndGlyphs(ActivationCondition condition,
+                               common::GlyphSet glyphs) {
+    conditions_and_glyphs_[condition].union_set(glyphs);
+    for (segment_index_t s : condition.TriggeringSegments()) {
+      triggering_segment_to_conditions_[s].insert(condition);
+    }
+  }
+
   void RemoveConditionAndGlyphs(ActivationCondition condition) {
     conditions_and_glyphs_.erase(condition);
     for (segment_index_t s : condition.TriggeringSegments()) {

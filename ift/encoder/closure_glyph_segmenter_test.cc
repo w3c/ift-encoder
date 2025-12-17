@@ -399,6 +399,64 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      noto_nastaliq_urdu.get(), {},
+      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, {}, FIND_CONDITIONS);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
+      << segmentation->UnmappedGlyphs().ToString();
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid1 }
+p1: { gid3, gid9, gid155 }
+p2: { gid4, gid10, gid156 }
+p3: { gid5, gid6, gid11, gid157 }
+p4: { gid158 }
+p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
+p6: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
+p7: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if (s4) then p4
+if ((s1 OR s2)) then p5
+if ((s3 OR s4)) then p7
+if ((s1 OR s2 OR s3 OR s4)) then p6
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
+  // Here the found conditions are equal to the fallback segment, this ensures
+  // everything works properly in this case.
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}}, {},
+      FIND_CONDITIONS);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
+      << segmentation->UnmappedGlyphs().ToString();
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid3, gid9, gid155 }
+p1: { gid4, gid10, gid156 }
+p2: { gid5, gid6, gid11, gid157 }
+p3: { gid158 }
+p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
+p5: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
+p6: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if ((s0 OR s1)) then p4
+if ((s2 OR s3)) then p6
+if ((s0 OR s1 OR s2 OR s3)) then p5
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest,
        UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
