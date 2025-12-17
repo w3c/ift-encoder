@@ -189,6 +189,24 @@ cc_test(
 )
 
 cc_test(
+    name = "complex_condition_finder_test",
+    size = "medium",
+    srcs = [
+        "complex_condition_finder_test.cc",
+    ],
+    data = [
+        "//common:testdata",
+        "//ift:testdata",
+    ],
+    deps = [
+        ":segmentation_context",
+        ":encoder",
+        "//common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "closure_glyph_segmenter_test",
     size = "medium",
     srcs = [

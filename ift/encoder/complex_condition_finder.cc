@@ -1,5 +1,7 @@
 #include "ift/encoder/complex_condition_finder.h"
 
+#include <utility>
+
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "common/int_set.h"
@@ -38,33 +40,44 @@ struct Context {
   std::vector<Task> queue;
 
  public:
-  void ScheduleInitialTasks(
+  Status ScheduleInitialTasks(
       GlyphSet glyphs,
       flat_hash_map<SegmentSet, GlyphSet> existing_conditions) {
+    if (glyphs.intersects(segmentation_info->InitFontGlyphs())) {
+      return absl::InvalidArgumentError(
+          "Can't analyze glyphs that are in the init  font.");
+    }
+
     // Each existing condition will map to one initial task that excludes the
     // existing condition from the analysis.
     for (const auto& [segments, glyph_sub_group] : existing_conditions) {
-      SegmentSet cur_remaining = all_segments;
-      cur_remaining.subtract(segments);
-      queue.push_back(Task{
-          .excluded = segments,
-          .required = {},
-          .to_be_tested = cur_remaining,
-          .glyphs = glyph_sub_group,
-      });
-      glyphs.subtract(glyph_sub_group);
+      if (!TRY(InClosure(segments, glyph_sub_group))) {
+        return absl::InvalidArgumentError(
+            "The glyphs of existing conditions must be in the closure of "
+            "condition segments.");
+      }
+      TRYV(ScheduleExistingConditionTask(segments, glyph_sub_group, glyphs));
+    }
+
+    if (glyphs.empty()) {
+      return absl::OkStatus();
+    }
+
+    if (!TRY(InClosure(all_segments, glyphs))) {
+      return absl::InvalidArgumentError(
+          "glyphs to analyze must be in the closure of all segments.");
     }
 
     // If any glyphs remain that do not have existing conditions these are
     // covered by a task with no excluded segments.
-    if (!glyphs.empty()) {
-      queue.push_back(Task{
-          .excluded = {},
-          .required = {},
-          .to_be_tested = all_segments,
-          .glyphs = glyphs,
-      });
-    }
+    queue.push_back(Task{
+        .excluded = {},
+        .required = {},
+        .to_be_tested = all_segments,
+        .glyphs = glyphs,
+    });
+
+    return absl::OkStatus();
   }
 
   Status ProcessQueue(btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
@@ -80,6 +93,44 @@ struct Context {
   }
 
  private:
+  // Returns true if all glyphs are in the closure of segments.
+  StatusOr<bool> InClosure(const SegmentSet& segments, const GlyphSet& glyphs) {
+    GlyphSet closure = TRY(SegmentClosure(segments));
+    return glyphs.is_subset_of(closure);
+  }
+
+  StatusOr<std::pair<GlyphSet, SegmentSet>> HasAdditionalConditions(
+      const SegmentSet& segments, const GlyphSet& glyphs) {
+    SegmentSet except = all_segments;
+    except.subtract(segments);
+    GlyphSet closure_glyphs = TRY(SegmentClosure(except));
+    closure_glyphs.intersect(glyphs);
+    return std::make_pair(closure_glyphs, std::move(except));
+  }
+
+  Status ScheduleExistingConditionTask(const SegmentSet& condition,
+                                       const GlyphSet& condition_glyphs,
+                                       GlyphSet& all_glyphs) {
+    // We need to check if there are any additional conditions,
+    // if there aren't there is no need to schedule the analysis.
+    auto [glyphs_with_additional_conditions, except] =
+        TRY(HasAdditionalConditions(condition, condition_glyphs));
+
+    if (glyphs_with_additional_conditions.empty()) {
+      return absl::OkStatus();
+    }
+
+    queue.push_back(Task{
+        .excluded = condition,
+        .required = {},
+        .to_be_tested = except,
+        .glyphs = glyphs_with_additional_conditions,
+    });
+    all_glyphs.subtract(condition_glyphs);
+
+    return absl::OkStatus();
+  }
+
   // Each analysis step checks one segment to see for which glyphs that segment
   // is required. The supplied task data structure gives the specific state
   // around which the segment is tested.
@@ -142,7 +193,7 @@ struct Context {
   // A minimal condition has been found, record it and kick off any
   // further analysis needed for additional conditions.
   Status RecordMinimalCondition(
-      Task& task, btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
+      Task task, btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
     for (glyph_id_t gid : task.glyphs) {
       glyph_to_conditions[gid].union_set(task.required);
     }
@@ -151,11 +202,8 @@ struct Context {
     // however as usual there may be remaining additional conditions which we
     // need to check for
     task.excluded.union_set(task.required);
-
-    SegmentSet remaining = all_segments;
-    remaining.subtract(task.excluded);
-    GlyphSet closure_glyphs = TRY(SegmentClosure(remaining));
-    task.glyphs.intersect(closure_glyphs);
+    auto [additional_condition_glyphs, remaining] =
+        TRY(HasAdditionalConditions(task.excluded, task.glyphs));
 
     // Anything left in glyphs has additional conditions, recurse again to
     // analyze them further
@@ -163,7 +211,7 @@ struct Context {
         .excluded = task.excluded,
         .required = {},
         .to_be_tested = remaining,
-        .glyphs = task.glyphs,
+        .glyphs = additional_condition_glyphs,
     });
     return absl::OkStatus();
   }
@@ -178,6 +226,9 @@ struct Context {
 
   StatusOr<GlyphSet> SegmentClosure(const SegmentSet& segments) {
     SubsetDefinition closure_def = CombinedDefinition(segments);
+    // Init font subset definition must be part of the closure input
+    // since it contributes to reachability of things.
+    closure_def.Union(segmentation_info->InitFontSegment());
     return glyph_closure_cache->GlyphClosure(closure_def);
   }
 };
@@ -235,9 +286,9 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindComplexConditionsFor(
   // glyphs, preload these into the output and schedule the initial tasks
   // excluding those segments.
   btree_map<glyph_id_t, SegmentSet> glyph_to_conditions;
-  context.ScheduleInitialTasks(
+  TRYV(context.ScheduleInitialTasks(
       std::move(glyphs),
-      ExistingConditions(glyph_condition_set, glyphs, glyph_to_conditions));
+      ExistingConditions(glyph_condition_set, glyphs, glyph_to_conditions)));
 
   TRYV(context.ProcessQueue(glyph_to_conditions));
 
