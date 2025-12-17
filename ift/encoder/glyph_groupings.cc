@@ -242,12 +242,17 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
                                    closure_cache, fallback_glyphs));
 
   or_glyph_groups_.erase(fallback_segments_);
+  RemoveConditionAndGlyphs(
+      ActivationCondition::or_segments(fallback_segments_, 0));
+  unmapped_glyphs_.clear();
   fallback_segments_.clear();
 
   for (const auto& [s, g] : complex_conditions) {
     or_glyph_groups_[s].union_set(g);
     ActivationCondition c = ActivationCondition::or_segments(s, 0);
-    AddConditionAndGlyphs(c, g);
+    // There may be existing glyphs at this specific condition, so union into
+    // it.
+    UnionConditionAndGlyphs(c, g);
   }
   VLOG(0)
       << "Unmapped glyphs patch removed and replaced with found conditions.";
