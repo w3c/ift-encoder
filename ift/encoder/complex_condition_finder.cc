@@ -16,8 +16,12 @@ using absl::StatusOr;
 using common::GlyphSet;
 using common::SegmentSet;
 
+// For more information on this process see the explanation in:
+// ../../docs/experimental/closure_glyph_segmentation_complex_conditions.md
+
 namespace ift::encoder {
 
+// One unit of work for the analysis. One from to_be_tested will be checked.
 struct Task {
   // These segments are already fully analyzed and should be excluded from this
   // analysis.
@@ -260,7 +264,7 @@ static SegmentSet NonEmptySegments(
   return segments;
 }
 
-StatusOr<btree_map<SegmentSet, GlyphSet>> FindComplexConditionsFor(
+StatusOr<btree_map<SegmentSet, GlyphSet>> FindMinimalDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
     GlyphClosureCache& closure_cache, GlyphSet glyphs) {

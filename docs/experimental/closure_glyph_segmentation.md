@@ -2,7 +2,7 @@
 
 Author: Garret Rieger  
 Date: Jan 27, 2025  
-Updated: Oct 27, 2025
+Updated: Dec 17, 2025
 
 ## Introduction
 
@@ -69,9 +69,10 @@ and remaining areas for development in this particular approach:
 * Support for merging segmentations involving multiple overlapping scripts is not yet implemented
   (for example creating a segmentation that supports Chinese and Japanese simultaneously).
 
-* [Multi segment analysis](#multi-segment-dependencies): the current implementation only does single
-  segment analysis which in some cases leaves sizable fallback glyph sets. How to implement multi
-  segment analysis is an open question and more development is needed.
+* [Multi segment analysis](#multi-segment-dependencies): the current implementation utilizes an approach which
+  approximates multi segment analysis by finding superset minimal disjunctive conditions for multi segment
+  conditions. See:
+  [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md).
   
 * Input segmentation generation: the glyph segmentation process starts with an existing
   codepoint/feature based segmentation. Good results can be achieved by starting with one input
@@ -252,7 +253,7 @@ that minimizes overall cost.
 
 ## Multi Segment Dependencies
 
-Note: this section is somewhat speculative as this functionality has not yet been implemented.
+Note: this section is somewhat speculative as this functionality has not yet been fully implemented.
 More research and exploration is definitely needed.
 
 The Segmenting Glyphs Based on Closure Analysis procedure places any glyphs whose conditions aren't
@@ -291,6 +292,15 @@ needed to reduce the amount of combinations to test. Some suggestions:
 * The performance of a segmentation is likely driven solely by the high frequency code points. So
   divide the font into a high frequency set and low frequency set of code points. Where a more
   extensive multi segment dependency check is done for only the high frequency segments.
+  
+As an alternative a simpler approach to the problem is to limit the scope to just finding the segments that appear in a
+multi segment condition. If we know the segments involved then the disjunction of them will be a superset of the true
+underlying condition. This superset condition can be used in place of the true condition without violating the closure
+requirement. This is the approach currently used in the segmenter implementation. This procedure is discussed in more
+details in [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md).  The
+advantage to this approach is it's much less computationally costly then multi segment analysis. The downside is these
+superset conditions will activate more frequently then the true conditions and thus may be loaded in cases where they
+are not actually needed.
 
 ## Examples
 

@@ -95,14 +95,14 @@ class ComplexConditionFinderTest : public ::testing::Test {
 TEST_F(ComplexConditionFinderTest, FindConditions) {
   SegmentationContext context = TestContext(false);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        756,
-                                        782,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                                   756,
+                                                   782,
+                                               });
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 
@@ -125,12 +125,12 @@ TEST_F(ComplexConditionFinderTest, FindConditions) {
 TEST_F(ComplexConditionFinderTest, FindConditions_Partial) {
   SegmentationContext context = TestContext(false);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                               });
   ASSERT_TRUE(r.ok()) << r.status();
   expected.erase(SegmentSet{6, 0, 5});
   expected.erase(SegmentSet{6, 2, 4});
@@ -141,25 +141,25 @@ TEST_F(ComplexConditionFinderTest, FindConditions_IncompleteExistingCondition) {
   SegmentationContext context = TestContext(false);
 
   context.glyph_condition_set.AddOrCondition(748, 6);
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                               });
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
 TEST_F(ComplexConditionFinderTest, FindConditions_GlyphsNotInClosure) {
   SegmentationContext context = TestContext(false);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        40  // this is not in the full closure.
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(
+      context.SegmentationInfo(), context.glyph_condition_set,
+      context.glyph_closure_cache,
+      {
+          748,
+          40  // this is not in the full closure.
+      });
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
@@ -167,14 +167,14 @@ TEST_F(ComplexConditionFinderTest,
        FindConditions_WithExistingConditions_FromClosureAnalysis) {
   SegmentationContext context = TestContext(true);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        756,
-                                        782,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                                   756,
+                                                   782,
+                                               });
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -185,14 +185,14 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithExistingConditions) {
   context.glyph_condition_set.AddOrCondition(748, 1);
   context.glyph_condition_set.AddOrCondition(748, 6);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        756,
-                                        782,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                                   756,
+                                                   782,
+                                               });
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -205,14 +205,14 @@ TEST_F(ComplexConditionFinderTest,
   context.glyph_condition_set.AddOrCondition(748, 3);
   context.glyph_condition_set.AddOrCondition(748, 6);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        756,
-                                        782,
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                               context.glyph_condition_set,
+                                               context.glyph_closure_cache,
+                                               {
+                                                   748,
+                                                   756,
+                                                   782,
+                                               });
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -220,20 +220,20 @@ TEST_F(ComplexConditionFinderTest,
 TEST_F(ComplexConditionFinderTest, FindConditions_RejectsInitFontGlyphs) {
   SegmentationContext context = TestContext(false);
 
-  auto r = FindComplexConditionsFor(context.SegmentationInfo(),
-                                    context.glyph_condition_set,
-                                    context.glyph_closure_cache,
-                                    {
-                                        748,
-                                        74,  // f - in the init closure
-                                    });
+  auto r = FindMinimalDisjunctiveConditionsFor(
+      context.SegmentationInfo(), context.glyph_condition_set,
+      context.glyph_closure_cache,
+      {
+          748,
+          74,  // f - in the init closure
+      });
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
 TEST_F(ComplexConditionFinderTest, FindConditions_ClosureRespectsInitFont) {
   SegmentationContext context = TestContext(false);
 
-  auto r = FindComplexConditionsFor(
+  auto r = FindMinimalDisjunctiveConditionsFor(
       context.SegmentationInfo(), context.glyph_condition_set,
       context.glyph_closure_cache,
       {
