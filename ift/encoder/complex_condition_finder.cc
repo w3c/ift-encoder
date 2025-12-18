@@ -290,9 +290,9 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindMinimalDisjunctiveConditionsFor(
   // glyphs, preload these into the output and schedule the initial tasks
   // excluding those segments.
   btree_map<glyph_id_t, SegmentSet> glyph_to_conditions;
-  TRYV(context.ScheduleInitialTasks(
-      std::move(glyphs),
-      ExistingConditions(glyph_condition_set, glyphs, glyph_to_conditions)));
+  flat_hash_map<SegmentSet, GlyphSet> existing_conditions =
+      ExistingConditions(glyph_condition_set, glyphs, glyph_to_conditions);
+  TRYV(context.ScheduleInitialTasks(std::move(glyphs), existing_conditions));
 
   TRYV(context.ProcessQueue(glyph_to_conditions));
 
