@@ -128,11 +128,18 @@ a new recursion (if there is at least one glyph in the split).
 Also from the closure analysis run by the segmenter we may have discovered some partial conditions for glyphs. These
 can be incorporated as a starting point into the complex condition analysis.
 
-Furthermore we can reduce the amount of segments we need to test by checking which segments can interact in some way
-with the GSUB table. Segments that don't interact with GSUB can't by part of a conjunctive condition, so these can
-always be found via the standard closure analysis procedures. Then the search can be limited to just the set of segments
-which interact with GSUB and were not identified during regular closure analysis.
+More substantial performance improvements could be realized by using a dependency graph generated from the font. This
+could come in two forms:
 
+1. Determine what segments interact with GSUB in some way and use that to scope the analysis. Segments that don't
+   interact with GSUB can be discovered via regular closure analysis as they will only ever have disjunctive conditions.
+   After completing a scoped analysis, a final additional conditions check against all segments could be used to ensure
+   we have actually arrived at a superset condition. This is more speculative and would need more research to validate the
+   approach.
+
+2. Using a actual dependency graph, even if it's no fully accurate, to generate a set of initial activation
+   conditions. Then as needed when additional conditions check fails, we could find any additional segments for the
+   superset condition using this process.
 
 ## Integrating into the Segmentation Algorithm
 
