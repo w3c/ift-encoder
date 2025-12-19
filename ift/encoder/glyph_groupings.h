@@ -173,6 +173,14 @@ class GlyphGroupings {
       const GlyphConditionSet& glyph_condition_set,
       GlyphClosureCache& closure_cache, const common::GlyphSet& glyphs);
 
+  // Perform a more detailed analysis to try and find more granular conditions
+  // for fallback glyphs. Will replace the fallback glyphs with any found
+  // conditions.
+  absl::Status FindFallbackGlyphConditions(
+      const RequestedSegmentationInformation& segmentation_info,
+      const GlyphConditionSet& glyph_condition_set,
+      GlyphClosureCache& closure_cache);
+
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const;
@@ -208,6 +216,14 @@ class GlyphGroupings {
         conditions_and_glyphs_.insert(std::pair(condition, glyphs));
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].insert(new_value_it->first);
+    }
+  }
+
+  void UnionConditionAndGlyphs(ActivationCondition condition,
+                               common::GlyphSet glyphs) {
+    conditions_and_glyphs_[condition].union_set(glyphs);
+    for (segment_index_t s : condition.TriggeringSegments()) {
+      triggering_segment_to_conditions_[s].insert(condition);
     }
   }
 

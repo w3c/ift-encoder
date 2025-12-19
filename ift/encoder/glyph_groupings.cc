@@ -6,6 +6,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/complex_condition_finder.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_partition.h"
@@ -227,6 +228,35 @@ Status GlyphGroupings::GroupGlyphs(
   // Note: we don't need to include the fallback segment/condition in
   //       conditions_and_glyphs since all downstream processing which
   //       utilizes that map ignores the fallback segment.
+
+  return absl::OkStatus();
+}
+
+Status GlyphGroupings::FindFallbackGlyphConditions(
+    const RequestedSegmentationInformation& segmentation_info,
+    const GlyphConditionSet& glyph_condition_set,
+    GlyphClosureCache& closure_cache) {
+  GlyphSet fallback_glyphs = FallbackGlyphs();
+  btree_map<SegmentSet, GlyphSet> complex_conditions =
+      TRY(FindSupersetDisjunctiveConditionsFor(segmentation_info,
+                                               glyph_condition_set,
+                                               closure_cache, fallback_glyphs));
+
+  or_glyph_groups_.erase(fallback_segments_);
+  RemoveConditionAndGlyphs(
+      ActivationCondition::or_segments(fallback_segments_, 0));
+  unmapped_glyphs_.clear();
+  fallback_segments_.clear();
+
+  for (const auto& [s, g] : complex_conditions) {
+    or_glyph_groups_[s].union_set(g);
+    ActivationCondition c = ActivationCondition::or_segments(s, 0);
+    // There may be existing glyphs at this specific condition, so union into
+    // it.
+    UnionConditionAndGlyphs(c, g);
+  }
+  VLOG(0)
+      << "Unmapped glyphs patch removed and replaced with found conditions.";
 
   return absl::OkStatus();
 }

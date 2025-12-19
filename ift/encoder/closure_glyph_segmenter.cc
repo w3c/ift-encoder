@@ -379,7 +379,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return CodepointToGlyphSegments(face, initial_segment, subset_definitions,
-                                  merge_groups, false);
+                                  merge_groups, PATCH);
 }
 
 StatusOr<std::vector<Merger>> ToMergers(
@@ -394,12 +394,37 @@ StatusOr<std::vector<Merger>> ToMergers(
   return mergers;
 }
 
+static StatusOr<GlyphSegmentation> ToFinalSegmentation(
+    SegmentationContext& context,
+    UnmappedGlyphHandling unmapped_glyph_handling) {
+  if (unmapped_glyph_handling == FIND_CONDITIONS) {
+    // TODO(garretrieger): this analysis should be performed prior to merging
+    // so that the found conditions can participate in merging. To make this
+    // performant we'll need to add support for incrementally recomputing
+    // complex conditions that are effected by merges.
+    //
+    // The good news here is that when we do a segment merge of the generated
+    // complex activation conditions that will naturally fix the unmapped
+    // nature of the relevant glyphs. However, changes to segments may
+    // also invalidate the complex conditions and require incremental
+    // reprocessing.
+    //
+    // Roughly, during invalidation and subsequent incremental closure
+    // analysis we may re-identify unmapped glyphs these would then
+    // need to be invalidated and reprocessed by the complex condition finder.
+    TRYV(context.glyph_groupings.FindFallbackGlyphConditions(
+        context.SegmentationInfo(), context.glyph_condition_set,
+        context.glyph_closure_cache));
+  }
+
+  return context.ToGlyphSegmentation();
+}
+
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
     btree_map<SegmentSet, MergeStrategy> merge_groups,
-    bool place_fallback_in_init) const {
-
+    UnmappedGlyphHandling unmapped_glyph_handling) const {
   for (const auto& [segments, strategy] : merge_groups) {
     if (strategy.UseCosts()) {
       TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
@@ -442,7 +467,8 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // if requested any remaining fallback glyphs are also moved into the init
   // font.
   GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
-  if (place_fallback_in_init && !fallback_glyphs.empty()) {
+  if (unmapped_glyph_handling == MOVE_TO_INIT_FONT &&
+      !fallback_glyphs.empty()) {
     VLOG(0) << "Moving " << fallback_glyphs.size()
             << " fallback glyphs into the initial font." << std::endl;
     SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
@@ -452,7 +478,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   if (merge_groups.empty()) {
     // No merging will be needed so we're done.
-    return context.ToGlyphSegmentation();
+    return ToFinalSegmentation(context, unmapped_glyph_handling);
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
@@ -499,7 +525,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         merger.LogMergedSizeHistogram();
       }
 
-      return context.ToGlyphSegmentation();
+      return ToFinalSegmentation(context, unmapped_glyph_handling);
     }
 
     const auto& [merged_segment_index, modified_gids] = *merged;
@@ -609,10 +635,8 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
 }
 
 Status ClosureGlyphSegmenter::FallbackCost(
-      hb_face_t* original_face, const GlyphSegmentation& segmentation,
-      uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size
-    ) const {
-
+    hb_face_t* original_face, const GlyphSegmentation& segmentation,
+    uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size) const {
   GlyphSet all_glyphs = segmentation.InitialFontGlyphClosure();
   for (const auto& [_, gids] : segmentation.GidSegments()) {
     all_glyphs.union_set(gids);

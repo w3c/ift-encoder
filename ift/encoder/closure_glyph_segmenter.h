@@ -10,6 +10,7 @@
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
+#include "util/common.pb.h"
 
 namespace ift::encoder {
 
@@ -55,7 +56,7 @@ class ClosureGlyphSegmenter {
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
       absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups,
-      bool place_fallback_in_init) const;
+      UnmappedGlyphHandling unmapped_glyph_handling) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.
@@ -76,12 +77,13 @@ class ClosureGlyphSegmenter {
       const freq::ProbabilityCalculator& probability_calculator) const;
 
   /*
-   * Computes the total cost of the fallback patch (expected number of bytes transferred)
+   * Computes the total cost of the fallback patch (expected number of bytes
+   * transferred)
    */
-  absl::Status FallbackCost(
-      hb_face_t* original_face, const GlyphSegmentation& segmentation,
-      uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size
-    ) const;
+  absl::Status FallbackCost(hb_face_t* original_face,
+                            const GlyphSegmentation& segmentation,
+                            uint32_t& fallback_glyphs_size,
+                            uint32_t& all_glyphs_size) const;
 
  private:
   uint32_t brotli_quality_;
