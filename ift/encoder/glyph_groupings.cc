@@ -238,9 +238,9 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
     GlyphClosureCache& closure_cache) {
   GlyphSet fallback_glyphs = FallbackGlyphs();
   btree_map<SegmentSet, GlyphSet> complex_conditions =
-      TRY(FindMinimalDisjunctiveConditionsFor(segmentation_info,
-                                              glyph_condition_set,
-                                              closure_cache, fallback_glyphs));
+      TRY(FindSupersetDisjunctiveConditionsFor(segmentation_info,
+                                               glyph_condition_set,
+                                               closure_cache, fallback_glyphs));
 
   or_glyph_groups_.erase(fallback_segments_);
   RemoveConditionAndGlyphs(

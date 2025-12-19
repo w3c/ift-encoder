@@ -70,7 +70,7 @@ and remaining areas for development in this particular approach:
   (for example creating a segmentation that supports Chinese and Japanese simultaneously).
 
 * [Multi segment analysis](#multi-segment-dependencies): the current implementation utilizes an approach which
-  approximates multi segment analysis by finding superset minimal disjunctive conditions for multi segment
+  approximates multi segment analysis by finding superset disjunctive conditions for multi segment
   conditions. See:
   [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md).
   
@@ -293,11 +293,10 @@ needed to reduce the amount of combinations to test. Some suggestions:
   divide the font into a high frequency set and low frequency set of code points. Where a more
   extensive multi segment dependency check is done for only the high frequency segments.
   
-As an alternative a simpler approach to the problem is to limit the scope to just finding the segments that appear in a
-multi segment condition. If we know the segments involved then the disjunction of them will be a superset of the true
-underlying condition. This superset condition can be used in place of the true condition without violating the closure
+As an alternative a simpler approach to the problem is to limit the scope to just finding conditions which are a superset
+of the true condition. This superset condition can be used in place of the true condition without violating the closure
 requirement. This is the approach currently used in the segmenter implementation. This procedure is discussed in more
-details in [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md).  The
+details in [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md). The
 advantage to this approach is it's much less computationally costly then multi segment analysis. The downside is these
 superset conditions will activate more frequently then the true conditions and thus may be loaded in cases where they
 are not actually needed.

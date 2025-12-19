@@ -27,8 +27,8 @@ struct Task {
   // analysis.
   SegmentSet excluded;
 
-  // These segments have been determined to be required.
-  SegmentSet required;
+  // These segments have been determined to be part of a sub condition.
+  SegmentSet sub_condition;
 
   // These segments have not yet been tested.
   SegmentSet to_be_tested;
@@ -76,7 +76,7 @@ struct Context {
     // covered by a task with no excluded segments.
     queue.push_back(Task{
         .excluded = {},
-        .required = {},
+        .sub_condition = {},
         .to_be_tested = all_segments,
         .glyphs = glyphs,
     });
@@ -126,7 +126,7 @@ struct Context {
 
     queue.push_back(Task{
         .excluded = condition,
-        .required = {},
+        .sub_condition = {},
         .to_be_tested = except,
         .glyphs = glyphs_with_additional_conditions,
     });
@@ -136,21 +136,21 @@ struct Context {
   }
 
   // Each analysis step checks one segment to see for which glyphs that segment
-  // is required. The supplied task data structure gives the specific state
+  // is relevant. The supplied task data structure gives the specific state
   // around which the segment is tested.
   //
   // To test a segment a closure is run without the segment being tested:
   // - For inscope glyphs which appear in the closure the test segment is not
-  //   required for these glyphs
+  //   relevant for these glyphs
   // - For inscope glyphs which do not appear in the closure the test segment is
-  //   required for these glyphs.
+  //   relevant for these glyphs.
   //
   // Based on the anlysis results up to two more analysis steps are spawned (one
-  // for glyphs where segment is required, the other where it is not required)
+  // for glyphs where segment is relevant, the other where it is not relevant)
   // to test the next segment.
   //
-  // Once all segments are tested the resulting minimal set of required segments
-  // is recorded in out. Lastly, the non-required segments are checked to see
+  // Once all segments are tested the resulting sub condition segments
+  // is recorded in out. Lastly, the non-relevant segments are checked to see
   // if additional conditions are present, if they are another analysis task is
   // queued to discover the additional conditions.
   Status RunAnalysisTask(
@@ -161,13 +161,13 @@ struct Context {
     }
 
     if (task.to_be_tested.empty()) {
-      return RecordMinimalCondition(task, glyph_to_conditions);
+      return RecordSubCondition(task, glyph_to_conditions);
     }
 
     segment_index_t test_segment = *task.to_be_tested.min();
     task.to_be_tested.erase(test_segment);
 
-    SegmentSet closure_segments = task.required;
+    SegmentSet closure_segments = task.sub_condition;
     closure_segments.union_set(task.to_be_tested);
     GlyphSet closure_glyphs = TRY(SegmentClosure(closure_segments));
 
@@ -178,15 +178,15 @@ struct Context {
 
     queue.push_back(Task{
         .excluded = task.excluded,
-        .required = task.required,
+        .sub_condition = task.sub_condition,
         .to_be_tested = task.to_be_tested,
         .glyphs = doesnt_need_test_segment,
     });
 
-    task.required.insert(test_segment);
+    task.sub_condition.insert(test_segment);
     queue.push_back(Task{
         .excluded = task.excluded,
-        .required = task.required,
+        .sub_condition = task.sub_condition,
         .to_be_tested = task.to_be_tested,
         .glyphs = needs_test_segment,
     });
@@ -194,18 +194,18 @@ struct Context {
     return absl::OkStatus();
   }
 
-  // A minimal condition has been found, record it and kick off any
+  // A sub condition has been found, record it and kick off any
   // further analysis needed for additional conditions.
-  Status RecordMinimalCondition(
+  Status RecordSubCondition(
       Task task, btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
     for (glyph_id_t gid : task.glyphs) {
-      glyph_to_conditions[gid].union_set(task.required);
+      glyph_to_conditions[gid].union_set(task.sub_condition);
     }
 
-    // We have identified a minimal set of required segments for glyphs,
-    // however as usual there may be remaining additional conditions which we
-    // need to check for
-    task.excluded.union_set(task.required);
+    // We have identified a sub condition for glyphs, however as usual
+    // there may be remaining additional conditions which we need to
+    // check for
+    task.excluded.union_set(task.sub_condition);
     auto [additional_condition_glyphs, remaining] =
         TRY(HasAdditionalConditions(task.excluded, task.glyphs));
 
@@ -213,7 +213,7 @@ struct Context {
     // analyze them further
     queue.push_back(Task{
         .excluded = task.excluded,
-        .required = {},
+        .sub_condition = {},
         .to_be_tested = remaining,
         .glyphs = additional_condition_glyphs,
     });
@@ -264,7 +264,7 @@ static SegmentSet NonEmptySegments(
   return segments;
 }
 
-StatusOr<btree_map<SegmentSet, GlyphSet>> FindMinimalDisjunctiveConditionsFor(
+StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
     GlyphClosureCache& closure_cache, GlyphSet glyphs) {
@@ -275,7 +275,7 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindMinimalDisjunctiveConditionsFor(
   // may interact with the GSUB table. Any segments which don't interact with
   // GSUB will already have relavent conditions discovered via the standard
   // closure analysis. Only segments which interact with GSUB may be part of
-  // complex conditions (since complex conditions required at least one 'AND'
+  // complex conditions (since complex conditions require at least one 'AND'
   // which only GSUB can introduce). As a result we can exclude any segments
   // with no GSUB interaction from this analysis which should significantly
   // speed things up.
