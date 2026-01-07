@@ -10,6 +10,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
@@ -115,6 +116,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     return out;
   }
 
+  glyph_id_t ToGlyph(hb_codepoint_t cp) { return cp_to_gid_[cp]; }
+
   hb_face_unique_ptr roboto_;
   std::vector<Segment> segments_;
   std::unique_ptr<GlyphClosureCache> closure_cache_;
@@ -142,7 +145,7 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
-      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
       {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
@@ -169,7 +172,6 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
 
   // Exclusive glyphs for segment 3
   new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
-  new_conditions.AddAndCondition(cp_to_gid_['k'], 3);
 
   // Conjunctive on segments 2 and 3
   new_conditions.AddAndCondition(cp_to_gid_['e'], 2);
@@ -188,11 +190,6 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
   new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
 
   // Recompute the grouping
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['a']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['c']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['d']);
-
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,
                                     glyphs_to_group_);
@@ -238,6 +235,58 @@ TEST_F(GlyphGroupingsTest, CombinePatches) {
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
       {ActivationCondition::or_segments({0, 3, 4}, 0),
        ToGlyphs({'a', 'b', 'g', 'h'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
+TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
+  // Initial Condition map:
+  // s0 -> {a, b}
+  // s1 -> {c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s3 OR s4 -> {g, h}
+
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'a'}), ToGlyphs({'c'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    glyphs_to_group_);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Combined Condition map:
+  // s0 OR s1 -> {a, b, c, d}
+  // s3 -> {k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s3 OR s4 -> {g, h}
+
+  // Create a new exclusive patch without using GroupGlyphs(), merges s1 and s3
+  // into s3
+  glyph_conditions_->InvalidateGlyphInformation(ToGlyphs({'c', 'd', 'k'}),
+                                                {1, 3});
+  glyph_conditions_->AddAndCondition(ToGlyph('c'), 3);
+  glyph_conditions_->AddAndCondition(ToGlyph('d'), 3);
+  glyph_conditions_->AddAndCondition(ToGlyph('k'), 3);
+
+  sc = glyph_groupings_.AddGlyphsToExclusiveGroup(*glyph_conditions_, 3,
+                                                  ToGlyphs({'c', 'd', 'k'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // s3 should get pulled into the combined patch of s0 and s1:
+  // s0 OR s1 OR s3 -> {a, b, c, d, k}
+  // s2 AND s3 -> {e, f}
+  // s2 OR s3 -> {j}
+  // s3 OR s4 -> {g, h}
+  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::or_segments({0, 3}, 0),
+       ToGlyphs({'a', 'b', 'c', 'd', 'k'})},
+      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+      {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
   };
 
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
@@ -289,10 +338,9 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Now simulate a partial invalidation that intersects the merged patch
   // and see if grouping correctly reforms the full mapping. Invalidates:
   // s0 -> {a, b}
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    ToGlyphs({'b'}));
+                                    ToGlyphs({'a', 'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Expected condition map:
@@ -313,10 +361,9 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 
   // Do another partial invalidation this time on: s3 OR s4 -> {g, h}
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['g']);
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    ToGlyphs({'g'}));
+                                    ToGlyphs({'g', 'h'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Groupings should still be the same.
@@ -324,7 +371,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
 }
 
 TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
-  auto sc = glyph_groupings_.CombinePatches({'a'}, {'b'});
+  auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'a'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
@@ -419,14 +466,9 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
 
   // Recompute the grouping
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['a']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['c']);
-  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['d']);
-
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,
-                                    glyphs_to_group_);
+                                    ToGlyphs({'a', 'b', 'c', 'd'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -465,6 +507,7 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
 
   sc = other.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok());
+
   sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
                          *closure_cache_, glyphs_to_group_);
   ASSERT_TRUE(sc.ok()) << sc;

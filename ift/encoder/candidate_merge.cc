@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "absl/container/btree_map.h"
-#include "absl/flags/flag.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -74,13 +73,16 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
     SegmentSet segments_to_merge_with_base = segments_to_merge_;
     segments_to_merge_with_base.insert(base_segment_index_);
     GlyphSet and_gids, or_gids, exclusive_gids;
-    // TODO XXXXXX in rare cases exclusive gids may contain glyphs that were previously
-    // unmapped and not currently in invalidated_glyphs_, if the new segment is inert
-    // we should union all found exclusive gids into invalidated_glyphs_. Segment reprocessing is
-    // skipped later in this case so we can't rely on it to do that for us as usual.
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
     new_segment_is_inert = (and_gids.empty() && or_gids.empty());
+    if (new_segment_is_inert) {
+      // When the new segment is inert then invalidated glyphs is
+      // used to shortcut closure analysis and directly construct
+      // the new condition and glyph mappings, save all of the
+      // closure glyphs to it.
+      invalidated_glyphs_.union_set(exclusive_gids);
+    }
   }
 
   const auto& segments = merger.Context().SegmentationInfo().Segments();
@@ -119,8 +121,9 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
       merger.Context().glyph_condition_set.AddAndCondition(gid,
                                                            base_segment_index_);
     }
-    merger.Context().glyph_groupings.AddGlyphsToExclusiveGroup(
-        base_segment_index_, invalidated_glyphs_);
+    TRYV(merger.Context().glyph_groupings.AddGlyphsToExclusiveGroup(
+        merger.Context().glyph_condition_set, base_segment_index_,
+        invalidated_glyphs_));
 
     // We've now fully updated information for these glyphs so don't need to
     // return them.
