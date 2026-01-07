@@ -94,12 +94,8 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
-    // unmapped, and and/or glyph groups are down stream of glyph conditions
-    // so must be invalidated. Do this before modifying the conditions.
-    for (uint32_t gid : glyphs) {
-      glyph_groupings.InvalidateGlyphInformation(gid);
-    }
-
+    // Note: glyph_groupings will be automatically invalidated as needed when
+    // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 

@@ -114,10 +114,6 @@ class GlyphGroupings {
     return empty;
   }
 
-  // Removes all stored grouping information related to glyph with the specified
-  // condition.
-  void InvalidateGlyphInformation(uint32_t gid);
-
   // Remove a set of segments from the fallback segments set.
   // Invalidates any existing fallback segments or glyph group.
   void RemoveFallbackSegments(const common::SegmentSet& removed_segments) {
@@ -131,29 +127,9 @@ class GlyphGroupings {
 
   // Add a set of glyphs to an existing exclusive group (and_group of one
   // segment).
-  void AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
-                                 const common::GlyphSet& glyphs) {
-
-    auto& exc_glyphs = exclusive_glyph_groups_[exclusive_segment];
-    exc_glyphs.union_set(glyphs);
-
-    ActivationCondition condition =
-        ActivationCondition::exclusive_segment(exclusive_segment, 0);
-    conditions_and_glyphs_[condition].union_set(glyphs);
-
-    // Update indices to reflect the change.
-    triggering_segment_to_conditions_[exclusive_segment].insert(condition);
-    for (glyph_id_t gid : glyphs) {
-      glyph_to_conditions_[gid].insert(condition);
-    }
-
-    // TODO XXXXXX this is used to bypass a call to group glyphs, if combined
-    // patches are affected by this change then those need to be recomputed
-    // since GroupGlyphs wont be called. We can tell if glyphs intersects any
-    // of non single element glyph groups.
-    //
-    // TODO XXXXXXX add a test case for this as well.
-  }
+  absl::Status AddGlyphsToExclusiveGroup(
+      const GlyphConditionSet& glyph_conditions,
+      segment_index_t exclusive_segment, const common::GlyphSet& glyphs);
 
   // Specify that any patches containing glyphs from either a or b should be
   // merged into one patch. Only affects exclusive and disjunctive patches.
@@ -197,6 +173,10 @@ class GlyphGroupings {
       const RequestedSegmentationInformation& segmentation_info) const;
 
  private:
+  // Removes all stored grouping information related to glyph with the specified
+  // condition.
+  void InvalidateGlyphInformation(uint32_t gid);
+
   // Looks at the requested combinations from combined_patches_ and
   // computes any resulting combinations, then updates the condition_and_glyphs_
   // with the combined conditions.
@@ -221,13 +201,19 @@ class GlyphGroupings {
       absl::flat_hash_map<glyph_id_t, common::SegmentSet>& merged_conditions,
       absl::flat_hash_map<glyph_id_t, common::GlyphSet>& merged_glyphs);
 
-  void AddConditionAndGlyphs(ActivationCondition condition,
-                             common::GlyphSet glyphs) {
-
+  absl::Status AddConditionAndGlyphs(ActivationCondition condition,
+                                     common::GlyphSet glyphs) {
     const auto& [new_value_it, did_insert] =
         conditions_and_glyphs_.insert(std::pair(condition, glyphs));
+
     if (!did_insert) {
-      return;
+      // If there's an existing value it must match what we're trying to add
+      if (condition != new_value_it->first || glyphs != new_value_it->second) {
+        return absl::InternalError(
+            "Trying to add a condition and glyph mapping which "
+            "would override an existing mapping to a different value.");
+      }
+      return absl::OkStatus();
     }
 
     for (segment_index_t s : condition.TriggeringSegments()) {
@@ -235,12 +221,20 @@ class GlyphGroupings {
     }
 
     for (glyph_id_t gid : glyphs) {
-      glyph_to_conditions_[gid].insert(new_value_it->first);
+      bool did_insert =
+          glyph_to_condition_.insert(std::pair(gid, new_value_it->first))
+              .second;
+      if (!did_insert) {
+        return absl::InternalError(
+            "Unexpected existing glyph to condition mapping.");
+      }
     }
+
+    return absl::OkStatus();
   }
 
-  void UnionConditionAndGlyphs(ActivationCondition condition,
-                               common::GlyphSet glyphs) {
+  absl::Status UnionConditionAndGlyphs(ActivationCondition condition,
+                                       common::GlyphSet glyphs) {
     conditions_and_glyphs_[condition].union_set(glyphs);
 
     for (segment_index_t s : condition.TriggeringSegments()) {
@@ -248,19 +242,25 @@ class GlyphGroupings {
     }
 
     for (glyph_id_t gid : glyphs) {
-      glyph_to_conditions_[gid].insert(condition);
+      auto [it, did_insert] =
+          glyph_to_condition_.insert(std::pair(gid, condition));
+      if (!did_insert && it->second != condition) {
+        return absl::InternalError(
+            "glyph_to_condition mapping does not match existing one.");
+      }
     }
+
+    return absl::OkStatus();
   }
 
   void RemoveConditionAndGlyphs(ActivationCondition condition) {
-
     auto it = conditions_and_glyphs_.find(condition);
     if (it == conditions_and_glyphs_.end()) {
       return;
     }
 
     for (glyph_id_t gid : it->second) {
-      glyph_to_conditions_[gid].erase(condition);
+      glyph_to_condition_.erase(gid);
     }
 
     conditions_and_glyphs_.erase(it);
@@ -305,8 +305,7 @@ class GlyphGroupings {
   absl::flat_hash_map<segment_index_t, absl::btree_set<ActivationCondition>>
       triggering_segment_to_conditions_;
 
-  absl::flat_hash_map<glyph_id_t, absl::btree_set<ActivationCondition>>
-      glyph_to_conditions_;
+  absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_to_condition_;
 
   // Set of segments in the fallback condition.
   common::SegmentSet fallback_segments_;
