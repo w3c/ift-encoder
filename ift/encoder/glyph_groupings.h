@@ -36,11 +36,11 @@ class GlyphGroupings {
   }
 
   bool operator==(const GlyphGroupings& other) {
-    // TODO XXXX should also check condition equality since those can diverge from glyph groups.
     return and_glyph_groups_ == other.and_glyph_groups_ &&
            or_glyph_groups_ == other.or_glyph_groups_ &&
            exclusive_glyph_groups_ == other.exclusive_glyph_groups_ &&
-           combined_or_glyph_groups_ == other.combined_or_glyph_groups_;
+           combined_or_glyph_groups_ == other.combined_or_glyph_groups_ &&
+           conditions_and_glyphs_ == other.conditions_and_glyphs_;
   }
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
