@@ -188,15 +188,10 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
   new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
 
   // Recompute the grouping
-  GlyphConditions s0;
-  s0.and_segments = {0};
-  GlyphConditions s1;
-  s1.and_segments = {1};
-
-  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['a']);
-  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['b']);
-  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['c']);
-  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['d']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['a']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['c']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['d']);
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,
@@ -294,9 +289,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Now simulate a partial invalidation that intersects the merged patch
   // and see if grouping correctly reforms the full mapping. Invalidates:
   // s0 -> {a, b}
-  GlyphConditions exc;
-  exc.and_segments = {0};
-  glyph_groupings_.InvalidateGlyphInformation(exc, cp_to_gid_['b']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
                                     ToGlyphs({'b'}));
@@ -320,9 +313,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 
   // Do another partial invalidation this time on: s3 OR s4 -> {g, h}
-  GlyphConditions or_cond;
-  exc.or_segments = {3, 4};
-  glyph_groupings_.InvalidateGlyphInformation(or_cond, cp_to_gid_['g']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['g']);
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
                                     ToGlyphs({'g'}));
@@ -428,15 +419,10 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
 
   // Recompute the grouping
-  GlyphConditions s0;
-  s0.and_segments = {0};
-  GlyphConditions s1;
-  s1.and_segments = {1};
-
-  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['a']);
-  glyph_groupings_.InvalidateGlyphInformation(s0, cp_to_gid_['b']);
-  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['c']);
-  glyph_groupings_.InvalidateGlyphInformation(s1, cp_to_gid_['d']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['a']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['b']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['c']);
+  glyph_groupings_.InvalidateGlyphInformation(cp_to_gid_['d']);
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,

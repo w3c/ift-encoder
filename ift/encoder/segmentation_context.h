@@ -97,8 +97,7 @@ class SegmentationContext {
     // unmapped, and and/or glyph groups are down stream of glyph conditions
     // so must be invalidated. Do this before modifying the conditions.
     for (uint32_t gid : glyphs) {
-      const auto& condition = glyph_condition_set.ConditionsFor(gid);
-      glyph_groupings.InvalidateGlyphInformation(condition, gid);
+      glyph_groupings.InvalidateGlyphInformation(gid);
     }
 
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);

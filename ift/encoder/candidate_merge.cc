@@ -74,6 +74,10 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
     SegmentSet segments_to_merge_with_base = segments_to_merge_;
     segments_to_merge_with_base.insert(base_segment_index_);
     GlyphSet and_gids, or_gids, exclusive_gids;
+    // TODO XXXXXX in rare cases exclusive gids may contain glyphs that were previously
+    // unmapped and not currently in invalidated_glyphs_, if the new segment is inert
+    // we should union all found exclusive gids into invalidated_glyphs_. Segment reprocessing is
+    // skipped later in this case so we can't rely on it to do that for us as usual.
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
     new_segment_is_inert = (and_gids.empty() && or_gids.empty());

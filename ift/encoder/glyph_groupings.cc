@@ -23,52 +23,56 @@ using common::SegmentSet;
 
 namespace ift::encoder {
 
-void GlyphGroupings::InvalidateGlyphInformation(
-    const GlyphConditions& condition, uint32_t gid) {
-  if (condition.and_segments.size() == 1) {
-    segment_index_t s = *condition.and_segments.begin();
-    exclusive_glyph_groups_[s].erase(gid);
-    ActivationCondition activation_condition =
-        ActivationCondition::exclusive_segment(s, 0);
-    conditions_and_glyphs_[activation_condition].erase(gid);
-
-    if (exclusive_glyph_groups_[s].empty()) {
-      exclusive_glyph_groups_.erase(s);
-      RemoveConditionAndGlyphs(activation_condition);
-    }
-  }
-
-  auto it = and_glyph_groups_.find(condition.and_segments);
-  if (it != and_glyph_groups_.end()) {
-    it->second.erase(gid);
-    ActivationCondition activation_condition =
-        ActivationCondition::and_segments(condition.and_segments, 0);
-    conditions_and_glyphs_[activation_condition].erase(gid);
-
-    if (it->second.empty()) {
-      and_glyph_groups_.erase(it);
-      RemoveConditionAndGlyphs(activation_condition);
-    }
-  }
-
-  it = or_glyph_groups_.find(condition.or_segments);
-  if (it != or_glyph_groups_.end()) {
-    it->second.erase(gid);
-    ActivationCondition activation_condition =
-        ActivationCondition::or_segments(condition.or_segments, 0);
-    conditions_and_glyphs_[activation_condition].erase(gid);
-
-    if (it->second.empty()) {
-      or_glyph_groups_.erase(it);
-      RemoveConditionAndGlyphs(activation_condition);
-    }
-  }
+void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
 
   unmapped_glyphs_.erase(gid);
-
   // Any changes may affect in complex ways the combined conditions
   // so remove them all. They will be fully recalculated during grouping.
   RemoveAllCombinedConditions();
+
+  auto it = glyph_to_conditions_.find(gid);
+  if (it == glyph_to_conditions_.end()) {
+    return;
+  }
+
+  btree_set<ActivationCondition> condition_list = it->second;
+
+  for (const auto& condition : condition_list) {
+    auto& glyphs = conditions_and_glyphs_.at(condition);
+    glyphs.erase(gid);
+    glyph_to_conditions_[gid].erase(condition);
+
+    if (glyphs.empty()) {
+      RemoveConditionAndGlyphs(condition);
+    }
+
+    if (condition.IsExclusive()) {
+      segment_index_t s = *condition.TriggeringSegments().begin();
+      auto it = exclusive_glyph_groups_.find(s);
+      if (it == exclusive_glyph_groups_.end()) {
+        continue;
+      }
+
+      it->second.erase(gid);
+      if (it->second.empty()) {
+        exclusive_glyph_groups_.erase(it);
+      }
+      continue;
+    }
+
+    btree_map<SegmentSet, GlyphSet>* groups = condition.conditions().size() == 1 ? &or_glyph_groups_ : &and_glyph_groups_;
+
+    const SegmentSet& s = condition.TriggeringSegments();
+    auto it = groups->find(s);
+    if (it == groups->end()) {
+      continue;
+    }
+
+    it->second.erase(gid);
+    if (it->second.empty()) {
+      groups->erase(it);
+    }
+  }
 }
 
 void GlyphGroupings::RemoveAllCombinedConditions() {
@@ -224,6 +228,8 @@ Status GlyphGroupings::GroupGlyphs(
     // so add it to an activation condition of any segment.
     or_glyph_groups_[fallback_segments_].insert(gid);
   }
+
+  // TODO XXXXX run complex condition analysis.
 
   // Note: we don't need to include the fallback segment/condition in
   //       conditions_and_glyphs since all downstream processing which
