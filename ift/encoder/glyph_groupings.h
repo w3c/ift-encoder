@@ -7,7 +7,6 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "common/int_set.h"
-#include "common/try.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
@@ -37,6 +36,7 @@ class GlyphGroupings {
   }
 
   bool operator==(const GlyphGroupings& other) {
+    // TODO XXXX should also check condition equality since those can diverge from glyph groups.
     return and_glyph_groups_ == other.and_glyph_groups_ &&
            or_glyph_groups_ == other.or_glyph_groups_ &&
            exclusive_glyph_groups_ == other.exclusive_glyph_groups_ &&
@@ -116,8 +116,7 @@ class GlyphGroupings {
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
-  void InvalidateGlyphInformation(const GlyphConditions& condition,
-                                  uint32_t gid);
+  void InvalidateGlyphInformation(uint32_t gid);
 
   // Remove a set of segments from the fallback segments set.
   // Invalidates any existing fallback segments or glyph group.
@@ -134,14 +133,26 @@ class GlyphGroupings {
   // segment).
   void AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
                                  const common::GlyphSet& glyphs) {
+
     auto& exc_glyphs = exclusive_glyph_groups_[exclusive_segment];
     exc_glyphs.union_set(glyphs);
 
     ActivationCondition condition =
         ActivationCondition::exclusive_segment(exclusive_segment, 0);
     conditions_and_glyphs_[condition].union_set(glyphs);
-    // triggering segment to conditions is not affected by this change, so
-    // doesn't need an update.
+
+    // Update indices to reflect the change.
+    triggering_segment_to_conditions_[exclusive_segment].insert(condition);
+    for (glyph_id_t gid : glyphs) {
+      glyph_to_conditions_[gid].insert(condition);
+    }
+
+    // TODO XXXXXX this is used to bypass a call to group glyphs, if combined
+    // patches are affected by this change then those need to be recomputed
+    // since GroupGlyphs wont be called. We can tell if glyphs intersects any
+    // of non single element glyph groups.
+    //
+    // TODO XXXXXXX add a test case for this as well.
   }
 
   // Specify that any patches containing glyphs from either a or b should be
@@ -212,23 +223,47 @@ class GlyphGroupings {
 
   void AddConditionAndGlyphs(ActivationCondition condition,
                              common::GlyphSet glyphs) {
+
     const auto& [new_value_it, did_insert] =
         conditions_and_glyphs_.insert(std::pair(condition, glyphs));
+    if (!did_insert) {
+      return;
+    }
+
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].insert(new_value_it->first);
+    }
+
+    for (glyph_id_t gid : glyphs) {
+      glyph_to_conditions_[gid].insert(new_value_it->first);
     }
   }
 
   void UnionConditionAndGlyphs(ActivationCondition condition,
                                common::GlyphSet glyphs) {
     conditions_and_glyphs_[condition].union_set(glyphs);
+
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].insert(condition);
+    }
+
+    for (glyph_id_t gid : glyphs) {
+      glyph_to_conditions_[gid].insert(condition);
     }
   }
 
   void RemoveConditionAndGlyphs(ActivationCondition condition) {
-    conditions_and_glyphs_.erase(condition);
+
+    auto it = conditions_and_glyphs_.find(condition);
+    if (it == conditions_and_glyphs_.end()) {
+      return;
+    }
+
+    for (glyph_id_t gid : it->second) {
+      glyph_to_conditions_[gid].erase(condition);
+    }
+
+    conditions_and_glyphs_.erase(it);
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].erase(condition);
     }
@@ -267,8 +302,11 @@ class GlyphGroupings {
 
   // Index that maps segments to all conditions in conditions_and_glyphs_ which
   // reference that segment.
-  absl::flat_hash_map<uint32_t, absl::btree_set<ActivationCondition>>
+  absl::flat_hash_map<segment_index_t, absl::btree_set<ActivationCondition>>
       triggering_segment_to_conditions_;
+
+  absl::flat_hash_map<glyph_id_t, absl::btree_set<ActivationCondition>>
+      glyph_to_conditions_;
 
   // Set of segments in the fallback condition.
   common::SegmentSet fallback_segments_;
