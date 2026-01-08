@@ -66,6 +66,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   changed_gids.union_set(and_gids);
   changed_gids.union_set(or_gids);
   changed_gids.union_set(exclusive_gids);
+
   for (uint32_t gid : changed_gids) {
     InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
   }
