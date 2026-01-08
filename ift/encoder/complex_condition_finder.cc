@@ -10,7 +10,6 @@
 #include "ift/encoder/types.h"
 
 using absl::btree_map;
-using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using common::GlyphSet;
@@ -46,7 +45,7 @@ struct Context {
  public:
   Status ScheduleInitialTasks(
       GlyphSet glyphs,
-      flat_hash_map<SegmentSet, GlyphSet> existing_conditions) {
+      btree_map<SegmentSet, GlyphSet> existing_conditions) {
     if (glyphs.intersects(segmentation_info->InitFontGlyphs())) {
       return absl::InvalidArgumentError(
           "Can't analyze glyphs that are in the init  font.");
@@ -237,10 +236,10 @@ struct Context {
   }
 };
 
-static flat_hash_map<SegmentSet, GlyphSet> ExistingConditions(
+static btree_map<SegmentSet, GlyphSet> ExistingConditions(
     const GlyphConditionSet& glyph_condition_set, const GlyphSet& glyphs,
     btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
-  flat_hash_map<SegmentSet, GlyphSet> existing_conditions;
+  btree_map<SegmentSet, GlyphSet> existing_conditions;
   for (glyph_id_t gid : glyphs) {
     SegmentSet or_segments = glyph_condition_set.ConditionsFor(gid).or_segments;
     if (or_segments.empty()) {
@@ -290,7 +289,7 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
   // glyphs, preload these into the output and schedule the initial tasks
   // excluding those segments.
   btree_map<glyph_id_t, SegmentSet> glyph_to_conditions;
-  flat_hash_map<SegmentSet, GlyphSet> existing_conditions =
+  btree_map<SegmentSet, GlyphSet> existing_conditions =
       ExistingConditions(glyph_condition_set, glyphs, glyph_to_conditions);
   TRYV(context.ScheduleInitialTasks(std::move(glyphs), existing_conditions));
 
