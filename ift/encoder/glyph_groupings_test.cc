@@ -54,7 +54,7 @@ class GlyphGroupingsTest : public ::testing::Test {
     closure_cache_ = std::make_unique<GlyphClosureCache>(roboto_.get());
     requested_segmentation_info_ =
         std::make_unique<RequestedSegmentationInformation>(
-            segments_, init_font_segment, *closure_cache_);
+            segments_, init_font_segment, *closure_cache_, PATCH);
 
     glyph_conditions_ = std::make_unique<GlyphConditionSet>(num_glyphs);
 

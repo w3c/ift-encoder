@@ -262,6 +262,8 @@ Status GlyphGroupings::GroupGlyphs(
     TRYV(AddConditionAndGlyphs(condition, glyphs));
   }
 
+  // TODO XXXXX run complex condition analysis.
+
   // The combined conditions can't be incrementally updated, so we recompute
   // them in full.
   TRYV(RecomputeCombinedConditions(glyph_condition_set));
@@ -271,8 +273,6 @@ Status GlyphGroupings::GroupGlyphs(
     // so add it to an activation condition of any segment.
     or_glyph_groups_[fallback_segments_].insert(gid);
   }
-
-  // TODO XXXXX run complex condition analysis.
 
   // Note: we don't need to include the fallback segment/condition in
   //       conditions_and_glyphs since all downstream processing which
