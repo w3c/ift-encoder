@@ -72,6 +72,7 @@ cc_library(
         "merge_strategy.cc",
         "merger.cc",
         "merger.h",
+        "invalidation_set.h",
 
     ],
     copts = [

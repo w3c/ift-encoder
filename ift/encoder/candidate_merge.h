@@ -6,6 +6,7 @@
 
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
@@ -99,7 +100,7 @@ struct CandidateMerge {
   }
 
   // Applies this merge operation to the given SegmentationContext.
-  absl::StatusOr<common::GlyphSet> Apply(Merger& context);
+  absl::StatusOr<InvalidationSet> Apply(Merger& context);
 
  private:
   absl::Status ApplyPatchMerge(Merger& context);

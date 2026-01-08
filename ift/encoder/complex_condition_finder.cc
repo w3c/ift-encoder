@@ -44,8 +44,7 @@ struct Context {
 
  public:
   Status ScheduleInitialTasks(
-      GlyphSet glyphs,
-      btree_map<SegmentSet, GlyphSet> existing_conditions) {
+      GlyphSet glyphs, btree_map<SegmentSet, GlyphSet> existing_conditions) {
     if (glyphs.intersects(segmentation_info->InitFontGlyphs())) {
       return absl::InvalidArgumentError(
           "Can't analyze glyphs that are in the init  font.");

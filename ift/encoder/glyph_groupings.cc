@@ -176,13 +176,22 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
 Status GlyphGroupings::GroupGlyphs(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, const GlyphSet& glyphs) {
+    GlyphClosureCache& closure_cache, GlyphSet glyphs,
+    const SegmentSet& modified_segments) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
 
   for (glyph_id_t gid : glyphs) {
     InvalidateGlyphInformation(gid);
   }
   RemoveAllCombinedConditions();
+
+  // Find any additional glyphs that are affected by changes in
+  // modified_segments
+  GlyphSet additional_glyphs = ModifiedGlyphs(modified_segments);
+  for (glyph_id_t gid : additional_glyphs) {
+    InvalidateGlyphInformation(gid);
+  }
+  glyphs.union_set(additional_glyphs);
 
   SegmentSet modified_exclusive_segments;
   btree_set<SegmentSet> modified_and_groups;
@@ -284,6 +293,17 @@ Status GlyphGroupings::GroupGlyphs(
   //       utilizes that map ignores the fallback segment.
 
   return absl::OkStatus();
+}
+
+GlyphSet GlyphGroupings::ModifiedGlyphs(const SegmentSet& segments) const {
+  GlyphSet glyphs;
+  for (segment_index_t s : segments) {
+    const auto& conditions = TriggeringSegmentToConditions(s);
+    for (const auto& c : conditions) {
+      glyphs.union_set(conditions_and_glyphs_.at(c));
+    }
+  }
+  return glyphs;
 }
 
 Status GlyphGroupings::FindFallbackGlyphConditions(

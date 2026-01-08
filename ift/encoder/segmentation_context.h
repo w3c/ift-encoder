@@ -96,8 +96,10 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
-    // Note: glyph_groupings will be automatically invalidated as needed when
-    // group glyphs is called.
+    // TODO XXXXX now that invalidation here is only for glyph condition set we
+    // should consider changing this so that invalidation is internal to glyph
+    // condition set reprocessing (like with GroupGlyphs). Note: glyph_groupings
+    // will be automatically invalidated as needed when group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 
@@ -118,13 +120,19 @@ class SegmentationContext {
     inert_segments_.clear();
 
     // Then reprocess segments:
+
     for (segment_index_t segment_index = 0;
          segment_index < SegmentationInfo().Segments().size();
          segment_index++) {
       TRY(ReprocessSegment(segment_index));
     }
 
-    TRYV(GroupGlyphs(SegmentationInfo().NonInitFontGlyphs()));
+    common::SegmentSet all_segments;
+    if (!SegmentationInfo().Segments().empty()) {
+      all_segments.insert_range(0, SegmentationInfo().Segments().size() - 1);
+    }
+    TRYV(GroupGlyphs(SegmentationInfo().NonInitFontGlyphs(), all_segments));
+
     glyph_closure_cache.LogClosureCount(
         "Segmentation reprocess for init def change.");
 
@@ -150,9 +158,11 @@ class SegmentationContext {
   //
   // The glyph condition set must be up to date and fully computed prior to
   // calling this.
-  absl::Status GroupGlyphs(const common::GlyphSet& glyphs) {
+  absl::Status GroupGlyphs(const common::GlyphSet& glyphs,
+                           const common::SegmentSet& modified_segments) {
     return glyph_groupings.GroupGlyphs(segmentation_info_, glyph_condition_set,
-                                       glyph_closure_cache, glyphs);
+                                       glyph_closure_cache, glyphs,
+                                       modified_segments);
   }
 
  private:

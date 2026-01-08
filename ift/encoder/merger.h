@@ -1,11 +1,12 @@
-#ifndef IFT_ENCODER_MERGER_
-#define IFT_ENCODER_MERGER_
+#ifndef IFT_ENCODER_MERGER_H_
+#define IFT_ENCODER_MERGER_H_
 
 #include <cstdint>
 #include <sstream>
 
 #include "common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/types.h"
@@ -50,8 +51,7 @@ class Merger {
    *
    * If nullopt is returned then there are no more available merges to perform.
    */
-  absl::StatusOr<std::optional<std::pair<segment_index_t, common::GlyphSet>>>
-  TryNextMerge();
+  absl::StatusOr<std::optional<InvalidationSet>> TryNextMerge();
 
   /*
    * This method analyzes the segments and checks to see if any should be
@@ -115,7 +115,7 @@ class Merger {
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
-  absl::StatusOr<std::optional<common::GlyphSet>> MergeSegmentWithCosts(
+  absl::StatusOr<std::optional<InvalidationSet>> MergeSegmentWithCosts(
       uint32_t base_segment_index);
 
   absl::Status CollectExclusiveCandidateMerges(
@@ -126,7 +126,7 @@ class Merger {
       uint32_t base_segment_index,
       std::optional<CandidateMerge>& smallest_candidate_merge);
 
-  absl::StatusOr<std::optional<common::GlyphSet>> MergeSegmentWithHeuristic(
+  absl::StatusOr<std::optional<InvalidationSet>> MergeSegmentWithHeuristic(
       uint32_t base_segment_index);
 
   common::SegmentSet CutoffSegments() const;
@@ -138,13 +138,13 @@ class Merger {
    * Returns the set of glyphs invalidated by the merge if found and the merge
    * suceeded.
    */
-  absl::StatusOr<std::optional<common::GlyphSet>> TryMergingABaseSegment(
+  absl::StatusOr<std::optional<InvalidationSet>> TryMergingABaseSegment(
       segment_index_t base_segment_index);
 
-  absl::StatusOr<std::optional<common::GlyphSet>> TryMergingACompositeCondition(
+  absl::StatusOr<std::optional<InvalidationSet>> TryMergingACompositeCondition(
       segment_index_t base_segment_index);
 
-  absl::StatusOr<std::optional<common::GlyphSet>> TryMerge(
+  absl::StatusOr<std::optional<InvalidationSet>> TryMerge(
       segment_index_t base_segment_index,
       const common::SegmentSet& to_merge_segments_);
 
@@ -197,4 +197,4 @@ class Merger {
 
 }  // namespace ift::encoder
 
-#endif  // IFT_ENCODER_STATE_
+#endif  // IFT_ENCODER_MERGER_H_
