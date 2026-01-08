@@ -8,6 +8,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
@@ -27,8 +28,7 @@ bool Merger::ShouldRecordMergedSizeReductions() const {
   return absl::GetFlag(FLAGS_record_merged_size_reductions);
 }
 
-StatusOr<std::optional<std::pair<segment_index_t, GlyphSet>>>
-Merger::TryNextMerge() {
+StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
   if (strategy_.IsNone()) {
     return std::nullopt;
   }
@@ -46,15 +46,15 @@ Merger::TryNextMerge() {
 
     segment_index_t base_segment_index = *it;
 
-    std::optional<GlyphSet> modified_gids;
+    std::optional<InvalidationSet> modified;
     if (strategy_.UseCosts()) {
-      modified_gids = TRY(MergeSegmentWithCosts(base_segment_index));
+      modified = TRY(MergeSegmentWithCosts(base_segment_index));
     } else {
-      modified_gids = TRY(MergeSegmentWithHeuristic(base_segment_index));
+      modified = TRY(MergeSegmentWithHeuristic(base_segment_index));
     }
 
-    if (modified_gids.has_value()) {
-      return std::pair(base_segment_index, *modified_gids);
+    if (modified.has_value()) {
+      return *modified;
     }
 
     MarkFinished(base_segment_index);
@@ -321,7 +321,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
   return previous_segment_index;
 }
 
-StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithCosts(
+StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
     uint32_t base_segment_index) {
   // TODO(garretrieger): what we are trying to solve here is effectively
   // a partitioning problem (finding the partitioning with lowest cost) which is
@@ -570,7 +570,7 @@ Status Merger::CollectCompositeCandidateMerges(
   return absl::OkStatus();
 }
 
-StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithHeuristic(
+StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithHeuristic(
     uint32_t base_segment_index) {
   auto base_segment_glyphs =
       context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
@@ -581,16 +581,16 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithHeuristic(
     return std::nullopt;
   }
 
-  auto modified_gids = TRY(TryMergingACompositeCondition(base_segment_index));
-  if (modified_gids.has_value()) {
+  auto modified = TRY(TryMergingACompositeCondition(base_segment_index));
+  if (modified.has_value()) {
     // Return to the parent method so it can reanalyze and reform groups
-    return *modified_gids;
+    return *modified;
   }
 
-  modified_gids = TRY(TryMergingABaseSegment(base_segment_index));
-  if (modified_gids.has_value()) {
+  modified = TRY(TryMergingABaseSegment(base_segment_index));
+  if (modified.has_value()) {
     // Return to the parent method so it can reanalyze and reform groups
-    return *modified_gids;
+    return *modified;
   }
 
   VLOG(0) << "Unable to get segment " << base_segment_index
@@ -598,7 +598,7 @@ StatusOr<std::optional<GlyphSet>> Merger::MergeSegmentWithHeuristic(
   return std::nullopt;
 }
 
-StatusOr<std::optional<GlyphSet>> Merger::TryMergingABaseSegment(
+StatusOr<std::optional<InvalidationSet>> Merger::TryMergingABaseSegment(
     segment_index_t base_segment_index) {
   // TODO(garretrieger): this currently merges at most one segment at a time
   //  into base. we could likely significantly improve performance (ie.
@@ -620,21 +620,21 @@ StatusOr<std::optional<GlyphSet>> Merger::TryMergingABaseSegment(
   while (next_segment_it != candidate_segments_.end()) {
     SegmentSet triggering_segments{*next_segment_it};
 
-    auto modified_gids = TRY(TryMerge(base_segment_index, triggering_segments));
-    if (!modified_gids.has_value()) {
+    auto modified = TRY(TryMerge(base_segment_index, triggering_segments));
+    if (!modified.has_value()) {
       next_segment_it++;
       continue;
     }
 
     VLOG(0) << "  Merging segments from base patch into segment "
             << base_segment_index << ": " << triggering_segments.ToString();
-    return modified_gids;
+    return modified;
   }
 
   return std::nullopt;
 }
 
-StatusOr<std::optional<GlyphSet>> Merger::TryMergingACompositeCondition(
+StatusOr<std::optional<InvalidationSet>> Merger::TryMergingACompositeCondition(
     segment_index_t base_segment_index) {
   auto candidate_conditions =
       context_->glyph_groupings.TriggeringSegmentToConditions(
@@ -661,20 +661,20 @@ StatusOr<std::optional<GlyphSet>> Merger::TryMergingACompositeCondition(
       continue;
     }
 
-    auto modified_gids = TRY(TryMerge(base_segment_index, triggering_segments));
-    if (!modified_gids.has_value()) {
+    auto modified = TRY(TryMerge(base_segment_index, triggering_segments));
+    if (!modified.has_value()) {
       continue;
     }
 
     VLOG(0) << "  Merging segments from composite patch into segment "
             << base_segment_index << ": " << next_condition.ToString();
-    return modified_gids;
+    return modified;
   }
 
   return std::nullopt;
 }
 
-StatusOr<std::optional<GlyphSet>> Merger::TryMerge(
+StatusOr<std::optional<InvalidationSet>> Merger::TryMerge(
     segment_index_t base_segment_index, const SegmentSet& to_merge_segments_) {
   // TODO(garretrieger): extensions/improvements that could be made:
   // - Can we reduce # of closures for the additional conditions checks?

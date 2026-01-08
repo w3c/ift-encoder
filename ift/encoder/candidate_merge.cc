@@ -17,6 +17,7 @@
 #include "common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_condition_set.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merger.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
@@ -56,10 +57,10 @@ StatusOr<bool> CandidateMerge::IsPatchTooSmall(
   return true;
 }
 
-StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
+StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
   if (!merged_segment_.has_value()) {
     TRYV(ApplyPatchMerge(merger));
-    return GlyphSet{};
+    return InvalidationSet(base_segment_index_);
   }
 
   // Upon application of this merger if all of the input segments were inert
@@ -130,7 +131,8 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
     invalidated_glyphs_.clear();
   }
 
-  return invalidated_glyphs_;
+  return InvalidationSet(invalidated_glyphs_, segments_to_merge_,
+                         base_segment_index_);
 }
 
 Status CandidateMerge::ApplyPatchMerge(Merger& merger) {

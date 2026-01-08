@@ -132,7 +132,7 @@ class GlyphGroupingsTest : public ::testing::Test {
 TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
-                                         glyphs_to_group_);
+                                         glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -157,7 +157,7 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
 TEST_F(GlyphGroupingsTest, SegmentChange) {
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
-                                         glyphs_to_group_);
+                                         glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now in the glyph condition set combine segments s1 into s0
@@ -192,7 +192,7 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
   // Recompute the grouping
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -219,7 +219,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -254,7 +254,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Combined Condition map:
@@ -296,14 +296,15 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
-                                         glyphs_to_group_);
+                                         glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, {});
+  sc =
+      glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                   *glyph_conditions_, *closure_cache_, {}, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // UnionPatches + GroupGlyphs() will automatically invalidate and then fix
@@ -329,7 +330,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                          *glyph_conditions_, *closure_cache_,
-                                         glyphs_to_group_);
+                                         glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
@@ -340,7 +341,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // s0 -> {a, b}
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    ToGlyphs({'a', 'b'}));
+                                    ToGlyphs({'a', 'b'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Expected condition map:
@@ -363,7 +364,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Do another partial invalidation this time on: s3 OR s4 -> {g, h}
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    ToGlyphs({'g', 'h'}));
+                                    ToGlyphs({'g', 'h'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Groupings should still be the same.
@@ -375,7 +376,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
   ASSERT_TRUE(sc.ok()) << sc;
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // The combination is a noop since it only combines things already in the
@@ -404,7 +405,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -432,7 +433,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now in the glyph condition set combine segments s1 into s0
@@ -468,7 +469,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   // Recompute the grouping
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     new_conditions, *closure_cache_,
-                                    ToGlyphs({'a', 'b', 'c', 'd'}));
+                                    ToGlyphs({'a', 'b', 'c', 'd'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -493,12 +494,12 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   GlyphGroupings other(segments_, hb_face_get_glyph_count(roboto_.get()));
   sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
-                         *closure_cache_, glyphs_to_group_);
+                         *closure_cache_, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // other does not have the same patch combinations and so should not be equal
@@ -509,7 +510,7 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
   ASSERT_TRUE(sc.ok());
 
   sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
-                         *closure_cache_, glyphs_to_group_);
+                         *closure_cache_, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now that combined patches matches they should be equal.
@@ -522,7 +523,7 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
                                     *glyph_conditions_, *closure_cache_,
-                                    glyphs_to_group_);
+                                    glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
