@@ -262,10 +262,15 @@ Status GlyphGroupings::GroupGlyphs(
     TRYV(AddConditionAndGlyphs(condition, glyphs));
   }
 
-  // TODO XXXXX run complex condition analysis.
+  if (segmentation_info.GetUnmappedGlyphHandling() == FIND_CONDITIONS) {
+    TRYV(FindFallbackGlyphConditions(segmentation_info, glyph_condition_set,
+                                     closure_cache));
+  }
 
   // The combined conditions can't be incrementally updated, so we recompute
   // them in full.
+  // TODO XXXX we should check if the modified glyph set intersects any
+  // combination groups and avoid recomputing if it doesn't.
   TRYV(RecomputeCombinedConditions(glyph_condition_set));
 
   for (uint32_t gid : unmapped_glyphs_) {
@@ -285,18 +290,16 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
     GlyphClosureCache& closure_cache) {
-  GlyphSet fallback_glyphs = FallbackGlyphs();
+  if (unmapped_glyphs_.empty()) {
+    return absl::OkStatus();
+  }
+
   btree_map<SegmentSet, GlyphSet> complex_conditions =
-      TRY(FindSupersetDisjunctiveConditionsFor(segmentation_info,
-                                               glyph_condition_set,
-                                               closure_cache, fallback_glyphs));
+      TRY(FindSupersetDisjunctiveConditionsFor(
+          segmentation_info, glyph_condition_set, closure_cache,
+          unmapped_glyphs_));
 
-  or_glyph_groups_.erase(fallback_segments_);
-  RemoveConditionAndGlyphs(
-      ActivationCondition::or_segments(fallback_segments_, 0));
   unmapped_glyphs_.clear();
-  fallback_segments_.clear();
-
   for (const auto& [s, g] : complex_conditions) {
     or_glyph_groups_[s].union_set(g);
     ActivationCondition c = ActivationCondition::or_segments(s, 0);

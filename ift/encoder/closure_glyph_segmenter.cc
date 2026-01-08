@@ -395,26 +395,6 @@ StatusOr<std::vector<Merger>> ToMergers(
 static StatusOr<GlyphSegmentation> ToFinalSegmentation(
     SegmentationContext& context,
     UnmappedGlyphHandling unmapped_glyph_handling) {
-  if (unmapped_glyph_handling == FIND_CONDITIONS) {
-    // TODO(garretrieger): this analysis should be performed prior to merging
-    // so that the found conditions can participate in merging. To make this
-    // performant we'll need to add support for incrementally recomputing
-    // complex conditions that are effected by merges.
-    //
-    // The good news here is that when we do a segment merge of the generated
-    // complex activation conditions that will naturally fix the unmapped
-    // nature of the relevant glyphs. However, changes to segments may
-    // also invalidate the complex conditions and require incremental
-    // reprocessing.
-    //
-    // Roughly, during invalidation and subsequent incremental closure
-    // analysis we may re-identify unmapped glyphs these would then
-    // need to be invalidated and reprocessed by the complex condition finder.
-    TRYV(context.glyph_groupings.FindFallbackGlyphConditions(
-        context.SegmentationInfo(), context.glyph_condition_set,
-        context.glyph_closure_cache));
-  }
-
   return context.ToGlyphSegmentation();
 }
 
