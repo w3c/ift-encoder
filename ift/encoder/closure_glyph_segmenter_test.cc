@@ -1,5 +1,7 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 
+#include <optional>
+
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
@@ -7,7 +9,6 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
-#include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
 
@@ -28,7 +29,9 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   ClosureGlyphSegmenterTest()
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)),
-        segmenter(8, 8) {
+        segmenter(8, 8, PATCH),
+        segmenter_find_conditions(8, 8, FIND_CONDITIONS),
+        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -47,6 +50,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   hb_face_unique_ptr roboto;
   hb_face_unique_ptr noto_nastaliq_urdu;
   ClosureGlyphSegmenter segmenter;
+  ClosureGlyphSegmenter segmenter_find_conditions;
+  ClosureGlyphSegmenter segmenter_move_to_init_font;
 };
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
@@ -400,9 +405,9 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
-      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, {}, FIND_CONDITIONS);
+      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, std::nullopt);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
@@ -432,9 +437,9 @@ if ((s1 OR s2 OR s3 OR s4)) then p6
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
   // Here the found conditions are equal to the fallback segment, this ensures
   // everything works properly in this case.
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}}, {},
-      FIND_CONDITIONS);
+  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
+      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
+      std::nullopt);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
   ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
       << segmentation->UnmappedGlyphs().ToString();
@@ -459,9 +464,9 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = segmenter_move_to_init_font.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
-      btree_map<SegmentSet, MergeStrategy>{}, MOVE_TO_INIT_FONT);
+      btree_map<SegmentSet, MergeStrategy>{});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 0);
@@ -848,7 +853,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
       GlyphSegmentation::GroupsToSegmentation({}, {}, {}, {}, segmentation1);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ClosureGlyphSegmenter segmenter(8, 8);
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH);
   SegmentationCost base_cost =
       *segmenter.TotalCost(roboto.get(), segmentation1, calculator);
   ASSERT_GT(base_cost.total_cost, 1000);
@@ -1146,7 +1151,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
                                                           {'m'},
                                                           {'n'},
                                                           {'o'}},
-                                                         merge_groups, PATCH);
+                                                         merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1242,7 +1247,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
                                                           {'m'},
                                                           {'n'},
                                                           {'o'}},
-                                                         merge_groups, PATCH);
+                                                         merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // Only segments from the groups that set a threshold are eligible to be moved
@@ -1319,7 +1324,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
                                                              {'i'},
                                                              {'j'},
                                                          },
-                                                         merge_groups, PATCH);
+                                                         merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
@@ -1360,7 +1365,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_Heuristic) {
                                                              {'i'},
                                                              {'j'},
                                                          },
-                                                         merge_groups, PATCH);
+                                                         merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // f + i would normally be a good merge, but here it's skipped since it
@@ -1470,8 +1475,7 @@ if (s2) then p2
       {
           {{0, 1}, *MergeStrategy::CostBased(std::move(frequencies), 75, 3)},
           {{2}, MergeStrategy::None()},
-      },
-      PATCH);
+      });
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_EQ(segmentation->ToString(),
@@ -1513,7 +1517,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
                                                              {'h'},
                                                              {'i'},
                                                          },
-                                                         merge_groups, PATCH);
+                                                         merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // d, a are above the pregrouping threshold so aren't grouped.

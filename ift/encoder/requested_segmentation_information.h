@@ -8,6 +8,7 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "util/common.pb.h"
 
 namespace ift::encoder {
 
@@ -16,9 +17,10 @@ namespace ift::encoder {
  */
 class RequestedSegmentationInformation {
  public:
-  RequestedSegmentationInformation(std::vector<Segment> segments,
-                                   SubsetDefinition init_font_segment,
-                                   GlyphClosureCache& closure_cache);
+  RequestedSegmentationInformation(
+      std::vector<Segment> segments, SubsetDefinition init_font_segment,
+      GlyphClosureCache& closure_cache,
+      UnmappedGlyphHandling unmapped_glyph_handling);
 
   // Merge all of the segments in to_merge into base, assigned it
   // a new subset definition "merged_segment".
@@ -57,6 +59,10 @@ class RequestedSegmentationInformation {
     for (auto& s : segments_) {
       s.Definition().codepoints.subtract(init_font_segment_.codepoints);
     }
+  }
+
+  UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
+    return unmapped_glyph_handling_;
   }
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
@@ -133,6 +139,7 @@ class RequestedSegmentationInformation {
   common::GlyphSet init_font_glyphs_;
   common::GlyphSet full_closure_;
   bool segments_disjoint_;
+  enum UnmappedGlyphHandling unmapped_glyph_handling_;
 };
 
 }  // namespace ift::encoder

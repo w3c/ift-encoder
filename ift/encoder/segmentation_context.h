@@ -42,6 +42,7 @@ class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments,
+                      UnmappedGlyphHandling unmapped_glyph_handling,
                       uint32_t brotli_quality,
                       uint32_t init_font_brotli_quality)
       : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
@@ -49,7 +50,8 @@ class SegmentationContext {
             NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        segmentation_info_(segments, initial_segment, glyph_closure_cache),
+        segmentation_info_(segments, initial_segment, glyph_closure_cache,
+                           unmapped_glyph_handling),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(segments, hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality) {}

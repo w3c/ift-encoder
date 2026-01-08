@@ -35,9 +35,11 @@ struct SegmentationCost {
 class ClosureGlyphSegmenter {
  public:
   ClosureGlyphSegmenter(uint32_t brotli_quality,
-                        uint32_t init_font_merging_brotli_quality)
+                        uint32_t init_font_merging_brotli_quality,
+                        UnmappedGlyphHandling unmapped_glyph_handling)
       : brotli_quality_(brotli_quality),
-        init_font_merging_brotli_quality_(init_font_merging_brotli_quality) {}
+        init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
+        unmapped_glyph_handling_(unmapped_glyph_handling) {}
 
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
@@ -55,8 +57,7 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups,
-      UnmappedGlyphHandling unmapped_glyph_handling) const;
+      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups) const;
 
   /*
    * Generates a segmentation context for the provided segmentation input.
@@ -88,6 +89,7 @@ class ClosureGlyphSegmenter {
  private:
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
+  UnmappedGlyphHandling unmapped_glyph_handling_;
 };
 
 }  // namespace ift::encoder
