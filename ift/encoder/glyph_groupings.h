@@ -179,6 +179,23 @@ class GlyphGroupings {
   // condition.
   void InvalidateGlyphInformation(uint32_t gid);
 
+  absl::Status RecomputeCombinedConditionsIfNeeded(const common::GlyphSet& modified_glyphs) {
+    if (!combined_patches_dirty_) {
+      for (glyph_id_t gid : modified_glyphs) {
+        if (TRY(combined_patches_.GlyphsFor(gid)).size() > 1) {
+          RemoveAllCombinedConditions();
+          break;
+        }
+      }
+    }
+
+    if (combined_patches_dirty_) {
+      return RecomputeCombinedConditions();
+    }
+
+    return absl::OkStatus();
+  }
+
   // Looks at the requested combinations from combined_patches_ and
   // computes any resulting combinations, then updates the condition_and_glyphs_
   // with the combined conditions.
@@ -298,6 +315,7 @@ class GlyphGroupings {
   // Conjunctive conditions/patches are unaffected by this mechanism since they
   // can't be joined together in the same fashion.
   GlyphPartition combined_patches_;
+  bool combined_patches_dirty_ = false;
 
   absl::btree_map<common::SegmentSet, common::GlyphSet> and_glyph_groups_;
   absl::btree_map<common::SegmentSet, common::GlyphSet> or_glyph_groups_;

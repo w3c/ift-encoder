@@ -717,8 +717,37 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_CombinedPatches) {
   ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
 }
 
-// TODO XXXXX complex condition finding tests:
-// - with combined patches involved (incremental).
-// - Modified segments test (no complex conditions)
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalAndCombinedPatches) {
+  auto sc = glyph_groupings_complex_.CombinePatches({ToGlyph(0x6C)}, {782});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Modify a segment definition and then incremental recompute the groupings.
+  Segment merged = segments_complex_[0];
+  merged.Definition().Union(segments_complex_[3].Definition());
+  requested_segmentation_info_complex_->AssignMergedSegment(0, {3}, merged);
+
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, ToGlyphs({0x54}), {0, 3});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // if ((s0 OR s1)) then p0 => {56, 80, 782}
+  // if ((s1 OR s2 OR s4)) then p0 => {748}
+  // if ((s0 OR s2 OR s4)) then p0 => {442}
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::or_segments({0, 1}, 0), {ToGlyph(0x54), ToGlyph(0x6C), 782}},
+      {ActivationCondition::or_segments({1, 2, 4}, 0), {748}},
+      {ActivationCondition::or_segments({0, 2, 4}, 0), {442}},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+}
 
 }  // namespace ift::encoder
