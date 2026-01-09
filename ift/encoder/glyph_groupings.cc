@@ -73,6 +73,7 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
 }
 
 void GlyphGroupings::RemoveAllCombinedConditions() {
+  combined_patches_dirty_ = true;
   for (const auto& [segments, _] : combined_or_glyph_groups_) {
     RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
                              false);
@@ -126,15 +127,7 @@ Status GlyphGroupings::AddGlyphsToExclusiveGroup(
   // are involved with the combined patches mechanism. If at least one is
   // then it's necessary to recompute all combined patches to reflect any
   // downstream changes.
-  for (glyph_id_t gid : glyphs) {
-    if (TRY(combined_patches_.GlyphsFor(gid)).size() > 1) {
-      RemoveAllCombinedConditions();
-      TRYV(RecomputeCombinedConditions());
-      break;
-    }
-  }
-
-  return absl::OkStatus();
+  return RecomputeCombinedConditionsIfNeeded(glyphs);
 }
 
 // Converts this grouping into a finalized GlyphSegmentation.
@@ -192,10 +185,6 @@ Status GlyphGroupings::GroupGlyphs(
     InvalidateGlyphInformation(gid);
   }
   glyphs.union_set(additional_glyphs);
-
-  // TODO XXXX can we skip this is nothing that's beng changed intersects
-  // a combined group.
-  RemoveAllCombinedConditions();
 
   SegmentSet modified_exclusive_segments;
   btree_set<SegmentSet> modified_and_groups;
@@ -281,10 +270,8 @@ Status GlyphGroupings::GroupGlyphs(
   }
 
   // The combined conditions can't be incrementally updated, so we recompute
-  // them in full.
-  // TODO XXXX we should check if the modified glyph set intersects any
-  // combination groups and avoid recomputing if it doesn't.
-  TRYV(RecomputeCombinedConditions());
+  // them in full if needed.
+  TRYV(RecomputeCombinedConditionsIfNeeded(glyphs));
 
   for (uint32_t gid : unmapped_glyphs_) {
     // this glyph is not activated anywhere but is needed in the full closure
@@ -376,6 +363,7 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
     TRYV(AddConditionAndGlyphs(condition, gids, false));
   }
 
+  combined_patches_dirty_ = false;
   return absl::OkStatus();
 }
 
