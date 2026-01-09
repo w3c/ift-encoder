@@ -1,10 +1,13 @@
 #include "ift/encoder/glyph_groupings.h"
 
+#include <memory>
+
 #include "absl/container/flat_hash_map.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/complex_condition_finder.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -15,6 +18,7 @@
 
 namespace ift::encoder {
 
+using absl::btree_map;
 using absl::flat_hash_map;
 using common::CodepointSet;
 using common::FontData;
@@ -23,9 +27,8 @@ using common::hb_face_unique_ptr;
 using common::make_hb_face;
 using freq::ProbabilityBound;
 
-void PrintTo(
-    const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions,
-    std::ostream* os) {
+void PrintTo(const btree_map<ActivationCondition, common::GlyphSet>& conditions,
+             std::ostream* os) {
   *os << "conditions:\n";
   for (const auto& [c, gids] : conditions) {
     *os << "  " << c.ToString() << " => " << gids.ToString();
@@ -47,7 +50,17 @@ class GlyphGroupingsTest : public ::testing::Test {
             Segment({'g'}, ProbabilityBound::Zero()),       // s3
             Segment({'h'}, ProbabilityBound::Zero()),       // s4
         }),
-        glyph_groupings_(segments_, hb_face_get_glyph_count(roboto_.get())) {
+
+        glyph_groupings_(segments_, hb_face_get_glyph_count(roboto_.get())),
+        segments_complex_({
+            Segment({0x54}, ProbabilityBound::Zero()),    // s0
+            Segment({0x6C}, ProbabilityBound::Zero()),    // s1
+            Segment({0x13C}, ProbabilityBound::Zero()),   // s2
+            Segment({0x21A}, ProbabilityBound::Zero()),   // s3
+            Segment({0xF6C3}, ProbabilityBound::Zero()),  // s4
+        }),
+        glyph_groupings_complex_(segments_complex_,
+                                 hb_face_get_glyph_count(roboto_.get())) {
     uint32_t num_glyphs = hb_face_get_glyph_count(roboto_.get());
 
     SubsetDefinition init_font_segment;
@@ -96,6 +109,32 @@ class GlyphGroupingsTest : public ::testing::Test {
     // Disjunctive on segments 2 and 3
     glyph_conditions_->AddOrCondition(cp_to_gid_['j'], 2);
     glyph_conditions_->AddOrCondition(cp_to_gid_['j'], 3);
+
+    SetupComplexCase();
+  }
+
+  void SetupComplexCase() {
+    hb_font_t* font = hb_font_create(roboto_.get());
+    std::vector<hb_codepoint_t> codepoints = {0x54, 0x6C, 0x13C, 0x21A, 0xF6C3};
+
+    for (hb_codepoint_t cp : codepoints) {
+      glyph_id_t gid;
+      hb_font_get_nominal_glyph(font, cp, &gid);
+      cp_to_gid_[cp] = gid;
+      glyphs_to_group_complex_.insert(gid);
+    }
+    hb_font_destroy(font);
+
+    glyph_conditions_complex_ = std::make_unique<GlyphConditionSet>(
+        hb_face_get_glyph_count(roboto_.get()));
+    glyph_conditions_complex_->AddAndCondition(ToGlyph(0x54), 0);
+    glyph_conditions_complex_->AddAndCondition(ToGlyph(0x6C), 1);
+
+    SubsetDefinition init_font_segment;
+    requested_segmentation_info_complex_ =
+        std::make_unique<RequestedSegmentationInformation>(
+            segments_complex_, init_font_segment, *closure_cache_,
+            FIND_CONDITIONS);
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
@@ -116,17 +155,25 @@ class GlyphGroupingsTest : public ::testing::Test {
     return out;
   }
 
-  glyph_id_t ToGlyph(hb_codepoint_t cp) { return cp_to_gid_[cp]; }
+  glyph_id_t ToGlyph(hb_codepoint_t cp) { return cp_to_gid_.at(cp); }
 
   hb_face_unique_ptr roboto_;
-  std::vector<Segment> segments_;
   std::unique_ptr<GlyphClosureCache> closure_cache_;
   std::unique_ptr<RequestedSegmentationInformation>
       requested_segmentation_info_;
+
+  std::vector<Segment> segments_;
   std::unique_ptr<GlyphConditionSet> glyph_conditions_;
   GlyphGroupings glyph_groupings_;
   GlyphSet glyphs_to_group_;
   flat_hash_map<hb_codepoint_t, glyph_id_t> cp_to_gid_;
+
+  std::vector<Segment> segments_complex_;
+  std::unique_ptr<GlyphConditionSet> glyph_conditions_complex_;
+  GlyphGroupings glyph_groupings_complex_;
+  GlyphSet glyphs_to_group_complex_;
+  std::unique_ptr<RequestedSegmentationInformation>
+      requested_segmentation_info_complex_;
 };
 
 TEST_F(GlyphGroupingsTest, SimpleGrouping) {
@@ -142,7 +189,7 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k'})},
@@ -201,7 +248,7 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0),
        ToGlyphs({'a', 'b', 'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
@@ -228,7 +275,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s0 OR s3 OR s4 -> {a, b, g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
@@ -281,7 +328,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::or_segments({0, 3}, 0),
        ToGlyphs({'a', 'b', 'c', 'd', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
@@ -314,7 +361,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s0 OR s3 OR s4 -> {a, b, g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
@@ -350,7 +397,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s0 OR s3 OR s4 -> {a, b, g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
@@ -387,7 +434,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
@@ -415,7 +462,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
       {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
@@ -477,7 +524,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s0 OR s3 OR s4 -> {a, b, c, , d, g, h}
-  absl::btree_map<ActivationCondition, common::GlyphSet> expected = {
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
       {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
@@ -539,5 +586,147 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(3), ToGlyphs({'k'}));
   ASSERT_EQ(glyph_groupings_.ExclusiveGlyphs(10), (GlyphSet{}));
 }
+
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_LeaveUnmapped) {
+  SubsetDefinition init_font_segment;
+  RequestedSegmentationInformation segmentation_info(
+      segments_complex_, init_font_segment, *closure_cache_, PATCH);
+
+  auto sc = glyph_groupings_complex_.GroupGlyphs(
+      segmentation_info, *glyph_conditions_complex_, *closure_cache_,
+      glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // if (s0) then p0 => {56} [excl]
+  // if (s1) then p0 => {80} [excl]
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({0x54})},
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({0x6C})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_EQ(glyph_groupings_complex_.FallbackGlyphs(),
+            (GlyphSet{442, 748, 782}));
+}
+
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
+  auto sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // if (s0) then p0 => {56} [excl]
+  // if (s1) then p0 => {80} [excl]
+  // if ((s0 OR s3 OR s4)) then p0 => {782}
+  // if ((s1 OR s2 OR s4)) then p0 => {748}
+  // if ((s2 OR s3 OR s4)) then p0 => {442}
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({0x54})},
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({0x6C})},
+
+      {ActivationCondition::or_segments({0, 3, 4}, 0), {782}},
+      {ActivationCondition::or_segments({1, 2, 4}, 0), {748}},
+      {ActivationCondition::or_segments({2, 3, 4}, 0), {442}},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+}
+
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalUnchanged) {
+  auto sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+  btree_map<ActivationCondition, common::GlyphSet> expected =
+      glyph_groupings_complex_.ConditionsAndGlyphs();
+
+  // Incremental regrouping, should arrive back at the same mapping.
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, {748}, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, ToGlyphs({0x54}), {2});
+  ASSERT_TRUE(sc.ok()) << sc;
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+}
+
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalChanged) {
+  auto sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Modify a segment definition and then incremental recompute the groupings.
+  Segment merged = segments_complex_[0];
+  merged.Definition().Union(segments_complex_[3].Definition());
+  requested_segmentation_info_complex_->AssignMergedSegment(0, {3}, merged);
+
+  // Incremental regrouping, should arrive back at the same mapping.
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, ToGlyphs({0x54}), {0, 3});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({0x54})},
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({0x6C})},
+      {ActivationCondition::or_segments({1, 2, 4}, 0), {748}},
+  };
+
+  auto new_mappings = *FindSupersetDisjunctiveConditionsFor(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, {442, 782});
+
+  for (const auto& [s, g] : new_mappings) {
+    if (s.size() == 1) {
+      expected[ActivationCondition::exclusive_segment(*s.begin(), 0)].union_set(
+          g);
+    } else {
+      expected[ActivationCondition::or_segments(s, 0)].union_set(g);
+    }
+  }
+
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+}
+
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_CombinedPatches) {
+  auto sc = glyph_groupings_complex_.CombinePatches({ToGlyph(0x6C)}, {782});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_complex_.GroupGlyphs(
+      *requested_segmentation_info_complex_, *glyph_conditions_complex_,
+      *closure_cache_, glyphs_to_group_complex_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Condition map:
+  // if (s0) then p0 => {56} [excl]
+  // if ((s0 OR s1 OR s3 OR s4)) then p0 => {80, 782}
+  // if ((s1 OR s2 OR s4)) then p0 => {748}
+  // if ((s2 OR s3 OR s4)) then p0 => {442}
+  btree_map<ActivationCondition, common::GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({0x54})},
+
+      {ActivationCondition::or_segments({0, 1, 3, 4}, 0), {ToGlyph(0x6C), 782}},
+      {ActivationCondition::or_segments({1, 2, 4}, 0), {748}},
+      {ActivationCondition::or_segments({2, 3, 4}, 0), {442}},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
+  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+}
+
+// TODO XXXXX complex condition finding tests:
+// - with combined patches involved (incremental).
+// - Modified segments test (no complex conditions)
 
 }  // namespace ift::encoder
