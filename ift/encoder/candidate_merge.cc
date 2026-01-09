@@ -123,8 +123,7 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
                                                            base_segment_index_);
     }
     TRYV(merger.Context().glyph_groupings.AddGlyphsToExclusiveGroup(
-        merger.Context().glyph_condition_set, base_segment_index_,
-        invalidated_glyphs_));
+        base_segment_index_, invalidated_glyphs_));
 
     // We've now fully updated information for these glyphs so don't need to
     // return them.

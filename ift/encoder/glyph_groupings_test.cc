@@ -295,7 +295,6 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
   // s2 AND s3 -> {e, f}
   // s2 OR s3 -> {j}
   // s3 OR s4 -> {g, h}
-
   auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'a'}), ToGlyphs({'c'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -313,14 +312,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
 
   // Create a new exclusive patch without using GroupGlyphs(), merges s1 and s3
   // into s3
-  glyph_conditions_->InvalidateGlyphInformation(ToGlyphs({'c', 'd', 'k'}),
-                                                {1, 3});
-  glyph_conditions_->AddAndCondition(ToGlyph('c'), 3);
-  glyph_conditions_->AddAndCondition(ToGlyph('d'), 3);
-  glyph_conditions_->AddAndCondition(ToGlyph('k'), 3);
-
-  sc = glyph_groupings_.AddGlyphsToExclusiveGroup(*glyph_conditions_, 3,
-                                                  ToGlyphs({'c', 'd', 'k'}));
+  sc = glyph_groupings_.AddGlyphsToExclusiveGroup(3, ToGlyphs({'c', 'd', 'k'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
   // s3 should get pulled into the combined patch of s0 and s1:
