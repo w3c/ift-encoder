@@ -321,8 +321,19 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
 
   unmapped_glyphs_.clear();
   for (const auto& [s, g] : complex_conditions) {
-    or_glyph_groups_[s].union_set(g);
+    if (s.empty()) {
+      return absl::InternalError("Complex conditions should never be empty.");
+    }
+
     ActivationCondition c = ActivationCondition::or_segments(s, 0);
+    if (s.size() == 1) {
+      segment_index_t segment = *s.begin();
+      exclusive_glyph_groups_[segment].union_set(g);
+      c = ActivationCondition::exclusive_segment(segment, 0);
+    } else {
+      or_glyph_groups_[s].union_set(g);
+    }
+
     // There may be existing glyphs at this specific condition, so union into
     // it.
     TRYV(UnionConditionAndGlyphs(c, g));
