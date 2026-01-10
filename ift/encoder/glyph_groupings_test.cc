@@ -25,6 +25,7 @@ using common::FontData;
 using common::GlyphSet;
 using common::hb_face_unique_ptr;
 using common::make_hb_face;
+using common::SegmentSet;
 using freq::ProbabilityBound;
 
 void PrintTo(const btree_map<ActivationCondition, common::GlyphSet>& conditions,
@@ -676,7 +677,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalChanged) {
 
   auto new_mappings = *FindSupersetDisjunctiveConditionsFor(
       *requested_segmentation_info_complex_, *glyph_conditions_complex_,
-      *closure_cache_, {442, 782});
+      *closure_cache_, {442, 782}, SegmentSet::all());
 
   for (const auto& [s, g] : new_mappings) {
     if (s.size() == 1) {
@@ -717,7 +718,8 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_CombinedPatches) {
   ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
 }
 
-TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalAndCombinedPatches) {
+TEST_F(GlyphGroupingsTest,
+       ComplexConditionFinding_IncrementalAndCombinedPatches) {
   auto sc = glyph_groupings_complex_.CombinePatches({ToGlyph(0x6C)}, {782});
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -741,7 +743,8 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalAndCombinedPatches
   // if ((s1 OR s2 OR s4)) then p0 => {748}
   // if ((s0 OR s2 OR s4)) then p0 => {442}
   btree_map<ActivationCondition, common::GlyphSet> expected = {
-      {ActivationCondition::or_segments({0, 1}, 0), {ToGlyph(0x54), ToGlyph(0x6C), 782}},
+      {ActivationCondition::or_segments({0, 1}, 0),
+       {ToGlyph(0x54), ToGlyph(0x6C), 782}},
       {ActivationCondition::or_segments({1, 2, 4}, 0), {748}},
       {ActivationCondition::or_segments({0, 2, 4}, 0), {442}},
   };

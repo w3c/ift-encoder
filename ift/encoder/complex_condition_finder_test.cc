@@ -102,7 +102,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions) {
                                                     748,
                                                     756,
                                                     782,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 
@@ -130,7 +131,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions_Partial) {
                                                 context.glyph_closure_cache,
                                                 {
                                                     748,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   expected.erase(SegmentSet{6, 0, 5});
   expected.erase(SegmentSet{6, 2, 4});
@@ -146,7 +148,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions_IncompleteExistingCondition) {
                                                 context.glyph_closure_cache,
                                                 {
                                                     748,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
@@ -159,7 +162,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions_GlyphsNotInClosure) {
       {
           748,
           40  // this is not in the full closure.
-      });
+      },
+      SegmentSet::all());
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
@@ -174,7 +178,8 @@ TEST_F(ComplexConditionFinderTest,
                                                     748,
                                                     756,
                                                     782,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -192,7 +197,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithExistingConditions) {
                                                     748,
                                                     756,
                                                     782,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -212,7 +218,8 @@ TEST_F(ComplexConditionFinderTest,
                                                     748,
                                                     756,
                                                     782,
-                                                });
+                                                },
+                                                SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(expected, *r);
 }
@@ -226,7 +233,8 @@ TEST_F(ComplexConditionFinderTest, FindConditions_RejectsInitFontGlyphs) {
       {
           748,
           74,  // f - in the init closure
-      });
+      },
+      SegmentSet::all());
   ASSERT_TRUE(absl::IsInvalidArgument(r.status())) << r.status();
 }
 
@@ -238,12 +246,46 @@ TEST_F(ComplexConditionFinderTest, FindConditions_ClosureRespectsInitFont) {
       context.glyph_closure_cache,
       {
           446,  // fi ligature - combines i with f from the init font
-      });
+      },
+      SegmentSet::all());
   ASSERT_TRUE(r.ok()) << r.status();
   expected = {
       {{7}, {446}},
   };
   ASSERT_EQ(expected, *r);
+}
+
+TEST_F(ComplexConditionFinderTest, FindConditions_WithInscope) {
+  SegmentationContext context = TestContext(false);
+
+  auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                                context.glyph_condition_set,
+                                                context.glyph_closure_cache,
+                                                {
+                                                    748,
+                                                    756,
+                                                },
+                                                {1, 2, 3, 4, 6});
+  ASSERT_TRUE(r.ok()) << r.status();
+
+  expected.erase({6, 0, 5});
+  ASSERT_EQ(expected, *r);
+}
+
+TEST_F(ComplexConditionFinderTest, FindConditions_WithBadInscope) {
+  SegmentationContext context = TestContext(false);
+
+  auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
+                                                context.glyph_condition_set,
+                                                context.glyph_closure_cache,
+                                                {
+                                                    748,
+                                                    756,
+                                                },
+                                                {
+                                                    2, 3, 4,  // missing 1, 6
+                                                });
+  ASSERT_TRUE(absl::IsInternal(r.status()));
 }
 
 }  // namespace ift::encoder

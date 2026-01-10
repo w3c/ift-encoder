@@ -26,7 +26,8 @@ absl::StatusOr<absl::btree_map<common::SegmentSet, common::GlyphSet>>
 FindSupersetDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, common::GlyphSet glyphs);
+    GlyphClosureCache& closure_cache, common::GlyphSet glyphs,
+    common::SegmentSet inscope_segments);
 
 }  // namespace ift::encoder
 
