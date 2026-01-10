@@ -165,6 +165,8 @@ class GlyphGroupings {
       const RequestedSegmentationInformation& segmentation_info) const;
 
  private:
+  void CollectSegments(glyph_id_t gid, common::SegmentSet& segments);
+
   common::GlyphSet ModifiedGlyphs(const common::SegmentSet& segments) const;
 
   // Perform a more detailed analysis to try and find more granular conditions
@@ -173,13 +175,15 @@ class GlyphGroupings {
   absl::Status FindFallbackGlyphConditions(
       const RequestedSegmentationInformation& segmentation_info,
       const GlyphConditionSet& glyph_condition_set,
+      const common::SegmentSet& inscope_segments,
       GlyphClosureCache& closure_cache);
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
   void InvalidateGlyphInformation(uint32_t gid);
 
-  absl::Status RecomputeCombinedConditionsIfNeeded(const common::GlyphSet& modified_glyphs) {
+  absl::Status RecomputeCombinedConditionsIfNeeded(
+      const common::GlyphSet& modified_glyphs) {
     if (!combined_patches_dirty_) {
       for (glyph_id_t gid : modified_glyphs) {
         if (TRY(combined_patches_.GlyphsFor(gid)).size() > 1) {

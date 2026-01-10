@@ -477,9 +477,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   while (true) {
     auto& merger = mergers[merger_index];
-    auto maybe_modified =
-        TRY(merger.TryNextMerge());  // XXXXX switch this to return a struct
-                                     // that also has modified segments list.
+    auto maybe_modified = TRY(merger.TryNextMerge());
 
     if (!maybe_modified.has_value()) {
       merger_index++;

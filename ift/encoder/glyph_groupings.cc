@@ -173,15 +173,25 @@ Status GlyphGroupings::GroupGlyphs(
     GlyphClosureCache& closure_cache, GlyphSet glyphs,
     const SegmentSet& modified_segments) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
+  SegmentSet inscope_fallback_segments;
 
   for (glyph_id_t gid : glyphs) {
+    CollectSegments(gid, inscope_fallback_segments);
     InvalidateGlyphInformation(gid);
+  }
+
+  if (!inscope_fallback_segments.empty()) {
+    inscope_fallback_segments.union_set(modified_segments);
+  } else {
+    // If no existing conditions exist, all segments are inscope.
+    inscope_fallback_segments.invert();
   }
 
   // Find any additional glyphs that are affected by changes in
   // modified_segments
   GlyphSet additional_glyphs = ModifiedGlyphs(modified_segments);
   for (glyph_id_t gid : additional_glyphs) {
+    CollectSegments(gid, inscope_fallback_segments);
     InvalidateGlyphInformation(gid);
   }
   glyphs.union_set(additional_glyphs);
@@ -266,7 +276,7 @@ Status GlyphGroupings::GroupGlyphs(
 
   if (segmentation_info.GetUnmappedGlyphHandling() == FIND_CONDITIONS) {
     TRYV(FindFallbackGlyphConditions(segmentation_info, glyph_condition_set,
-                                     closure_cache));
+                                     inscope_fallback_segments, closure_cache));
   }
 
   // The combined conditions can't be incrementally updated, so we recompute
@@ -286,6 +296,14 @@ Status GlyphGroupings::GroupGlyphs(
   return absl::OkStatus();
 }
 
+void GlyphGroupings::CollectSegments(glyph_id_t gid, SegmentSet& segments) {
+  auto it = glyph_to_condition_.find(gid);
+  if (it == glyph_to_condition_.end()) {
+    return;
+  }
+  segments.union_set(it->second.TriggeringSegments());
+}
+
 GlyphSet GlyphGroupings::ModifiedGlyphs(const SegmentSet& segments) const {
   GlyphSet glyphs;
   for (segment_index_t s : segments) {
@@ -300,7 +318,7 @@ GlyphSet GlyphGroupings::ModifiedGlyphs(const SegmentSet& segments) const {
 Status GlyphGroupings::FindFallbackGlyphConditions(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache) {
+    const SegmentSet& inscope_segments, GlyphClosureCache& closure_cache) {
   if (unmapped_glyphs_.empty()) {
     return absl::OkStatus();
   }
@@ -308,7 +326,7 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
   btree_map<SegmentSet, GlyphSet> complex_conditions =
       TRY(FindSupersetDisjunctiveConditionsFor(
           segmentation_info, glyph_condition_set, closure_cache,
-          unmapped_glyphs_));
+          unmapped_glyphs_, inscope_segments));
 
   unmapped_glyphs_.clear();
   for (const auto& [s, g] : complex_conditions) {

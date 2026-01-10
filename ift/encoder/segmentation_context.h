@@ -98,8 +98,10 @@ class SegmentationContext {
                                   const common::SegmentSet& segments) {
     // TODO XXXXX now that invalidation here is only for glyph condition set we
     // should consider changing this so that invalidation is internal to glyph
-    // condition set reprocessing (like with GroupGlyphs). Note: glyph_groupings
-    // will be automatically invalidated as needed when group glyphs is called.
+    // condition set reprocessing (like with GroupGlyphs).
+    //
+    // Note: glyph_groupings will be automatically invalidated as needed when
+    // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
   }
 

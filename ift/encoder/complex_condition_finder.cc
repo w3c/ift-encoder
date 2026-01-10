@@ -22,9 +22,9 @@ namespace ift::encoder {
 
 // One unit of work for the analysis. One from to_be_tested will be checked.
 struct Task {
-  // These segments are already fully analyzed and should be excluded from this
-  // analysis.
-  SegmentSet excluded;
+  // These are the segments of the full condition found so far. Should be
+  // excluded from the analysis now, does not include elements of sub_condition.
+  SegmentSet full_condition;
 
   // These segments have been determined to be part of a sub condition.
   SegmentSet sub_condition;
@@ -38,6 +38,7 @@ struct Task {
 
 struct Context {
   const SegmentSet all_segments;
+  const SegmentSet inscope_segments;
   const RequestedSegmentationInformation* segmentation_info;
   GlyphClosureCache* glyph_closure_cache;
   std::vector<Task> queue;
@@ -70,12 +71,15 @@ struct Context {
           "glyphs to analyze must be in the closure of all segments.");
     }
 
+    SegmentSet to_be_tested = all_segments;
+    to_be_tested.intersect(inscope_segments);
+
     // If any glyphs remain that do not have existing conditions these are
     // covered by a task with no excluded segments.
     queue.push_back(Task{
-        .excluded = {},
+        .full_condition = {},
         .sub_condition = {},
-        .to_be_tested = all_segments,
+        .to_be_tested = to_be_tested,
         .glyphs = glyphs,
     });
 
@@ -107,6 +111,8 @@ struct Context {
     except.subtract(segments);
     GlyphSet closure_glyphs = TRY(SegmentClosure(except));
     closure_glyphs.intersect(glyphs);
+
+    except.intersect(inscope_segments);
     return std::make_pair(closure_glyphs, std::move(except));
   }
 
@@ -123,7 +129,7 @@ struct Context {
     }
 
     queue.push_back(Task{
-        .excluded = condition,
+        .full_condition = condition,
         .sub_condition = {},
         .to_be_tested = except,
         .glyphs = glyphs_with_additional_conditions,
@@ -175,7 +181,7 @@ struct Context {
     doesnt_need_test_segment.intersect(closure_glyphs);
 
     queue.push_back(Task{
-        .excluded = task.excluded,
+        .full_condition = task.full_condition,
         .sub_condition = task.sub_condition,
         .to_be_tested = task.to_be_tested,
         .glyphs = doesnt_need_test_segment,
@@ -183,7 +189,7 @@ struct Context {
 
     task.sub_condition.insert(test_segment);
     queue.push_back(Task{
-        .excluded = task.excluded,
+        .full_condition = task.full_condition,
         .sub_condition = task.sub_condition,
         .to_be_tested = task.to_be_tested,
         .glyphs = needs_test_segment,
@@ -203,14 +209,20 @@ struct Context {
     // We have identified a sub condition for glyphs, however as usual
     // there may be remaining additional conditions which we need to
     // check for
-    task.excluded.union_set(task.sub_condition);
+    task.full_condition.union_set(task.sub_condition);
     auto [additional_condition_glyphs, remaining] =
-        TRY(HasAdditionalConditions(task.excluded, task.glyphs));
+        TRY(HasAdditionalConditions(task.full_condition, task.glyphs));
+
+    if (!additional_condition_glyphs.empty() && remaining.empty()) {
+      return absl::InternalError(
+          "Additional conditions check has failed, but there are no more "
+          "non-excluded segments to utilize.");
+    }
 
     // Anything left in glyphs has additional conditions, recurse again to
     // analyze them further
     queue.push_back(Task{
-        .excluded = task.excluded,
+        .full_condition = task.full_condition,
         .sub_condition = {},
         .to_be_tested = remaining,
         .glyphs = additional_condition_glyphs,
@@ -265,7 +277,8 @@ static SegmentSet NonEmptySegments(
 StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, GlyphSet glyphs) {
+    GlyphClosureCache& closure_cache, GlyphSet glyphs,
+    SegmentSet inscope_segments) {
   VLOG(0) << "Analyzing " << glyphs.size()
           << " unmapped glyphs with the complex condition detector.";
 
@@ -279,6 +292,7 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
   // speed things up.
   Context context{
       .all_segments = NonEmptySegments(segmentation_info),
+      .inscope_segments = inscope_segments,
       .segmentation_info = &segmentation_info,
       .glyph_closure_cache = &closure_cache,
       .queue = {},
