@@ -104,10 +104,7 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     TRYV(non_incremental_context.glyph_groupings.CombinePatches(group, {}));
   }
 
-  GlyphSet all_glyphs;
-  uint32_t glyph_count = hb_face_get_glyph_count(face);
-  all_glyphs.insert_range(0, glyph_count - 1);
-  TRYV(non_incremental_context.GroupGlyphs(all_glyphs));
+  TRYV(non_incremental_context.GroupGlyphs(context.SegmentationInfo().FullClosure()));
 
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
@@ -552,8 +549,7 @@ StatusOr<SegmentationContext>
 ClosureGlyphSegmenter::InitializeSegmentationContext(
     hb_face_t* face, SubsetDefinition initial_segment,
     std::vector<Segment> segments) const {
-  uint32_t glyph_count = hb_face_get_glyph_count(face);
-  if (!glyph_count) {
+  if (!hb_face_get_glyph_count(face)) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
   }
 
@@ -575,9 +571,7 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   }
   context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
 
-  GlyphSet all_glyphs;
-  all_glyphs.insert_range(0, glyph_count - 1);
-  TRYV(context.GroupGlyphs(all_glyphs));
+  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs()));
   context.glyph_closure_cache.LogClosureCount("Condition grouping");
 
   return context;

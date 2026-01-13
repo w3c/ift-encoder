@@ -122,9 +122,7 @@ class SegmentationContext {
       TRY(ReprocessSegment(segment_index));
     }
 
-    common::GlyphSet all_glyphs;
-    all_glyphs.insert_range(0, glyph_count - 1);
-    TRYV(GroupGlyphs(all_glyphs));
+    TRYV(GroupGlyphs(SegmentationInfo().NonInitFontGlyphs()));
     glyph_closure_cache.LogClosureCount(
         "Segmentation reprocess for init def change.");
 
