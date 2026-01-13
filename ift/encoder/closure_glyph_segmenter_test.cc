@@ -1553,6 +1553,43 @@ if (s2 AND s5) then p6
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
+  // In this test we enable merging of segments into the init font
+  UnicodeFrequencies frequencies{
+      /* s0 */ {{0x20, 0x20},   1000},
+      /* s1 */ {{0x62a, 0x62a}, 1000},
+      /* s2 */ {{0x62b, 0x62b}, 1000},
+      /* s3 */ {{0x62c, 0x62c}, 1},
+      /* s4 */ {{0x62d, 0x62d}, 1},
+  };
+
+  MergeStrategy strategy =
+      *MergeStrategy::BigramCostBased(std::move(frequencies));
+  strategy.SetInitFontMergeThreshold(-75);
+
+  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
+      noto_nastaliq_urdu.get(), {},
+      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // s0, 1, and 2 will be moved to init font.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},
+      {},
+      {},
+      {0x62c, 0x62d},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  // Complex condition if ((s1 OR s2 OR s3 OR s4)) then ... is moved to the init font.
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid1, gid3, gid4, gid9, gid10, gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid155, gid156, gid172, gid174 }
+p0: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
+if (s3) then p0
+)");
+}
+
 // TODO(garretrieger): test that segments are excluded by init font segment. ie.
 // if a segment is present in the init font then it should be cleared out in the
 // segmentation.

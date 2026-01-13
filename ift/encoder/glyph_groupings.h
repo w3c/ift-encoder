@@ -164,6 +164,15 @@ class GlyphGroupings {
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
       const RequestedSegmentationInformation& segmentation_info) const;
 
+  std::optional<ActivationCondition> GlyphToCondition(glyph_id_t gid) const {
+    auto it = glyph_to_condition_.find(gid);
+    if (it == glyph_to_condition_.end()) {
+      return std::nullopt;
+    }
+
+    return it->second;
+  }
+
  private:
   void CollectSegments(glyph_id_t gid, common::SegmentSet& segments);
 

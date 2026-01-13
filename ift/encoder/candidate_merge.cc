@@ -293,20 +293,12 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
       continue;
     }
 
-    const GlyphConditions& conditions =
-        context.glyph_condition_set.ConditionsFor(gid);
-    if (conditions.and_segments.size() == 1) {
-      conditions_of_interest.insert(ActivationCondition::exclusive_segment(
-          *conditions.and_segments.begin(), 0));
-    } else if (!conditions.and_segments.empty()) {
-      conditions_of_interest.insert(
-          ActivationCondition::and_segments(conditions.and_segments, 0));
+    auto result = context.glyph_groupings.GlyphToCondition(gid);
+    if (!result.has_value()) {
+      continue;
     }
 
-    if (!conditions.or_segments.empty()) {
-      conditions_of_interest.insert(
-          ActivationCondition::or_segments(conditions.or_segments, 0));
-    }
+    conditions_of_interest.insert(*result);
   }
 
   btree_map<ActivationCondition, GlyphSet> result;
@@ -395,6 +387,7 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     double patch_probability = TRY(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
                               *merger.Strategy().ProbabilityCalculator()));
+
     double patch_size_before =
         TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
             glyphs)) +
