@@ -37,23 +37,18 @@ class RequestedSegmentationInformation {
 
   void ReassignInitSubset(GlyphClosureCache& closure_cache,
                           SubsetDefinition new_def) {
-    init_font_segment_ = std::move(new_def);
 
-    SubsetDefinition all;
-    all.Union(init_font_segment_);
-    for (const auto& s : segments_) {
-      all.Union(s.Definition());
+    init_font_segment_ = std::move(new_def);
+    while (ExpandInitClosure(closure_cache)) {
+      // Expand the init closure until it stops changing.
     }
 
+    full_definition_.Union(init_font_segment_);
     {
-      auto closure = closure_cache.GlyphClosure(all);
+      auto closure = closure_cache.GlyphClosure(full_definition_);
       if (closure.ok()) {
         full_closure_ = std::move(*closure);
       }
-    }
-
-    while (ExpandInitClosure(closure_cache)) {
-      // Expand the init closure until it stops changing.
     }
 
     // Changing the init font subset may have caused additional codepoints to be
@@ -80,6 +75,11 @@ class RequestedSegmentationInformation {
   }
 
   const common::GlyphSet& InitFontGlyphs() const { return init_font_glyphs_; }
+  common::GlyphSet NonInitFontGlyphs() const {
+    common::GlyphSet out = full_closure_;
+    out.subtract(InitFontGlyphs());
+    return out;
+  }
 
   const common::GlyphSet& FullClosure() const { return full_closure_; }
 
