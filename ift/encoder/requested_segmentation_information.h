@@ -37,9 +37,8 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
-  void ReassignInitSubset(GlyphClosureCache& closure_cache,
+  common::SegmentSet ReassignInitSubset(GlyphClosureCache& closure_cache,
                           SubsetDefinition new_def) {
-
     init_font_segment_ = std::move(new_def);
     while (ExpandInitClosure(closure_cache)) {
       // Expand the init closure until it stops changing.
@@ -56,9 +55,17 @@ class RequestedSegmentationInformation {
     // Changing the init font subset may have caused additional codepoints to be
     // moved to the init font. We need to update the segment definitions to
     // remove these.
+    common::SegmentSet changed;
+    uint32_t s_index = 0;
     for (auto& s : segments_) {
-      s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+      if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
+        changed.insert(s_index);
+        s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+      }
+      s_index++;
     }
+
+    return changed;
   }
 
   UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
