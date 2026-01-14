@@ -7,10 +7,8 @@
 
 namespace ift::encoder {
 
-static bool CheckSegmentsAreDisjoint(
-  const SubsetDefinition& init_segment,
-  const std::vector<Segment>& segments
-) {
+static bool CheckSegmentsAreDisjoint(const SubsetDefinition& init_segment,
+                                     const std::vector<Segment>& segments) {
   bool segments_disjoint = true;
   SubsetDefinition full_definition = init_segment;
   for (const auto& s : segments) {

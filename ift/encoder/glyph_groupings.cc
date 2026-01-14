@@ -24,7 +24,17 @@ using common::SegmentSet;
 namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
-  unmapped_glyphs_.erase(gid);
+  if (unmapped_glyphs_.erase(gid)) {
+    // unmapped glyphs are put into a special or_glyph_groups_ on fallback_segments_
+    // so remove from there as well.
+    auto it = or_glyph_groups_.find(fallback_segments_);
+    if (it != or_glyph_groups_.end()) {
+      it->second.erase(gid);
+      if (it->second.empty()) {
+        or_glyph_groups_.erase(it);
+      }
+    }
+  }
 
   auto it = glyph_to_condition_.find(gid);
   if (it == glyph_to_condition_.end()) {

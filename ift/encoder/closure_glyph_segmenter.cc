@@ -106,7 +106,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     TRYV(non_incremental_context.glyph_groupings.CombinePatches(group, {}));
   }
 
-  TRYV(non_incremental_context.GroupGlyphs(context.SegmentationInfo().FullClosure(), {}));
+  TRYV(non_incremental_context.GroupGlyphs(
+      context.SegmentationInfo().FullClosure(), {}));
 
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
