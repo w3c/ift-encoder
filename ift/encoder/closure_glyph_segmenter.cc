@@ -484,7 +484,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // Once we've gotten standard segments placed into the initial font as needed,
   // if requested any remaining fallback glyphs are also moved into the init
   // font.
-  GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
+  GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
   if (unmapped_glyph_handling_ == MOVE_TO_INIT_FONT &&
       !fallback_glyphs.empty()) {
     VLOG(0) << "Moving " << fallback_glyphs.size()

@@ -7,7 +7,6 @@
 #include "common/try.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/types.h"
 
 using absl::Status;
@@ -105,13 +104,6 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   SegmentSet changed_segments = segmentation_info_.ReassignInitSubset(
       glyph_closure_cache, std::move(new_def));
 
-  SegmentSet newly_empty_segments;
-  for (segment_index_t s : changed_segments) {
-    if (segmentation_info_.Segments().at(s).Definition().Empty()) {
-      newly_empty_segments.insert(s);
-    }
-  }
-
   // Consider all glyphs moved to the init font as changed.
   changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());
 
@@ -136,7 +128,6 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     }
   }
 
-  glyph_groupings.RemoveFallbackSegments(newly_empty_segments);
   TRYV(GroupGlyphs(changed_gids, changed_segments));
 
   glyph_closure_cache.LogClosureCount(

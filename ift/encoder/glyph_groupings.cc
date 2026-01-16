@@ -24,17 +24,7 @@ using common::SegmentSet;
 namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
-  if (unmapped_glyphs_.erase(gid)) {
-    // unmapped glyphs are put into a special or_glyph_groups_ on
-    // fallback_segments_ so remove from there as well.
-    auto it = or_glyph_groups_.find(fallback_segments_);
-    if (it != or_glyph_groups_.end()) {
-      it->second.erase(gid);
-      if (it->second.empty()) {
-        or_glyph_groups_.erase(it);
-      }
-    }
-  }
+  unmapped_glyphs_.erase(gid);
 
   auto it = glyph_to_condition_.find(gid);
   if (it == glyph_to_condition_.end()) {
@@ -165,14 +155,17 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
     }
   }
 
-  auto fallback = or_glyph_groups_.find(fallback_segments_);
-  if (fallback != or_glyph_groups_.end()) {
-    or_glyph_groups[fallback_segments_] = fallback->second;
+  // The fallback patch isn't stored in ConditionAndGlyphs() so add it in
+  // manually.
+  SegmentSet fallback_segments;
+  if (!unmapped_glyphs_.empty()) {
+    fallback_segments = segmentation_info.NonEmptySegments();
+    or_glyph_groups[fallback_segments].union_set(unmapped_glyphs_);
   }
 
   TRYV(GlyphSegmentation::GroupsToSegmentation(
       and_glyph_groups, or_glyph_groups, exclusive_glyph_groups,
-      fallback_segments_, segmentation));
+      fallback_segments, segmentation));
 
   return segmentation;
 }
@@ -293,15 +286,10 @@ Status GlyphGroupings::GroupGlyphs(
   // them in full if needed.
   TRYV(RecomputeCombinedConditionsIfNeeded(glyphs));
 
-  for (uint32_t gid : unmapped_glyphs_) {
-    // this glyph is not activated anywhere but is needed in the full closure
-    // so add it to an activation condition of any segment.
-    or_glyph_groups_[fallback_segments_].insert(gid);
-  }
-
   // Note: we don't need to include the fallback segment/condition in
   //       conditions_and_glyphs since all downstream processing which
-  //       utilizes that map ignores the fallback segment.
+  //       utilizes that map ignores the fallback segment. It will be
+  //       manually added to the final segmentation in ToGlyphSegmentation()
 
   return absl::OkStatus();
 }

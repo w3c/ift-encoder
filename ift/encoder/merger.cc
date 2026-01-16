@@ -207,7 +207,8 @@ Status Merger::MoveSegmentsToInitFont() {
 
   VLOG(0) << "Initial font now has "
           << Context().SegmentationInfo().InitFontSegment().codepoints.size()
-          << " codepoints.";
+          << " codepoints and "
+          << Context().SegmentationInfo().InitFontGlyphs().size() << " glyphs";
   return absl::OkStatus();
 }
 

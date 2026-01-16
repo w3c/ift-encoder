@@ -67,7 +67,7 @@ Status GlyphSegmentation::GroupsToSegmentation(
                  *or_segments.begin()));
     }
 
-    bool is_fallback = (or_segments == fallback_group);
+    bool is_fallback = !fallback_group.empty() && (or_segments == fallback_group);
     segmentation.patches_.insert(std::pair(next_id, glyphs));
     segmentation.conditions_.insert(
         ActivationCondition::or_segments(or_segments, next_id, is_fallback));

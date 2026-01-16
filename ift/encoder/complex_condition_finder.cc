@@ -287,18 +287,6 @@ static btree_map<SegmentSet, GlyphSet> ExistingConditions(
   return existing_conditions;
 }
 
-static SegmentSet NonEmptySegments(
-    const RequestedSegmentationInformation& segmentation_info) {
-  SegmentSet segments;
-  for (segment_index_t s = 0; s < segmentation_info.Segments().size(); s++) {
-    if (segmentation_info.Segments().at(s).Definition().Empty()) {
-      continue;
-    }
-    segments.insert(s);
-  }
-  return segments;
-}
-
 StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
@@ -321,7 +309,7 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
   // with no GSUB interaction from this analysis which should significantly
   // speed things up.
   Context context{
-      .all_segments = NonEmptySegments(segmentation_info),
+      .all_segments = segmentation_info.NonEmptySegments(),
       .inscope_segments = inscope_segments,
       .segmentation_info = &segmentation_info,
       .glyph_closure_cache = &closure_cache,

@@ -110,6 +110,19 @@ class RequestedSegmentationInformation {
     return out;
   }
 
+  common::SegmentSet NonEmptySegments() const {
+    // TODO(garretrieger): consider caching this value.
+    common::SegmentSet segments;
+    segment_index_t index = 0;
+    for (const auto& s : Segments()) {
+      if (!s.Definition().Empty()) {
+        segments.insert(index);
+      }
+      index++;
+    }
+    return segments;
+  }
+
  private:
   // Recomputes the init font glyph and codepoint closure, returns true
   // if the init font segment was modified.

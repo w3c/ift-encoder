@@ -53,7 +53,7 @@ class SegmentationContext {
         segmentation_info_(segments, initial_segment, glyph_closure_cache,
                            unmapped_glyph_handling),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(segments, hb_face_get_glyph_count(face)),
+        glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality) {}
 
   unsigned BrotliQuality() const { return brotli_quality_; }
@@ -96,8 +96,8 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
-    // TODO XXXXX now that invalidation here is only for glyph condition set we
-    // should consider changing this so that invalidation is internal to glyph
+    // TODO(garretrieger): now that invalidation here is only for glyph condition
+    // set we should consider changing this so that invalidation is internal to glyph
     // condition set reprocessing (like with GroupGlyphs).
     //
     // Note: glyph_groupings will be automatically invalidated as needed when
