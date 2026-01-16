@@ -38,7 +38,7 @@ class RequestedSegmentationInformation {
   }
 
   common::SegmentSet ReassignInitSubset(GlyphClosureCache& closure_cache,
-                          SubsetDefinition new_def) {
+                                        SubsetDefinition new_def) {
     init_font_segment_ = std::move(new_def);
     while (ExpandInitClosure(closure_cache)) {
       // Expand the init closure until it stops changing.

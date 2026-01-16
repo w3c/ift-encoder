@@ -79,18 +79,18 @@ Status CheckForDisjointCodepoints(
   return absl::OkStatus();
 }
 
-static void PrintCondition(const std::pair<ActivationCondition, GlyphSet>& condition, bool added) {
-  VLOG(0) << (added ? "++ " : "-- ") << condition.first.ToString() << " => " << condition.second.ToString();
+static void PrintCondition(
+    const std::pair<ActivationCondition, GlyphSet>& condition, bool added) {
+  VLOG(0) << (added ? "++ " : "-- ") << condition.first.ToString() << " => "
+          << condition.second.ToString();
 }
 
-static void PrintDiff(
-  const btree_map<ActivationCondition, GlyphSet>& a,
-  const btree_map<ActivationCondition, GlyphSet>& b
-) {
+static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
+                      const btree_map<ActivationCondition, GlyphSet>& b) {
   auto it_a = a.begin();
   auto it_b = b.begin();
 
-  while(it_a != a.end() || it_b != b.end()) {
+  while (it_a != a.end() || it_b != b.end()) {
     if (it_a == a.end()) {
       PrintCondition(*it_b, true);
       it_b++;
@@ -148,7 +148,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
       context.glyph_groupings.ConditionsAndGlyphs()) {
     VLOG(0) << "-- incremental grouping";
     VLOG(0) << "++ non-incremental grouping";
-    PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(), non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
+    PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
+              non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
     return absl::FailedPreconditionError(
         "conditions_and_glyphs aren't correct.");
   }

@@ -25,9 +25,8 @@ Status SegmentationContext::ValidateSegmentation(
   for (const auto& [id, gids] : segmentation.GidSegments()) {
     for (glyph_id_t gid : gids) {
       if (initial_closure.contains(gid)) {
-        return absl::FailedPreconditionError(
-          absl::StrCat(
-            "Initial font glyph g", gid," is present in a patch."));
+        return absl::FailedPreconditionError(absl::StrCat(
+            "Initial font glyph g", gid, " is present in a patch."));
       }
       if (visited.contains(gid)) {
         return absl::FailedPreconditionError(
@@ -103,8 +102,8 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   // Record a set of all glyphs prior to the init subset redefinition.
   // Will be needed to do group invalidation correctly.
   GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
-  SegmentSet changed_segments = segmentation_info_.ReassignInitSubset(glyph_closure_cache,
-                                        std::move(new_def));
+  SegmentSet changed_segments = segmentation_info_.ReassignInitSubset(
+      glyph_closure_cache, std::move(new_def));
 
   SegmentSet newly_empty_segments;
   for (segment_index_t s : changed_segments) {
@@ -128,9 +127,11 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     TRY(ReprocessSegment(segment_index));
   }
 
-  // the groupings can be incrementally recomputed by looking at what conditions have changed.
+  // the groupings can be incrementally recomputed by looking at what conditions
+  // have changed.
   for (glyph_id_t gid : SegmentationInfo().NonInitFontGlyphs()) {
-    if (previous_glyph_condition_set.ConditionsFor(gid) != glyph_condition_set.ConditionsFor(gid)) {
+    if (previous_glyph_condition_set.ConditionsFor(gid) !=
+        glyph_condition_set.ConditionsFor(gid)) {
       changed_gids.insert(gid);
     }
   }

@@ -7,6 +7,7 @@
 #include "common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 using absl::btree_map;
@@ -31,6 +32,10 @@ struct Task {
 
   // These segments have not yet been tested.
   SegmentSet to_be_tested;
+
+  // The subset definition of the union of segments in sub_condition,
+  // to_be_tested, and the initial font subset definition.
+  SubsetDefinition subset_definition;
 
   // The set of glyphs in scope for analysis.
   GlyphSet glyphs;
@@ -76,12 +81,7 @@ struct Context {
 
     // If any glyphs remain that do not have existing conditions these are
     // covered by a task with no excluded segments.
-    queue.push_back(Task{
-        .full_condition = {},
-        .sub_condition = {},
-        .to_be_tested = to_be_tested,
-        .glyphs = glyphs,
-    });
+    queue.push_back(CreateTask({}, {}, to_be_tested, glyphs));
 
     return absl::OkStatus();
   }
@@ -99,6 +99,43 @@ struct Context {
   }
 
  private:
+  Task CreateTask(SegmentSet full_condition, SegmentSet sub_condition,
+                  SegmentSet to_be_tested, GlyphSet glyphs) {
+    SegmentSet all = sub_condition;
+    all.union_set(to_be_tested);
+    SubsetDefinition task_definition = CombinedDefinition(all);
+    return Task{
+        .full_condition = full_condition,
+        .sub_condition = sub_condition,
+        .to_be_tested = to_be_tested,
+        .subset_definition = task_definition,
+        .glyphs = glyphs,
+    };
+  }
+
+  Task CreateSubTask(const Task& task, GlyphSet new_glyphs,
+                     segment_index_t tested, bool keep) {
+    SegmentSet new_to_be_tested = task.to_be_tested;
+    new_to_be_tested.erase(tested);
+
+    SegmentSet new_sub_condition = task.sub_condition;
+    SubsetDefinition new_sub_definition = task.subset_definition;
+    if (keep) {
+      new_sub_condition.insert(tested);
+    } else {
+      new_sub_definition.Subtract(
+          segmentation_info->Segments().at(tested).Definition());
+    }
+
+    return Task{
+        .full_condition = task.full_condition,
+        .sub_condition = new_sub_condition,
+        .to_be_tested = new_to_be_tested,
+        .subset_definition = new_sub_definition,
+        .glyphs = new_glyphs,
+    };
+  }
+
   // Returns true if all glyphs are in the closure of segments.
   StatusOr<bool> InClosure(const SegmentSet& segments, const GlyphSet& glyphs) {
     GlyphSet closure = TRY(SegmentClosure(segments));
@@ -128,12 +165,8 @@ struct Context {
       return absl::OkStatus();
     }
 
-    queue.push_back(Task{
-        .full_condition = condition,
-        .sub_condition = {},
-        .to_be_tested = except,
-        .glyphs = glyphs_with_additional_conditions,
-    });
+    queue.push_back(
+        CreateTask(condition, {}, except, glyphs_with_additional_conditions));
     all_glyphs.subtract(condition_glyphs);
 
     return absl::OkStatus();
@@ -169,31 +202,22 @@ struct Context {
     }
 
     segment_index_t test_segment = *task.to_be_tested.min();
-    task.to_be_tested.erase(test_segment);
 
-    SegmentSet closure_segments = task.sub_condition;
-    closure_segments.union_set(task.to_be_tested);
-    GlyphSet closure_glyphs = TRY(SegmentClosure(closure_segments));
+    SubsetDefinition subset_definition = task.subset_definition;
+    subset_definition.Subtract(
+        segmentation_info->Segments().at(test_segment).Definition());
+    GlyphSet closure_glyphs =
+        TRY(glyph_closure_cache->GlyphClosure(subset_definition));
 
     GlyphSet needs_test_segment = task.glyphs;
     needs_test_segment.subtract(closure_glyphs);
     GlyphSet doesnt_need_test_segment = task.glyphs;
     doesnt_need_test_segment.intersect(closure_glyphs);
 
-    queue.push_back(Task{
-        .full_condition = task.full_condition,
-        .sub_condition = task.sub_condition,
-        .to_be_tested = task.to_be_tested,
-        .glyphs = doesnt_need_test_segment,
-    });
-
-    task.sub_condition.insert(test_segment);
-    queue.push_back(Task{
-        .full_condition = task.full_condition,
-        .sub_condition = task.sub_condition,
-        .to_be_tested = task.to_be_tested,
-        .glyphs = needs_test_segment,
-    });
+    queue.push_back(
+        CreateSubTask(task, doesnt_need_test_segment, test_segment, false));
+    queue.push_back(
+        CreateSubTask(task, needs_test_segment, test_segment, true));
 
     return absl::OkStatus();
   }
@@ -221,28 +245,29 @@ struct Context {
 
     // Anything left in glyphs has additional conditions, recurse again to
     // analyze them further
-    queue.push_back(Task{
-        .full_condition = task.full_condition,
-        .sub_condition = {},
-        .to_be_tested = remaining,
-        .glyphs = additional_condition_glyphs,
-    });
+    queue.push_back(CreateTask(task.full_condition, {}, remaining,
+                               additional_condition_glyphs));
     return absl::OkStatus();
   }
 
   SubsetDefinition CombinedDefinition(const SegmentSet& segments) {
+    // TODO(garretrieger): this approach is inefficient vs the subtraction
+    // method, add the special case path or remove use of this function in
+    // favour of incrementally produced defs.
     SubsetDefinition def;
     for (segment_index_t s : segments) {
       def.Union(segmentation_info->Segments().at(s).Definition());
     }
+
+    // Init font subset definition must be part of the closure input
+    // since it contributes to reachability of things.
+    def.Union(segmentation_info->InitFontSegment());
+
     return def;
   }
 
   StatusOr<GlyphSet> SegmentClosure(const SegmentSet& segments) {
     SubsetDefinition closure_def = CombinedDefinition(segments);
-    // Init font subset definition must be part of the closure input
-    // since it contributes to reachability of things.
-    closure_def.Union(segmentation_info->InitFontSegment());
     return glyph_closure_cache->GlyphClosure(closure_def);
   }
 };
@@ -279,6 +304,11 @@ StatusOr<btree_map<SegmentSet, GlyphSet>> FindSupersetDisjunctiveConditionsFor(
     const GlyphConditionSet& glyph_condition_set,
     GlyphClosureCache& closure_cache, GlyphSet glyphs,
     SegmentSet inscope_segments) {
+  if (!segmentation_info.SegmentsAreDisjoint()) {
+    return absl::InvalidArgumentError(
+        "Complex condition finding requires disjoint segments.");
+  }
+
   VLOG(0) << "Analyzing " << glyphs.size()
           << " unmapped glyphs with the complex condition detector.";
 
