@@ -66,13 +66,13 @@ StatusOr<GlyphSet> GlyphClosureCache::CodepointsToOrGids(
 
 // This generates the subset definition that contains all segments except for
 // those listed in segment_ids.
-SubsetDefinition ComputExceptSegment(
+SubsetDefinition ComputeExceptSegment(
     const RequestedSegmentationInformation& segmentation_info,
     const SegmentSet& segment_ids, const SubsetDefinition& combined) {
   if (segmentation_info.SegmentsAreDisjoint() &&
       (segment_ids.size() == 1 ||
        segment_ids.size() < (segmentation_info.Segments().size() / 2))) {
-    // Approach that is optimzied for the case where input segments are disjoint
+    // Approach that is optimized for the case where input segments are disjoint
     // and the number of segment ids is smallish.
     SubsetDefinition except_segment = segmentation_info.FullDefinition();
     except_segment.Subtract(combined);
@@ -135,7 +135,7 @@ Status GlyphClosureCache::AnalyzeSegment(
   }
 
   SubsetDefinition except_segment =
-      ComputExceptSegment(segmentation_info, segment_ids, combined);
+      ComputeExceptSegment(segmentation_info, segment_ids, combined);
   auto B_except_segment_closure = TRY(GlyphClosure(except_segment));
 
   SubsetDefinition only_segment = combined;

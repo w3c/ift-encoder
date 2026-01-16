@@ -25,8 +25,8 @@ namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   if (unmapped_glyphs_.erase(gid)) {
-    // unmapped glyphs are put into a special or_glyph_groups_ on fallback_segments_
-    // so remove from there as well.
+    // unmapped glyphs are put into a special or_glyph_groups_ on
+    // fallback_segments_ so remove from there as well.
     auto it = or_glyph_groups_.find(fallback_segments_);
     if (it != or_glyph_groups_.end()) {
       it->second.erase(gid);
@@ -334,11 +334,12 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
   }
 
   // Note: inscope_segments is not currently used, the approach needs more
-  // work. In testing in some cases it caused complex conditions to be larger than
-  // necessary when a segment which could shorten the condition isn't in scope.
+  // work. In testing in some cases it caused complex conditions to be larger
+  // than necessary when a segment which could shorten the condition isn't in
+  // scope.
   //
-  // For example, with true condition (a or b) AND (b or c), if only {a, c} is inscope
-  // then we don't have the possibility of finding the superset of {b}.
+  // For example, with true condition (a or b) AND (b or c), if only {a, c} is
+  // inscope then we don't have the possibility of finding the superset of {b}.
   btree_map<SegmentSet, GlyphSet> complex_conditions =
       TRY(FindSupersetDisjunctiveConditionsFor(
           segmentation_info, glyph_condition_set, closure_cache,

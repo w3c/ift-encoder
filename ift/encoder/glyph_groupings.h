@@ -240,13 +240,13 @@ class GlyphGroupings {
     if (!did_insert) {
       // If there's an existing value it must match what we're trying to add
       if (!new_value_it->second.is_subset_of(glyphs)) {
-        return absl::InternalError(
-          absl::StrCat(
+        return absl::InternalError(absl::StrCat(
             "Trying to add a condition and glyph mapping (",
-            condition.ToString(), " => ", glyphs.ToString(),") which "
+            condition.ToString(), " => ", glyphs.ToString(),
+            ") which "
             "would override an existing mapping (",
-            new_value_it->first.ToString(), " => ", new_value_it->second.ToString(),
-            ") to a different value."));
+            new_value_it->first.ToString(), " => ",
+            new_value_it->second.ToString(), ") to a different value."));
       }
 
       // We allow overrides that only increase the glyph set.
@@ -254,7 +254,7 @@ class GlyphGroupings {
       new_value_it->second.union_set(glyphs);
     } else {
       for (segment_index_t s : condition.TriggeringSegments()) {
-       triggering_segment_to_conditions_[s].insert(new_value_it->first);
+        triggering_segment_to_conditions_[s].insert(new_value_it->first);
       }
     }
 
