@@ -333,10 +333,16 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
     return absl::OkStatus();
   }
 
+  // Note: inscope_segments is not currently used, the approach needs more
+  // work. In testing in some cases it caused complex conditions to be larger than
+  // necessary when a segment which could shorten the condition isn't in scope.
+  //
+  // For example, with true condition (a or b) AND (b or c), if only {a, c} is inscope
+  // then we don't have the possibility of finding the superset of {b}.
   btree_map<SegmentSet, GlyphSet> complex_conditions =
       TRY(FindSupersetDisjunctiveConditionsFor(
           segmentation_info, glyph_condition_set, closure_cache,
-          unmapped_glyphs_, inscope_segments));
+          unmapped_glyphs_, SegmentSet::all()));
 
   unmapped_glyphs_.clear();
   for (const auto& [s, g] : complex_conditions) {
