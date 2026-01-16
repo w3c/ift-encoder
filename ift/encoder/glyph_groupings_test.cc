@@ -52,7 +52,7 @@ class GlyphGroupingsTest : public ::testing::Test {
             Segment({'h'}, ProbabilityBound::Zero()),       // s4
         }),
 
-        glyph_groupings_(segments_, hb_face_get_glyph_count(roboto_.get())),
+        glyph_groupings_(hb_face_get_glyph_count(roboto_.get())),
         segments_complex_({
             Segment({0x54}, ProbabilityBound::Zero()),    // s0
             Segment({0x6C}, ProbabilityBound::Zero()),    // s1
@@ -60,8 +60,7 @@ class GlyphGroupingsTest : public ::testing::Test {
             Segment({0x21A}, ProbabilityBound::Zero()),   // s3
             Segment({0xF6C3}, ProbabilityBound::Zero()),  // s4
         }),
-        glyph_groupings_complex_(segments_complex_,
-                                 hb_face_get_glyph_count(roboto_.get())) {
+        glyph_groupings_complex_(hb_face_get_glyph_count(roboto_.get())) {
     uint32_t num_glyphs = hb_face_get_glyph_count(roboto_.get());
 
     SubsetDefinition init_font_segment;
@@ -537,7 +536,7 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
                                     glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  GlyphGroupings other(segments_, hb_face_get_glyph_count(roboto_.get()));
+  GlyphGroupings other(hb_face_get_glyph_count(roboto_.get()));
   sc = other.GroupGlyphs(*requested_segmentation_info_, *glyph_conditions_,
                          *closure_cache_, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
@@ -599,7 +598,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_LeaveUnmapped) {
   };
 
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_EQ(glyph_groupings_complex_.FallbackGlyphs(),
+  ASSERT_EQ(glyph_groupings_complex_.UnmappedGlyphs(),
             (GlyphSet{442, 748, 782}));
 }
 
@@ -625,7 +624,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
   };
 
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalUnchanged) {
@@ -642,14 +641,14 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalUnchanged) {
       *closure_cache_, {748}, {});
   ASSERT_TRUE(sc.ok()) << sc;
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 
   sc = glyph_groupings_complex_.GroupGlyphs(
       *requested_segmentation_info_complex_, *glyph_conditions_complex_,
       *closure_cache_, ToGlyphs({0x54}), {2});
   ASSERT_TRUE(sc.ok()) << sc;
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalChanged) {
@@ -689,7 +688,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalChanged) {
   }
 
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_CombinedPatches) {
@@ -715,7 +714,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_CombinedPatches) {
   };
 
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
 TEST_F(GlyphGroupingsTest,
@@ -750,7 +749,7 @@ TEST_F(GlyphGroupingsTest,
   };
 
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
-  ASSERT_TRUE(glyph_groupings_complex_.FallbackGlyphs().empty());
+  ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
 }  // namespace ift::encoder

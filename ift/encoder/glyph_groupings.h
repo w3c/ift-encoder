@@ -2,7 +2,6 @@
 #define IFT_ENCODER_GLYPH_GROUPINGS_H_
 
 #include <cstdint>
-#include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
@@ -13,8 +12,6 @@
 #include "ift/encoder/glyph_partition.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/requested_segmentation_information.h"
-#include "ift/encoder/segment.h"
-#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -24,15 +21,8 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(const std::vector<Segment>& segments, uint32_t glyph_count)
+  GlyphGroupings(uint32_t glyph_count)
       : combined_patches_(glyph_count) {
-    uint32_t index = 0;
-    for (const auto& s : segments) {
-      if (!s.Definition().Empty()) {
-        fallback_segments_.insert(index);
-      }
-      index++;
-    }
   }
 
   bool operator==(const GlyphGroupings& other) {
@@ -40,7 +30,8 @@ class GlyphGroupings {
            or_glyph_groups_ == other.or_glyph_groups_ &&
            exclusive_glyph_groups_ == other.exclusive_glyph_groups_ &&
            combined_or_glyph_groups_ == other.combined_or_glyph_groups_ &&
-           conditions_and_glyphs_ == other.conditions_and_glyphs_;
+           conditions_and_glyphs_ == other.conditions_and_glyphs_ &&
+           unmapped_glyphs_ == other.unmapped_glyphs_;
   }
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
@@ -85,22 +76,10 @@ class GlyphGroupings {
     return empty;
   }
 
-  // Returns the set of glyphs in the fallback (always loaded) patch.
-  common::GlyphSet FallbackGlyphs() const {
-    if (fallback_segments_.empty()) {
-      return common::GlyphSet{};
-    }
-
-    auto it = or_glyph_groups_.find(fallback_segments_);
-    if (it == or_glyph_groups_.end()) {
-      return common::GlyphSet{};
-    }
-
-    return it->second;
-  }
-
-  const common::SegmentSet& FallbackSegments() const {
-    return fallback_segments_;
+  // Returns the set of glyphs that are considered unmapped,
+  // which will be placed in the fallback (always loaded) patch.
+  common::GlyphSet UnmappedGlyphs() const {
+    return unmapped_glyphs_;
   }
 
   // Returns a list of conditions which include segment.
@@ -112,17 +91,6 @@ class GlyphGroupings {
       return it->second;
     }
     return empty;
-  }
-
-  // Remove a set of segments from the fallback segments set.
-  // Invalidates any existing fallback segments or glyph group.
-  void RemoveFallbackSegments(const common::SegmentSet& removed_segments) {
-    // Invalidate the existing fallback segment 'or group', it will be fully
-    // recomputed by GroupGlyphs
-    or_glyph_groups_.erase(fallback_segments_);
-    for (segment_index_t segment_index : removed_segments) {
-      fallback_segments_.erase(segment_index);
-    }
   }
 
   // Add a set of glyphs to an existing exclusive group (and_group of one
@@ -362,9 +330,6 @@ class GlyphGroupings {
   absl::flat_hash_map<glyph_id_t, ActivationCondition>
       glyph_to_condition_pre_combination_;
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_to_condition_;
-
-  // Set of segments in the fallback condition.
-  common::SegmentSet fallback_segments_;
 
   // These glyphs aren't mapped by any conditions and as a result should be
   // included in the fallback patch.

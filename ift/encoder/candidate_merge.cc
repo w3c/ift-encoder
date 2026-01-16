@@ -106,12 +106,6 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
   merger.Context().InvalidateGlyphInformation(invalidated_glyphs_,
                                               segments_to_merge_);
 
-  // Remove the fallback segment or group, it will be fully recomputed by
-  // GroupGlyphs. This needs to happen after invalidation because in some
-  // cases invalidation may need to find conditions associated with the
-  // fallback segment.
-  merger.Context().glyph_groupings.RemoveFallbackSegments(segments_to_merge_);
-
   if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the
     // new condition sets and glyph groupings here instead of using the
@@ -283,7 +277,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
     const SegmentationContext& context, const GlyphSet& gids) {
   // To more efficiently target our search we can use the glyph_condition_set to
   // locate conditions that intersect with gids.
-  GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
+  GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
   btree_set<ActivationCondition> conditions_of_interest;
   for (glyph_id_t gid : gids) {
     if (fallback_glyphs.contains(gid)) {
@@ -311,7 +305,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
   // We also need to check if there's a fallback patch and it intersects gids.
   if (!fallback_glyphs.empty() && fallback_glyphs.intersects(gids)) {
     ActivationCondition condition = ActivationCondition::or_segments(
-        context.glyph_groupings.FallbackSegments(), 0);
+        {}, 0, true);
     result.insert(std::make_pair(condition, fallback_glyphs));
   }
 
@@ -384,9 +378,12 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     // we'd include that in this calculation. This should have only a minor
     // impact on the computed delta's since the majority of cases we process
     // here will just be full patch removals.
-    double patch_probability = TRY(
+    double patch_probability = 1.0;
+    if (!condition.IsFallback()) {
+      patch_probability = TRY(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
                               *merger.Strategy().ProbabilityCalculator()));
+    }
 
     double patch_size_before =
         TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
