@@ -42,6 +42,7 @@ class SegmentationContext {
  public:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments,
+                      UnmappedGlyphHandling unmapped_glyph_handling,
                       uint32_t brotli_quality,
                       uint32_t init_font_brotli_quality)
       : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
@@ -49,9 +50,10 @@ class SegmentationContext {
             NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        segmentation_info_(segments, initial_segment, glyph_closure_cache),
+        segmentation_info_(segments, initial_segment, glyph_closure_cache,
+                           unmapped_glyph_handling),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(segments, hb_face_get_glyph_count(face)),
+        glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality) {}
 
   unsigned BrotliQuality() const { return brotli_quality_; }
@@ -94,6 +96,10 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
+    // TODO(garretrieger): now that invalidation here is only for glyph condition
+    // set we should consider changing this so that invalidation is internal to glyph
+    // condition set reprocessing (like with GroupGlyphs).
+    //
     // Note: glyph_groupings will be automatically invalidated as needed when
     // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
@@ -102,32 +108,7 @@ class SegmentationContext {
   /*
    * Invalidates all grouping information and fully reprocesses all segments.
    */
-  absl::Status ReassignInitSubset(SubsetDefinition new_def) {
-    unsigned glyph_count = hb_face_get_glyph_count(original_face.get());
-
-    segmentation_info_.ReassignInitSubset(glyph_closure_cache,
-                                          std::move(new_def));
-
-    // All segments depend on the init subset def, so we must reprocess
-    // everything. First reset grouping information:
-    glyph_condition_set = GlyphConditionSet(glyph_count);
-    glyph_groupings =
-        GlyphGroupings(SegmentationInfo().Segments(), glyph_count);
-    inert_segments_.clear();
-
-    // Then reprocess segments:
-    for (segment_index_t segment_index = 0;
-         segment_index < SegmentationInfo().Segments().size();
-         segment_index++) {
-      TRY(ReprocessSegment(segment_index));
-    }
-
-    TRYV(GroupGlyphs(SegmentationInfo().NonInitFontGlyphs()));
-    glyph_closure_cache.LogClosureCount(
-        "Segmentation reprocess for init def change.");
-
-    return absl::OkStatus();
-  }
+  absl::Status ReassignInitSubset(SubsetDefinition new_def);
 
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
@@ -148,9 +129,11 @@ class SegmentationContext {
   //
   // The glyph condition set must be up to date and fully computed prior to
   // calling this.
-  absl::Status GroupGlyphs(const common::GlyphSet& glyphs) {
+  absl::Status GroupGlyphs(const common::GlyphSet& glyphs,
+                           const common::SegmentSet& modified_segments) {
     return glyph_groupings.GroupGlyphs(segmentation_info_, glyph_condition_set,
-                                       glyph_closure_cache, glyphs);
+                                       glyph_closure_cache, glyphs,
+                                       modified_segments);
   }
 
  private:

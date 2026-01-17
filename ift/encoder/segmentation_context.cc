@@ -5,8 +5,8 @@
 #include "absl/status/status.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/types.h"
 
 using absl::Status;
@@ -24,8 +24,8 @@ Status SegmentationContext::ValidateSegmentation(
   for (const auto& [id, gids] : segmentation.GidSegments()) {
     for (glyph_id_t gid : gids) {
       if (initial_closure.contains(gid)) {
-        return absl::FailedPreconditionError(
-            "Initial font glyph is present in a patch.");
+        return absl::FailedPreconditionError(absl::StrCat(
+            "Initial font glyph g", gid, " is present in a patch."));
       }
       if (visited.contains(gid)) {
         return absl::FailedPreconditionError(
@@ -66,6 +66,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   changed_gids.union_set(and_gids);
   changed_gids.union_set(or_gids);
   changed_gids.union_set(exclusive_gids);
+
   for (uint32_t gid : changed_gids) {
     InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
   }
@@ -89,6 +90,50 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   }
 
   return changed_gids;
+}
+
+/*
+ * Invalidates all grouping information and fully reprocesses all segments.
+ */
+Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
+  unsigned glyph_count = hb_face_get_glyph_count(original_face.get());
+
+  // Record a set of all glyphs prior to the init subset redefinition.
+  // Will be needed to do group invalidation correctly.
+  GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
+  SegmentSet changed_segments = segmentation_info_.ReassignInitSubset(
+      glyph_closure_cache, std::move(new_def));
+
+  // Consider all glyphs moved to the init font as changed.
+  changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());
+
+  // All segments depend on the init subset def, so we must reprocess
+  // everything. First reset condition set information:
+  GlyphConditionSet previous_glyph_condition_set = glyph_condition_set;
+  glyph_condition_set = GlyphConditionSet(glyph_count);
+  inert_segments_.clear();
+
+  // Then reprocess segments:
+  for (segment_index_t segment_index = 0;
+       segment_index < SegmentationInfo().Segments().size(); segment_index++) {
+    TRY(ReprocessSegment(segment_index));
+  }
+
+  // the groupings can be incrementally recomputed by looking at what conditions
+  // have changed.
+  for (glyph_id_t gid : SegmentationInfo().NonInitFontGlyphs()) {
+    if (previous_glyph_condition_set.ConditionsFor(gid) !=
+        glyph_condition_set.ConditionsFor(gid)) {
+      changed_gids.insert(gid);
+    }
+  }
+
+  TRYV(GroupGlyphs(changed_gids, changed_segments));
+
+  glyph_closure_cache.LogClosureCount(
+      "Segmentation reprocess for init def change.");
+
+  return absl::OkStatus();
 }
 
 }  // namespace ift::encoder

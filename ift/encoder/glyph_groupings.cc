@@ -25,9 +25,6 @@ namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   unmapped_glyphs_.erase(gid);
-  // Any changes may affect in complex ways the combined conditions
-  // so remove them all. They will be fully recalculated during grouping.
-  RemoveAllCombinedConditions();
 
   auto it = glyph_to_condition_.find(gid);
   if (it == glyph_to_condition_.end()) {
@@ -39,6 +36,7 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   auto& glyphs = conditions_and_glyphs_.at(condition);
   glyphs.erase(gid);
   glyph_to_condition_.erase(gid);
+  glyph_to_condition_pre_combination_.erase(gid);
 
   if (glyphs.empty()) {
     RemoveConditionAndGlyphs(condition);
@@ -75,8 +73,10 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
 }
 
 void GlyphGroupings::RemoveAllCombinedConditions() {
+  combined_patches_dirty_ = true;
   for (const auto& [segments, _] : combined_or_glyph_groups_) {
-    RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0));
+    RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
+                             false);
   }
   combined_or_glyph_groups_.clear();
   combined_exclusive_segments_.clear();
@@ -97,7 +97,6 @@ Status GlyphGroupings::CombinePatches(const GlyphSet& a, const GlyphSet& b) {
 }
 
 Status GlyphGroupings::AddGlyphsToExclusiveGroup(
-    const GlyphConditionSet& glyph_conditions,
     segment_index_t exclusive_segment, const GlyphSet& glyphs) {
   for (glyph_id_t gid : glyphs) {
     InvalidateGlyphInformation(gid);
@@ -115,6 +114,9 @@ Status GlyphGroupings::AddGlyphsToExclusiveGroup(
   for (glyph_id_t gid : glyphs) {
     bool did_insert =
         glyph_to_condition_.insert(std::pair(gid, condition)).second;
+    did_insert |=
+        glyph_to_condition_pre_combination_.insert(std::pair(gid, condition))
+            .second;
     if (!did_insert) {
       return absl::InternalError(
           "Attempting to add conflicting glyph to condition mapping.");
@@ -125,15 +127,7 @@ Status GlyphGroupings::AddGlyphsToExclusiveGroup(
   // are involved with the combined patches mechanism. If at least one is
   // then it's necessary to recompute all combined patches to reflect any
   // downstream changes.
-  for (glyph_id_t gid : glyphs) {
-    if (TRY(combined_patches_.GlyphsFor(gid)).size() > 1) {
-      RemoveAllCombinedConditions();
-      TRYV(RecomputeCombinedConditions(glyph_conditions));
-      break;
-    }
-  }
-
-  return absl::OkStatus();
+  return RecomputeCombinedConditionsIfNeeded(glyphs);
 }
 
 // Converts this grouping into a finalized GlyphSegmentation.
@@ -161,14 +155,17 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
     }
   }
 
-  auto fallback = or_glyph_groups_.find(fallback_segments_);
-  if (fallback != or_glyph_groups_.end()) {
-    or_glyph_groups[fallback_segments_] = fallback->second;
+  // The fallback patch isn't stored in ConditionAndGlyphs() so add it in
+  // manually.
+  SegmentSet fallback_segments;
+  if (!unmapped_glyphs_.empty()) {
+    fallback_segments = segmentation_info.NonEmptySegments();
+    or_glyph_groups[fallback_segments].union_set(unmapped_glyphs_);
   }
 
   TRYV(GlyphSegmentation::GroupsToSegmentation(
       and_glyph_groups, or_glyph_groups, exclusive_glyph_groups,
-      fallback_segments_, segmentation));
+      fallback_segments, segmentation));
 
   return segmentation;
 }
@@ -176,13 +173,31 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
 Status GlyphGroupings::GroupGlyphs(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, const GlyphSet& glyphs) {
+    GlyphClosureCache& closure_cache, GlyphSet glyphs,
+    const SegmentSet& modified_segments) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
+  SegmentSet inscope_fallback_segments;
 
   for (glyph_id_t gid : glyphs) {
+    CollectSegments(gid, inscope_fallback_segments);
     InvalidateGlyphInformation(gid);
   }
-  RemoveAllCombinedConditions();
+
+  if (!inscope_fallback_segments.empty()) {
+    inscope_fallback_segments.union_set(modified_segments);
+  } else {
+    // If no existing conditions exist, all segments are inscope.
+    inscope_fallback_segments.invert();
+  }
+
+  // Find any additional glyphs that are affected by changes in
+  // modified_segments
+  GlyphSet additional_glyphs = ModifiedGlyphs(modified_segments);
+  for (glyph_id_t gid : additional_glyphs) {
+    CollectSegments(gid, inscope_fallback_segments);
+    InvalidateGlyphInformation(gid);
+  }
+  glyphs.union_set(additional_glyphs);
 
   SegmentSet modified_exclusive_segments;
   btree_set<SegmentSet> modified_and_groups;
@@ -262,44 +277,77 @@ Status GlyphGroupings::GroupGlyphs(
     TRYV(AddConditionAndGlyphs(condition, glyphs));
   }
 
-  // The combined conditions can't be incrementally updated, so we recompute
-  // them in full.
-  TRYV(RecomputeCombinedConditions(glyph_condition_set));
-
-  for (uint32_t gid : unmapped_glyphs_) {
-    // this glyph is not activated anywhere but is needed in the full closure
-    // so add it to an activation condition of any segment.
-    or_glyph_groups_[fallback_segments_].insert(gid);
+  if (segmentation_info.GetUnmappedGlyphHandling() == FIND_CONDITIONS) {
+    TRYV(FindFallbackGlyphConditions(segmentation_info, glyph_condition_set,
+                                     inscope_fallback_segments, closure_cache));
   }
 
-  // TODO XXXXX run complex condition analysis.
+  // The combined conditions can't be incrementally updated, so we recompute
+  // them in full if needed.
+  TRYV(RecomputeCombinedConditionsIfNeeded(glyphs));
 
   // Note: we don't need to include the fallback segment/condition in
   //       conditions_and_glyphs since all downstream processing which
-  //       utilizes that map ignores the fallback segment.
+  //       utilizes that map ignores the fallback segment. It will be
+  //       manually added to the final segmentation in ToGlyphSegmentation()
 
   return absl::OkStatus();
+}
+
+void GlyphGroupings::CollectSegments(glyph_id_t gid, SegmentSet& segments) {
+  auto it = glyph_to_condition_.find(gid);
+  if (it == glyph_to_condition_.end()) {
+    return;
+  }
+  segments.union_set(it->second.TriggeringSegments());
+}
+
+GlyphSet GlyphGroupings::ModifiedGlyphs(const SegmentSet& segments) const {
+  GlyphSet glyphs;
+  for (segment_index_t s : segments) {
+    const auto& conditions = TriggeringSegmentToConditions(s);
+    for (const auto& c : conditions) {
+      glyphs.union_set(conditions_and_glyphs_.at(c));
+    }
+  }
+  return glyphs;
 }
 
 Status GlyphGroupings::FindFallbackGlyphConditions(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache) {
-  GlyphSet fallback_glyphs = FallbackGlyphs();
+    const SegmentSet& inscope_segments, GlyphClosureCache& closure_cache) {
+  if (unmapped_glyphs_.empty()) {
+    return absl::OkStatus();
+  }
+
+  // Note: inscope_segments is not currently used, the approach needs more
+  // work. In testing in some cases it caused complex conditions to be larger
+  // than necessary when a segment which could shorten the condition isn't in
+  // scope.
+  //
+  // For example, with true condition (a or b) AND (b or c), if only {a, c} is
+  // inscope then we don't have the possibility of finding the superset of {b}.
   btree_map<SegmentSet, GlyphSet> complex_conditions =
-      TRY(FindSupersetDisjunctiveConditionsFor(segmentation_info,
-                                               glyph_condition_set,
-                                               closure_cache, fallback_glyphs));
+      TRY(FindSupersetDisjunctiveConditionsFor(
+          segmentation_info, glyph_condition_set, closure_cache,
+          unmapped_glyphs_, SegmentSet::all()));
 
-  or_glyph_groups_.erase(fallback_segments_);
-  RemoveConditionAndGlyphs(
-      ActivationCondition::or_segments(fallback_segments_, 0));
   unmapped_glyphs_.clear();
-  fallback_segments_.clear();
-
   for (const auto& [s, g] : complex_conditions) {
-    or_glyph_groups_[s].union_set(g);
+    if (s.empty()) {
+      return absl::InternalError("Complex conditions should never be empty.");
+    }
+
     ActivationCondition c = ActivationCondition::or_segments(s, 0);
+    if (s.size() == 1) {
+      segment_index_t segment = *s.begin();
+      exclusive_glyph_groups_[segment].union_set(g);
+      c = ActivationCondition::exclusive_segment(segment, 0);
+    } else {
+      or_glyph_groups_[s].union_set(g);
+    }
+
     // There may be existing glyphs at this specific condition, so union into
     // it.
     TRYV(UnionConditionAndGlyphs(c, g));
@@ -310,15 +358,13 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
   return absl::OkStatus();
 }
 
-Status GlyphGroupings::RecomputeCombinedConditions(
-    const GlyphConditionSet& glyph_condition_set) {
+Status GlyphGroupings::RecomputeCombinedConditions() {
   // To minimize the amount of work we need to do we first detect which segments
   // are potentially affected by the patch combination mechanism and then limit
   // processing just to those.
   SegmentSet exclusive_segments;
   btree_set<SegmentSet> or_conditions;
-  TRYV(ConditionsAffectedByCombination(glyph_condition_set, exclusive_segments,
-                                       or_conditions));
+  TRYV(ConditionsAffectedByCombination(exclusive_segments, or_conditions));
 
   flat_hash_map<glyph_id_t, SegmentSet> merged_conditions;
   flat_hash_map<glyph_id_t, GlyphSet> merged_glyphs;
@@ -337,24 +383,23 @@ Status GlyphGroupings::RecomputeCombinedConditions(
       combined_or_glyph_groups_[segments_copy] = gids;
     }
 
-    TRYV(AddConditionAndGlyphs(condition, gids));
+    TRYV(AddConditionAndGlyphs(condition, gids, false));
   }
 
+  combined_patches_dirty_ = false;
   return absl::OkStatus();
 }
 
 Status GlyphGroupings::ConditionsAffectedByCombination(
-    const GlyphConditionSet& glyph_condition_set,
     SegmentSet& exclusive_segments,
     btree_set<SegmentSet>& or_conditions) const {
   for (const GlyphSet& gids : TRY(combined_patches_.NonIdentityGroups())) {
     for (glyph_id_t gid : gids) {
-      const auto& cond = glyph_condition_set.ConditionsFor(gid);
-      if (cond.and_segments.size() == 1) {
-        exclusive_segments.insert(*cond.and_segments.begin());
-      }
-      if (!cond.or_segments.empty()) {
-        or_conditions.insert(cond.or_segments);
+      const auto& cond = glyph_to_condition_pre_combination_.at(gid);
+      if (cond.IsExclusive()) {
+        exclusive_segments.insert(*cond.TriggeringSegments().begin());
+      } else if (cond.conditions().size() == 1) {
+        or_conditions.insert(cond.TriggeringSegments());
       }
     }
   }
@@ -401,12 +446,13 @@ Status GlyphGroupings::ComputeConditionExpansionMap(
       // then there will be no merge.
       merged_conditions[rep].insert(s);
       merged_glyphs[rep].union_set(gids);
-      RemoveConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0));
+      RemoveConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0),
+                               false);
       // Record s as having been removed via combination.
       combined_exclusive_segments_.insert(s);
     } else {
       TRYV(AddConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0),
-                                 gids));
+                                 gids, false));
     }
   }
 
@@ -421,10 +467,11 @@ Status GlyphGroupings::ComputeConditionExpansionMap(
     if (gids != TRY(partition.GlyphsFor(rep))) {
       merged_conditions[rep].union_set(segments);
       merged_glyphs[rep].union_set(gids);
-      RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0));
+      RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
+                               false);
     } else {
       TRYV(AddConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
-                                 gids));
+                                 gids, false));
     }
   }
 

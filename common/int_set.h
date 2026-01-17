@@ -353,6 +353,12 @@ class SegmentSet : public IntSet {
   SegmentSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
   explicit SegmentSet(const hb_set_t* set) : IntSet(set) {}
   explicit SegmentSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+
+  static SegmentSet all() {
+    SegmentSet all;
+    all.invert();
+    return all;
+  }
 };
 
 }  // namespace common

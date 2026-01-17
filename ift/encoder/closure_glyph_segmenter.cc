@@ -23,6 +23,7 @@
 #include "common/try.h"
 #include "common/woff2.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/merger.h"
 #include "ift/encoder/segment.h"
@@ -78,6 +79,41 @@ Status CheckForDisjointCodepoints(
   return absl::OkStatus();
 }
 
+static void PrintCondition(
+    const std::pair<ActivationCondition, GlyphSet>& condition, bool added) {
+  VLOG(0) << (added ? "++ " : "-- ") << condition.first.ToString() << " => "
+          << condition.second.ToString();
+}
+
+static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
+                      const btree_map<ActivationCondition, GlyphSet>& b) {
+  auto it_a = a.begin();
+  auto it_b = b.begin();
+
+  while (it_a != a.end() || it_b != b.end()) {
+    if (it_a == a.end()) {
+      PrintCondition(*it_b, true);
+      it_b++;
+    } else if (it_b == b.end()) {
+      PrintCondition(*it_a, false);
+      it_a++;
+    } else if (it_a->first == it_b->first) {
+      if (it_a->second != it_b->second) {
+        PrintCondition(*it_a, false);
+        PrintCondition(*it_b, true);
+      }
+      it_a++;
+      it_b++;
+    } else if (it_a->first < it_b->first) {
+      PrintCondition(*it_a, false);
+      it_a++;
+    } else {
+      PrintCondition(*it_b, true);
+      it_b++;
+    }
+  }
+}
+
 /*
  * Checks that the incrementally generated glyph conditions and groupings in
  * context match what would have been produced by a non incremental process.
@@ -88,7 +124,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
   SegmentationContext non_incremental_context(
       face, context.SegmentationInfo().InitFontSegment(),
-      context.SegmentationInfo().Segments(), 1, 1);
+      context.SegmentationInfo().Segments(),
+      context.SegmentationInfo().GetUnmappedGlyphHandling(), 1, 1);
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
@@ -104,10 +141,15 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     TRYV(non_incremental_context.glyph_groupings.CombinePatches(group, {}));
   }
 
-  TRYV(non_incremental_context.GroupGlyphs(context.SegmentationInfo().FullClosure()));
+  TRYV(non_incremental_context.GroupGlyphs(
+      context.SegmentationInfo().FullClosure(), {}));
 
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
+    VLOG(0) << "-- incremental grouping";
+    VLOG(0) << "++ non-incremental grouping";
+    PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
+              non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
     return absl::FailedPreconditionError(
         "conditions_and_glyphs aren't correct.");
   }
@@ -376,7 +418,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return CodepointToGlyphSegments(face, initial_segment, subset_definitions,
-                                  merge_groups, PATCH);
+                                  merge_groups);
 }
 
 StatusOr<std::vector<Merger>> ToMergers(
@@ -394,34 +436,13 @@ StatusOr<std::vector<Merger>> ToMergers(
 static StatusOr<GlyphSegmentation> ToFinalSegmentation(
     SegmentationContext& context,
     UnmappedGlyphHandling unmapped_glyph_handling) {
-  if (unmapped_glyph_handling == FIND_CONDITIONS) {
-    // TODO(garretrieger): this analysis should be performed prior to merging
-    // so that the found conditions can participate in merging. To make this
-    // performant we'll need to add support for incrementally recomputing
-    // complex conditions that are effected by merges.
-    //
-    // The good news here is that when we do a segment merge of the generated
-    // complex activation conditions that will naturally fix the unmapped
-    // nature of the relevant glyphs. However, changes to segments may
-    // also invalidate the complex conditions and require incremental
-    // reprocessing.
-    //
-    // Roughly, during invalidation and subsequent incremental closure
-    // analysis we may re-identify unmapped glyphs these would then
-    // need to be invalidated and reprocessed by the complex condition finder.
-    TRYV(context.glyph_groupings.FindFallbackGlyphConditions(
-        context.SegmentationInfo(), context.glyph_condition_set,
-        context.glyph_closure_cache));
-  }
-
   return context.ToGlyphSegmentation();
 }
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
-    btree_map<SegmentSet, MergeStrategy> merge_groups,
-    UnmappedGlyphHandling unmapped_glyph_handling) const {
+    btree_map<SegmentSet, MergeStrategy> merge_groups) const {
   for (const auto& [segments, strategy] : merge_groups) {
     if (strategy.UseCosts()) {
       TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
@@ -463,8 +484,8 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // Once we've gotten standard segments placed into the initial font as needed,
   // if requested any remaining fallback glyphs are also moved into the init
   // font.
-  GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
-  if (unmapped_glyph_handling == MOVE_TO_INIT_FONT &&
+  GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
+  if (unmapped_glyph_handling_ == MOVE_TO_INIT_FONT &&
       !fallback_glyphs.empty()) {
     VLOG(0) << "Moving " << fallback_glyphs.size()
             << " fallback glyphs into the initial font." << std::endl;
@@ -475,7 +496,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   if (merge_groups.empty()) {
     // No merging will be needed so we're done.
-    return ToFinalSegmentation(context, unmapped_glyph_handling);
+    return ToFinalSegmentation(context, unmapped_glyph_handling_);
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
@@ -496,9 +517,9 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   while (true) {
     auto& merger = mergers[merger_index];
-    auto merged = TRY(merger.TryNextMerge());
+    auto maybe_modified = TRY(merger.TryNextMerge());
 
-    if (!merged.has_value()) {
+    if (!maybe_modified.has_value()) {
       merger_index++;
 
       if (merger_index < mergers.size()) {
@@ -522,11 +543,11 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         merger.LogMergedSizeHistogram();
       }
 
-      return ToFinalSegmentation(context, unmapped_glyph_handling);
+      return ToFinalSegmentation(context, unmapped_glyph_handling_);
     }
 
-    const auto& [merged_segment_index, modified_gids] = *merged;
-    last_merged_segment_index = merged_segment_index;
+    InvalidationSet modified = std::move(*maybe_modified);
+    last_merged_segment_index = modified.base_segment;
 
     GlyphSet analysis_modified_gids;
     if (!context.InertSegments().contains(last_merged_segment_index)) {
@@ -535,9 +556,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       analysis_modified_gids =
           TRY(context.ReprocessSegment(last_merged_segment_index));
     }
-    analysis_modified_gids.union_set(modified_gids);
 
-    TRYV(context.GroupGlyphs(analysis_modified_gids));
+    modified.glyphs.union_set(analysis_modified_gids);
+
+    TRYV(context.GroupGlyphs(modified.glyphs, modified.segments));
 
     context.glyph_closure_cache.LogClosureCount("Condition grouping");
   }
@@ -558,7 +580,8 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   AddInitSubsetDefaults(initial_segment);
 
   // No merging is done during init.
-  SegmentationContext context(face, initial_segment, segments, brotli_quality_,
+  SegmentationContext context(face, initial_segment, segments,
+                              unmapped_glyph_handling_, brotli_quality_,
                               init_font_merging_brotli_quality_);
 
   // ### Generate the initial conditions and groupings by processing all
@@ -571,7 +594,7 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   }
   context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
 
-  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs()));
+  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs(), {}));
   context.glyph_closure_cache.LogClosureCount("Condition grouping");
 
   return context;

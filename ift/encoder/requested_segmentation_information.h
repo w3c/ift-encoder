@@ -8,6 +8,7 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "util/common.pb.h"
 
 namespace ift::encoder {
 
@@ -16,9 +17,10 @@ namespace ift::encoder {
  */
 class RequestedSegmentationInformation {
  public:
-  RequestedSegmentationInformation(std::vector<Segment> segments,
-                                   SubsetDefinition init_font_segment,
-                                   GlyphClosureCache& closure_cache);
+  RequestedSegmentationInformation(
+      std::vector<Segment> segments, SubsetDefinition init_font_segment,
+      GlyphClosureCache& closure_cache,
+      UnmappedGlyphHandling unmapped_glyph_handling);
 
   // Merge all of the segments in to_merge into base, assigned it
   // a new subset definition "merged_segment".
@@ -35,9 +37,8 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
-  void ReassignInitSubset(GlyphClosureCache& closure_cache,
-                          SubsetDefinition new_def) {
-
+  common::SegmentSet ReassignInitSubset(GlyphClosureCache& closure_cache,
+                                        SubsetDefinition new_def) {
     init_font_segment_ = std::move(new_def);
     while (ExpandInitClosure(closure_cache)) {
       // Expand the init closure until it stops changing.
@@ -54,9 +55,21 @@ class RequestedSegmentationInformation {
     // Changing the init font subset may have caused additional codepoints to be
     // moved to the init font. We need to update the segment definitions to
     // remove these.
+    common::SegmentSet changed;
+    uint32_t s_index = 0;
     for (auto& s : segments_) {
-      s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+      if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
+        changed.insert(s_index);
+        s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+      }
+      s_index++;
     }
+
+    return changed;
+  }
+
+  UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
+    return unmapped_glyph_handling_;
   }
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
@@ -97,6 +110,19 @@ class RequestedSegmentationInformation {
     return out;
   }
 
+  common::SegmentSet NonEmptySegments() const {
+    // TODO(garretrieger): consider caching this value.
+    common::SegmentSet segments;
+    segment_index_t index = 0;
+    for (const auto& s : Segments()) {
+      if (!s.Definition().Empty()) {
+        segments.insert(index);
+      }
+      index++;
+    }
+    return segments;
+  }
+
  private:
   // Recomputes the init font glyph and codepoint closure, returns true
   // if the init font segment was modified.
@@ -133,6 +159,7 @@ class RequestedSegmentationInformation {
   common::GlyphSet init_font_glyphs_;
   common::GlyphSet full_closure_;
   bool segments_disjoint_;
+  enum UnmappedGlyphHandling unmapped_glyph_handling_;
 };
 
 }  // namespace ift::encoder

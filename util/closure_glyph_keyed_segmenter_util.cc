@@ -111,7 +111,7 @@ static Status Analysis(hb_face_t* font,
     }
 
     auto calculator = strategy.ProbabilityCalculator();
-    ClosureGlyphSegmenter segmenter(11, 11);
+    ClosureGlyphSegmenter segmenter(11, 11, PATCH);
     SegmentationCost cost =
         TRY(segmenter.TotalCost(font, segmentation, *calculator));
 
@@ -206,11 +206,10 @@ static Status Main(const std::vector<char*> args) {
                                           font_features, segments));
 
   ClosureGlyphSegmenter segmenter(
-      config.brotli_quality(),
-      config.brotli_quality_for_initial_font_merging());
+      config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
+      config.unmapped_glyph_handling());
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
-      font.get(), init_segment, segments, merge_groups,
-      config.unmapped_glyph_handling()));
+      font.get(), init_segment, segments, merge_groups));
 
   if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
     SegmentationPlan plan = segmentation.ToSegmentationPlanProto();

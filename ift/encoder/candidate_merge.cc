@@ -17,6 +17,7 @@
 #include "common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_condition_set.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merger.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
@@ -56,10 +57,10 @@ StatusOr<bool> CandidateMerge::IsPatchTooSmall(
   return true;
 }
 
-StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
+StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
   if (!merged_segment_.has_value()) {
     TRYV(ApplyPatchMerge(merger));
-    return GlyphSet{};
+    return InvalidationSet(base_segment_index_);
   }
 
   // Upon application of this merger if all of the input segments were inert
@@ -105,12 +106,6 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
   merger.Context().InvalidateGlyphInformation(invalidated_glyphs_,
                                               segments_to_merge_);
 
-  // Remove the fallback segment or group, it will be fully recomputed by
-  // GroupGlyphs. This needs to happen after invalidation because in some
-  // cases invalidation may need to find conditions associated with the
-  // fallback segment.
-  merger.Context().glyph_groupings.RemoveFallbackSegments(segments_to_merge_);
-
   if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the
     // new condition sets and glyph groupings here instead of using the
@@ -122,15 +117,15 @@ StatusOr<GlyphSet> CandidateMerge::Apply(Merger& merger) {
                                                            base_segment_index_);
     }
     TRYV(merger.Context().glyph_groupings.AddGlyphsToExclusiveGroup(
-        merger.Context().glyph_condition_set, base_segment_index_,
-        invalidated_glyphs_));
+        base_segment_index_, invalidated_glyphs_));
 
     // We've now fully updated information for these glyphs so don't need to
     // return them.
     invalidated_glyphs_.clear();
   }
 
-  return invalidated_glyphs_;
+  return InvalidationSet(invalidated_glyphs_, segments_to_merge_,
+                         base_segment_index_);
 }
 
 Status CandidateMerge::ApplyPatchMerge(Merger& merger) {
@@ -282,7 +277,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
     const SegmentationContext& context, const GlyphSet& gids) {
   // To more efficiently target our search we can use the glyph_condition_set to
   // locate conditions that intersect with gids.
-  GlyphSet fallback_glyphs = context.glyph_groupings.FallbackGlyphs();
+  GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
   btree_set<ActivationCondition> conditions_of_interest;
   for (glyph_id_t gid : gids) {
     if (fallback_glyphs.contains(gid)) {
@@ -292,20 +287,12 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
       continue;
     }
 
-    const GlyphConditions& conditions =
-        context.glyph_condition_set.ConditionsFor(gid);
-    if (conditions.and_segments.size() == 1) {
-      conditions_of_interest.insert(ActivationCondition::exclusive_segment(
-          *conditions.and_segments.begin(), 0));
-    } else if (!conditions.and_segments.empty()) {
-      conditions_of_interest.insert(
-          ActivationCondition::and_segments(conditions.and_segments, 0));
+    auto result = context.glyph_groupings.GlyphToCondition(gid);
+    if (!result.has_value()) {
+      continue;
     }
 
-    if (!conditions.or_segments.empty()) {
-      conditions_of_interest.insert(
-          ActivationCondition::or_segments(conditions.or_segments, 0));
-    }
+    conditions_of_interest.insert(*result);
   }
 
   btree_map<ActivationCondition, GlyphSet> result;
@@ -318,7 +305,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
   // We also need to check if there's a fallback patch and it intersects gids.
   if (!fallback_glyphs.empty() && fallback_glyphs.intersects(gids)) {
     ActivationCondition condition = ActivationCondition::or_segments(
-        context.glyph_groupings.FallbackSegments(), 0);
+        {}, 0, true);
     result.insert(std::make_pair(condition, fallback_glyphs));
   }
 
@@ -391,9 +378,13 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     // we'd include that in this calculation. This should have only a minor
     // impact on the computed delta's since the majority of cases we process
     // here will just be full patch removals.
-    double patch_probability = TRY(
+    double patch_probability = 1.0;
+    if (!condition.IsFallback()) {
+      patch_probability = TRY(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
                               *merger.Strategy().ProbabilityCalculator()));
+    }
+
     double patch_size_before =
         TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
             glyphs)) +
