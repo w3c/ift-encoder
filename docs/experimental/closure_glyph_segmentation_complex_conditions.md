@@ -36,7 +36,7 @@ The algorithm is based on the following assertions:
    union of all segments except for those in the condition. If the glyph does not appear in this closure, then the
    condition satisfies the closure requirement for that glyph and is a superset of the true condition. This is called
    the “additional conditions” check.
-   
+
 2. The glyph closure of all segments includes the glyph that we are analyzing.
 
 3. We have a glyph which has some true activation condition. If we compute a glyph closure of some combination of
@@ -106,22 +106,22 @@ only segments from the true condition, when the glyph is not already in the init
   non-excluded segments will contain glyph. Thus testing a segment which is not part of the true condition will never
   result in glyph missing from the closure, and won't be added to `sub_condition`. Therefore `Finding a Sub Condition`
   will only ever return segments that are part of the true condition.
-  
+
 * `Finding a Sub Condition` will always return at least one segment: if when the last segment is tested `sub_condition`
   is still the empty set, then the closure will be on no segments and will not have glyph in it. This is a result of
   assertion (4) and the premise that glyph is not already in the initial font. As a consequence the returned
   `sub_condition` will always have at least one segment in it.
-  
+
 * Since all returned segments from `Finding a Sub Condition` are excluded from future calls, there will be a finite
   number of `Finding a Sub Condition` executions which return only segments part of the true condition.
-  
+
 * Lastly, the algorithm terminates only once the additional conditions check finds no additional conditions,
   guaranteeing we have found a superset disjunctive condition (assertion (1)).
-  
+
 ## Making it More Performant
 
 As described above this approach can be slow since it processes glyphs one at a time. Improvements to performance
-can be made by processing glyphs in a batch. This can be done with a recursive approach where after each segment test 
+can be made by processing glyphs in a batch. This can be done with a recursive approach where after each segment test
 the set of input glyphs gets split into those that require the tested segment and those that don't. Each of the splits spawns
 a new recursion (if there is at least one glyph in the split).
 
@@ -143,13 +143,12 @@ could come in two forms:
 
 ## Integrating into the Segmentation Algorithm
 
-Initially the complex condition analysis has been added as a final step after merging. If after merging unmapped glyphs
-are present, then the complex condition analysis is run on those glyphs and the fallback patch is replaced with one or
-more patches based on the results of complex condition analysis.
-
-However, ideally complex condition analysis would be run before merging so that the patches it generates can participate
-in the merging process. This will require incremental updates to the complex condition analysis results, but that should
-be straightforward. Implementing this is planned for the near future.
+The complex condition analysis has been added as a post processing step during the glyph grouping phase. After the
+grouping phase finds the initial condition set, complex condition finding is run to find conditions for any remaining
+unmapped glyphs. The found complex conditions are added to the condition set and thus are able to participate
+in both initial font analysis and patch merging. To make this performant complex conditions are only recomputed for
+glyphs/segments that are modified after a merge is performed. The glyph grouping phase has an existing invalidation
+mechanism which is utilized to determine which glyphs need to be re-analyzed.
 
 
 
