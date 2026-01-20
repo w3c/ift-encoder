@@ -5,15 +5,17 @@ module(
 
 # Bazel Modules
 
-bazel_dep(name = "googletest", version = "1.17.0")
-bazel_dep(name = "abseil-cpp", version = "20250814.0")
-bazel_dep(name = "protobuf", version = "32.0")
+bazel_dep(name = "rules_cc", version = "0.2.16")
+bazel_dep(name = "rules_python", version = "1.8.0")
+
+bazel_dep(name = "googletest", version = "1.17.0.bcr.2")
+bazel_dep(name = "abseil-cpp", version = "20260107.0")
+bazel_dep(name = "protobuf", version = "33.4")
 bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d")
-bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_rust", version = "0.64.0")
-bazel_dep(name = "glib", version = "2.82.2.bcr.5")
-bazel_dep(name = "brotli", version = "1.1.0")
+bazel_dep(name = "rules_rust", version = "0.68.1")
+bazel_dep(name = "glib", version = "2.82.2.bcr.7")
+bazel_dep(name = "brotli", version = "1.2.0")
 
 # Frequency Data
 bazel_dep(name = "ift_encoder_data", version = "git")

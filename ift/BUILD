@@ -1,15 +1,18 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 cc_library(
     name = "ift",
     srcs = [
         "glyph_keyed_diff.cc",
         "glyph_keyed_diff.h",
-        "url_template.cc",
         "table_keyed_diff.cc",
         "table_keyed_diff.h",
+        "url_template.cc",
     ],
     hdrs = [
-        "url_template.h",
         "table_keyed_diff.h",
+        "url_template.h",
     ],
     visibility = [
         "//visibility:public",
@@ -38,11 +41,11 @@ cc_library(
     hdrs = [
         "testdata/test_segments.h",
     ],
-    deps = [
-        "@abseil-cpp//absl/container:flat_hash_set",
-    ],
     visibility = [
         "//visibility:public",
+    ],
+    deps = [
+        "@abseil-cpp//absl/container:flat_hash_set",
     ],
 )
 
@@ -51,15 +54,15 @@ cc_test(
     size = "small",
     srcs = [
         "glyph_keyed_diff_test.cc",
-        "url_template_test.cc",
         "table_keyed_diff_test.cc",
+        "url_template_test.cc",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
     ],
     data = [
-        "//ift:testdata",
         "//common:testdata",
+        "//ift:testdata",
     ],
     deps = [
         ":ift",
@@ -81,15 +84,15 @@ cc_test(
         "-DHB_EXPERIMENTAL_API",
     ],
     data = [
-        "//ift:testdata",
         "//common:testdata",
+        "//ift:testdata",
     ],
     deps = [
         ":ift",
         ":test_segments",
         "//common",
-        "//ift/encoder",
         "//ift/client:fontations",
+        "//ift/encoder",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@googletest//:gtest_main",
     ],

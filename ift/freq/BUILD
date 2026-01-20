@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 cc_library(
     name = "common",
     srcs = ["probability_bound.cc"],
@@ -11,24 +14,24 @@ cc_library(
 cc_library(
     name = "freq",
     srcs = [
+        "bigram_probability_calculator.cc",
         "unicode_frequencies.cc",
         "unigram_probability_calculator.cc",
-        "bigram_probability_calculator.cc",
     ],
     hdrs = [
-        "noop_probability_calculator.h",
-        "unicode_frequencies.h",
-        "probability_calculator.h",
-        "unigram_probability_calculator.h",
         "bigram_probability_calculator.h",
+        "noop_probability_calculator.h",
+        "probability_calculator.h",
+        "unicode_frequencies.h",
+        "unigram_probability_calculator.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":common",
         "//ift/encoder:common",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@harfbuzz",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_test(
@@ -63,9 +66,9 @@ cc_test(
 cc_library(
     name = "mock_probability_calculator",
     hdrs = ["mock_probability_calculator.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":freq",
         "//ift/encoder:common",
     ],
-    visibility = ["//visibility:public"],
 )
