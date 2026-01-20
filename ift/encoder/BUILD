@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 cc_library(
     name = "encoder",
     srcs = [
@@ -17,11 +20,13 @@ cc_library(
     ],
     deps = [
         ":activation_condition",
+        ":common",
+        ":segmentation_context",
         "//ift",
+        "//ift/feature_registry",
         "//ift/proto",
-        "//ift/feature_registry:feature_registry",
-        "//util:segmentation_plan_cc_proto",
         "//util:common_cc_proto",
+        "//util:segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
@@ -29,22 +34,20 @@ cc_library(
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:initialize",
         "@harfbuzz",
-        ":common",
-        ":segmentation_context",
     ],
 )
 
 cc_library(
     name = "glyph_partition",
     srcs = [
-        "glyph_partition.h",
         "glyph_partition.cc",
+        "glyph_partition.h",
     ],
     deps = [
         ":common",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/types:span",
     ],
 )
@@ -52,28 +55,27 @@ cc_library(
 cc_library(
     name = "segmentation_context",
     srcs = [
-        "segmentation_context.h",
-        "segmentation_context.cc",
-        "glyph_closure_cache.h",
-        "glyph_closure_cache.cc",
-        "requested_segmentation_information.h",
-        "requested_segmentation_information.cc",
-        "glyph_condition_set.h",
-        "glyph_groupings.h",
-        "glyph_groupings.cc",
-        "complex_condition_finder.h",
-        "complex_condition_finder.cc",
         "candidate_merge.cc",
         "candidate_merge.h",
-        "patch_size_cache.h",
-        "estimated_patch_size_cache.h",
+        "complex_condition_finder.cc",
+        "complex_condition_finder.h",
         "estimated_patch_size_cache.cc",
-        "merge_strategy.h",
+        "estimated_patch_size_cache.h",
+        "glyph_closure_cache.cc",
+        "glyph_closure_cache.h",
+        "glyph_condition_set.h",
+        "glyph_groupings.cc",
+        "glyph_groupings.h",
+        "invalidation_set.h",
         "merge_strategy.cc",
+        "merge_strategy.h",
         "merger.cc",
         "merger.h",
-        "invalidation_set.h",
-
+        "patch_size_cache.h",
+        "requested_segmentation_information.cc",
+        "requested_segmentation_information.h",
+        "segmentation_context.cc",
+        "segmentation_context.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -81,43 +83,43 @@ cc_library(
     visibility = [
     ],
     deps = [
-        ":glyph_partition",
-        ":common",
         ":activation_condition",
-        "//ift/feature_registry",
+        ":common",
+        ":glyph_partition",
         "//ift",
+        "//ift/feature_registry",
         "//ift/freq",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:node_hash_set",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
 cc_library(
     name = "activation_condition",
     srcs = [
-        "activation_condition.h",
         "activation_condition.cc",
+        "activation_condition.h",
         "glyph_segmentation.cc",
         "glyph_segmentation.h",
     ],
     deps = [
-        "//ift/freq",
         ":common",
+        "//ift/freq",
     ],
 )
 
 cc_library(
     name = "common",
     srcs = [
+        "init_subset_defaults.h",
+        "segment.h",
         "subset_definition.cc",
         "subset_definition.h",
         "types.h",
-        "init_subset_defaults.h",
-        "segment.h",
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
@@ -126,13 +128,13 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
+        "//common",
+        "//ift/freq:common",
+        "//ift/proto",
+        "//util:segmentation_plan_cc_proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "//common",
-        "//ift/proto",
-        "//ift/freq:common",
-        "//util:segmentation_plan_cc_proto",
     ],
 )
 
@@ -166,8 +168,8 @@ cc_test(
     ],
     deps = [
         ":encoder",
-        "@harfbuzz",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
@@ -182,8 +184,8 @@ cc_test(
         "//ift:testdata",
     ],
     deps = [
-        ":encoder",
         ":activation_condition",
+        ":encoder",
         "//common",
         "@googletest//:gtest_main",
     ],
@@ -200,8 +202,8 @@ cc_test(
         "//ift:testdata",
     ],
     deps = [
-        ":segmentation_context",
         ":encoder",
+        ":segmentation_context",
         "//common",
         "@googletest//:gtest_main",
     ],
@@ -262,8 +264,8 @@ cc_test(
         "activation_condition_test.cc",
     ],
     deps = [
-        ":encoder",
         ":activation_condition",
+        ":encoder",
         "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],

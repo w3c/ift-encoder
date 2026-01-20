@@ -1,5 +1,8 @@
 # Define HAVE_XLOCALE_H for OSX
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 config_setting(
     name = "macos",
     constraint_values = [
@@ -10,18 +13,18 @@ config_setting(
 cc_binary(
     name = "hb-shape",
     srcs = [
-        "util/hb-shape.cc",
         "util/batch.hh",
-        "util/options.hh",
-        "util/font-options.hh",
         "util/face-options.hh",
+        "util/font-options.hh",
+        "util/hb-shape.cc",
         "util/main-font-text.hh",
+        "util/options.hh",
+        "util/output-options.hh",
         "util/shape-consumer.hh",
+        "util/shape-format.hh",
         "util/shape-options.hh",
         "util/shape-output.hh",
-        "util/shape-format.hh",
         "util/text-options.hh",
-        "util/output-options.hh",
     ],
     deps = [
         ":harfbuzz",
@@ -41,7 +44,7 @@ cc_library(
             "src/OT/glyf/*.hh",
             "src/OT/Layout/GSUB/*.hh",
             "src/OT/Layout/GPOS/*.hh",
-            "src/OT/Layout/GDEF/*.hh",            
+            "src/OT/Layout/GDEF/*.hh",
             "src/OT/Layout/Common/*.hh",
             "src/OT/Layout/*.hh",
             "src/OT/Color/CBDT/*.hh",
@@ -69,23 +72,19 @@ cc_library(
             "src/hb-directwrite.cc",  # exclude windows platform related files.
         ],
     ),
-    deps = [
-        "@ift_encoder//third_party/harfbuzz:config",
-    ],
     hdrs = [
         "src/hb.h",
         "src/hb-aat.h",
         "src/hb-aat-layout.h",
         "src/hb-blob.h",
         "src/hb-buffer.h",
+        "src/hb-cairo.h",
         "src/hb-common.h",
         "src/hb-deprecated.h",
+        "src/hb-draw.h",
         "src/hb-face.h",
         "src/hb-font.h",
-        "src/hb-paint.h",
-        "src/hb-cairo.h",
         "src/hb-map.h",
-        "src/hb-draw.h",
         "src/hb-ot.h",
         "src/hb-ot-color.h",
         "src/hb-ot-deprecated.h",
@@ -97,6 +96,8 @@ cc_library(
         "src/hb-ot-name.h",
         "src/hb-ot-shape.h",
         "src/hb-ot-var.h",
+        "src/hb-paint.h",
+        "src/hb-script-list.h",
         "src/hb-set.h",
         "src/hb-shape.h",
         "src/hb-shape-plan.h",
@@ -105,7 +106,6 @@ cc_library(
         "src/hb-subset-serialize.h",
         "src/hb-unicode.h",
         "src/hb-version.h",
-	"src/hb-script-list.h",
     ],
     copts = [
         "-DHAVE_CONFIG_H",
@@ -120,4 +120,7 @@ cc_library(
         "src/hb-ucdn",
     ],
     visibility = ["//visibility:public"],
+    deps = [
+        "@ift_encoder//third_party/harfbuzz:config",
+    ],
 )

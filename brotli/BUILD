@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 cc_library(
     name = "encoding",
     srcs = [
@@ -20,8 +23,8 @@ cc_library(
     ],
     deps = [
         "//common",
-        "@brotli//:brotlienc",
         "@abseil-cpp//absl/types:span",
+        "@brotli//:brotlienc",
     ],
 )
 
@@ -52,8 +55,8 @@ cc_test(
     deps = [
         ":encoding",
         "//common",
-        "@brotli//:brotlienc",
         "@abseil-cpp//absl/types:span",
+        "@brotli//:brotlienc",
         "@googletest//:gtest_main",
     ],
 )

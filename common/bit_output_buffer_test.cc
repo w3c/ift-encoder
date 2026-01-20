@@ -1,5 +1,6 @@
 #include "common/bit_output_buffer.h"
 
+#include <algorithm>
 #include <bitset>
 #include <string>
 
@@ -19,7 +20,7 @@ class BitOutputBufferTest : public ::testing::Test {
     string result;
     for (unsigned int i = 0; i < s.size(); i++) {
       string byte_bits = bitset<8>(s.c_str()[i]).to_string();
-      reverse(byte_bits.begin(), byte_bits.end());
+      std::reverse(byte_bits.begin(), byte_bits.end());
       result += byte_bits;
       result += " ";
     }
