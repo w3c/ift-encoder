@@ -8,6 +8,8 @@
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "hb.h"
+#include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/estimated_patch_size_cache.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
@@ -96,9 +98,9 @@ class SegmentationContext {
    */
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
-    // TODO(garretrieger): now that invalidation here is only for glyph condition
-    // set we should consider changing this so that invalidation is internal to glyph
-    // condition set reprocessing (like with GroupGlyphs).
+    // TODO(garretrieger): now that invalidation here is only for glyph
+    // condition set we should consider changing this so that invalidation is
+    // internal to glyph condition set reprocessing (like with GroupGlyphs).
     //
     // Note: glyph_groupings will be automatically invalidated as needed when
     // group glyphs is called.
@@ -175,6 +177,7 @@ class SegmentationContext {
 
  private:
   RequestedSegmentationInformation segmentation_info_;
+  // TODO XXXXX add dependency closure object.
 
  public:
   // == Phase 1 - derived from segments and init information

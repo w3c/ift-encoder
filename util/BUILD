@@ -110,6 +110,10 @@ cc_binary(
     srcs = [
         "closure_glyph_keyed_segmenter_util.cc",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
     data = [
         "@ift_encoder_data//:freq_data",
     ],

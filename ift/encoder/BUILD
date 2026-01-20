@@ -11,6 +11,7 @@ cc_library(
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
     ],
     visibility = [
         "//ift:__subpackages__",
@@ -59,6 +60,8 @@ cc_library(
         "candidate_merge.h",
         "complex_condition_finder.cc",
         "complex_condition_finder.h",
+        "dependency_closure.cc",
+        "dependency_closure.h",
         "estimated_patch_size_cache.cc",
         "estimated_patch_size_cache.h",
         "glyph_closure_cache.cc",
@@ -79,6 +82,7 @@ cc_library(
     ],
     copts = [
         "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
     ],
     visibility = [
     ],
@@ -92,6 +96,7 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:node_hash_set",
         "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -179,6 +184,10 @@ cc_test(
     srcs = [
         "glyph_segmentation_test.cc",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
     data = [
         "//common:testdata",
         "//ift:testdata",
@@ -197,6 +206,10 @@ cc_test(
     srcs = [
         "complex_condition_finder_test.cc",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
     data = [
         "//common:testdata",
         "//ift:testdata",
@@ -214,6 +227,10 @@ cc_test(
     size = "medium",
     srcs = [
         "closure_glyph_segmenter_test.cc",
+    ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
     ],
     data = [
         "//common:testdata",
@@ -246,6 +263,10 @@ cc_test(
         "candidate_merge_test.cc",
         "mock_patch_size_cache.h",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
     data = [
         "//common:testdata",
     ],
@@ -267,6 +288,26 @@ cc_test(
         ":activation_condition",
         ":encoder",
         "//ift/freq:mock_probability_calculator",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "dependency_closure_test",
+    size = "small",
+    srcs = [
+        "dependency_closure_test.cc",
+    ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
+    data = [
+        "//common:testdata",
+    ],
+    deps = [
+        ":segmentation_context",
+        "//util:common_cc_proto",
         "@googletest//:gtest_main",
     ],
 )
