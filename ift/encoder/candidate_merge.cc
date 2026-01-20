@@ -304,8 +304,8 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
 
   // We also need to check if there's a fallback patch and it intersects gids.
   if (!fallback_glyphs.empty() && fallback_glyphs.intersects(gids)) {
-    ActivationCondition condition = ActivationCondition::or_segments(
-        {}, 0, true);
+    ActivationCondition condition =
+        ActivationCondition::or_segments({}, 0, true);
     result.insert(std::make_pair(condition, fallback_glyphs));
   }
 
@@ -381,8 +381,8 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     double patch_probability = 1.0;
     if (!condition.IsFallback()) {
       patch_probability = TRY(
-        condition.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *merger.Strategy().ProbabilityCalculator()));
+          condition.Probability(merger.Context().SegmentationInfo().Segments(),
+                                *merger.Strategy().ProbabilityCalculator()));
     }
 
     double patch_size_before =

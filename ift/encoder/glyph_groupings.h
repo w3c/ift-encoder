@@ -21,9 +21,7 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(uint32_t glyph_count)
-      : combined_patches_(glyph_count) {
-  }
+  GlyphGroupings(uint32_t glyph_count) : combined_patches_(glyph_count) {}
 
   bool operator==(const GlyphGroupings& other) {
     return and_glyph_groups_ == other.and_glyph_groups_ &&
@@ -78,9 +76,7 @@ class GlyphGroupings {
 
   // Returns the set of glyphs that are considered unmapped,
   // which will be placed in the fallback (always loaded) patch.
-  common::GlyphSet UnmappedGlyphs() const {
-    return unmapped_glyphs_;
-  }
+  common::GlyphSet UnmappedGlyphs() const { return unmapped_glyphs_; }
 
   // Returns a list of conditions which include segment.
   const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(

@@ -181,6 +181,9 @@ void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
                                       hb_face_t* face) const {
   codepoints.union_into(hb_subset_input_unicode_set(input));
 
+  // TODO XXXX should we clear the harfbuzz default feature set so that we are
+  //           always working with a known set of features? we would
+  //           use the IFT spec defaults instead.
   hb_set_t* features =
       hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
   // hb_input_t has a set of layout featurs configured by default, we

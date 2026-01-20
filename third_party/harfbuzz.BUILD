@@ -80,6 +80,7 @@ cc_library(
         "src/hb-buffer.h",
         "src/hb-cairo.h",
         "src/hb-common.h",
+        "src/hb-depend.h",
         "src/hb-deprecated.h",
         "src/hb-draw.h",
         "src/hb-face.h",
@@ -110,6 +111,7 @@ cc_library(
     copts = [
         "-DHAVE_CONFIG_H",
         "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
         "-Iexternal/w3c_patch_subset_incxfer/third_party/harfbuzz",
     ] + select({
         ":macos": ["-DHAVE_XLOCALE_H=1"],
