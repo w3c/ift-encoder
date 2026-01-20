@@ -718,7 +718,7 @@ Status Merger::ApplyInitFontMove(const GlyphSet& glyphs_to_move, double delta) {
           << " glyphs into the initial font (cost delta = " << delta << ")";
 
   SubsetDefinition initial_segment =
-      Context().SegmentationInfo().InitFontSegmentWithoutDefaults();
+      Context().SegmentationInfo().InitFontSegment();
   initial_segment.gids.union_set(glyphs_to_move);
 
   TRYV(Context().ReassignInitSubset(initial_segment));

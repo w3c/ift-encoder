@@ -15,6 +15,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
+#include "ift/encoder/init_subset_defaults.h"
 
 namespace ift::encoder {
 
@@ -64,6 +65,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     uint32_t num_glyphs = hb_face_get_glyph_count(roboto_.get());
 
     SubsetDefinition init_font_segment;
+    AddInitSubsetDefaults(init_font_segment);
+
     closure_cache_ = std::make_unique<GlyphClosureCache>(roboto_.get());
     requested_segmentation_info_ =
         std::make_unique<RequestedSegmentationInformation>(
@@ -131,6 +134,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     glyph_conditions_complex_->AddAndCondition(ToGlyph(0x6C), 1);
 
     SubsetDefinition init_font_segment;
+    AddInitSubsetDefaults(init_font_segment);
+
     requested_segmentation_info_complex_ =
         std::make_unique<RequestedSegmentationInformation>(
             segments_complex_, init_font_segment, *closure_cache_,
@@ -581,6 +586,7 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
 
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_LeaveUnmapped) {
   SubsetDefinition init_font_segment;
+  AddInitSubsetDefaults(init_font_segment);
   RequestedSegmentationInformation segmentation_info(
       segments_complex_, init_font_segment, *closure_cache_, PATCH);
 

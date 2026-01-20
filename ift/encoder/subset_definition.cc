@@ -183,6 +183,10 @@ void SubsetDefinition::ConfigureInput(hb_subset_input_t* input,
 
   hb_set_t* features =
       hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  // hb_input_t has a set of layout featurs configured by default, we
+  // instead rely on the IFT spec default feature list so clear out the
+  // harfbuzz provided ones.
+  hb_set_clear(features);
   for (hb_tag_t tag : feature_tags) {
     hb_set_add(features, tag);
   }
