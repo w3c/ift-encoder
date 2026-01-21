@@ -35,7 +35,7 @@ Status SegmentationContext::ValidateSegmentation(
     }
   }
 
-  GlyphSet full_minus_initial = segmentation_info_.FullClosure();
+  GlyphSet full_minus_initial = segmentation_info_->FullClosure();
   full_minus_initial.subtract(initial_closure);
 
   if (full_minus_initial != visited) {
@@ -51,7 +51,7 @@ Status SegmentationContext::ValidateSegmentation(
 
 StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
     segment_index_t segment_index) {
-  if (segmentation_info_.Segments()[segment_index].Definition().Empty()) {
+  if (segmentation_info_->Segments()[segment_index].Definition().Empty()) {
     // Empty segment is a noop;
     return GlyphSet{};
   }
@@ -59,8 +59,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   GlyphSet and_gids;
   GlyphSet or_gids;
   GlyphSet exclusive_gids;
-  TRYV(glyph_closure_cache.AnalyzeSegment(segmentation_info_, {segment_index},
-                                          and_gids, or_gids, exclusive_gids));
+  TRYV(AnalyzeSegment({segment_index}, and_gids, or_gids, exclusive_gids));
 
   GlyphSet changed_gids;
   changed_gids.union_set(and_gids);
@@ -101,7 +100,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   // Record a set of all glyphs prior to the init subset redefinition.
   // Will be needed to do group invalidation correctly.
   GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
-  SegmentSet changed_segments = segmentation_info_.ReassignInitSubset(
+  SegmentSet changed_segments = segmentation_info_->ReassignInitSubset(
       glyph_closure_cache, std::move(new_def));
 
   // Consider all glyphs moved to the init font as changed.
@@ -132,6 +131,66 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
 
   glyph_closure_cache.LogClosureCount(
       "Segmentation reprocess for init def change.");
+
+  return absl::OkStatus();
+}
+
+static void PrintDiff(absl::string_view set_name, const GlyphSet& closure, const GlyphSet& dep) {
+  std::string op = " == ";
+  bool equal = true;
+  if (closure != dep) {
+    op = " != ";
+    equal = false;
+  }
+
+  LOG(ERROR) << "Set " << set_name
+    << ": closure glyphs " << closure.ToString() << op
+    << " dependency glyphs " << dep.ToString();
+}
+
+Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
+                                           GlyphSet& and_gids,
+                                           GlyphSet& or_gids,
+                                           GlyphSet& exclusive_gids) {
+  // TODO XXXXX count number of times we were able to use dep analysis.
+  ConditionAnalysisMode effective_mode = condition_analysis_mode_;
+  GlyphSet dep_and_gids = and_gids;
+  GlyphSet dep_or_gids = or_gids;
+  GlyphSet dep_exclusive_gids = exclusive_gids;
+  if (effective_mode == CLOSURE_AND_DEP_GRAPH ||
+      effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
+    // TODO XXXX make dep closure take segment set.
+    auto valid = TRY(depedency_closure_->AnalyzeSegment(
+      *segment_ids.begin(), dep_and_gids, dep_or_gids, dep_exclusive_gids));
+    if (!valid) {
+      effective_mode = CLOSURE_ONLY;
+    }
+  }
+
+  if (effective_mode == CLOSURE_ONLY || effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
+    TRYV(glyph_closure_cache.AnalyzeSegment(
+      *segmentation_info_, segment_ids, and_gids, or_gids, exclusive_gids));
+  } else {
+    or_gids.union_set(dep_or_gids);
+    and_gids.union_set(dep_and_gids);
+    exclusive_gids.union_set(dep_exclusive_gids);
+  }
+
+  if (effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
+    if (and_gids != dep_and_gids ||
+        or_gids != dep_or_gids ||
+        exclusive_gids != dep_exclusive_gids) {
+      LOG(ERROR) << "Mismatch between closure and depedency analysis conditions for segments " << segment_ids.ToString();
+      for (segment_index_t s : segment_ids) {
+        LOG(ERROR) << "segment[" << s << "].codepoints = " << segmentation_info_->Segments().at(s).Definition().codepoints.ToString();
+        LOG(ERROR) << "segment[" << s << "].features.size() = " << segmentation_info_->Segments().at(s).Definition().feature_tags.size();
+      }
+      PrintDiff("AND", and_gids, dep_and_gids);
+      PrintDiff("OR ", or_gids, dep_or_gids);
+      PrintDiff("EXC", exclusive_gids, dep_exclusive_gids);
+      return absl::InternalError("Depedency graph conditions does not match the closure analysis conditions");
+    }
+  }
 
   return absl::OkStatus();
 }

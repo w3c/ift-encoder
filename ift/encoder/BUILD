@@ -93,6 +93,7 @@ cc_library(
         "//ift",
         "//ift/feature_registry",
         "//ift/freq",
+        "//util:segmenter_config_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:node_hash_set",
         "@abseil-cpp//absl/flags:flag",

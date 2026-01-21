@@ -197,8 +197,14 @@ StatusOr<bool> DependencyClosure::AnalyzeSegment(
     return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
   }
 
-  const CodepointSet& unicodes =
-      segmentation_info_->Segments().at(segment_id).Definition().codepoints;
+  const Segment& segment = segmentation_info_->Segments().at(segment_id);
+  if (!segment.Definition().feature_tags.empty()) {
+    // Feature based segments not yet handled.
+    return false;
+  }
+
+  const CodepointSet& unicodes = segment.Definition().codepoints;
+
 
   flat_hash_map<glyph_id_t, unsigned> traversed_edge_counts;
   const GlyphSet& closure_glyphs = segmentation_info_->NonInitFontGlyphs();

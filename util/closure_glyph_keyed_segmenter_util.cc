@@ -111,7 +111,7 @@ static Status Analysis(hb_face_t* font,
     }
 
     auto calculator = strategy.ProbabilityCalculator();
-    ClosureGlyphSegmenter segmenter(11, 11, PATCH);
+    ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
     SegmentationCost cost =
         TRY(segmenter.TotalCost(font, segmentation, *calculator));
 
@@ -207,7 +207,7 @@ static Status Main(const std::vector<char*> args) {
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
-      config.unmapped_glyph_handling());
+      config.unmapped_glyph_handling(), config.condition_analysis_mode());
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       font.get(), init_segment, segments, merge_groups));
 

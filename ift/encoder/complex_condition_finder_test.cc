@@ -24,7 +24,7 @@ namespace ift::encoder {
 class ComplexConditionFinderTest : public ::testing::Test {
  protected:
   ComplexConditionFinderTest()
-      : roboto(make_hb_face(nullptr)), segmenter(1, 1, PATCH) {
+      : roboto(make_hb_face(nullptr)), segmenter(1, 1, PATCH, CLOSURE_ONLY) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
   }
 
