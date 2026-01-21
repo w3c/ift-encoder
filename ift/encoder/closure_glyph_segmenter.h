@@ -11,6 +11,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 #include "util/common.pb.h"
+#include "util/segmenter_config.pb.h"
 
 namespace ift::encoder {
 
@@ -36,10 +37,12 @@ class ClosureGlyphSegmenter {
  public:
   ClosureGlyphSegmenter(uint32_t brotli_quality,
                         uint32_t init_font_merging_brotli_quality,
-                        UnmappedGlyphHandling unmapped_glyph_handling)
+                        UnmappedGlyphHandling unmapped_glyph_handling,
+                        ConditionAnalysisMode condition_analysis_mode)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
-        unmapped_glyph_handling_(unmapped_glyph_handling) {}
+        unmapped_glyph_handling_(unmapped_glyph_handling),
+        condition_analysis_mode_(condition_analysis_mode) {}
 
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
@@ -90,6 +93,7 @@ class ClosureGlyphSegmenter {
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
   UnmappedGlyphHandling unmapped_glyph_handling_;
+  ConditionAnalysisMode condition_analysis_mode_;
 };
 
 }  // namespace ift::encoder

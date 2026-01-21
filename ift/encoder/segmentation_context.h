@@ -20,6 +20,7 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "util/segmenter_config.pb.h"
 
 namespace ift::encoder {
 
@@ -42,9 +43,27 @@ namespace ift::encoder {
 // recompute the parts that change as a result of the changes in 1.
 class SegmentationContext {
  public:
+  static absl::StatusOr<SegmentationContext> Create(
+    hb_face_t* face, const SubsetDefinition& initial_segment,
+    const std::vector<Segment>& segments,
+    UnmappedGlyphHandling unmapped_glyph_handling,
+    ConditionAnalysisMode condition_analysis_mode,
+    uint32_t brotli_quality,
+    uint32_t init_font_brotli_quality) {
+    // TODO(garretrieger): argument list is getting long, switch to a builder pattern
+    // for construction.
+    SegmentationContext context(
+      face, initial_segment, segments, unmapped_glyph_handling,
+      condition_analysis_mode, brotli_quality, init_font_brotli_quality);
+    context.depedency_closure_ = TRY(DependencyClosure::Create(context.segmentation_info_.get(), context.original_face.get()));
+    return context;
+  }
+
+ private:
   SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
                       const std::vector<Segment>& segments,
                       UnmappedGlyphHandling unmapped_glyph_handling,
+                      ConditionAnalysisMode condition_analysis_mode,
                       uint32_t brotli_quality,
                       uint32_t init_font_brotli_quality)
       : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
@@ -52,19 +71,21 @@ class SegmentationContext {
             NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(face),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        segmentation_info_(segments, initial_segment, glyph_closure_cache,
-                           unmapped_glyph_handling),
+        segmentation_info_(std::make_unique<RequestedSegmentationInformation>(
+          segments, initial_segment, glyph_closure_cache, unmapped_glyph_handling)),
+        depedency_closure_(nullptr),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(hb_face_get_glyph_count(face)),
-        brotli_quality_(brotli_quality) {}
-
+        brotli_quality_(brotli_quality),
+        condition_analysis_mode_(condition_analysis_mode) {}
+ public:
   unsigned BrotliQuality() const { return brotli_quality_; }
 
   // Convert the information in this context into a finalized GlyphSegmentation
   // representation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
     GlyphSegmentation segmentation =
-        TRY(glyph_groupings.ToGlyphSegmentation(segmentation_info_));
+        TRY(glyph_groupings.ToGlyphSegmentation(*segmentation_info_));
     glyph_closure_cache.LogCacheStats();
     TRYV(ValidateSegmentation(segmentation));
     return segmentation;
@@ -73,7 +94,11 @@ class SegmentationContext {
   const common::SegmentSet& InertSegments() const { return inert_segments_; }
 
   const RequestedSegmentationInformation& SegmentationInfo() const {
-    return segmentation_info_;
+    return *segmentation_info_;
+  }
+
+  ConditionAnalysisMode GetConditionAnalysisMode() const {
+    return condition_analysis_mode_;
   }
 
   // Assign a new merged segment to base and clear all of the segments that
@@ -82,7 +107,7 @@ class SegmentationContext {
                                const common::SegmentSet& to_merge,
                                const Segment& merged_segment, bool is_inert) {
     unsigned count =
-        segmentation_info_.AssignMergedSegment(base, to_merge, merged_segment);
+        segmentation_info_->AssignMergedSegment(base, to_merge, merged_segment);
     inert_segments_.subtract(to_merge);
     if (is_inert) {
       inert_segments_.insert(base);
@@ -117,10 +142,7 @@ class SegmentationContext {
   absl::Status AnalyzeSegment(const common::SegmentSet& segment_ids,
                               common::GlyphSet& and_gids,
                               common::GlyphSet& or_gids,
-                              common::GlyphSet& exclusive_gids) {
-    return glyph_closure_cache.AnalyzeSegment(
-        segmentation_info_, segment_ids, and_gids, or_gids, exclusive_gids);
-  }
+                              common::GlyphSet& exclusive_gids);
 
   // Generates updated glyph conditions and glyph groupings for segment_index
   // which has the provided set of codepoints.
@@ -133,7 +155,7 @@ class SegmentationContext {
   // calling this.
   absl::Status GroupGlyphs(const common::GlyphSet& glyphs,
                            const common::SegmentSet& modified_segments) {
-    return glyph_groupings.GroupGlyphs(segmentation_info_, glyph_condition_set,
+    return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
                                        glyph_closure_cache, glyphs,
                                        modified_segments);
   }
@@ -176,8 +198,8 @@ class SegmentationContext {
   common::hb_face_unique_ptr original_face;
 
  private:
-  RequestedSegmentationInformation segmentation_info_;
-  // TODO XXXXX add dependency closure object.
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info_;
+  std::unique_ptr<DependencyClosure> depedency_closure_;
 
  public:
   // == Phase 1 - derived from segments and init information
@@ -192,6 +214,8 @@ class SegmentationContext {
   common::SegmentSet inert_segments_;
 
   unsigned brotli_quality_;
+
+  ConditionAnalysisMode condition_analysis_mode_;
 };
 
 }  // namespace ift::encoder

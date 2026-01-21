@@ -122,10 +122,11 @@ static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
  */
 Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
-  SegmentationContext non_incremental_context(
+  SegmentationContext non_incremental_context = TRY(SegmentationContext::Create(
       face, context.SegmentationInfo().InitFontSegment(),
       context.SegmentationInfo().Segments(),
-      context.SegmentationInfo().GetUnmappedGlyphHandling(), 1, 1);
+      context.SegmentationInfo().GetUnmappedGlyphHandling(),
+      context.GetConditionAnalysisMode(), 1, 1));
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
@@ -580,9 +581,10 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
   AddInitSubsetDefaults(initial_segment);
 
   // No merging is done during init.
-  SegmentationContext context(face, initial_segment, segments,
-                              unmapped_glyph_handling_, brotli_quality_,
-                              init_font_merging_brotli_quality_);
+  SegmentationContext context =
+    TRY(SegmentationContext::Create(face, initial_segment, segments,
+                              unmapped_glyph_handling_, condition_analysis_mode_,
+                              brotli_quality_, init_font_merging_brotli_quality_));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

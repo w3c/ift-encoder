@@ -1,5 +1,5 @@
 #include "ift/encoder/dependency_closure.h"
-#include <optional>
+#include <memory>
 #include <vector>
 
 #include "common/int_set.h"
@@ -82,7 +82,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (TRY(dependency_closure.AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
+    if (TRY(dependency_closure->AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
       return absl::InternalError("Dependency closure analysis should have been rejected.");
     }
     return absl::OkStatus();
@@ -93,7 +93,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (!TRY(dependency_closure.AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
+    if (!TRY(dependency_closure->AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
       return absl::InternalError("Dependency closure analysis rejected unexpectedly.");
     }
 
@@ -137,7 +137,7 @@ class DependencyClosureTest : public ::testing::Test {
   hb_face_unique_ptr double_nested_face;
   GlyphClosureCache closure_cache;
   RequestedSegmentationInformation segmentation_info;
-  DependencyClosure dependency_closure;
+  std::unique_ptr<DependencyClosure> dependency_closure;
 };
 
 TEST_F(DependencyClosureTest, AddsToSets) {
@@ -145,7 +145,7 @@ TEST_F(DependencyClosureTest, AddsToSets) {
     GlyphSet or_gids {102};
     GlyphSet exclusive_gids {103};
 
-    auto r = dependency_closure.AnalyzeSegment({0}, and_gids, or_gids, exclusive_gids);
+    auto r = dependency_closure->AnalyzeSegment(0, and_gids, or_gids, exclusive_gids);
     ASSERT_TRUE(r.ok()) << r.status();
     ASSERT_TRUE(*r);
 
@@ -248,6 +248,21 @@ TEST_F(DependencyClosureTest, Rejected) {
   // Since the dep graph still passes through a GSUB edge.
   Reconfigure(WithDefaultFeatures({'f'}), {{{'i'}, ProbabilityBound::Zero()}});
   s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, Rejected_Features) {
+  SubsetDefinition features;
+  features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));
+  Reconfigure({}, {
+    {{'a'}, ProbabilityBound::Zero()},
+    {features, ProbabilityBound::Zero()},
+  });
+
+  Status s = CompareAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = RejectedAnalysis(1);
   ASSERT_TRUE(s.ok()) << s;
 }
 

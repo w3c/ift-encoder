@@ -3,6 +3,25 @@ edition = "2023";
 import "util/segmentation_plan.proto";
 import "util/common.proto";
 
+enum ConditionAnalysisMode {
+  // Analyzes glyph conditions using closure analysis only.
+  CLOSURE_ONLY = 0;
+
+  // Attempts to analyze glyph conditions using a depedency
+  // graph where possible. When not possible it falls back
+  // to closure analysis. This is for many cases much faster
+  // then pure closure based analysis. However, the depedency
+  // graph approach is still experimental and may (rarely) produce
+  // different results than the pure closure analysis approach.
+  CLOSURE_AND_DEP_GRAPH = 1;
+
+  // Always runs both closure and depedency graph analysis, the
+  // results are compared and an error is raised if they differ.
+  // Useful primarily for testing the accuracy of the depedency
+  // graph approach.
+  CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
+}
+
 // This messages provides the configuration details for closure_glyph_keyed_segmenter_util
 //
 // The closure_glyph_keyed_segmenter_util is used to turn a series of codepoint/feature based
@@ -108,7 +127,11 @@ message SegmenterConfig {
   // When provide the generated segmentation plan will be merged onto this base plan.
   SegmentationPlan base_segmentation_plan = 13;
 
-  // next = 15
+  // Configures the method used to find glyph activation conditions. See the enum
+  // for more informmation.
+  ConditionAnalysisMode condition_analysis_mode = 15 [default = CLOSURE_ONLY];
+
+  // next = 16
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group

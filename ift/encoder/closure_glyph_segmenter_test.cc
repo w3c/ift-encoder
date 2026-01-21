@@ -24,14 +24,17 @@ using ift::freq::UnigramProbabilityCalculator;
 
 namespace ift::encoder {
 
+// TODO XXXXX add full roboto type test which uses the alternate closure analysis modes.
+// verify result is the same as pure closure.
+
 class ClosureGlyphSegmenterTest : public ::testing::Test {
  protected:
   ClosureGlyphSegmenterTest()
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)),
-        segmenter(8, 8, PATCH),
-        segmenter_find_conditions(8, 8, FIND_CONDITIONS),
-        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT) {
+        segmenter(8, 8, PATCH, CLOSURE_ONLY),
+        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
+        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -853,7 +856,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
       GlyphSegmentation::GroupsToSegmentation({}, {}, {}, {}, segmentation1);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ClosureGlyphSegmenter segmenter(8, 8, PATCH);
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   SegmentationCost base_cost =
       *segmenter.TotalCost(roboto.get(), segmentation1, calculator);
   ASSERT_GT(base_cost.total_cost, 1000);

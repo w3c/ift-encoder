@@ -1,6 +1,8 @@
 #ifndef IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 #define IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 
+#include <memory>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
@@ -18,11 +20,11 @@ class RequestedSegmentationInformation;
  */
 class DependencyClosure {
  public:
-  static absl::StatusOr<DependencyClosure> Create(
+  static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face) {
     auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
-    return DependencyClosure(segmentation_info, face, full_feature_set);
+    return std::unique_ptr<DependencyClosure>(new DependencyClosure(segmentation_info, face, full_feature_set));
   }
 
   // Attempts to analyze the given segment using a glyph dependency graph
