@@ -6,7 +6,9 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/types.h"
 
+using absl::btree_set;
 using absl::flat_hash_map;
+using absl::flat_hash_set;
 using absl::StatusOr;
 using common::CodepointSet;
 using common::GlyphSet;
@@ -15,7 +17,7 @@ using common::FontHelper;
 
 namespace ift::encoder {
 
-bool DependencyClosure::FollowEdge(
+bool DependencyClosure::ShouldFollowEdge(
   hb_tag_t table_tag,
   glyph_id_t from_gid,
   glyph_id_t to_gid,
@@ -49,84 +51,144 @@ static bool DisallowedTableTag(hb_tag_t tag) {
          tag == HB_TAG('C', 'F', 'F', ' ') || tag == HB_TAG('C', 'F', 'F', '2');
 }
 
-bool DependencyClosure::TraverseGraph(
-    const common::GlyphSet& glyphs,
-    absl::flat_hash_map<glyph_id_t, unsigned>& traversed_edges) const {
 
-  VLOG(1) << "DependencyClosure::TraverseGraph(" << glyphs.ToString() << ")";
-  std::vector<glyph_id_t> next;
-  for (glyph_id_t gid : glyphs) {
-    next.push_back(gid);
-    // Ensure an edge count entry exists.
-    traversed_edges.insert(std::pair(gid, 0));
+bool DependencyClosure::HandleUnicodeOutgoingEdges(
+    hb_codepoint_t unicode,
+    std::vector<Node>& next,
+    absl::flat_hash_map<Node, unsigned>& traversed_edges
+) const {
+
+  auto it = unicode_to_gid_.find(unicode);
+  if (it == unicode_to_gid_.end()) {
+    // Unknown unicode has no outgoing edges.
+    return true;
   }
 
-  GlyphSet visited;
-  while (!next.empty()) {
-    glyph_id_t gid = next.back();
-    next.pop_back();
+  Node node = Node::Glyph(it->second);
+  traversed_edges[node]++;
+  next.push_back(node);
 
-    if (visited.contains(gid)) {
-      continue;
-    }
-    visited.insert(gid);
-
-    hb_codepoint_t index = 0;
-    hb_tag_t table_tag = HB_CODEPOINT_INVALID;
-    hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
-    hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
-    hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
-    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                     &dep_gid, &layout_tag, &ligature_set)) {
-      if (!FollowEdge(table_tag, gid, dep_gid, layout_tag)) {
-        continue;
-      }
-
-      if (DisallowedTableTag(table_tag)) {
-        return false;
-      }
-
-      traversed_edges[dep_gid]++;
-      next.push_back(dep_gid);
-    }
+  // The subsetter adds unicode bidi mirrors for any unicode codepoints,
+  // so add a dep graph edge for those if they exist:
+  auto unicode_funcs = hb_unicode_funcs_get_default ();
+  hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
+  if (mirror != unicode) {
+    Node node = Node::Unicode(mirror);
+    traversed_edges[node]++;
+    next.push_back(node);
   }
 
   return true;
 }
 
-flat_hash_map<hb_codepoint_t, glyph_id_t>
+bool DependencyClosure::HandleGlyphOutgoingEdges(
+    glyph_id_t gid,
+    std::vector<Node>& next,
+    absl::flat_hash_map<Node, unsigned>& traversed_edges
+) const {
+  hb_codepoint_t index = 0;
+  hb_tag_t table_tag = HB_CODEPOINT_INVALID;
+  hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
+  hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
+  hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
+  bool allowed = true;
+  while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
+                                   &dep_gid, &layout_tag, &ligature_set)) {
+    if (!ShouldFollowEdge(table_tag, gid, dep_gid, layout_tag)) {
+      continue;
+    }
+
+    allowed = allowed && !DisallowedTableTag(table_tag);
+
+    Node node = Node::Glyph(dep_gid);
+    traversed_edges[node]++;
+    next.push_back(node);
+  }
+
+  return allowed;
+}
+
+bool DependencyClosure::HandleSegmentOutgoingEdges(
+    segment_index_t id,
+    std::vector<Node>& next,
+    absl::flat_hash_map<Node, unsigned>& traversed_edges
+  ) const {
+
+  if (id >= segmentation_info_->Segments().size()) {
+    // Unknown segment has no outgoing edges.
+    return true;
+  }
+
+  const Segment& s = segmentation_info_->Segments().at(id);
+  for (hb_codepoint_t u : s.Definition().codepoints) {
+    Node node = Node::Unicode(u);
+    traversed_edges[node]++;
+    next.push_back(node);
+  }
+
+  return true;
+}
+
+bool DependencyClosure::TraverseGraph(const absl::btree_set<Node>& nodes,
+                                      flat_hash_map<Node, unsigned>& traversed_edges) const {
+  VLOG(1) << "DependencyClosure::TraverseGraph(...)";
+  std::vector<Node> next;
+  for (Node node : nodes) {
+    next.push_back(node);
+    // Ensure an edge count entry exists.
+    traversed_edges.insert(std::pair(node, 0));
+  }
+
+  bool allowed = true;
+  flat_hash_set<Node> visited;
+  while (!next.empty()) {
+    Node node = next.back();
+    next.pop_back();
+
+    if (visited.contains(node)) {
+      continue;
+    }
+    visited.insert(node);
+
+    if (node.IsGlyph() && !HandleGlyphOutgoingEdges(node.Id(), next, traversed_edges)) {
+      allowed = false;
+    }
+
+    if (node.IsUnicode() && !HandleUnicodeOutgoingEdges(node.Id(), next, traversed_edges)) {
+      allowed = false;
+    }
+
+    if (node.IsSegment() && !HandleSegmentOutgoingEdges(node.Id(), next, traversed_edges)) {
+      allowed = false;
+    }
+  }
+
+  return allowed;
+}
+
+bool DependencyClosure::TraverseGlyphGraph(
+    const common::GlyphSet& glyphs,
+    absl::flat_hash_map<Node, unsigned>& traversed_edges) const {
+  VLOG(1) << "DependencyClosure::TraverseGlyphGraph(" << glyphs.ToString() << ")";
+  btree_set<Node> nodes;
+  for (glyph_id_t gid : glyphs) {
+    nodes.insert(Node::Glyph(gid));
+  }
+  return TraverseGraph(nodes, traversed_edges);
+}
+
+flat_hash_map<DependencyClosure::Node, glyph_id_t>
 DependencyClosure::ComputeIncomingEdgeCount() const {
   VLOG(1) << "DependencyClosure::ComputeIncomingEdgeCount()";
-  unsigned glyph_count = hb_face_get_glyph_count(original_face_.get());
-  flat_hash_map<glyph_id_t, unsigned> incoming_edge_count;
-  for (unsigned gid = 0; gid < glyph_count; gid++) {
-    hb_codepoint_t index = 0;
-    hb_tag_t table_tag = HB_CODEPOINT_INVALID;
-    hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
-    hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
-    hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
-    incoming_edge_count.insert(std::make_pair(gid, 0)); // ensure each gid has an entry
 
-    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                     &dep_gid, &layout_tag, &ligature_set)) {
-      if (!FollowEdge(table_tag, gid, dep_gid, layout_tag)) {
-        continue;
-      }
-      incoming_edge_count[dep_gid]++;
-    }
+  btree_set<Node> nodes;
+  for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
+    nodes.insert(Node::Segment(s));
   }
 
-  // For our use case, the unicode -> gid mappings also contribute an incoming edge to the
-  // counts, so collect those up.
-  const CodepointSet& full_def = segmentation_info_->FullDefinition().codepoints;
-  const GlyphSet& closure_glyphs = segmentation_info_->NonInitFontGlyphs();
-  for (const auto [u, g] : unicode_to_gid_) {
-    if (full_def.contains(u) && closure_glyphs.contains(g)) {
-      incoming_edge_count[g]++;
-    }
-  }
-
-  return incoming_edge_count;
+  flat_hash_map<Node, glyph_id_t> incoming_edge_counts;
+  TraverseGraph(nodes, incoming_edge_counts);
+  return incoming_edge_counts;
 }
 
 StatusOr<IntSet> DependencyClosure::FullFeatureSet(
@@ -203,59 +265,47 @@ StatusOr<bool> DependencyClosure::AnalyzeSegment(
     return false;
   }
 
-  const CodepointSet& unicodes = segment.Definition().codepoints;
 
-
-  flat_hash_map<glyph_id_t, unsigned> traversed_edge_counts;
-  const GlyphSet& closure_glyphs = segmentation_info_->NonInitFontGlyphs();
-  GlyphSet glyphs;
-  for (hb_codepoint_t u : unicodes) {
-    auto it = unicode_to_gid_.find(u);
-    if (it == unicode_to_gid_.end()) {
-      continue;
-    }
-    glyph_id_t gid = it->second;
-    if (!closure_glyphs.contains(gid)) {
-      continue;
-    }
-
-    glyphs.insert(gid);
-    traversed_edge_counts[gid]++;
-  }
-
-  if (!TraverseGraph(glyphs, traversed_edge_counts)) {
+  btree_set<Node> start_nodes;
+  start_nodes.insert(Node::Segment(segment_id));
+  flat_hash_map<Node, unsigned> traversed_edge_counts;
+  if (!TraverseGraph(start_nodes, traversed_edge_counts)) {
     return false;
   }
 
-  GlyphSet shared_glyphs; // set of glyphs which are accessible from outside this subgraph.
-  for (auto [gid, count] : traversed_edge_counts) {
-    unsigned incoming_edge_count = incoming_edge_count_.at(gid);
+  btree_set<Node> shared_nodes; // set of nodes which are accessible from outside this subgraph.
+  for (auto [node, count] : traversed_edge_counts) {
+    unsigned incoming_edge_count = incoming_edge_count_.at(node);
 
-    exclusive_gids.insert(gid);
+    if (node.IsGlyph()) {
+      exclusive_gids.insert(node.Id());
+    }
+
     if (count < incoming_edge_count) {
-      shared_glyphs.insert(gid);
+      shared_nodes.insert(node);
     } else if (count != incoming_edge_count) {
       return absl::InternalError(absl::StrCat(
         "Should not happen traversed incoming edge count is greater than "
-        "the precomputed incoming edge counts: g", gid, " = ", count, " > ", incoming_edge_count));
+        "the precomputed incoming edge counts: ", node.ToString(), " = ", count, " > ", incoming_edge_count));
     }
   }
 
   // We need to find glyphs that are reachable from other segments, which are those
   // glyphs that are reachable from any shared_glyphs found above.
-  flat_hash_map<glyph_id_t, unsigned> all_shared_glyphs;
-  if (!TraverseGraph(shared_glyphs, all_shared_glyphs)) {
+  flat_hash_map<Node, unsigned> all_shared_nodes;
+  if (!TraverseGraph(shared_nodes, all_shared_nodes)) {
     return false;
   }
 
   // Now we can make the glyph condition categorizations
   // any glyphs not in 'shared_glyphs' are only reachable from
   // the iput segment so are exclusive. Everything else is disjunctive.
-  for (auto [gid, _] : all_shared_glyphs) {
-    or_gids.insert(gid);
+  for (auto [node, _] : all_shared_nodes) {
+    if (node.IsGlyph()) {
+      or_gids.insert(node.Id());
+    }
   }
   exclusive_gids.subtract(or_gids);
-
 
   return true;
 }
