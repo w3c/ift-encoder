@@ -224,7 +224,7 @@ flat_hash_map<hb_codepoint_t, glyph_id_t> DependencyClosure::UnicodeToGid(
 }
 
 StatusOr<bool> DependencyClosure::AnalyzeSegment(
-    segment_index_t segment_id, GlyphSet& and_gids, GlyphSet& or_gids,
+    const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) const {
 
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
@@ -255,19 +255,21 @@ StatusOr<bool> DependencyClosure::AnalyzeSegment(
   // - Handle simple disjunctive GSUB lookups (may need conjunction with features).
   // - Handle simple conjunctive GSUB lookups (eg. liga)
   // - Handle features in the input segment (once GSUB is supported).
-  if (segment_id >= segmentation_info_->Segments().size()) {
-    return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
-  }
-
-  const Segment& segment = segmentation_info_->Segments().at(segment_id);
-  if (!segment.Definition().feature_tags.empty()) {
-    // Feature based segments not yet handled.
-    return false;
-  }
-
-
   btree_set<Node> start_nodes;
-  start_nodes.insert(Node::Segment(segment_id));
+  for (segment_index_t segment_id : segments) {
+    if (segment_id >= segmentation_info_->Segments().size()) {
+      return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
+    }
+
+    const Segment& segment = segmentation_info_->Segments().at(segment_id);
+    if (!segment.Definition().feature_tags.empty()) {
+      // Feature based segments not yet handled.
+      return false;
+    }
+
+    start_nodes.insert(Node::Segment(segment_id));
+  }
+
   flat_hash_map<Node, unsigned> traversed_edge_counts;
   if (!TraverseGraph(start_nodes, traversed_edge_counts)) {
     return false;

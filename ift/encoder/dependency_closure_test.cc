@@ -17,6 +17,7 @@
 using absl::Status;
 using common::hb_face_unique_ptr;
 using common::CodepointSet;
+using common::SegmentSet;
 using common::FontData;
 using common::GlyphSet;
 using ift::freq::ProbabilityBound;
@@ -82,25 +83,25 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (TRY(dependency_closure->AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
+    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids, exclusive_gids))) {
       return absl::InternalError("Dependency closure analysis should have been rejected.");
     }
     return absl::OkStatus();
   }
 
-  Status CompareAnalysis(segment_index_t segment) {
+  Status CompareAnalysis(SegmentSet segments) {
     GlyphSet and_gids;
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (!TRY(dependency_closure->AnalyzeSegment(segment, and_gids, or_gids, exclusive_gids))) {
+    if (!TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids, exclusive_gids))) {
       return absl::InternalError("Dependency closure analysis rejected unexpectedly.");
     }
 
     GlyphSet expected_and_gids;
     GlyphSet expected_or_gids;
     GlyphSet expected_exclusive_gids;
-    TRYV(closure_cache.AnalyzeSegment(segmentation_info, {segment}, expected_and_gids, expected_or_gids, expected_exclusive_gids));
+    TRYV(closure_cache.AnalyzeSegment(segmentation_info, segments, expected_and_gids, expected_or_gids, expected_exclusive_gids));
 
     std::string message;
     bool success = true;
@@ -145,7 +146,7 @@ TEST_F(DependencyClosureTest, AddsToSets) {
     GlyphSet or_gids {102};
     GlyphSet exclusive_gids {103};
 
-    auto r = dependency_closure->AnalyzeSegment(0, and_gids, or_gids, exclusive_gids);
+    auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids, exclusive_gids);
     ASSERT_TRUE(r.ok()) << r.status();
     ASSERT_TRUE(*r);
 
@@ -155,9 +156,11 @@ TEST_F(DependencyClosureTest, AddsToSets) {
 }
 
 TEST_F(DependencyClosureTest, Exclusive) {
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
-  s = CompareAnalysis(3);
+  s = CompareAnalysis({3});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({0, 3});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -175,21 +178,23 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
     {{'a'}, ProbabilityBound::Zero()},
     {{'b'}, ProbabilityBound::Zero()},
   });
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
-  s = CompareAnalysis(1);
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({0, 1});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(double_nested_face.get(), {'a'}, {
     {{'b'}, ProbabilityBound::Zero()},
   });
-  s = CompareAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(double_nested_face.get(), {'b'}, {
     {{'a'}, ProbabilityBound::Zero()},
   });
-  s = CompareAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -197,7 +202,7 @@ TEST_F(DependencyClosureTest, CodepointNotInFont) {
   Reconfigure(double_nested_face.get(), {}, {
     {{'A'}, ProbabilityBound::Zero()},
   });
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -206,20 +211,20 @@ TEST_F(DependencyClosureTest, Disjunctive) {
   Reconfigure({}, segments);
 
   // Here 'A' is a component of 'Aacute' so 'A's condition is s4 or s5
-  Status s = CompareAnalysis(4);
+  Status s = CompareAnalysis({4});
   ASSERT_TRUE(s.ok()) << s;
-  s = CompareAnalysis(5);
+  s = CompareAnalysis({5});
   ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, DisjunctivePartialInInitFont) {
   // One half of a disjunctive dep is in the init font.
   Reconfigure({'A'}, {{{0xC1}, ProbabilityBound::Zero()}});
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure({0xC1}, {{{'A'}, ProbabilityBound::Zero()}});
-  s = CompareAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -229,12 +234,12 @@ TEST_F(DependencyClosureTest, AlreadyInInitFont) {
     {{'A'}, ProbabilityBound::Zero()},
     {{0xC1}, ProbabilityBound::Zero()},
   });
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, SegmentOutOfBounds) {
-  Status s = CompareAnalysis(10);
+  Status s = CompareAnalysis({10});
   ASSERT_TRUE(absl::IsInvalidArgument(s)) << s;
 }
 
@@ -259,7 +264,7 @@ TEST_F(DependencyClosureTest, Rejected_Features) {
     {features, ProbabilityBound::Zero()},
   });
 
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   s = RejectedAnalysis(1);
@@ -274,10 +279,10 @@ TEST_F(DependencyClosureTest, BidiMirroring) {
     {{0x2265 /* greater equal */}, ProbabilityBound::Zero()},
   });
 
-  Status s = CompareAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = CompareAnalysis(1);
+  s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 }
 

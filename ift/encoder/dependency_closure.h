@@ -39,7 +39,7 @@ class DependencyClosure {
   // them based on the analysis classification.
   //
   // TODO XXXX explain the meaning behind the three gid sets.
-  absl::StatusOr<bool> AnalyzeSegment(segment_index_t segment_id,
+  absl::StatusOr<bool> AnalyzeSegment(const common::SegmentSet& segments,
                       common::GlyphSet& and_gids,
                       common::GlyphSet& or_gids,
                       common::GlyphSet& exclusive_gids) const;
@@ -167,6 +167,7 @@ class DependencyClosure {
 
   absl::flat_hash_map<hb_codepoint_t, glyph_id_t> unicode_to_gid_;
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
+  // TODO XXXXX this needs to be rebuilt whenever segments in seg info are modified.
   absl::flat_hash_map<Node, unsigned> incoming_edge_count_;
 };
 
