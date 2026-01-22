@@ -137,10 +137,8 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
 
 static void PrintDiff(absl::string_view set_name, const GlyphSet& closure, const GlyphSet& dep) {
   std::string op = " == ";
-  bool equal = true;
   if (closure != dep) {
     op = " != ";
-    equal = false;
   }
 
   LOG(ERROR) << "Set " << set_name
@@ -159,9 +157,8 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   GlyphSet dep_exclusive_gids = exclusive_gids;
   if (effective_mode == CLOSURE_AND_DEP_GRAPH ||
       effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
-    // TODO XXXX make dep closure take segment set.
     auto valid = TRY(depedency_closure_->AnalyzeSegment(
-      *segment_ids.begin(), dep_and_gids, dep_or_gids, dep_exclusive_gids));
+      segment_ids, dep_and_gids, dep_or_gids, dep_exclusive_gids));
     if (!valid) {
       effective_mode = CLOSURE_ONLY;
     }
