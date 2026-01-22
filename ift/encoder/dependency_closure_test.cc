@@ -266,6 +266,21 @@ TEST_F(DependencyClosureTest, Rejected_Features) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, BidiMirroring) {
+  // Test that the dep graph analysis accounts for bidi mirroring in the
+  // harfbuzz closure
+  Reconfigure({}, {
+    {{0x2264 /* less equal */}, ProbabilityBound::Zero()},
+    {{0x2265 /* greater equal */}, ProbabilityBound::Zero()},
+  });
+
+  Status s = CompareAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = CompareAnalysis(1);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 }  // namespace ift::encoder
 
 // TODO(garretrieger) more tests (once functionality is available):
