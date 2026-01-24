@@ -17,7 +17,10 @@ namespace ift::encoder {
 class RequestedSegmentationInformation;
 
 /*
- * A cache of the results of glyph closure on a specific font face.
+ * Performs closure analysis (like GlyphClosureCache) using a depedency graph
+ * instead of closure. The dependency graph is not always accurate (overestimating
+ * the true closure in some cases) so this returns a signal on the accuracy of
+ * the analysis.
  */
 class DependencyClosure {
  public:
@@ -27,6 +30,15 @@ class DependencyClosure {
     auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
     return std::unique_ptr<DependencyClosure>(new DependencyClosure(segmentation_info, face, full_feature_set));
   }
+
+  enum AnalysisAccuracy {
+    // The analysis is accurate and should match true glyph closure.
+    ACCURATE,
+
+    // The analysis may not be accurate and as a result may overestimate
+    // the true glyph closure.
+    INACCURATE,
+  };
 
   // Attempts to analyze the given segment using a glyph dependency graph
   // from harfbuzz. Returns true if a accurate analysis is possible, otherwise
@@ -39,7 +51,8 @@ class DependencyClosure {
   // them based on the analysis classification.
   //
   // TODO XXXX explain the meaning behind the three gid sets.
-  absl::StatusOr<bool> AnalyzeSegment(const common::SegmentSet& segments,
+  // TODO XXXX explain the return type.
+  absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(const common::SegmentSet& segments,
                       common::GlyphSet& and_gids,
                       common::GlyphSet& or_gids,
                       common::GlyphSet& exclusive_gids) const;
@@ -117,6 +130,7 @@ class DependencyClosure {
         dependency_graph_(hb_depend_from_face(face), &hb_depend_destroy),
         incoming_edge_count_() {
     incoming_edge_count_ = ComputeIncomingEdgeCount();
+    context_glyphs_ = CollectContextGlyphs(original_face_.get(), full_feature_set_);
   }
 
   bool ShouldFollowEdge(
@@ -125,28 +139,30 @@ class DependencyClosure {
     glyph_id_t to_gid,
     hb_tag_t feature_tag) const;
 
+  AnalysisAccuracy AccuracyForGlyph(glyph_id_t gid) const;
+
   // Traverse the full depedency graph (segments, unicodes, and gids), starting at one or more
   // specific unicode values.
-  bool TraverseGraph(const absl::btree_set<Node>& nodes,
+  AnalysisAccuracy TraverseGraph(const absl::btree_set<Node>& nodes,
                      absl::flat_hash_map<Node, unsigned>& traversed_edges) const;
 
   // Traverse the glyph only portion of the dependency graph.
-  bool TraverseGlyphGraph(const common::GlyphSet& glyphs,
+  AnalysisAccuracy TraverseGlyphGraph(const common::GlyphSet& glyphs,
                           absl::flat_hash_map<Node, unsigned>& traversed_edges) const;
 
-  bool HandleUnicodeOutgoingEdges(
+  AnalysisAccuracy HandleUnicodeOutgoingEdges(
     hb_codepoint_t unicode,
     std::vector<Node>& next,
     absl::flat_hash_map<Node, unsigned>& traversed_edges
   ) const;
 
-  bool HandleGlyphOutgoingEdges(
+  AnalysisAccuracy HandleGlyphOutgoingEdges(
     glyph_id_t gid,
     std::vector<Node>& next,
     absl::flat_hash_map<Node, unsigned>& traversed_edges
   ) const;
 
-  bool HandleSegmentOutgoingEdges(
+  AnalysisAccuracy HandleSegmentOutgoingEdges(
     segment_index_t id,
     std::vector<Node>& next,
     absl::flat_hash_map<Node, unsigned>& traversed_edges
@@ -161,6 +177,8 @@ class DependencyClosure {
   static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
       hb_face_t* face);
 
+  static common::GlyphSet CollectContextGlyphs(hb_face_t* face, const common::IntSet& full_feature_set);
+
   const RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
   common::IntSet full_feature_set_;
@@ -169,6 +187,10 @@ class DependencyClosure {
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
   // TODO XXXXX this needs to be rebuilt whenever segments in seg info are modified.
   absl::flat_hash_map<Node, unsigned> incoming_edge_count_;
+
+  // These glyphs may participate in complex substitutions and as a result we can't
+  // analyze via the dep graph.
+  common::GlyphSet context_glyphs_;
 };
 
 }  // namespace ift::encoder

@@ -5,6 +5,7 @@
 #include "absl/status/status.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/types.h"
@@ -157,9 +158,9 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   GlyphSet dep_exclusive_gids = exclusive_gids;
   if (effective_mode == CLOSURE_AND_DEP_GRAPH ||
       effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
-    auto valid = TRY(depedency_closure_->AnalyzeSegment(
+    auto accuracy = TRY(depedency_closure_->AnalyzeSegment(
       segment_ids, dep_and_gids, dep_or_gids, dep_exclusive_gids));
-    if (!valid) {
+    if (accuracy == DependencyClosure::INACCURATE) {
       effective_mode = CLOSURE_ONLY;
     }
   }
