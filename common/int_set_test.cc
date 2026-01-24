@@ -338,6 +338,10 @@ TEST_F(IntSetTest, Union) {
   ASSERT_TRUE(hb_set_has(c.get(), 8));
   ASSERT_TRUE(hb_set_has(c.get(), 11));
   ASSERT_EQ(hb_set_get_population(c.get()), 3);
+
+  hb_set_unique_ptr d = make_hb_set(2, 12, 20);
+  b.union_from(d.get());
+  ASSERT_EQ(b, (IntSet {8, 11, 12, 20}));
 }
 
 TEST_F(IntSetTest, Intersect) {

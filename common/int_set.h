@@ -283,6 +283,8 @@ class IntSet {
 
   void union_into(hb_set_t* other) const { hb_set_union(other, set_.get()); }
 
+  void union_from(hb_set_t* other) const { hb_set_union(set_.get(), other); }
+
   // Compute the intersection of this and other, store the result in this set.
   void intersect(const IntSet& other) {
     hb_set_intersect(set_.get(), other.set_.get());

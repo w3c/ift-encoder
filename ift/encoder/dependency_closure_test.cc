@@ -83,7 +83,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids, exclusive_gids))) {
+    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids, exclusive_gids)) == DependencyClosure::ACCURATE) {
       return absl::InternalError("Dependency closure analysis should have been rejected.");
     }
     return absl::OkStatus();
@@ -94,7 +94,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (!TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids, exclusive_gids))) {
+    if (TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids, exclusive_gids)) != DependencyClosure::ACCURATE) {
       return absl::InternalError("Dependency closure analysis rejected unexpectedly.");
     }
 
@@ -148,7 +148,7 @@ TEST_F(DependencyClosureTest, AddsToSets) {
 
     auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids, exclusive_gids);
     ASSERT_TRUE(r.ok()) << r.status();
-    ASSERT_TRUE(*r);
+    ASSERT_EQ(*r, DependencyClosure::ACCURATE);
 
     ASSERT_EQ(and_gids, (GlyphSet {101}));
     ASSERT_EQ(or_gids, (GlyphSet {102}));
@@ -253,6 +253,21 @@ TEST_F(DependencyClosureTest, Rejected) {
   // Since the dep graph still passes through a GSUB edge.
   Reconfigure(WithDefaultFeatures({'f'}), {{{'i'}, ProbabilityBound::Zero()}});
   s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{'i'}, ProbabilityBound::Zero()},
+    {{0x485}, ProbabilityBound::Zero()},
+  });
+
+  Status s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+
+  // glyph for 0x485 is part of a lookahead on a chain context sub
+  // so analysis should be rejected.
+  s = RejectedAnalysis(1);
   ASSERT_TRUE(s.ok()) << s;
 }
 
