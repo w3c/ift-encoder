@@ -41,17 +41,27 @@ class DependencyClosure {
   };
 
   // Attempts to analyze the given segment using a glyph dependency graph
-  // from harfbuzz. Returns true if a accurate analysis is possible, otherwise
-  // false.
+  // from harfbuzz. The return value signals if an analysis was able to be performed
+  // or not.
   //
-  // When false is returned GlyphClosureCache should be used instead to analyze
-  // the segment.
+  // If ACCURATE is returned then the dep graph is able to produce an analysis
+  // which should match GlyphClosureCache::AnalyzeSegment(). In this case
+  // the three output sets (and_gids, or_gids, and exclusive_gids) will be populated
+  // with the anaysis results.
   //
-  // If true is returned then the input sets *_gids will have glyphs appended to
-  // them based on the analysis classification.
+  // Otherwise if INACCURATE is returned then the dep graph analysis was found
+  // to possibly not match GlyphClosureCache::AnalyzeSegment(). The three
+  // output sets will not be modified in this case.
   //
-  // TODO XXXX explain the meaning behind the three gid sets.
-  // TODO XXXX explain the return type.
+  // The three output sets have the following interpretation:
+  // and_gids: these gids have the union of input segments as a conjunctive condition.
+  //           ie. (s_1 U ... U s_n) AND ... -> and_gids
+  //
+  // or_gids: these gids have the union of input segments as a disjunctive condition.
+  //          ie. (s_1 U ... U s_n) OR ... -> or_gids
+  //
+  // exclusive_gids: these gids are exclusively needed by the union of input segments.
+  //                 ie. (s_1 U ... U s_n) -> exclusive_gids
   absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(const common::SegmentSet& segments,
                       common::GlyphSet& and_gids,
                       common::GlyphSet& or_gids,
