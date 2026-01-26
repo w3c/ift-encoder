@@ -29,6 +29,7 @@ class DependencyClosureTest : public ::testing::Test {
   DependencyClosureTest() :
     face(from_file("common/testdata/Roboto-Regular.ttf")),
     double_nested_face(from_file("common/testdata/double-nested-components.ttf")),
+    noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
     closure_cache(face.get()),
     segmentation_info(segments, WithDefaultFeatures(), closure_cache, PATCH),
     dependency_closure(*DependencyClosure::Create(&segmentation_info, face.get()))
@@ -136,6 +137,7 @@ class DependencyClosureTest : public ::testing::Test {
 
   hb_face_unique_ptr face;
   hb_face_unique_ptr double_nested_face;
+  hb_face_unique_ptr noto_sans_jp;
   GlyphClosureCache closure_cache;
   RequestedSegmentationInformation segmentation_info;
   std::unique_ptr<DependencyClosure> dependency_closure;
@@ -161,6 +163,15 @@ TEST_F(DependencyClosureTest, Exclusive) {
   s = CompareAnalysis({3});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({0, 3});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, UnicodeToGid_ExcludesInitFont) {
+  // 0x7528 and 0x2F64 share the same glyph
+  Reconfigure(noto_sans_jp.get(), {0x7528}, {
+    {{0x2F64}, ProbabilityBound::Zero()},
+  });
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 

@@ -252,22 +252,22 @@ CodepointSet FontHelper::GidsToUnicodes(hb_face_t* face, const GlyphSet& gids) {
   for (uint32_t gid : gids) {
     auto unicode = gid_to_unicode.find(gid);
     if (unicode != gid_to_unicode.end()) {
-      result.insert(unicode->second);
+      result.union_set(unicode->second);
     }
   }
   return result;
 }
 
-flat_hash_map<uint32_t, uint32_t> FontHelper::GidToUnicodeMap(hb_face_t* face) {
+flat_hash_map<uint32_t, CodepointSet> FontHelper::GidToUnicodeMap(hb_face_t* face) {
   hb_map_t* unicode_to_gid = hb_map_create();
   hb_face_collect_nominal_glyph_mapping(face, unicode_to_gid, nullptr);
 
-  flat_hash_map<uint32_t, uint32_t> gid_to_unicode;
+  flat_hash_map<uint32_t, CodepointSet> gid_to_unicode;
   int index = -1;
   uint32_t cp = HB_MAP_VALUE_INVALID;
   uint32_t gid = HB_MAP_VALUE_INVALID;
   while (hb_map_next(unicode_to_gid, &index, &cp, &gid)) {
-    gid_to_unicode[gid] = cp;
+    gid_to_unicode[gid].insert(cp);
   }
 
   hb_map_destroy(unicode_to_gid);
