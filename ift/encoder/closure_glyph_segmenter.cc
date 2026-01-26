@@ -437,6 +437,7 @@ StatusOr<std::vector<Merger>> ToMergers(
 static StatusOr<GlyphSegmentation> ToFinalSegmentation(
     SegmentationContext& context,
     UnmappedGlyphHandling unmapped_glyph_handling) {
+  context.LogClosureStatistics();
   return context.ToGlyphSegmentation();
 }
 
@@ -561,8 +562,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     modified.glyphs.union_set(analysis_modified_gids);
 
     TRYV(context.GroupGlyphs(modified.glyphs, modified.segments));
-
-    context.glyph_closure_cache.LogClosureCount("Condition grouping");
   }
 
   return absl::InternalError("unreachable");
@@ -594,10 +593,8 @@ ClosureGlyphSegmenter::InitializeSegmentationContext(
        segment_index++) {
     TRY(context.ReprocessSegment(segment_index));
   }
-  context.glyph_closure_cache.LogClosureCount("Inital segment analysis");
 
   TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs(), {}));
-  context.glyph_closure_cache.LogClosureCount("Condition grouping");
 
   return context;
 }

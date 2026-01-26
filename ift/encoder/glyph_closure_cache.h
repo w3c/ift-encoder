@@ -1,7 +1,6 @@
 #ifndef IFT_ENCODER_GLYPH_CLOSURE_CACHE_H_
 #define IFT_ENCODER_GLYPH_CLOSURE_CACHE_H_
 
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -33,21 +32,8 @@ class GlyphClosureCache {
       const common::SegmentSet& segment_ids, common::GlyphSet& and_gids,
       common::GlyphSet& or_gids, common::GlyphSet& exclusive_gids);
 
-  void LogCacheStats() const {
-    double closure_hit_rate =
-        100.0 * ((double)glyph_closure_cache_hit_) /
-        ((double)(glyph_closure_cache_hit_ + glyph_closure_cache_miss_));
-    VLOG(1) << "Glyph closure cache hit rate: " << closure_hit_rate << "% ("
-            << glyph_closure_cache_hit_ << " hits, "
-            << glyph_closure_cache_miss_ << " misses)";
-  }
-
-  void LogClosureCount(absl::string_view operation) {
-    VLOG(1) << operation << ": cumulative number of glyph closures "
-            << closure_count_cumulative_ << " (+" << closure_count_delta_
-            << ")";
-    closure_count_delta_ = 0;
-  }
+  uint64_t CacheHits() const { return glyph_closure_cache_hit_; }
+  uint64_t CacheMisses() const { return glyph_closure_cache_miss_; }
 
   hb_face_t* Face() { return preprocessed_face_.get(); }
 
@@ -55,10 +41,8 @@ class GlyphClosureCache {
   common::hb_face_unique_ptr preprocessed_face_;
   common::hb_face_unique_ptr original_face_;
   absl::flat_hash_map<SubsetDefinition, common::GlyphSet> glyph_closure_cache_;
-  uint32_t glyph_closure_cache_hit_ = 0;
-  uint32_t glyph_closure_cache_miss_ = 0;
-  uint32_t closure_count_cumulative_ = 0;
-  uint32_t closure_count_delta_ = 0;
+  uint64_t glyph_closure_cache_hit_ = 0;
+  uint64_t glyph_closure_cache_miss_ = 0;
 };
 
 }  // namespace ift::encoder
