@@ -130,9 +130,6 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
 
   TRYV(GroupGlyphs(changed_gids, changed_segments));
 
-  glyph_closure_cache.LogClosureCount(
-      "Segmentation reprocess for init def change.");
-
   return absl::OkStatus();
 }
 
@@ -186,6 +183,8 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
       PrintDiff("AND", and_gids, dep_and_gids);
       PrintDiff("OR ", or_gids, dep_or_gids);
       PrintDiff("EXC", exclusive_gids, dep_exclusive_gids);
+      LOG(ERROR) << "init codepoints = " << segmentation_info_->InitFontSegment().codepoints.ToString();
+      LOG(ERROR) << "init glyphs = " << segmentation_info_->InitFontGlyphs().ToString();
       return absl::InternalError("Depedency graph conditions does not match the closure analysis conditions");
     }
   }

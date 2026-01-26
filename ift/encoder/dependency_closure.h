@@ -55,7 +55,10 @@ class DependencyClosure {
   absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(const common::SegmentSet& segments,
                       common::GlyphSet& and_gids,
                       common::GlyphSet& or_gids,
-                      common::GlyphSet& exclusive_gids) const;
+                      common::GlyphSet& exclusive_gids);
+
+  uint64_t AccurateResults() const { return accurate_results_; }
+  uint64_t InaccurateResults() const { return inaccurate_results_; }
 
  private:
   enum NodeType {
@@ -191,6 +194,9 @@ class DependencyClosure {
   // These glyphs may participate in complex substitutions and as a result we can't
   // analyze via the dep graph.
   common::GlyphSet context_glyphs_;
+
+  uint64_t accurate_results_ = 0;
+  uint64_t inaccurate_results_ = 0;
 };
 
 }  // namespace ift::encoder

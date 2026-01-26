@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "absl/container/btree_set.h"
+#include "absl/log/log.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "ift/encoder/activation_condition.h"

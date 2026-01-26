@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -86,9 +87,27 @@ class SegmentationContext {
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
     GlyphSegmentation segmentation =
         TRY(glyph_groupings.ToGlyphSegmentation(*segmentation_info_));
-    glyph_closure_cache.LogCacheStats();
     TRYV(ValidateSegmentation(segmentation));
     return segmentation;
+  }
+
+  void LogClosureStatistics() const {
+    uint64_t dep_graph_closures = depedency_closure_->AccurateResults() * 2;
+    uint64_t potential_closures =
+      glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() +
+      dep_graph_closures;
+
+    double hb_subset_rate = 100.0 * ((double) glyph_closure_cache.CacheMisses() / (double) potential_closures);
+    double cache_hit_rate = 100.0 * ((double) glyph_closure_cache.CacheHits() / (double) potential_closures);
+    double dep_graph_hit_rate = 100.0 * ((double) dep_graph_closures / (double) potential_closures);
+    uint64_t other_closures = glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() - (2 * depedency_closure_->InaccurateResults());
+
+    VLOG(0) << ">> Of " << potential_closures << " potential closure operations:" << std::endl
+      << "  " << glyph_closure_cache.CacheMisses() << " (" << hb_subset_rate << "%)  were handled by hb-subset-plan" << std::endl
+      << "  " << dep_graph_closures
+      << " (" << dep_graph_hit_rate << "%) were handled by dep graph" << std::endl
+      << "  " << glyph_closure_cache.CacheHits() << " (" << cache_hit_rate << "%) were provided by the cache" << std::endl
+      << "  " << other_closures << " were from something other than AnalyzeSegment()" << std::endl;
   }
 
   const common::SegmentSet& InertSegments() const { return inert_segments_; }

@@ -255,7 +255,7 @@ flat_hash_map<hb_codepoint_t, glyph_id_t> DependencyClosure::UnicodeToGid(
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
-    GlyphSet& exclusive_gids) const {
+    GlyphSet& exclusive_gids) {
 
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
@@ -294,6 +294,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const Segment& segment = segmentation_info_->Segments().at(segment_id);
     if (!segment.Definition().feature_tags.empty()) {
       // Feature based segments not yet handled.
+      inaccurate_results_++;
       return INACCURATE;
     }
 
@@ -302,6 +303,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 
   flat_hash_map<Node, unsigned> traversed_edge_counts;
   if (TraverseGraph(start_nodes, traversed_edge_counts) == INACCURATE) {
+    inaccurate_results_++;
     return INACCURATE;
   }
 
@@ -326,6 +328,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   // glyphs that are reachable from any shared_glyphs found above.
   flat_hash_map<Node, unsigned> all_shared_nodes;
   if (TraverseGraph(shared_nodes, all_shared_nodes) == INACCURATE) {
+    inaccurate_results_++;
     return INACCURATE;
   }
 
@@ -339,6 +342,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   }
   exclusive_gids.subtract(or_gids);
 
+  accurate_results_++;
   return ACCURATE;
 }
 

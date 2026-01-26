@@ -25,8 +25,6 @@ StatusOr<common::GlyphSet> GlyphClosureCache::GlyphClosure(
   }
 
   glyph_closure_cache_miss_++;
-  closure_count_cumulative_++;
-  closure_count_delta_++;
 
   hb_subset_input_t* input = hb_subset_input_create_or_fail();
   if (!input) {
