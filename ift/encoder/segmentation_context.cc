@@ -148,7 +148,6 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
                                            GlyphSet& and_gids,
                                            GlyphSet& or_gids,
                                            GlyphSet& exclusive_gids) {
-  // TODO XXXXX count number of times we were able to use dep analysis.
   ConditionAnalysisMode effective_mode = condition_analysis_mode_;
   GlyphSet dep_and_gids = and_gids;
   GlyphSet dep_or_gids = or_gids;

@@ -24,9 +24,6 @@ using ift::freq::UnigramProbabilityCalculator;
 
 namespace ift::encoder {
 
-// TODO XXXXX add full roboto type test which uses the alternate closure analysis modes.
-// verify result is the same as pure closure.
-
 class ClosureGlyphSegmenterTest : public ::testing::Test {
  protected:
   ClosureGlyphSegmenterTest()
@@ -35,7 +32,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         noto_sans_jp(make_hb_face(nullptr)),
         segmenter(8, 8, PATCH, CLOSURE_ONLY),
         segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
-        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY) {
+        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY),
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_DEP_GRAPH) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -59,6 +57,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   ClosureGlyphSegmenter segmenter;
   ClosureGlyphSegmenter segmenter_find_conditions;
   ClosureGlyphSegmenter segmenter_move_to_init_font;
+  ClosureGlyphSegmenter segmenter_dep_graph;
 };
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
@@ -515,7 +514,7 @@ if ((s2 OR s3)) then p5
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
+TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
   auto codepoints = common::FontHelper::ToCodepointsSet(roboto.get());
 
   uint32_t num_segments = 412;
@@ -545,6 +544,14 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeatures) {
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  auto segmentation_dep_graph = segmenter_dep_graph.CodepointToGlyphSegments(
+      roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
+  ASSERT_TRUE(segmentation_dep_graph.ok()) << segmentation_dep_graph.status();
+
+  // Dep graph should produce identical results.
+  ASSERT_EQ(segmentation->Segments(), segmentation_dep_graph->Segments());
+  ASSERT_EQ(segmentation->GidSegments(), segmentation_dep_graph->GidSegments());
 }
 
 TEST_F(ClosureGlyphSegmenterTest, CostRequiresFrequencies) {
