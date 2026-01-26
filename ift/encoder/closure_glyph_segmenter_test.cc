@@ -32,12 +32,15 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   ClosureGlyphSegmenterTest()
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)),
+        noto_sans_jp(make_hb_face(nullptr)),
         segmenter(8, 8, PATCH, CLOSURE_ONLY),
         segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
         segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
+    noto_sans_jp =
+        from_file("common/testdata/NotoSansJP-Regular.ttf");
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
@@ -52,6 +55,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
 
   hb_face_unique_ptr roboto;
   hb_face_unique_ptr noto_nastaliq_urdu;
+  hb_face_unique_ptr noto_sans_jp;
   ClosureGlyphSegmenter segmenter;
   ClosureGlyphSegmenter segmenter_find_conditions;
   ClosureGlyphSegmenter segmenter_move_to_init_font;
@@ -93,6 +97,25 @@ p0: { gid70 }
 p1: { gid71 }
 if (s0) then p0
 if (s1) then p1
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest, InitSegmentExpansion) {
+  SubsetDefinition init;
+  init.codepoints = {0x7528};
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(noto_sans_jp.get(), init, {{0x2F64}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 0x2F64 and 0x7528 both map to the same glyph, the expectation is that 0x2F64 get's
+  // pulled into the initial font.
+  ASSERT_EQ(segmentation->InitialFontSegment().codepoints, (CodepointSet {0x2F64, 0x7528}));
+
+  std::vector<SubsetDefinition> expected_segments = {{}};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid8759 }
 )");
 }
 

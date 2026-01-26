@@ -195,7 +195,7 @@ class FontHelper {
     return result;
   }
 
-  static absl::flat_hash_map<uint32_t, uint32_t> GidToUnicodeMap(
+  static absl::flat_hash_map<uint32_t, CodepointSet> GidToUnicodeMap(
       hb_face_t* face);
 
   static CodepointSet GidsToUnicodes(hb_face_t* face, const GlyphSet& gids);

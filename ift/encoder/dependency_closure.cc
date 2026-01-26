@@ -84,15 +84,18 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::HandleUnicodeOutgoingEdge
     return ACCURATE;
   }
 
-  Node node = Node::Glyph(it->second);
-  traversed_edges[node]++;
-  next.push_back(node);
+
+  if (segmentation_info_->NonInitFontGlyphs().contains(it->second)) {
+    Node node = Node::Glyph(it->second);
+    traversed_edges[node]++;
+    next.push_back(node);
+  }
 
   // The subsetter adds unicode bidi mirrors for any unicode codepoints,
   // so add a dep graph edge for those if they exist:
   auto unicode_funcs = hb_unicode_funcs_get_default ();
   hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
-  if (mirror != unicode) {
+  if (mirror != unicode && !segmentation_info_->InitFontSegment().codepoints.contains(mirror)) {
     Node node = Node::Unicode(mirror);
     traversed_edges[node]++;
     next.push_back(node);
@@ -141,6 +144,9 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::HandleSegmentOutgoingEdge
 
   const Segment& s = segmentation_info_->Segments().at(id);
   for (hb_codepoint_t u : s.Definition().codepoints) {
+    if (segmentation_info_->InitFontSegment().codepoints.contains(u)) {
+      continue;
+    }
     Node node = Node::Unicode(u);
     traversed_edges[node]++;
     next.push_back(node);

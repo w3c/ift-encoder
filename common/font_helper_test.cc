@@ -5,8 +5,8 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "common/font_data.h"
+#include "common/int_set.h"
 #include "gtest/gtest.h"
-#include "hb-subset.h"
 
 using absl::flat_hash_map;
 using absl::string_view;
@@ -468,9 +468,9 @@ TEST_F(FontHelperTest, Loca) {
 TEST_F(FontHelperTest, GidToUnicodeMap) {
   auto map = FontHelper::GidToUnicodeMap(roboto_ab.get());
 
-  absl::flat_hash_map<uint32_t, uint32_t> expected = {
-      {69, 0x61},
-      {70, 0x62},
+  absl::flat_hash_map<uint32_t, CodepointSet> expected = {
+      {69, {0x61}},
+      {70, {0x62}},
   };
 
   ASSERT_EQ(map, expected);
@@ -658,6 +658,15 @@ TEST_F(FontHelperTest, TotalGlyphData_Cff2) {
 
   ASSERT_GT(*size, 0);
   ASSERT_EQ(*size, expected);
+}
+
+TEST_F(FontHelperTest, GidsToUnicodes) {
+  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {
+    20
+  }), (CodepointSet {0x33}));
+  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {
+    20, 8699
+  }), (CodepointSet {0x33, 0x2F64, 0x7528}));
 }
 
 // TODO test BuildFont...

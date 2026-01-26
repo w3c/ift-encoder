@@ -6,7 +6,6 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "hb.h"
@@ -74,12 +73,14 @@ StatusOr<SegmentationPlan> create_config(
   // Populate segments in the config. chunks are directly analagous to segments.
   auto segments = config.mutable_glyph_patches();
   for (const auto [gid, chunk] : gid_map) {
-    auto cp = gid_to_unicode.find(gid);
-    if (cp != gid_to_unicode.end()) {
+    auto cps = gid_to_unicode.find(gid);
+    if (cps != gid_to_unicode.end()) {
       SegmentProto segment;
       auto [it, added] =
           config.mutable_segments()->insert(std::pair(chunk, segment));
-      it->second.mutable_codepoints()->add_values(cp->second);
+      for (hb_codepoint_t cp : cps->second) {
+        it->second.mutable_codepoints()->add_values(cp);
+      }
     }
 
     Glyphs glyphs;
