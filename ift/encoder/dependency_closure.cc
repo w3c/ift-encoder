@@ -213,6 +213,9 @@ DependencyClosure::ComputeIncomingEdgeCount() const {
 
   btree_set<Node> nodes;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
+    if (segmentation_info_->Segments().at(s).Definition().Empty()) {
+      continue;
+    }
     nodes.insert(Node::Segment(s));
   }
 
@@ -292,6 +295,11 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     }
 
     const Segment& segment = segmentation_info_->Segments().at(segment_id);
+    if (segment.Definition().Empty()) {
+      // Empty segments are ignored.
+      continue;
+    }
+
     if (!segment.Definition().feature_tags.empty()) {
       // Feature based segments not yet handled.
       inaccurate_results_++;

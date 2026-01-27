@@ -67,6 +67,13 @@ class DependencyClosure {
                       common::GlyphSet& or_gids,
                       common::GlyphSet& exclusive_gids);
 
+  // This structure caches information derived from the segmentation info segments.
+  // This function signals that segmentation info segments have changed and recomputes
+  // the internal cached information.
+  void SegmentsChanged() {
+    incoming_edge_count_ = ComputeIncomingEdgeCount();
+  }
+
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
 
@@ -198,7 +205,6 @@ class DependencyClosure {
 
   absl::flat_hash_map<hb_codepoint_t, glyph_id_t> unicode_to_gid_;
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
-  // TODO XXXXX this needs to be rebuilt whenever segments in seg info are modified.
   absl::flat_hash_map<Node, unsigned> incoming_edge_count_;
 
   // These glyphs may participate in complex substitutions and as a result we can't

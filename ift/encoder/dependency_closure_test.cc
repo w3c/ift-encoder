@@ -312,6 +312,28 @@ TEST_F(DependencyClosureTest, BidiMirroring) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, SegmentsChanged) {
+  // Test that the dep graph analysis accounts for bidi mirroring in the
+  // harfbuzz closure
+  Reconfigure({}, {
+    {{'a'}, ProbabilityBound::Zero()},
+    {{'b'}, ProbabilityBound::Zero()},
+  });
+
+  Status s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  segmentation_info.ReassignInitSubset(closure_cache, {'a'});
+  dependency_closure->SegmentsChanged();
+
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 }  // namespace ift::encoder
 
 // TODO(garretrieger) more tests (once functionality is available):
