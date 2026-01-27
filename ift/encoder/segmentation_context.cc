@@ -103,6 +103,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
   SegmentSet changed_segments = segmentation_info_->ReassignInitSubset(
       glyph_closure_cache, std::move(new_def));
+  depedency_closure_->SegmentsChanged();
 
   // Consider all glyphs moved to the init font as changed.
   changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());
