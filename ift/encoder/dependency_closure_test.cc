@@ -326,7 +326,8 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   ASSERT_TRUE(s.ok()) << s;
 
   segmentation_info.ReassignInitSubset(closure_cache, {'a'});
-  dependency_closure->SegmentsChanged();
+  s = dependency_closure->SegmentsChanged();
+  ASSERT_TRUE(s.ok()) << s;
 
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -335,6 +336,10 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
 }
 
 }  // namespace ift::encoder
+
+// TODO XXXX CFF seac test.
+// TODO XXXX allow liga if context is satisfied, reject otherwise.
+// TODO XXXX contextual always rejected (since recursion is hard to reason about).
 
 // TODO(garretrieger) more tests (once functionality is available):
 // - Test case exposing the current exclusive check failure (exclusive glyph reachable via intermediate).

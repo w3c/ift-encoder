@@ -64,8 +64,6 @@ cc_library(
         "dependency_closure.h",
         "estimated_patch_size_cache.cc",
         "estimated_patch_size_cache.h",
-        "glyph_closure_cache.cc",
-        "glyph_closure_cache.h",
         "glyph_condition_set.h",
         "glyph_groupings.cc",
         "glyph_groupings.h",
@@ -87,10 +85,12 @@ cc_library(
     visibility = [
     ],
     deps = [
+        ":segmentation_info",
         ":activation_condition",
         ":common",
         ":glyph_partition",
         "//ift",
+        "//ift/dep_graph",
         "//ift/feature_registry",
         "//ift/freq",
         "//util:segmenter_config_cc_proto",
@@ -101,6 +101,23 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "segmentation_info",
+    srcs = [
+        "requested_segmentation_information.cc",
+        "requested_segmentation_information.h",
+        "glyph_closure_cache.cc",
+        "glyph_closure_cache.h",
+    ],
+    visibility = [
+        "//ift/dep_graph:__pkg__",
+    ],
+    deps = [
+        ":common",
+        "//ift/feature_registry",
     ],
 )
 
