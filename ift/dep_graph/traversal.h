@@ -18,7 +18,7 @@ class Traversal {
   void Visit(Node dest) {
     incoming_edges_[dest]++;
     if (dest.IsGlyph()) {
-      reached_glyphs_.insert(dest.Id());
+      reachable_glyphs_.insert(dest.Id());
     }
   }
 
@@ -27,18 +27,24 @@ class Traversal {
     tables_.insert(table);
   }
 
+  void VisitGsub(Node dest, hb_tag_t feature) {
+    Visit(dest);
+    tables_.insert(HB_TAG('G', 'S', 'U', 'B'));
+    feature_tags_.insert(feature);
+  }
+
   void VisitUVS(Node dest, hb_codepoint_t variation_selector) {
     Visit(dest, HB_TAG('c', 'm', 'a', 'p'));
     variation_selectors_.insert(variation_selector);
   }
 
-  void VisitContextual(Node dest, common::GlyphSet context_glyphs) {
-    Visit(dest, HB_TAG('G', 'S', 'U', 'B'));
+  void VisitContextual(Node dest, hb_tag_t feature, common::GlyphSet context_glyphs) {
+    VisitGsub(dest, feature);
     context_glyphs_.union_set(context_glyphs);
   }
 
-  void VisitLigature(Node dest, common::GlyphSet liga_glyphs) {
-    Visit(dest, HB_TAG('G', 'S', 'U', 'B'));
+  void VisitLigature(Node dest, hb_tag_t feature, common::GlyphSet liga_glyphs) {
+    VisitGsub(dest, feature);
     liga_glyphs_.union_set(liga_glyphs);
   }
 
@@ -46,12 +52,20 @@ class Traversal {
     return incoming_edges_;
   }
 
-  const absl::flat_hash_set<hb_tag_t> TraversedTables() const {
+  const absl::flat_hash_set<hb_tag_t>& TraversedTables() const {
     return tables_;
   }
 
-  const common::GlyphSet& ReachedGlyphs() const {
-    return reached_glyphs_;
+  const absl::flat_hash_set<hb_tag_t>& TraversedLayoutFeatures() const {
+    return feature_tags_;
+  }
+
+  const common::GlyphSet& RequiredLigaGlyphs() const {
+    return liga_glyphs_;
+  }
+
+  const common::GlyphSet& ReachableGlyphs() const {
+    return reachable_glyphs_;
   }
 
   const common::GlyphSet& ContextGlyphs() const {
@@ -64,12 +78,20 @@ class Traversal {
     return !context_glyphs_.empty() || !liga_glyphs_.empty() || !variation_selectors_.empty();
   }
 
+  bool HasOnlyLigaConditionalGlyphs() const {
+    return !liga_glyphs_.empty() && context_glyphs_.empty() && variation_selectors_.empty();
+  }
+
  private:
   absl::flat_hash_map<Node, uint64_t> incoming_edges_;
-  common::GlyphSet reached_glyphs_;
+
+  common::GlyphSet reachable_glyphs_;
   common::GlyphSet context_glyphs_;
   common::GlyphSet liga_glyphs_;
+
   common::CodepointSet variation_selectors_;
+
+  absl::flat_hash_set<hb_tag_t> feature_tags_;
   absl::flat_hash_set<hb_tag_t> tables_;
 };
 

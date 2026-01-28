@@ -166,6 +166,31 @@ TEST_F(DependencyClosureTest, Exclusive) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, LigaSatisfied) {
+  // As a special case if a segment fully satisifies it's liga requirements,
+  // then we can accurately analyze it.
+
+  // f or i on it's own is rejected, since liga is unsatisfied.
+  Status s = RejectedAnalysis(1);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(2);
+  ASSERT_TRUE(s.ok()) << s;
+
+  // when f and i are both in a segment then we can analyze it.
+  s = CompareAnalysis({1, 2});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1, 2, 3});
+  ASSERT_TRUE(s.ok()) << s;
+
+  // One half of the liga is in the init font
+  Reconfigure(face.get(), WithDefaultFeatures({'f'}), {
+    {{'a'}, ProbabilityBound::Zero()},
+    {{'i'}, ProbabilityBound::Zero()},
+  });
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, UnicodeToGid_ExcludesInitFont) {
   // 0x7528 and 0x2F64 share the same glyph
   Reconfigure(noto_sans_jp.get(), {0x7528}, {
@@ -217,6 +242,48 @@ TEST_F(DependencyClosureTest, CodepointNotInFont) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, SingleSubst) {
+  SubsetDefinition c2sc;
+  c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
+
+  Reconfigure(face.get(), {}, {
+    {{'a'}, ProbabilityBound::Zero()},
+    {{'b'}, ProbabilityBound::Zero()},
+    {{'A'}, ProbabilityBound::Zero()},
+    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+    {c2sc, ProbabilityBound::Zero()},
+    // TODO XXX add composite glyph AE instead of B?
+  });
+
+  Status s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+
+   // s2sc not in init font which A passes through.
+  s = RejectedAnalysis(2);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(3);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(4);
+  ASSERT_TRUE(s.ok()) << s;
+
+  // With c2sc in the init font, we can now analyze the single subst's
+  Reconfigure(face.get(), c2sc, {
+    {{'a'}, ProbabilityBound::Zero()},
+    {{'b'}, ProbabilityBound::Zero()},
+    {{'A'}, ProbabilityBound::Zero()},
+    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+  });
+
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({2});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({3});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({2, 3});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, Disjunctive) {
   // disable features so those don't create disallowed edges.
   Reconfigure({}, segments);
@@ -259,12 +326,6 @@ TEST_F(DependencyClosureTest, Rejected) {
   ASSERT_TRUE(s.ok()) << s;
   s = RejectedAnalysis(2);
   ASSERT_TRUE(s.ok()) << s;
-
-  // Even with i in the init font, analysis should still be rejected.
-  // Since the dep graph still passes through a GSUB edge.
-  Reconfigure(WithDefaultFeatures({'f'}), {{{'i'}, ProbabilityBound::Zero()}});
-  s = RejectedAnalysis(0);
-  ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
@@ -294,6 +355,31 @@ TEST_F(DependencyClosureTest, Rejected_Features) {
   ASSERT_TRUE(s.ok()) << s;
 
   s = RejectedAnalysis(1);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, Rejected_UVS) {
+  Reconfigure(noto_sans_jp.get(), {}, {
+    {{0x4fae}, ProbabilityBound::Zero()},
+    {{0xfe00}, ProbabilityBound::Zero()},
+  });
+
+  // UVS isn't supported yet.
+  Status s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(1);
+  ASSERT_TRUE(s.ok()) << s;
+
+  Reconfigure(noto_sans_jp.get(), {0x4fae}, {
+    {{0xfe00}, ProbabilityBound::Zero()},
+  });
+  s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+
+  Reconfigure(noto_sans_jp.get(), {0xfe00}, {
+    {{0x4fae}, ProbabilityBound::Zero()},
+  });
+  s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 }
 

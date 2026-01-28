@@ -30,21 +30,42 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
   // TODO(garretrieger): implement handling for these tables to allow them to be removed
   //                     from the disallowed list.
   // - cmap: needs special handling for UVS edges
-  // - gsub: needs special handling based on the lookup type (support the "simple" GSUB types, those without context).
-  if (traversal.TraversedTables().contains(HB_TAG('c', 'm', 'a', 'p')) ||
-      traversal.TraversedTables().contains(HB_TAG('G', 'S', 'U', 'B'))) {
+  if (traversal.TraversedTables().contains(HB_TAG('c', 'm', 'a', 'p'))) {
     return DependencyClosure::AnalysisAccuracy::INACCURATE;
   }
 
-  if (traversal.HasConditionalGlyphs()) {
-    return DependencyClosure::AnalysisAccuracy::INACCURATE;
+  if (traversal.HasOnlyLigaConditionalGlyphs()) {
+    // When liga glyphs are present and accurate analysis is still possible
+    // if all of the liga glyphs have been reached.
+    GlyphSet required_liga = traversal.RequiredLigaGlyphs();
+    required_liga.subtract(traversal.ReachableGlyphs());
+    required_liga.subtract(segmentation_info_->InitFontGlyphs());
+    if (!required_liga.empty()) {
+      // TODO XXXX if there are nested ligatures this may be too simplisitic. Since reachable glyphs
+      // might contain things are aren't actually accessible from the starting point (ie. ligature which
+      // isn't triggerable from the starting set adds a glyph that unlocks it). Try and construct a
+      // test case to demonstrate this.
+      return AnalysisAccuracy::INACCURATE;
+    }
+  } else if (traversal.HasConditionalGlyphs()) {
+    // TODO(garretrieger): it should be possible to support at least liga when all of
+    // the liga glyphs have been reached.
+    return AnalysisAccuracy::INACCURATE;
   }
 
-  if (traversal.ReachedGlyphs().intersects(context_glyphs_)) {
-    return DependencyClosure::AnalysisAccuracy::INACCURATE;
+  for (hb_tag_t tag : traversal.TraversedLayoutFeatures()) {
+    // TODO XXXX broader feature support. For now to keep things simple only allow features in the init font
+    // which are always enabled no matter what.
+    if (!init_font_features_.contains(tag)) {
+      return AnalysisAccuracy::INACCURATE;
+    }
   }
 
-  return DependencyClosure::AnalysisAccuracy::ACCURATE;
+  if (traversal.ReachableGlyphs().intersects(context_glyphs_)) {
+    return AnalysisAccuracy::INACCURATE;
+  }
+
+  return AnalysisAccuracy::ACCURATE;
 }
 
 Status DependencyClosure::SegmentsChanged() {
@@ -62,6 +83,8 @@ Status DependencyClosure::SegmentsChanged() {
 
   incoming_edge_counts_ = traversal.TraversedIncomingEdgeCounts();
   context_glyphs_ = traversal.ContextGlyphs();
+  init_font_features_ = TRY(InitFeatureSet(segmentation_info_, original_face_.get()));
+
   return absl::OkStatus();
 }
 
@@ -162,6 +185,22 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 
   accurate_results_++;
   return ACCURATE;
+}
+
+StatusOr<IntSet> DependencyClosure::InitFeatureSet(
+    const RequestedSegmentationInformation* segmentation_info,
+    hb_face_t* face) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  if (!input) {
+    return absl::InternalError("Failed to create subset input object.");
+  }
+
+  segmentation_info->InitFontSegment().ConfigureInput(input, face);
+  IntSet features(
+      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
+  hb_subset_input_destroy(input);
+
+  return features;
 }
 
 }  // namespace ift::encoder
