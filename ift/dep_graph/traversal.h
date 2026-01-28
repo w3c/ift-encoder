@@ -33,9 +33,10 @@ class Traversal {
     feature_tags_.insert(feature);
   }
 
-  void VisitUVS(Node dest, hb_codepoint_t variation_selector) {
+  void VisitUVS(Node dest, hb_codepoint_t a, hb_codepoint_t b) {
     Visit(dest, HB_TAG('c', 'm', 'a', 'p'));
-    variation_selectors_.insert(variation_selector);
+    variation_selectors_.insert(a);
+    variation_selectors_.insert(b);
   }
 
   void VisitContextual(Node dest, hb_tag_t feature, common::GlyphSet context_glyphs) {

@@ -25,6 +25,8 @@ using ift::encoder::RequestedSegmentationInformation;
 
 namespace ift::dep_graph {
 
+static constexpr hb_tag_t cmap = HB_TAG('c', 'm', 'a', 'p');
+
 StatusOr<Traversal> DependencyGraph::TraverseGraph(const absl::btree_set<Node>& nodes) const {
   VLOG(1) << "DependencyGraph::TraverseGraph(...)";
   Traversal traversal;
@@ -89,16 +91,22 @@ void DependencyGraph::HandleUnicodeOutgoingEdges(
     Traversal& traversal
 ) const {
 
-  auto it = unicode_to_gid_.find(unicode);
-  if (it == unicode_to_gid_.end()) {
-    // Unknown unicode has no outgoing edges.
-    return;
+  {
+    auto it = unicode_to_gid_.find(unicode);
+    if (it != unicode_to_gid_.end() && segmentation_info_->NonInitFontGlyphs().contains(it->second)) {
+      Node node = Node::Glyph(it->second);
+      traversal.Visit(node);
+      next.push_back(node);
+    }
   }
 
-  if (segmentation_info_->NonInitFontGlyphs().contains(it->second)) {
-    Node node = Node::Glyph(it->second);
-    traversal.Visit(node);
-    next.push_back(node);
+  auto vs_edges = variation_selector_implied_edges_.find(unicode);
+  if (vs_edges != variation_selector_implied_edges_.end()) {
+    for (VariationSelectorEdge edge : vs_edges->second) {
+      Node node = Node::Glyph(edge.gid);
+      next.push_back(node);
+      traversal.VisitUVS(node, unicode, edge.unicode);
+    }
   }
 
   // The subsetter adds unicode bidi mirrors for any unicode codepoints,
@@ -110,9 +118,6 @@ void DependencyGraph::HandleUnicodeOutgoingEdges(
     traversal.Visit(node);
     next.push_back(node);
   }
-
-  // TODO XXXX handle UVS edges here instead, probably want to still pre-record edges as unicode -> gid
-  // mappings, which means UVS edges will get ignored in the glyph outgoing edges.
 }
 
 Status DependencyGraph::HandleGlyphOutgoingEdges(
@@ -149,14 +154,13 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
       continue;
     }
 
-    if (table_tag == HB_TAG('c', 'm', 'a', 'p') && layout_tag != HB_CODEPOINT_INVALID) {
-      traversal.VisitUVS(node, layout_tag /* layout tag holds the VS char */);
+    if (table_tag == cmap && layout_tag != HB_CODEPOINT_INVALID) {
+      // cmap edges are tracked in a separate structure and handled in HandleUnicodeOutgoingEdges.
+      continue;
     } else {
       // Just a regular edge
       traversal.Visit(node, table_tag);
     }
-
-
   }
 
   return absl::OkStatus();
@@ -250,6 +254,36 @@ StatusOr<GlyphSet> DependencyGraph::GetContextSet(hb_codepoint_t context_set_id)
   }
 
   return glyphs;
+}
+
+flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge>> DependencyGraph::ComputeUVSEdges() const {
+  flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> edges;
+  for (auto [u, gid] : unicode_to_gid_) {
+    hb_codepoint_t index = 0;
+    hb_tag_t table_tag = HB_CODEPOINT_INVALID;
+    hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
+    hb_codepoint_t variation_selector = HB_CODEPOINT_INVALID;
+    hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
+    hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
+    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
+                                     &dep_gid, &variation_selector, &ligature_set, &context_set)) {
+      if (table_tag != cmap) {
+        continue;
+      }
+
+      // each UVS edge is two edges in reality, record both:
+      edges[u].push_back(VariationSelectorEdge {
+        .unicode = variation_selector,
+        .gid = gid,
+      });
+      edges[variation_selector].push_back(VariationSelectorEdge {
+        .unicode = u,
+        .gid = gid,
+      });
+    }
+  }
+
+  return edges;
 }
 
 }  // namespace ift::dep_graph

@@ -367,6 +367,7 @@ TEST_F(DependencyClosureTest, Rejected_UVS) {
   // UVS isn't supported yet.
   Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
+
   s = RejectedAnalysis(1);
   ASSERT_TRUE(s.ok()) << s;
 

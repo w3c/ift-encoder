@@ -30,10 +30,8 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
   // TODO(garretrieger): implement handling for these tables to allow them to be removed
   //                     from the disallowed list.
   // - cmap: needs special handling for UVS edges
-  if (traversal.TraversedTables().contains(HB_TAG('c', 'm', 'a', 'p'))) {
-    return DependencyClosure::AnalysisAccuracy::INACCURATE;
-  }
 
+  // TODO XXXXXXX allow UVS edges if their conditions are fully satisfied.
   if (traversal.HasOnlyLigaConditionalGlyphs()) {
     // When liga glyphs are present and accurate analysis is still possible
     // if all of the liga glyphs have been reached.
