@@ -50,8 +50,8 @@ class DependencyGraph {
         original_face_(common::make_hb_face(hb_face_reference(face))),
         full_feature_set_(full_feature_set),
         unicode_to_gid_(UnicodeToGid(face)),
-        dependency_graph_(hb_depend_from_face(face), &hb_depend_destroy) {
-  }
+        dependency_graph_(hb_depend_from_face(face), &hb_depend_destroy),
+        variation_selector_implied_edges_(ComputeUVSEdges()) {}
 
   bool ShouldFollowEdge(
     hb_tag_t table_tag,
@@ -87,8 +87,6 @@ class DependencyGraph {
   static absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeToGid(
       hb_face_t* face);
 
-  static common::GlyphSet CollectContextGlyphs(hb_face_t* face, const common::IntSet& full_feature_set);
-
   // TODO store UVS mappings (u -> g).
   const ift::encoder::RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
@@ -96,6 +94,15 @@ class DependencyGraph {
 
   absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid_;
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
+
+  struct VariationSelectorEdge {
+    hb_codepoint_t unicode;
+    hb_codepoint_t gid;
+  };
+
+  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> ComputeUVSEdges() const;
+
+  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> variation_selector_implied_edges_;
 };
 
 }  // namespace ift::dep_graph
