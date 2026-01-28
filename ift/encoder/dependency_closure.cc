@@ -28,7 +28,7 @@ bool DependencyClosure::ShouldFollowEdge(
   const GlyphSet& closure_glyphs = segmentation_info_->NonInitFontGlyphs();
   bool r = closure_glyphs.contains(to_gid) &&
            closure_glyphs.contains(from_gid) &&
-         (feature_tag == 0 ||
+         (feature_tag == HB_CODEPOINT_INVALID ||
           full_feature_set_.contains(feature_tag));
 
   if (r) {
@@ -114,9 +114,10 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::HandleGlyphOutgoingEdges(
   hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
   hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
   hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
+  hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
   AnalysisAccuracy accuracy = ACCURATE;
   while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                   &dep_gid, &layout_tag, &ligature_set)) {
+                                   &dep_gid, &layout_tag, &ligature_set, &context_set)) {
     if (!ShouldFollowEdge(table_tag, gid, dep_gid, layout_tag)) {
       continue;
     }
