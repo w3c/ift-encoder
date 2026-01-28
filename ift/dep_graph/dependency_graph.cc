@@ -135,20 +135,28 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
 
     Node node = Node::Glyph(dep_gid);
 
-    if (table_tag == HB_TAG('G', 'S', 'U', 'B') && context_set != HB_CODEPOINT_INVALID) {
-      GlyphSet context = TRY(GetContextSet(context_set));
-      traversal.VisitContextual(node, context);
-    } else if (table_tag == HB_TAG('G', 'S', 'U', 'B') && ligature_set != HB_CODEPOINT_INVALID) {
-      GlyphSet liga = TRY(GetLigaSet(ligature_set));
-      traversal.VisitLigature(node, liga);
-    } else if (table_tag == HB_TAG('c', 'm', 'a', 'p') && layout_tag != HB_CODEPOINT_INVALID) {
+    next.push_back(node);
+    if (table_tag == HB_TAG('G', 'S', 'U', 'B')) {
+      if (context_set != HB_CODEPOINT_INVALID) {
+        GlyphSet context = TRY(GetContextSet(context_set));
+        traversal.VisitContextual(node, layout_tag, context);
+      } else if (ligature_set != HB_CODEPOINT_INVALID) {
+        GlyphSet liga = TRY(GetLigaSet(ligature_set));
+        traversal.VisitLigature(node, layout_tag, liga);
+      } else {
+        traversal.VisitGsub(node, layout_tag);
+      }
+      continue;
+    }
+
+    if (table_tag == HB_TAG('c', 'm', 'a', 'p') && layout_tag != HB_CODEPOINT_INVALID) {
       traversal.VisitUVS(node, layout_tag /* layout tag holds the VS char */);
     } else {
       // Just a regular edge
       traversal.Visit(node, table_tag);
     }
 
-    next.push_back(node);
+
   }
 
   return absl::OkStatus();
