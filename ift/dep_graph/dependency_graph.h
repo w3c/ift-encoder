@@ -87,7 +87,6 @@ class DependencyGraph {
   static absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeToGid(
       hb_face_t* face);
 
-  // TODO store UVS mappings (u -> g).
   const ift::encoder::RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
   common::IntSet full_feature_set_;

@@ -30,7 +30,7 @@ class DependencyClosure {
       hb_face_t* face) {
     dep_graph::DependencyGraph graph = TRY(dep_graph::DependencyGraph::Create(segmentation_info, face));
     auto result = std::unique_ptr<DependencyClosure>(new DependencyClosure(std::move(graph), segmentation_info, face));
-    TRYV(result->SegmentsChanged());
+    TRYV(result->SegmentsChanged(true, common::SegmentSet::all()));
     return result;
   }
 
@@ -73,7 +73,7 @@ class DependencyClosure {
   // This structure caches information derived from the segmentation info segments.
   // This function signals that segmentation info segments have changed and recomputes
   // the internal cached information.
-  absl::Status SegmentsChanged();
+  absl::Status SegmentsChanged(bool init_font_changed, const common::SegmentSet& segments);
 
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
@@ -103,6 +103,10 @@ class DependencyClosure {
     const RequestedSegmentationInformation* segmentation_info,
     hb_face_t* face);
 
+  absl::Status UpdateReachabilityIndex(const common::SegmentSet& segments);
+  absl::Status UpdateReachabilityIndex(segment_index_t segment);
+  void ClearReachabilityIndex(segment_index_t segment);
+
   const RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
@@ -115,6 +119,19 @@ class DependencyClosure {
   // - given some segment of interest, s
   // - s may interact with another segment IF:
   //   -
+  //
+  // - segement interactions may chain, example:
+  // s0 needs codepoint a to activation a liga.
+  // s1 can theoretically reach a, but needs b to do so
+  // s2 provides b.
+  //
+  // - so when search for what interacts with s0 we need to find both s1 and s2.
+  // - only s1 has a direct interaction.
+  //
+  // What we want to store here is map from glyph -> segment sets.
+  // where a glyph -> segment mapping means that glyph is in the reachable set of segment.
+  absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
 
   uint64_t accurate_results_ = 0;
   uint64_t inaccurate_results_ = 0;

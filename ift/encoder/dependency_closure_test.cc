@@ -413,7 +413,7 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   ASSERT_TRUE(s.ok()) << s;
 
   segmentation_info.ReassignInitSubset(closure_cache, {'a'});
-  s = dependency_closure->SegmentsChanged();
+  s = dependency_closure->SegmentsChanged(true, SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
   s = CompareAnalysis({0});
