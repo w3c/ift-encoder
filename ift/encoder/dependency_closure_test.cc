@@ -343,6 +343,19 @@ TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, Rejected_InitFontContext) {
+  Reconfigure(WithDefaultFeatures({'i'}), {
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    {{0x485}, ProbabilityBound::Zero()},
+  });
+
+  // Gravecomb doesn't pass through any contextual dependencies, but
+  // it shows up as a context glyph for the init font subset.
+  // Thus it should be rejected.
+  Status s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, Rejected_Features) {
   SubsetDefinition features;
   features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));

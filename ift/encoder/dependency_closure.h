@@ -132,6 +132,8 @@ class DependencyClosure {
   // where a glyph -> segment mapping means that glyph is in the reachable set of segment.
   absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
   absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
+  // TODO XXXXX feature reachability index
+  // TODO XXXXX unicode reachability index
 
   uint64_t accurate_results_ = 0;
   uint64_t inaccurate_results_ = 0;
