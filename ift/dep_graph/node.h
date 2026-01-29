@@ -12,12 +12,17 @@ namespace ift::dep_graph {
 // A single node in a fonts glyph depedency graph.
 class Node {
   enum NodeType {
+    INIT_FONT,
     SEGMENT,
     UNICODE,
     GLYPH,
   };
 
  public:
+  static Node InitFont() {
+    return Node(0, INIT_FONT);
+  }
+
   static Node Glyph(encoder::glyph_id_t id) {
     return Node(id, GLYPH);
   }
@@ -33,6 +38,8 @@ class Node {
   bool IsUnicode() const { return type_ == UNICODE; };
   bool IsGlyph() const { return type_ == GLYPH; };
   bool IsSegment() const { return type_ == SEGMENT; };
+  bool IsInitFont() const { return type_ == INIT_FONT; };
+
   uint32_t Id() const { return id_; }
 
   std::string ToString() const {

@@ -42,6 +42,9 @@ class Traversal {
   void VisitContextual(Node dest, hb_tag_t feature, common::GlyphSet context_glyphs) {
     VisitGsub(dest, feature);
     context_glyphs_.union_set(context_glyphs);
+    if (dest.IsGlyph()) {
+      context_per_glyph_[dest.Id()].union_set(context_glyphs);
+    }
   }
 
   void VisitLigature(Node dest, hb_tag_t feature, common::GlyphSet liga_glyphs) {
@@ -73,6 +76,11 @@ class Traversal {
     return context_glyphs_;
   }
 
+  // Map containing the context glyphs relevant to each reachable glyph.
+  const absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet>& ContextPerGlyph() const {
+    return context_per_glyph_;
+  }
+
   // Returns true if at least one traversed edge has some sort of extra conditions attached to it.
   // This is any contextual, ligature, or UVS type edge.
   bool HasConditionalGlyphs() const {
@@ -88,6 +96,7 @@ class Traversal {
 
   common::GlyphSet reachable_glyphs_;
   common::GlyphSet context_glyphs_;
+  absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet> context_per_glyph_;
   common::GlyphSet liga_glyphs_;
 
   common::CodepointSet variation_selectors_;
