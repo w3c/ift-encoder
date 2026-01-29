@@ -144,6 +144,23 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
   }));
 }
 
+TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
+  Reconfigure(WithDefaultFeatures({'i'}), {
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.TraverseGraph({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  // Gravecomb interacts with 'i' as only a context glyph, so it's
+  // own traversal is just it's self.
+  ASSERT_EQ(traversal.ReachableGlyphs(), (GlyphSet {168 /* gravecomb */}));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+}
+
 // TODO XXXX more tests:
 // - default filtering.
 // - ...

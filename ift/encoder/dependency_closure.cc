@@ -70,6 +70,8 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
 Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSet& segments) {
   VLOG(1) << "DependencyClosure::SegmentsChanged()";
 
+  // TODO XXXX when init font changes the whole reachability index needs to be recomputed, probably
+  // want to do invalidation here with lazy population when needed to avoid unnecesarilly rebuilding it.
   TRYV(UpdateReachabilityIndex(segments));
 
   if (!init_font_change && segmentation_info_->SegmentsAreDisjoint()) {
@@ -89,8 +91,20 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
 
   Traversal traversal = TRY(graph_.TraverseGraph(nodes));
   incoming_edge_counts_ = traversal.TraversedIncomingEdgeCounts();
+
   context_glyphs_ = traversal.ContextGlyphs();
   init_font_features_ = TRY(InitFeatureSet(segmentation_info_, original_face_.get()));
+
+  // The init font may have reachable glyphs which are not in the init font closure,
+  // we need to record the context glyphs from these as they are potential interaction
+  // points.
+  Traversal init_font_traversal = TRY(graph_.TraverseGraph({Node::InitFont()},
+    &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints));
+  for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
+    if (segmentation_info_->NonInitFontGlyphs().contains(g)) {
+      context_glyphs_.union_set(context);
+    }
+  }
 
   return absl::OkStatus();
 }
