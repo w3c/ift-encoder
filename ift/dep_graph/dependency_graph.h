@@ -15,6 +15,7 @@
 
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -40,7 +41,14 @@ class DependencyGraph {
 
   // Traverse the full depedency graph (segments, unicodes, and gids), starting at one or more
   // specific starting nodes.
-  absl::StatusOr<Traversal> TraverseGraph(const absl::btree_set<Node>& nodes) const;
+  //
+  // If filter is non-null, then only glyph nodes in that set will be traversed. If filter is
+  // null then the filter defaults to the set of non init font glyphs in segmentation info.
+  absl::StatusOr<Traversal> TraverseGraph(
+    const absl::btree_set<Node>& nodes,
+    const common::GlyphSet* glyph_filter_ptr = nullptr,
+    const common::CodepointSet* unicode_filter_ptr = nullptr
+  ) const;
 
  private:
 
@@ -54,25 +62,37 @@ class DependencyGraph {
         variation_selector_implied_edges_(ComputeUVSEdges()) {}
 
   bool ShouldFollowEdge(
+    const common::GlyphSet& filter,
     hb_tag_t table_tag,
     encoder::glyph_id_t from_gid,
     encoder::glyph_id_t to_gid,
     hb_tag_t feature_tag) const;
 
   void HandleUnicodeOutgoingEdges(
+    const common::GlyphSet& glyph_filter,
+    const common::CodepointSet& unicode_filter,
     hb_codepoint_t unicode,
     std::vector<Node>& next,
     Traversal& traversal
   ) const;
 
   absl::Status HandleGlyphOutgoingEdges(
+    const common::GlyphSet& filter,
     encoder::glyph_id_t gid,
     std::vector<Node>& next,
     Traversal& traversal
   ) const;
 
   void HandleSegmentOutgoingEdges(
+    const common::CodepointSet& unicode_filter,
     encoder::segment_index_t id,
+    std::vector<Node>& next,
+    Traversal& traversal
+  ) const;
+
+  void HandleSubsetDefinitionOutgoingEdges(
+    const common::CodepointSet& unicode_filter,
+    const encoder::SubsetDefinition& subset_def,
     std::vector<Node>& next,
     Traversal& traversal
   ) const;

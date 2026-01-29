@@ -339,6 +339,12 @@ class GlyphSet : public IntSet {
   GlyphSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
   explicit GlyphSet(const hb_set_t* set) : IntSet(set) {}
   explicit GlyphSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+
+  static GlyphSet all() {
+    GlyphSet all;
+    all.invert();
+    return all;
+  }
 };
 
 class CodepointSet : public IntSet {
@@ -347,6 +353,12 @@ class CodepointSet : public IntSet {
   CodepointSet(std::initializer_list<hb_codepoint_t> values) : IntSet(values) {}
   explicit CodepointSet(const hb_set_t* set) : IntSet(set) {}
   explicit CodepointSet(const hb_set_unique_ptr& set) : IntSet(set) {}
+
+  static CodepointSet all() {
+    CodepointSet all;
+    all.invert();
+    return all;
+  }
 };
 
 class SegmentSet : public IntSet {

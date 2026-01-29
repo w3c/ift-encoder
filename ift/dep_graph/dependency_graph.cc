@@ -15,6 +15,7 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using common::hb_set_unique_ptr;
 using common::make_hb_set;
+using common::CodepointSet;
 using common::FontHelper;
 using common::GlyphSet;
 using common::IntSet;
@@ -22,12 +23,17 @@ using ift::encoder::Segment;
 using ift::encoder::glyph_id_t;
 using ift::encoder::segment_index_t;
 using ift::encoder::RequestedSegmentationInformation;
+using ift::encoder::SubsetDefinition;
 
 namespace ift::dep_graph {
 
 static constexpr hb_tag_t cmap = HB_TAG('c', 'm', 'a', 'p');
 
-StatusOr<Traversal> DependencyGraph::TraverseGraph(const absl::btree_set<Node>& nodes) const {
+StatusOr<Traversal> DependencyGraph::TraverseGraph(
+  const absl::btree_set<Node>& nodes,
+  const GlyphSet* glyph_filter_ptr,
+  const CodepointSet* unicode_filter_ptr
+) const {
   VLOG(1) << "DependencyGraph::TraverseGraph(...)";
   Traversal traversal;
   std::vector<Node> next;
@@ -35,6 +41,15 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(const absl::btree_set<Node>& 
     next.push_back(node);
     traversal.VisitInitNode(node);
   }
+
+  CodepointSet non_init_font_codepoints;
+  if (unicode_filter_ptr == nullptr) {
+    non_init_font_codepoints = segmentation_info_->FullDefinition().codepoints;
+    non_init_font_codepoints.subtract(segmentation_info_->InitFontSegment().codepoints);
+  }
+
+  const CodepointSet& unicode_filter = !unicode_filter_ptr ? non_init_font_codepoints : *unicode_filter_ptr;
+  const GlyphSet& glyph_filter = !glyph_filter_ptr ? segmentation_info_->NonInitFontGlyphs() : *glyph_filter_ptr;
 
   flat_hash_set<Node> visited;
   while (!next.empty()) {
@@ -47,15 +62,19 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(const absl::btree_set<Node>& 
     visited.insert(node);
 
     if (node.IsGlyph()) {
-      TRYV(HandleGlyphOutgoingEdges(node.Id(), next, traversal));
+      TRYV(HandleGlyphOutgoingEdges(glyph_filter, node.Id(), next, traversal));
     }
 
     if (node.IsUnicode()) {
-      HandleUnicodeOutgoingEdges(node.Id(), next, traversal);
+      HandleUnicodeOutgoingEdges(glyph_filter, unicode_filter, node.Id(), next, traversal);
     }
 
     if (node.IsSegment()) {
-      HandleSegmentOutgoingEdges(node.Id(), next, traversal);
+      HandleSegmentOutgoingEdges(unicode_filter, node.Id(), next, traversal);
+    }
+
+    if (node.IsInitFont()) {
+      HandleSubsetDefinitionOutgoingEdges(unicode_filter, segmentation_info_->InitFontSegment(), next, traversal);
     }
   }
 
@@ -63,14 +82,14 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(const absl::btree_set<Node>& 
 }
 
 bool DependencyGraph::ShouldFollowEdge(
+  const GlyphSet& filter,
   hb_tag_t table_tag,
   glyph_id_t from_gid,
   glyph_id_t to_gid,
   hb_tag_t feature_tag) const {
 
-  const GlyphSet& closure_glyphs = segmentation_info_->NonInitFontGlyphs();
-  bool r = closure_glyphs.contains(to_gid) &&
-           closure_glyphs.contains(from_gid) &&
+  bool r = filter.contains(to_gid) &&
+           filter.contains(from_gid) &&
          (feature_tag == HB_CODEPOINT_INVALID ||
           full_feature_set_.contains(feature_tag));
 
@@ -86,14 +105,16 @@ bool DependencyGraph::ShouldFollowEdge(
 }
 
 void DependencyGraph::HandleUnicodeOutgoingEdges(
-    hb_codepoint_t unicode,
-    std::vector<Node>& next,
-    Traversal& traversal
+  const GlyphSet& glyph_filter,
+  const CodepointSet& unicode_filter,
+  hb_codepoint_t unicode,
+  std::vector<Node>& next,
+  Traversal& traversal
 ) const {
 
   {
     auto it = unicode_to_gid_.find(unicode);
-    if (it != unicode_to_gid_.end() && segmentation_info_->NonInitFontGlyphs().contains(it->second)) {
+    if (it != unicode_to_gid_.end() && glyph_filter.contains(it->second)) {
       Node node = Node::Glyph(it->second);
       traversal.Visit(node);
       next.push_back(node);
@@ -113,7 +134,7 @@ void DependencyGraph::HandleUnicodeOutgoingEdges(
   // so add a dep graph edge for those if they exist:
   auto unicode_funcs = hb_unicode_funcs_get_default ();
   hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
-  if (mirror != unicode && !segmentation_info_->InitFontSegment().codepoints.contains(mirror)) {
+  if (mirror != unicode && unicode_filter.contains(mirror)) {
     Node node = Node::Unicode(mirror);
     traversal.Visit(node);
     next.push_back(node);
@@ -121,6 +142,7 @@ void DependencyGraph::HandleUnicodeOutgoingEdges(
 }
 
 Status DependencyGraph::HandleGlyphOutgoingEdges(
+    const GlyphSet& filter,
     glyph_id_t gid,
     std::vector<Node>& next,
     Traversal& traversal
@@ -134,7 +156,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
 
   while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
                                    &dep_gid, &layout_tag, &ligature_set, &context_set)) {
-    if (!ShouldFollowEdge(table_tag, gid, dep_gid, layout_tag)) {
+    if (!ShouldFollowEdge(filter, table_tag, gid, dep_gid, layout_tag)) {
       continue;
     }
 
@@ -167,6 +189,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
 }
 
 void DependencyGraph::HandleSegmentOutgoingEdges(
+    const CodepointSet& unicode_filter,
     segment_index_t id,
     std::vector<Node>& next,
     Traversal& traversal
@@ -178,8 +201,17 @@ void DependencyGraph::HandleSegmentOutgoingEdges(
   }
 
   const Segment& s = segmentation_info_->Segments().at(id);
-  for (hb_codepoint_t u : s.Definition().codepoints) {
-    if (segmentation_info_->InitFontSegment().codepoints.contains(u)) {
+  HandleSubsetDefinitionOutgoingEdges(unicode_filter, s.Definition(), next, traversal);
+}
+
+void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
+  const CodepointSet& unicode_filter,
+  const SubsetDefinition& subset_def,
+  std::vector<Node>& next,
+  Traversal& traversal
+) const {
+  for (hb_codepoint_t u : subset_def.codepoints) {
+    if (!unicode_filter.contains(u)) {
       continue;
     }
     Node node = Node::Unicode(u);
@@ -187,6 +219,7 @@ void DependencyGraph::HandleSegmentOutgoingEdges(
     next.push_back(node);
   }
 }
+
 
 flat_hash_map<hb_codepoint_t, glyph_id_t> DependencyGraph::UnicodeToGid(
     hb_face_t* face) {
@@ -252,6 +285,9 @@ StatusOr<GlyphSet> DependencyGraph::GetContextSet(hb_codepoint_t context_set_id)
     }
     glyphs.union_from(context_glyphs.get());
   }
+
+  // Only glyphs in the full closure are relevant.
+  glyphs.intersect(segmentation_info_->FullClosure());
 
   return glyphs;
 }
