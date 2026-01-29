@@ -140,7 +140,7 @@ class SegmentationContext {
    * Removes all condition and grouping information related to all gids in
    * glyphs.
    */
-  void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
+  absl::Status InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
     // TODO(garretrieger): now that invalidation here is only for glyph
     // condition set we should consider changing this so that invalidation is
@@ -149,6 +149,7 @@ class SegmentationContext {
     // Note: glyph_groupings will be automatically invalidated as needed when
     // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
+    return depedency_closure_->SegmentsChanged(false, segments);
   }
 
   /*

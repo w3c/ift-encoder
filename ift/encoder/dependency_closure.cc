@@ -19,6 +19,7 @@ using common::CodepointSet;
 using common::GlyphSet;
 using common::IntSet;
 using common::FontHelper;
+using common::SegmentSet;
 using common::hb_set_unique_ptr;
 using ift::dep_graph::Node;
 using ift::dep_graph::DependencyGraph;
@@ -66,9 +67,18 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
   return AnalysisAccuracy::ACCURATE;
 }
 
-Status DependencyClosure::SegmentsChanged() {
+Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSet& segments) {
   VLOG(1) << "DependencyClosure::SegmentsChanged()";
 
+  TRYV(UpdateReachabilityIndex(segments));
+
+  if (!init_font_change && segmentation_info_->SegmentsAreDisjoint()) {
+    // If the init font is changed and all segments are disjoint then there won't be any changes to incoming
+    // edge counts as segment modifications will just shift outgoing edges around between segments.
+    return absl::OkStatus();
+  }
+
+  // TODO XXXXX can we do an incremental update of incoming_edge_counts_, and context
   btree_set<Node> nodes;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
     if (segmentation_info_->Segments().at(s).Definition().Empty()) {
@@ -78,7 +88,6 @@ Status DependencyClosure::SegmentsChanged() {
   }
 
   Traversal traversal = TRY(graph_.TraverseGraph(nodes));
-
   incoming_edge_counts_ = traversal.TraversedIncomingEdgeCounts();
   context_glyphs_ = traversal.ContextGlyphs();
   init_font_features_ = TRY(InitFeatureSet(segmentation_info_, original_face_.get()));
@@ -199,6 +208,52 @@ StatusOr<IntSet> DependencyClosure::InitFeatureSet(
   hb_subset_input_destroy(input);
 
   return features;
+}
+
+Status DependencyClosure::UpdateReachabilityIndex(const common::SegmentSet& segments) {
+  if (!segments_that_can_reach_.empty() || !glyphs_that_can_be_reached_.empty()) {
+    // If indices have existing data, then we need to ensure prior entries for the
+    // segments to be updated are cleared out.
+    for (segment_index_t s : segments) {
+      if (s < segmentation_info_->Segments().size()) {
+        ClearReachabilityIndex(s);
+      } else {
+        break;
+      }
+    }
+  }
+
+  for (segment_index_t s : segments) {
+    if (s < segmentation_info_->Segments().size()) {
+      TRYV(UpdateReachabilityIndex(s));
+    } else {
+      break;
+    }
+  }
+  return absl::OkStatus();
+}
+
+Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
+  auto traversal = TRY(graph_.TraverseGraph(btree_set<Node> {Node::Segment(s)}));
+
+  for (glyph_id_t g : traversal.ReachableGlyphs()) {
+    segments_that_can_reach_[g].insert(s);
+    glyphs_that_can_be_reached_[s].insert(g);
+  }
+
+  return absl::OkStatus();
+}
+
+void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
+  auto glyphs = glyphs_that_can_be_reached_.find(segment);
+  if (glyphs == glyphs_that_can_be_reached_.end()) {
+    return;
+  }
+
+  for (glyph_id_t gid : glyphs->second) {
+    segments_that_can_reach_[gid].erase(segment);
+  }
+  glyphs_that_can_be_reached_.erase(glyphs);
 }
 
 }  // namespace ift::encoder

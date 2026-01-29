@@ -68,7 +68,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   changed_gids.union_set(exclusive_gids);
 
   for (uint32_t gid : changed_gids) {
-    InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
+    TRYV(InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index}));
   }
 
   if (and_gids.empty() && or_gids.empty()) {
@@ -103,7 +103,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
   SegmentSet changed_segments = segmentation_info_->ReassignInitSubset(
       glyph_closure_cache, std::move(new_def));
-  TRYV(depedency_closure_->SegmentsChanged());
+  TRYV(depedency_closure_->SegmentsChanged(true, changed_segments));
 
   // Consider all glyphs moved to the init font as changed.
   changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());

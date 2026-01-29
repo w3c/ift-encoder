@@ -69,10 +69,10 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
   // and checking there are no non-exclusive gids. If the input segments are
   // inert and the new segment is inert then we can directly compute the result
   // of the merge without needing to invalidate and reprocess.
+  SegmentSet segments_to_merge_with_base = segments_to_merge_;
+  segments_to_merge_with_base.insert(base_segment_index_);
   bool new_segment_is_inert = false;
   if (input_segments_are_inert_) {
-    SegmentSet segments_to_merge_with_base = segments_to_merge_;
-    segments_to_merge_with_base.insert(base_segment_index_);
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));
@@ -103,8 +103,8 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
-  merger.Context().InvalidateGlyphInformation(invalidated_glyphs_,
-                                              segments_to_merge_);
+  TRYV(merger.Context().InvalidateGlyphInformation(invalidated_glyphs_,
+                                                   segments_to_merge_with_base));
 
   if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the
