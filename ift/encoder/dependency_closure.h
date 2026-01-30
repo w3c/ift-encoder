@@ -75,6 +75,13 @@ class DependencyClosure {
   // the internal cached information.
   absl::Status SegmentsChanged(bool init_font_changed, const common::SegmentSet& segments);
 
+  // Finds the complete set of segments that may have some interaction on the presence of glyphs
+  // in the glyph closure.
+  //
+  // Utilizes the depedency graph to make the determination, so it's possible that the result
+  // may be overestimated.
+  absl::StatusOr<common::SegmentSet> SegmentsThatInteractWith(const common::GlyphSet& glyphs);
+
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
 
@@ -103,8 +110,11 @@ class DependencyClosure {
     const RequestedSegmentationInformation* segmentation_info,
     hb_face_t* face);
 
+
+  absl::Status EnsureReachabilityIndexPopulated();
   absl::Status UpdateReachabilityIndex(const common::SegmentSet& segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
+  void ClearReachabilityIndex();
   void ClearReachabilityIndex(segment_index_t segment);
 
   const RequestedSegmentationInformation* segmentation_info_;
@@ -112,6 +122,8 @@ class DependencyClosure {
   dep_graph::DependencyGraph graph_;
   absl::flat_hash_map<dep_graph::Node, uint64_t> incoming_edge_counts_;
   common::GlyphSet context_glyphs_;
+  common::GlyphSet init_font_reachable_glyphs_;
+  common::GlyphSet init_font_context_glyphs_;
   common::IntSet init_font_features_;
 
   // TODO XXXX store an index which maps from Node's back to segments which may interact with that node
@@ -132,6 +144,7 @@ class DependencyClosure {
   // where a glyph -> segment mapping means that glyph is in the reachable set of segment.
   absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
   absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
+  // TODO XXXXX cache segment -> context glyphs and utilize in SegmentsThatInteractWith()
   // TODO XXXXX feature reachability index
   // TODO XXXXX unicode reachability index
 
