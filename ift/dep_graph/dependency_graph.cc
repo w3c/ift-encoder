@@ -218,6 +218,12 @@ void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
     traversal.Visit(node);
     next.push_back(node);
   }
+
+  for (hb_tag_t f : subset_def.feature_tags) {
+    if (full_feature_set_.contains(f)) {
+      traversal.VisitFeature(f);
+    }
+  }
 }
 
 

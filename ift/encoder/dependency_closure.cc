@@ -52,9 +52,15 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
     return AnalysisAccuracy::INACCURATE;
   }
 
-  for (hb_tag_t tag : traversal.TraversedLayoutFeatures()) {
+  for (hb_tag_t tag : traversal.ContextLayoutFeatures()) {
     // TODO XXXX broader feature support. For now to keep things simple only allow features in the init font
     // which are always enabled no matter what.
+    if (!init_font_features_.contains(tag)) {
+      return AnalysisAccuracy::INACCURATE;
+    }
+  }
+
+  for (hb_tag_t tag : traversal.ReachedLayoutFeatures()) {
     if (!init_font_features_.contains(tag)) {
       return AnalysisAccuracy::INACCURATE;
     }
@@ -157,12 +163,6 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     if (segment.Definition().Empty()) {
       // Empty segments are ignored.
       continue;
-    }
-
-    if (!segment.Definition().feature_tags.empty()) {
-      // Feature based segments not yet handled.
-      inaccurate_results_++;
-      return INACCURATE;
     }
 
     start_nodes.insert(Node::Segment(segment_id));
