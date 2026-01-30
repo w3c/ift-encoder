@@ -435,6 +435,66 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
+  Reconfigure(WithDefaultFeatures(), {
+    {{'a'}, ProbabilityBound::Zero()},
+    {{'b'}, ProbabilityBound::Zero()},
+    {{'f'}, ProbabilityBound::Zero()},
+    {{'i'}, ProbabilityBound::Zero()},
+  });
+
+  auto s = dependency_closure->SegmentsThatInteractWith({69 /* a */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {0}));
+
+  s = dependency_closure->SegmentsThatInteractWith({70 /* b */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {1}));
+
+  s = dependency_closure->SegmentsThatInteractWith({69, 70});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {0, 1}));
+
+  s = dependency_closure->SegmentsThatInteractWith({74 /* f */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2}));
+
+  s = dependency_closure->SegmentsThatInteractWith({444});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+}
+
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
+  Reconfigure(WithDefaultFeatures(), {
+    {{'x'}, ProbabilityBound::Zero()},
+    {{'q'}, ProbabilityBound::Zero()},
+    {{'i'}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+
+  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+}
+
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
+  Reconfigure(WithDefaultFeatures({'i'}), {
+    {{'x'}, ProbabilityBound::Zero()},
+    {{'q'}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+
+  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2}));
+}
+
+// TODO XXXX SegmentsThatInteract with features involved.
+
 }  // namespace ift::encoder
 
 // TODO XXXX CFF seac test.

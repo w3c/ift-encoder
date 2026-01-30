@@ -70,9 +70,11 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
 Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSet& segments) {
   VLOG(1) << "DependencyClosure::SegmentsChanged()";
 
-  // TODO XXXX when init font changes the whole reachability index needs to be recomputed, probably
-  // want to do invalidation here with lazy population when needed to avoid unnecesarilly rebuilding it.
-  TRYV(UpdateReachabilityIndex(segments));
+  if (init_font_change) {
+    ClearReachabilityIndex();
+  } else {
+    TRYV(UpdateReachabilityIndex(segments));
+  }
 
   if (!init_font_change && segmentation_info_->SegmentsAreDisjoint()) {
     // If the init font is changed and all segments are disjoint then there won't be any changes to incoming
@@ -98,13 +100,17 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
   // The init font may have reachable glyphs which are not in the init font closure,
   // we need to record the context glyphs from these as they are potential interaction
   // points.
+  init_font_context_glyphs_.clear();
   Traversal init_font_traversal = TRY(graph_.TraverseGraph({Node::InitFont()},
     &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
     if (segmentation_info_->NonInitFontGlyphs().contains(g)) {
       context_glyphs_.union_set(context);
+      init_font_context_glyphs_.union_set(context);
     }
   }
+  init_font_reachable_glyphs_ = init_font_traversal.ReachableGlyphs();
+  init_font_reachable_glyphs_.subtract(segmentation_info_->InitFontGlyphs());
 
   return absl::OkStatus();
 }
@@ -224,6 +230,57 @@ StatusOr<IntSet> DependencyClosure::InitFeatureSet(
   return features;
 }
 
+StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet& glyphs) {
+  TRYV(EnsureReachabilityIndexPopulated());
+
+  // TODO XXXXX also need to check interactions with:
+  // - features (including segments with features), treated as additional context items.
+  SegmentSet visited_segments;
+  GlyphSet visited_glyphs;
+  GlyphSet to_check = glyphs;
+  bool init_font_context_added = false;
+  while (!to_check.empty()) {
+    glyph_id_t gid = *to_check.min();
+    to_check.erase(gid);
+    visited_glyphs.insert(gid);
+
+    // gid may be reachable from the init font.
+    if (!init_font_context_added && init_font_reachable_glyphs_.contains(gid)) {
+      GlyphSet additional = init_font_context_glyphs_;
+      additional.subtract(visited_glyphs);
+      to_check.union_set(additional);
+      init_font_context_added = true;
+    }
+
+    // now check if any segments can reach it.
+    auto segments = segments_that_can_reach_.find(gid);
+    if (segments == segments_that_can_reach_.end()) {
+      continue;
+    }
+
+    for (segment_index_t s : segments->second) {
+      if (visited_segments.contains(s)) {
+        continue;
+      }
+
+      visited_segments.insert(s);
+      auto traversal = TRY(graph_.TraverseGraph({Node::Segment(s)}));
+      GlyphSet additional = traversal.ContextGlyphs();
+      additional.subtract(visited_glyphs);
+      to_check.union_set(additional);
+    }
+  }
+
+  return visited_segments;
+}
+
+Status DependencyClosure::EnsureReachabilityIndexPopulated() {
+  if (!segments_that_can_reach_.empty() || !glyphs_that_can_be_reached_.empty()) {
+    return absl::OkStatus();
+  }
+  return UpdateReachabilityIndex(SegmentSet::all());
+}
+
 Status DependencyClosure::UpdateReachabilityIndex(const common::SegmentSet& segments) {
   if (!segments_that_can_reach_.empty() || !glyphs_that_can_be_reached_.empty()) {
     // If indices have existing data, then we need to ensure prior entries for the
@@ -256,6 +313,11 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
   }
 
   return absl::OkStatus();
+}
+
+void DependencyClosure::ClearReachabilityIndex() {
+  glyphs_that_can_be_reached_.clear();
+  segments_that_can_reach_.clear();
 }
 
 void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
