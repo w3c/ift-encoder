@@ -27,10 +27,14 @@ class Traversal {
     tables_.insert(table);
   }
 
+  void VisitFeature(hb_tag_t feature_tag) {
+    reached_feature_tags_.insert(feature_tag);
+  }
+
   void VisitGsub(Node dest, hb_tag_t feature) {
     Visit(dest);
     tables_.insert(HB_TAG('G', 'S', 'U', 'B'));
-    feature_tags_.insert(feature);
+    reached_feature_tags_.insert(feature);
   }
 
   void VisitUVS(Node dest, hb_codepoint_t a, hb_codepoint_t b) {
@@ -60,8 +64,12 @@ class Traversal {
     return tables_;
   }
 
-  const absl::flat_hash_set<hb_tag_t>& TraversedLayoutFeatures() const {
-    return feature_tags_;
+  const absl::flat_hash_set<hb_tag_t>& ReachedLayoutFeatures() const {
+    return reached_feature_tags_;
+  }
+
+  const absl::flat_hash_set<hb_tag_t>& ContextLayoutFeatures() const {
+    return context_feature_tags_;
   }
 
   const common::GlyphSet& RequiredLigaGlyphs() const {
@@ -101,7 +109,8 @@ class Traversal {
 
   common::CodepointSet variation_selectors_;
 
-  absl::flat_hash_set<hb_tag_t> feature_tags_;
+  absl::flat_hash_set<hb_tag_t> reached_feature_tags_;
+  absl::flat_hash_set<hb_tag_t> context_feature_tags_;
   absl::flat_hash_set<hb_tag_t> tables_;
 };
 
