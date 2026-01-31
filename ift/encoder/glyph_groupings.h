@@ -7,6 +7,7 @@
 #include "absl/container/btree_set.h"
 #include "common/int_set.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_partition.h"
@@ -121,8 +122,8 @@ class GlyphGroupings {
   absl::Status GroupGlyphs(
       const RequestedSegmentationInformation& segmentation_info,
       const GlyphConditionSet& glyph_condition_set,
-      GlyphClosureCache& closure_cache, common::GlyphSet glyphs,
-      const common::SegmentSet& modified_segments);
+      GlyphClosureCache& closure_cache, std::optional<DependencyClosure*> depedency_closure,
+      common::GlyphSet glyphs, const common::SegmentSet& modified_segments);
 
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
@@ -149,7 +150,9 @@ class GlyphGroupings {
       const RequestedSegmentationInformation& segmentation_info,
       const GlyphConditionSet& glyph_condition_set,
       const common::SegmentSet& inscope_segments,
-      GlyphClosureCache& closure_cache);
+      GlyphClosureCache& closure_cache,
+      std::optional<DependencyClosure*> depedency_closure
+    );
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
