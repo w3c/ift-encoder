@@ -267,6 +267,10 @@ cc_test(
     data = [
         "//common:testdata",
     ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
     deps = [
         ":segmentation_context",
         "//common",

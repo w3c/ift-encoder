@@ -103,7 +103,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
   SegmentSet changed_segments = segmentation_info_->ReassignInitSubset(
       glyph_closure_cache, std::move(new_def));
-  TRYV(depedency_closure_->SegmentsChanged(true, changed_segments));
+  TRYV(dependency_closure_->SegmentsChanged(true, changed_segments));
 
   // Consider all glyphs moved to the init font as changed.
   changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());
@@ -155,7 +155,7 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   GlyphSet dep_exclusive_gids = exclusive_gids;
   if (effective_mode == CLOSURE_AND_DEP_GRAPH ||
       effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
-    auto accuracy = TRY(depedency_closure_->AnalyzeSegment(
+    auto accuracy = TRY(dependency_closure_->AnalyzeSegment(
       segment_ids, dep_and_gids, dep_or_gids, dep_exclusive_gids));
     if (accuracy == DependencyClosure::INACCURATE) {
       effective_mode = CLOSURE_ONLY;
