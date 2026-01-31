@@ -1,6 +1,7 @@
 #ifndef IFT_DEP_GRAPH_TRAVERSAL_H_
 #define IFT_DEP_GRAPH_TRAVERSAL_H_
 
+#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "common/int_set.h"
@@ -34,7 +35,10 @@ class Traversal {
   void VisitGsub(Node dest, hb_tag_t feature) {
     Visit(dest);
     tables_.insert(HB_TAG('G', 'S', 'U', 'B'));
-    reached_feature_tags_.insert(feature);
+    context_feature_tags_.insert(feature);
+    if (dest.IsGlyph()) {
+      context_features_per_glyph_[dest.Id()].insert(feature);
+    }
   }
 
   void VisitUVS(Node dest, hb_codepoint_t a, hb_codepoint_t b) {
@@ -89,6 +93,10 @@ class Traversal {
     return context_per_glyph_;
   }
 
+  const absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>& ContextFeaturesPerGlyph() const {
+    return context_features_per_glyph_;
+  }
+
   // Returns true if at least one traversed edge has some sort of extra conditions attached to it.
   // This is any contextual, ligature, or UVS type edge.
   bool HasConditionalGlyphs() const {
@@ -105,6 +113,7 @@ class Traversal {
   common::GlyphSet reachable_glyphs_;
   common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet> context_per_glyph_;
+  absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>> context_features_per_glyph_;
   common::GlyphSet liga_glyphs_;
 
   common::CodepointSet variation_selectors_;

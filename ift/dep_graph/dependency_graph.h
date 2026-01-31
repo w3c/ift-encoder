@@ -50,6 +50,10 @@ class DependencyGraph {
     const common::CodepointSet* unicode_filter_ptr = nullptr
   ) const;
 
+  const common::IntSet& FullFeatureSet() {
+    return full_feature_set_;
+  }
+
  private:
 
   DependencyGraph(const ift::encoder::RequestedSegmentationInformation* segmentation_info,
