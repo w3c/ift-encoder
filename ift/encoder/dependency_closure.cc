@@ -107,6 +107,7 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
   // we need to record the context glyphs from these as they are potential interaction
   // points.
   init_font_context_glyphs_.clear();
+  init_font_context_features_.clear();
   Traversal init_font_traversal = TRY(graph_.TraverseGraph({Node::InitFont()},
     &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
@@ -115,6 +116,19 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
       init_font_context_glyphs_.union_set(context);
     }
   }
+
+  for (const auto& [g, context_features] : init_font_traversal.ContextFeaturesPerGlyph()) {
+    if (!segmentation_info_->NonInitFontGlyphs().contains(g)) {
+      continue;
+    }
+
+    for (hb_tag_t f : context_features) {
+      if (graph_.FullFeatureSet().contains(f) && !init_font_features_.contains(f)) {
+        init_font_context_features_.insert(f);
+      }
+    }
+  }
+
   init_font_reachable_glyphs_ = init_font_traversal.ReachableGlyphs();
   init_font_reachable_glyphs_.subtract(segmentation_info_->InitFontGlyphs());
 
@@ -237,41 +251,96 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet&
   // - features (including segments with features), treated as additional context items.
   SegmentSet visited_segments;
   GlyphSet visited_glyphs;
+  btree_set<hb_tag_t> visited_features;
+
   GlyphSet to_check = glyphs;
+  btree_set<hb_tag_t> features_to_check;
+
   bool init_font_context_added = false;
-  while (!to_check.empty()) {
-    glyph_id_t gid = *to_check.min();
-    to_check.erase(gid);
-    visited_glyphs.insert(gid);
 
-    // gid may be reachable from the init font.
-    if (!init_font_context_added && init_font_reachable_glyphs_.contains(gid)) {
-      GlyphSet additional = init_font_context_glyphs_;
-      additional.subtract(visited_glyphs);
-      to_check.union_set(additional);
-      init_font_context_added = true;
-    }
+  while (!to_check.empty() || !features_to_check.empty()) {
 
-    // now check if any segments can reach it.
-    auto segments = segments_that_can_reach_.find(gid);
-    if (segments == segments_that_can_reach_.end()) {
-      continue;
-    }
+    if (!to_check.empty()) {
+      glyph_id_t gid = *to_check.min();
+      to_check.erase(gid);
+      visited_glyphs.insert(gid);
 
-    for (segment_index_t s : segments->second) {
-      if (visited_segments.contains(s)) {
+      // gid may be reachable from the init font.
+      if (!init_font_context_added && init_font_reachable_glyphs_.contains(gid)) {
+        ReachabilityInitFontAddToCheck(visited_glyphs, visited_features, to_check, features_to_check);
+        init_font_context_added = true;
+      }
+
+      // now check if any segments can reach it.
+      auto segments = segments_that_can_reach_.find(gid);
+      if (segments == segments_that_can_reach_.end()) {
         continue;
       }
 
-      visited_segments.insert(s);
-      auto traversal = TRY(graph_.TraverseGraph({Node::Segment(s)}));
-      GlyphSet additional = traversal.ContextGlyphs();
-      additional.subtract(visited_glyphs);
-      to_check.union_set(additional);
+      TRYV(ReachabilitySegmentsAddToCheck(
+        segments->second, visited_segments, visited_glyphs, visited_features, to_check, features_to_check));
+
+    } else if (!features_to_check.empty()) {
+      hb_tag_t feature = *features_to_check.begin();
+      features_to_check.erase(feature);
+      visited_features.insert(feature);
+
+      // now check if any segments can reach it.
+      auto segments = segments_that_can_reach_feature_.find(feature);
+      if (segments == segments_that_can_reach_feature_.end()) {
+        continue;
+      }
+
+      TRYV(ReachabilitySegmentsAddToCheck(
+        segments->second, visited_segments, visited_glyphs, visited_features, to_check, features_to_check));
     }
   }
 
   return visited_segments;
+}
+
+void DependencyClosure::ReachabilityInitFontAddToCheck(
+  GlyphSet& visited_glyphs, btree_set<hb_tag_t>& visited_features,
+  GlyphSet& to_check, btree_set<hb_tag_t>& features_to_check
+) const {
+  GlyphSet additional = init_font_context_glyphs_;
+  additional.subtract(visited_glyphs);
+  to_check.union_set(additional);
+
+  for (hb_tag_t f : init_font_context_features_) {
+    if (!visited_features.contains(f)) {
+      features_to_check.insert(f);
+    }
+  }
+}
+
+Status DependencyClosure::ReachabilitySegmentsAddToCheck(
+    const SegmentSet& segments,
+    SegmentSet& visited_segments,
+    GlyphSet& visited_glyphs,
+    btree_set<hb_tag_t>& visited_features,
+    GlyphSet& to_check,
+    btree_set<hb_tag_t>& features_to_check
+) const {
+  for (segment_index_t s : segments) {
+    if (visited_segments.contains(s)) {
+      continue;
+    }
+
+    visited_segments.insert(s);
+    auto traversal = TRY(graph_.TraverseGraph({Node::Segment(s)}));
+
+    GlyphSet additional = traversal.ContextGlyphs();
+    additional.subtract(visited_glyphs);
+    to_check.union_set(additional);
+
+    for (hb_tag_t feature : traversal.ContextLayoutFeatures()) {
+      if (!visited_features.contains(feature)) {
+        features_to_check.insert(feature);
+      }
+    }
+  }
+  return absl::OkStatus();
 }
 
 Status DependencyClosure::EnsureReachabilityIndexPopulated() {
@@ -312,24 +381,37 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
     glyphs_that_can_be_reached_[s].insert(g);
   }
 
+  for (hb_tag_t f : traversal.ReachedLayoutFeatures()) {
+    segments_that_can_reach_feature_[f].insert(s);
+    features_that_can_be_reached_[s].insert(f);
+  }
+
   return absl::OkStatus();
 }
 
 void DependencyClosure::ClearReachabilityIndex() {
   glyphs_that_can_be_reached_.clear();
   segments_that_can_reach_.clear();
+  segments_that_can_reach_feature_.clear();
+  features_that_can_be_reached_.clear();
 }
 
 void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
   auto glyphs = glyphs_that_can_be_reached_.find(segment);
-  if (glyphs == glyphs_that_can_be_reached_.end()) {
-    return;
+  if (glyphs != glyphs_that_can_be_reached_.end()) {
+    for (glyph_id_t gid : glyphs->second) {
+      segments_that_can_reach_[gid].erase(segment);
+    }
+    glyphs_that_can_be_reached_.erase(glyphs);
   }
 
-  for (glyph_id_t gid : glyphs->second) {
-    segments_that_can_reach_[gid].erase(segment);
+  auto features = features_that_can_be_reached_.find(segment);
+  if (features != features_that_can_be_reached_.end()) {
+    for (hb_tag_t tag : features->second) {
+      segments_that_can_reach_feature_[tag].erase(segment);
+    }
+    features_that_can_be_reached_.erase(features);
   }
-  glyphs_that_can_be_reached_.erase(glyphs);
 }
 
 }  // namespace ift::encoder

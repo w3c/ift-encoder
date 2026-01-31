@@ -479,6 +479,25 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
   ASSERT_EQ(*s, (SegmentSet {2, 3}));
 }
 
+
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  Reconfigure({}, {
+    {{'x'}, ProbabilityBound::Zero()},
+    {{'q'}, ProbabilityBound::Zero()},
+    {{'i'}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    {{ccmp}, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+
+  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2, 3, 4}));
+}
+
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
   Reconfigure(WithDefaultFeatures({'i'}), {
     {{'x'}, ProbabilityBound::Zero()},
@@ -493,7 +512,22 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
   ASSERT_EQ(*s, (SegmentSet {2}));
 }
 
-// TODO XXXX SegmentsThatInteract with features involved.
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesAndInitFontContext) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  Reconfigure({'i'}, {
+    {{'x'}, ProbabilityBound::Zero()},
+    {{'q'}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    {ccmp, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+
+  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+}
 
 }  // namespace ift::encoder
 
