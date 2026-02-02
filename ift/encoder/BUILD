@@ -65,6 +65,7 @@ cc_library(
         "estimated_patch_size_cache.cc",
         "estimated_patch_size_cache.h",
         "glyph_condition_set.h",
+        "glyph_condition_set.cc",
         "glyph_groupings.cc",
         "glyph_groupings.h",
         "invalidation_set.h",

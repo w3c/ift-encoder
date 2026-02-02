@@ -161,8 +161,8 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
   ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
 }
 
-// TODO XXXX more tests:
-// - default filtering.
-// - ...
+// TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DepedencyClosureTest
+// for coverage of DepedencyGraph functionality. We should add some basic tests here that test DepedencyGraph
+// core features in isolation.
 
 }  // namespace ift::dep_graph

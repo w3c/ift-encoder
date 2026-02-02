@@ -13,6 +13,7 @@
 #include "ift/freq/unigram_probability_calculator.h"
 
 using absl::btree_map;
+using absl::StatusOr;
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;
@@ -30,10 +31,14 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)),
         noto_sans_jp(make_hb_face(nullptr)),
+
         segmenter(8, 8, PATCH, CLOSURE_ONLY),
         segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
         segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY),
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_DEP_GRAPH) {
+
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH),
+        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH),
+        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH) {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -51,18 +56,73 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
     return result.face();
   }
 
+  StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      const std::vector<SubsetDefinition>& subset_definitions,
+      std::optional<MergeStrategy> strategy = std::nullopt) const {
+    auto segmentation = segmenter.CodepointToGlyphSegments(face, initial_segment, subset_definitions, strategy);
+    auto dep_graph_segmentation = segmenter_dep_graph.CodepointToGlyphSegments(face, initial_segment, subset_definitions, strategy);
+    if (segmentation != dep_graph_segmentation) {
+        return absl::InternalError("Basic segmenter: segmentation from dep graph is not equivalent to the non-dep graph version.");
+    }
+    return segmentation;
+  }
+
+  StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      const std::vector<SubsetDefinition>& subset_definitions,
+      btree_map<common::SegmentSet, MergeStrategy> merge_groups) const {
+    auto segmentation = segmenter.CodepointToGlyphSegments(face, initial_segment, subset_definitions, merge_groups);
+    auto dep_graph_segmentation = segmenter_dep_graph.CodepointToGlyphSegments(face, initial_segment, subset_definitions, merge_groups);
+    if (segmentation != dep_graph_segmentation) {
+        return absl::InternalError("Basic segmenter: segmentation from dep graph is not equivalent to the non-dep graph version.");
+    }
+    return segmentation;
+  }
+
+  StatusOr<GlyphSegmentation> FindConditionsCodepointToGlyphSegments(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      const std::vector<SubsetDefinition>& subset_definitions,
+      std::optional<MergeStrategy> strategy = std::nullopt) const {
+    auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(face, initial_segment, subset_definitions, strategy);
+    auto dep_graph_segmentation = segmenter_find_conditions_dep_graph.CodepointToGlyphSegments(face, initial_segment, subset_definitions, strategy);
+    if (segmentation != dep_graph_segmentation) {
+        return absl::InternalError("Find conditions segmenter: segmentation from dep graph is not equivalent to the non-dep graph version.");
+    }
+    return segmentation;
+  }
+
+  StatusOr<GlyphSegmentation> MoveToInitFontCodepointToGlyphSegments(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      const std::vector<SubsetDefinition>& subset_definitions,
+      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups) const {
+    auto segmentation = segmenter_move_to_init_font.CodepointToGlyphSegments(face, initial_segment, subset_definitions, merge_groups);
+    auto dep_graph_segmentation = segmenter_move_to_init_font_dep_graph.CodepointToGlyphSegments(face, initial_segment, subset_definitions, merge_groups);
+    if (segmentation != dep_graph_segmentation) {
+        return absl::InternalError("Move to init font segmenter: segmentation from dep graph is not equivalent to the non-dep graph version.");
+    }
+    return segmentation;
+  }
+
+
+
   hb_face_unique_ptr roboto;
   hb_face_unique_ptr noto_nastaliq_urdu;
   hb_face_unique_ptr noto_sans_jp;
+
+  private:
   ClosureGlyphSegmenter segmenter;
   ClosureGlyphSegmenter segmenter_find_conditions;
   ClosureGlyphSegmenter segmenter_move_to_init_font;
+
   ClosureGlyphSegmenter segmenter_dep_graph;
+  ClosureGlyphSegmenter segmenter_find_conditions_dep_graph;
+  ClosureGlyphSegmenter segmenter_move_to_init_font_dep_graph;
 };
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
   auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+      CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}};
@@ -82,7 +142,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DefaultFeatures) {
   init.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
   init.codepoints = {'a'};
   auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}});
+      CodepointToGlyphSegments(roboto.get(), init, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'b'}, {'c'}};
@@ -103,7 +163,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitSegmentExpansion) {
   SubsetDefinition init;
   init.codepoints = {0x7528};
   auto segmentation =
-      segmenter.CodepointToGlyphSegments(noto_sans_jp.get(), init, {{0x2F64}});
+      CodepointToGlyphSegments(noto_sans_jp.get(), init, {{0x2F64}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // 0x2F64 and 0x7528 both map to the same glyph, the expectation is that 0x2F64 get's
@@ -119,7 +179,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitSegmentExpansion) {
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_DropsUneededSegment) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {'a'},
                                                          {{'b'}, {'c'}, {'a'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -142,7 +202,7 @@ TEST_F(ClosureGlyphSegmenterTest,
        SimpleSegmentation_DropsUneededSegment_DefaultFeature) {
   SubsetDefinition ccmp;
   ccmp.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {'a'},
                                                          {{'b'}, {'c'}, ccmp});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -161,7 +221,7 @@ if (s1) then p1
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithPartialOverlap) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'b', 'c'}, {'c', 'd'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -180,7 +240,7 @@ if ((s0 OR s1)) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFullOverlap) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'b', 'c'}, {'b', 'c'}, {'d'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -198,7 +258,7 @@ if ((s0 OR s1)) then p1
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithAdditionalConditionOverlap) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -220,7 +280,7 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {'a'},
                                                          {{'b'}, {'c'}, smcp});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -246,7 +306,7 @@ TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures_DontMergeFeatures) {
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'b'}, {'c'}, smcp},
       MergeStrategy::Heuristic(10000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -267,7 +327,7 @@ if (s0 AND s2) then p2
 
 TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
   auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
+      CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'f'}, {'i'}};
@@ -285,7 +345,7 @@ if (s0 AND s1) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, OrCondition) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {'a'},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {'a'},
                                                          {{0xc1}, {0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -308,7 +368,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBase_ViaConditions) {
   // there is a dependency between these two. The result should have no
   // conditional patches since ligatures will have been brought into the merged
   // {e, f, i, l}
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k', 'm', 'n'}, {'i', 'l'}},
       MergeStrategy::Heuristic(370));
@@ -332,7 +392,7 @@ if (s2) then p2
 TEST_F(ClosureGlyphSegmenterTest, MergeBases) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'd'}, {'e', 'f'}, {'j', 'k'}, {'m', 'n', 'o', 'p'}},
       MergeStrategy::Heuristic(370));
@@ -361,7 +421,7 @@ TEST_F(ClosureGlyphSegmenterTest, MergeBases_MaxSize) {
   // {e, f} is too small, since no conditional patches exist it will merge with
   // the next available base which is {'m', 'n', 'o', 'p'}. However that patch
   // is too large, so the next one {j, k} will actually be chosen.
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'd'}, {'e', 'f'}, {'m', 'n', 'o', 'p'}, {'j', 'k'}},
       MergeStrategy::Heuristic(370, 700));
@@ -383,7 +443,7 @@ if (s2) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, MixedAndOr) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -404,7 +464,7 @@ if (s0 AND s1) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FallbackSegment) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -430,7 +490,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
-  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
+  auto segmentation = FindConditionsCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
       {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, std::nullopt);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -462,7 +522,7 @@ if ((s1 OR s2 OR s3 OR s4)) then p6
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
   // Here the found conditions are equal to the fallback segment, this ensures
   // everything works properly in this case.
-  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
+  auto segmentation = FindConditionsCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
       std::nullopt);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -489,7 +549,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
-  auto segmentation = segmenter_move_to_init_font.CodepointToGlyphSegments(
+  auto segmentation = MoveToInitFontCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
       btree_map<SegmentSet, MergeStrategy>{});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -541,17 +601,9 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   segments.push_back(smcp);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-
-  auto segmentation_dep_graph = segmenter_dep_graph.CodepointToGlyphSegments(
-      roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
-  ASSERT_TRUE(segmentation_dep_graph.ok()) << segmentation_dep_graph.status();
-
-  // Dep graph should produce identical results.
-  ASSERT_EQ(segmentation->Segments(), segmentation_dep_graph->Segments());
-  ASSERT_EQ(segmentation->GidSegments(), segmentation_dep_graph->GidSegments());
 }
 
 TEST_F(ClosureGlyphSegmenterTest, CostRequiresFrequencies) {
@@ -567,7 +619,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_CostStrategy) {
       {{'h', 'h'}, 90},  {{'i', 'i'}, 90}, {{'j', 'j'}, 90}, {{'k', 'k'}, 5},
       {{'l', 'l'}, 5},   {{'m', 'm'}, 5},  {{'n', 'n'}, 5},  {{'o', 'o'}, 5}};
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c', 'd', 'e'},
        {'f', 'g', 'h', 'i', 'j'},
@@ -602,7 +654,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   };
 
   // Base line, nothing is merged
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c'}, {'f', 'g', 'h'}, {'k', 'l', 'm', 'n', 'o'}},
       *MergeStrategy::CostBased(std::move(frequencies1), 75, 3));
@@ -629,7 +681,7 @@ if (s0 AND s2) then p3
       {{' ', ' '}, 100},
       // Everything unspecified defaults to a count of 1.
   };
-  segmentation = segmenter.CodepointToGlyphSegments(
+  segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c'}, {'f', 'g', 'h'}, {'k', 'l', 'm', 'n', 'o'}},
       *MergeStrategy::CostBased(std::move(frequencies2), 75, 5));
@@ -657,7 +709,7 @@ TEST_F(ClosureGlyphSegmenterTest, CustomOverhead_CostStrategy) {
       {{'h', 'h'}, 90},  {{'i', 'i'}, 90}, {{'j', 'j'}, 90}, {{'k', 'k'}, 5},
       {{'l', 'l'}, 5},   {{'m', 'm'}, 5},  {{'n', 'n'}, 5},  {{'o', 'o'}, 5}};
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c', 'd', 'e'},
        {'f', 'g', 'h', 'i', 'j'},
@@ -682,7 +734,7 @@ if (s0) then p0
 
 TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
   UnicodeFrequencies frequencies{{{'a', 'a'}, 10}};
-  auto s = segmenter.CodepointToGlyphSegments(
+  auto s = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a', 'd'}, {'d', 'c'}},
       *MergeStrategy::CostBased(std::move(frequencies)));
   ASSERT_FALSE(s.ok());
@@ -702,7 +754,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
       *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'!'}, {0x203C}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -730,7 +782,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
       *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
   strategy.SetUsePatchMerges(false);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'!'}, {0x203C}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -764,7 +816,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoCostCutoff) {
       *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -805,7 +857,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_WithCostCutoff) {
       *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.05);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -850,7 +902,7 @@ TEST_F(ClosureGlyphSegmenterTest,
       *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 2);
   strategy.SetOptimizationCutoffFraction(0.05);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -931,7 +983,7 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   strategy.SetUsePatchMerges(true);
 
   auto segmentation =
-      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+      CodepointToGlyphSegments(roboto.get(), {},
                                          {
                                              {'A'}, {'C'}, {0x106}, /* Cacute */
                                          },
@@ -970,7 +1022,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitNoGlyphSegments_CostMerging) {
       {{'C', 'C'}, 100},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {0x106 /* Cacute */},
       {
           {'A'},
@@ -1014,7 +1066,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
       *MergeStrategy::BigramCostBased(std::move(frequencies));
   strategy.SetInitFontMergeThreshold(-75);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -1052,7 +1104,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_WithProbabilityThreshold) {
   strategy.SetInitFontMergeThreshold(-75);
   strategy.SetInitFontMergeProbabilityThreshold(0.98);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -1086,7 +1138,7 @@ TEST_F(ClosureGlyphSegmenterTest,
       *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
   strategy.SetInitFontMergeThreshold(-75);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'A'}, {'B'}, {'C'}, {0x106}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -1128,7 +1180,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies));
   strategy.SetInitFontMergeThreshold(-75);
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{0x106}, {'A'}, {'C'}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -1168,7 +1220,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
        *MergeStrategy::CostBased(std::move(group2_freq), 75, 2)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {{'a'},
                                                           {'b'},
                                                           {'c'},
@@ -1264,7 +1316,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
       {{0, 1, 7, 8, 9, 10, 11, 12, 13, 14}, s2},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {{'a'},
                                                           {'b'},
                                                           {'c'},
@@ -1350,7 +1402,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
       {{2, 3}, *MergeStrategy::CostBased(std::move(group2_freq), 75, 1)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {
                                                              {'f'},
                                                              {'g'},
@@ -1391,7 +1443,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_Heuristic) {
       {{2, 3}, MergeStrategy::Heuristic(10000)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {
                                                              {'f'},
                                                              {'g'},
@@ -1430,7 +1482,7 @@ TEST_F(ClosureGlyphSegmenterTest, CompositeMerge_Cutoff) {
 
   MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.50);
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {
                                                              {'f'},
                                                              {'g'},
@@ -1470,7 +1522,7 @@ TEST_F(ClosureGlyphSegmenterTest, ConjunctiveAdditionalConditions) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   smcp.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {0xE4},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {0xE4},
                                                          {
                                                              {0xD6},  // Ö
                                                              {0xF6},  // ö
@@ -1498,7 +1550,7 @@ if (s2) then p2
       {{0xD6, 0xD6}, 100},  // Ö
       {{0xF6, 0xF6}, 100},  // ö
   };
-  segmentation = segmenter.CodepointToGlyphSegments(
+  segmentation = CodepointToGlyphSegments(
       roboto.get(), {0xE4},
       {
           {0xD6},  // Ö
@@ -1538,7 +1590,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
       {{7, 8}, MergeStrategy::Heuristic(1)},
   };
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                          {
                                                              {'a'},
                                                              {'b'},
@@ -1600,7 +1652,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
       *MergeStrategy::BigramCostBased(std::move(frequencies));
   strategy.SetInitFontMergeThreshold(-75);
 
-  auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
+  auto segmentation = FindConditionsCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
       {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();

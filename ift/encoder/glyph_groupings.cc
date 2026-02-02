@@ -174,7 +174,7 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
 Status GlyphGroupings::GroupGlyphs(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, std::optional<DependencyClosure*> depedency_closure,
+    GlyphClosureCache& closure_cache, std::optional<DependencyClosure*> dependency_closure,
     GlyphSet glyphs, const SegmentSet& modified_segments) {
 
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
@@ -281,7 +281,7 @@ Status GlyphGroupings::GroupGlyphs(
 
   if (segmentation_info.GetUnmappedGlyphHandling() == FIND_CONDITIONS) {
     TRYV(FindFallbackGlyphConditions(segmentation_info, glyph_condition_set,
-                                     inscope_fallback_segments, closure_cache, depedency_closure));
+                                     inscope_fallback_segments, closure_cache, dependency_closure));
   }
 
   // The combined conditions can't be incrementally updated, so we recompute
@@ -319,16 +319,16 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
     const SegmentSet& inscope_segments, GlyphClosureCache& closure_cache,
-    std::optional<DependencyClosure*> depedency_closure
+    std::optional<DependencyClosure*> dependency_closure
   ) {
   if (unmapped_glyphs_.empty()) {
     return absl::OkStatus();
   }
 
   SegmentSet inscope = SegmentSet::all();
-  if (depedency_closure.has_value()) {
-    inscope = TRY(depedency_closure.value()->SegmentsThatInteractWith(unmapped_glyphs_));
-    VLOG(0) << "scoping complex condition finding to " << inscope.ToString(); // XXXXXXX
+  if (dependency_closure.has_value()) {
+    inscope = TRY(dependency_closure.value()->SegmentsThatInteractWith(unmapped_glyphs_));
+    VLOG(0) << "used dep graph to scope complex condition finding to " << inscope.size() << " segments.";
   }
 
   // Note: inscope_segments is not currently used, the approach needs more

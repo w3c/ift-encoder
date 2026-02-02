@@ -36,6 +36,15 @@ class GlyphSegmentation {
         init_font_glyph_closure_(init_font_glyph_closure),
         unmapped_glyphs_(unmapped_glyphs) {}
 
+  bool operator==(const GlyphSegmentation& other) const {
+    return init_font_segment_ == other.init_font_segment_ &&
+      init_font_glyph_closure_ == other.init_font_glyph_closure_ &&
+      unmapped_glyphs_ == other.unmapped_glyphs_ &&
+      conditions_ == other.conditions_ &&
+      segments_ == other.segments_ &&
+      patches_ == other.patches_;
+  }
+
   /*
    * Returns a human readable string representation of this segmentation and
    * associated activation conditions.

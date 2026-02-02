@@ -32,6 +32,9 @@ class GlyphClosureCache {
       const common::SegmentSet& segment_ids, common::GlyphSet& and_gids,
       common::GlyphSet& or_gids, common::GlyphSet& exclusive_gids);
 
+
+  absl::StatusOr<SubsetDefinition> ExpandClosure(const SubsetDefinition& definition);
+
   uint64_t CacheHits() const { return glyph_closure_cache_hit_; }
   uint64_t CacheMisses() const { return glyph_closure_cache_miss_; }
 

@@ -57,7 +57,11 @@ class SegmentationContext {
     SegmentationContext context(
       face, initial_segment, segments, unmapped_glyph_handling,
       condition_analysis_mode, brotli_quality, init_font_brotli_quality);
-    context.dependency_closure_ = TRY(DependencyClosure::Create(context.segmentation_info_.get(), context.original_face.get()));
+
+    if ((condition_analysis_mode == CLOSURE_AND_DEP_GRAPH) ||
+        (condition_analysis_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
+      context.dependency_closure_ = TRY(DependencyClosure::Create(context.segmentation_info_.get(), context.original_face.get()));
+    }
     return context;
   }
 
@@ -75,7 +79,7 @@ class SegmentationContext {
         original_face(common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(std::make_unique<RequestedSegmentationInformation>(
           segments, initial_segment, glyph_closure_cache, unmapped_glyph_handling)),
-        dependency_closure_(nullptr),
+        dependency_closure_(std::nullopt),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality),
@@ -93,7 +97,13 @@ class SegmentationContext {
   }
 
   void LogClosureStatistics() const {
-    uint64_t dep_graph_closures = dependency_closure_->AccurateResults() * 2;
+    uint64_t dep_graph_closures = 0;
+    uint64_t dep_graph_inaccurate = 0;
+    if (dependency_closure_.has_value()) {
+      dep_graph_closures = (*dependency_closure_)->AccurateResults() * 2;
+      dep_graph_inaccurate = (*dependency_closure_)->InaccurateResults();
+    }
+
     uint64_t potential_closures =
       glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() +
       dep_graph_closures;
@@ -101,7 +111,7 @@ class SegmentationContext {
     double hb_subset_rate = 100.0 * ((double) glyph_closure_cache.CacheMisses() / (double) potential_closures);
     double cache_hit_rate = 100.0 * ((double) glyph_closure_cache.CacheHits() / (double) potential_closures);
     double dep_graph_hit_rate = 100.0 * ((double) dep_graph_closures / (double) potential_closures);
-    uint64_t other_closures = glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() - (2 * dependency_closure_->InaccurateResults());
+    uint64_t other_closures = glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() - (2 * dep_graph_inaccurate);
 
     VLOG(0) << ">> Of " << potential_closures << " potential closure operations:" << std::endl
       << "  " << glyph_closure_cache.CacheMisses() << " (" << hb_subset_rate << "%)  were handled by hb-subset-plan" << std::endl
@@ -150,7 +160,11 @@ class SegmentationContext {
     // Note: glyph_groupings will be automatically invalidated as needed when
     // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
-    return dependency_closure_->SegmentsChanged(false, segments);
+
+    if (dependency_closure_.has_value()) {
+      return (*dependency_closure_)->SegmentsChanged(false, segments);
+    }
+    return absl::OkStatus();
   }
 
   /*
@@ -178,9 +192,8 @@ class SegmentationContext {
                            const common::SegmentSet& modified_segments) {
 
     std::optional<DependencyClosure*> maybe_dep_closure = std::nullopt;
-    if ((condition_analysis_mode_ == CLOSURE_AND_DEP_GRAPH) ||
-        (condition_analysis_mode_ == CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
-      maybe_dep_closure = dependency_closure_.get();
+    if (dependency_closure_.has_value()) {
+      maybe_dep_closure = (*dependency_closure_).get();
     }
     return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
                                        glyph_closure_cache, maybe_dep_closure,
@@ -226,7 +239,7 @@ class SegmentationContext {
 
  private:
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info_;
-  std::unique_ptr<DependencyClosure> dependency_closure_;
+  std::optional<std::unique_ptr<DependencyClosure>> dependency_closure_;
 
  public:
   // == Phase 1 - derived from segments and init information
