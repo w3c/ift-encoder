@@ -68,7 +68,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
   changed_gids.union_set(exclusive_gids);
 
   for (uint32_t gid : changed_gids) {
-    TRYV(InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index}));
+    glyph_condition_set.InvalidateGlyphInformation(GlyphSet{gid}, SegmentSet{segment_index});
   }
 
   if (and_gids.empty() && or_gids.empty()) {
@@ -96,40 +96,63 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
  * Invalidates all grouping information and fully reprocesses all segments.
  */
 Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
-  unsigned glyph_count = hb_face_get_glyph_count(original_face.get());
+  // Figure out what's going to change before making the change so that we
+  // can utilize the dep graph to locate affected segments.
+  new_def = TRY(glyph_closure_cache.ExpandClosure(new_def));
+  GlyphSet removed_gids = SegmentationInfo().NonInitFontGlyphs();
+  removed_gids.intersect(new_def.gids);
 
-  // Record a set of all glyphs prior to the init subset redefinition.
-  // Will be needed to do group invalidation correctly.
-  GlyphSet changed_gids = SegmentationInfo().NonInitFontGlyphs();
-  SegmentSet changed_segments = segmentation_info_->ReassignInitSubset(
-      glyph_closure_cache, std::move(new_def));
-  TRYV(dependency_closure_->SegmentsChanged(true, changed_segments));
+  SegmentSet segments_with_changed_defs;
+  uint32_t s_index = 0;
+  for (auto& s : segmentation_info_->Segments()) {
+    // TODO XXXXX this also needs to handle features?
+    if (s.Definition().codepoints.intersects(new_def.codepoints)) {
+        segments_with_changed_defs.insert(s_index);
+    }
+    s_index++;
+  }
 
-  // Consider all glyphs moved to the init font as changed.
-  changed_gids.subtract(SegmentationInfo().NonInitFontGlyphs());
+  SegmentSet segments_to_reprocess;
+  if (!segmentation_info_->Segments().empty()) {
+    segments_to_reprocess.insert_range(0, segmentation_info_->Segments().size() - 1);
+  }
+  if (dependency_closure_.has_value()) {
+    // If dep graph is enabled we can use it to narrow the set of segments that need reprocessing.
+    segments_to_reprocess = TRY((*dependency_closure_)->SegmentInteractionGroup(segments_with_changed_defs));
+  }
+
+  TRYV(segmentation_info_->ReassignInitSubset(glyph_closure_cache, new_def));
+
+  if (dependency_closure_.has_value()) {
+    TRYV((*dependency_closure_)->SegmentsChanged(true, segments_to_reprocess));
+  }
 
   // All segments depend on the init subset def, so we must reprocess
   // everything. First reset condition set information:
   GlyphConditionSet previous_glyph_condition_set = glyph_condition_set;
-  glyph_condition_set = GlyphConditionSet(glyph_count);
-  inert_segments_.clear();
+
+  glyph_condition_set.InvalidateGlyphInformation(removed_gids);
+  glyph_condition_set.InvalidateGlyphInformation(segments_to_reprocess);
+  inert_segments_.subtract(segments_to_reprocess);
 
   // Then reprocess segments:
-  for (segment_index_t segment_index = 0;
-       segment_index < SegmentationInfo().Segments().size(); segment_index++) {
+  for (segment_index_t segment_index : segments_to_reprocess) {
     TRY(ReprocessSegment(segment_index));
   }
 
   // the groupings can be incrementally recomputed by looking at what conditions
   // have changed.
+  GlyphSet changed_gids;
+  changed_gids.union_set(removed_gids);
   for (glyph_id_t gid : SegmentationInfo().NonInitFontGlyphs()) {
+    const auto& new_conditions = glyph_condition_set.ConditionsFor(gid);
     if (previous_glyph_condition_set.ConditionsFor(gid) !=
-        glyph_condition_set.ConditionsFor(gid)) {
+        new_conditions) {
       changed_gids.insert(gid);
     }
   }
 
-  TRYV(GroupGlyphs(changed_gids, changed_segments));
+  TRYV(GroupGlyphs(changed_gids, segments_with_changed_defs));
 
   return absl::OkStatus();
 }
@@ -153,9 +176,8 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   GlyphSet dep_and_gids = and_gids;
   GlyphSet dep_or_gids = or_gids;
   GlyphSet dep_exclusive_gids = exclusive_gids;
-  if (effective_mode == CLOSURE_AND_DEP_GRAPH ||
-      effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
-    auto accuracy = TRY(dependency_closure_->AnalyzeSegment(
+  if (dependency_closure_.has_value()) {
+    auto accuracy = TRY((*dependency_closure_)->AnalyzeSegment(
       segment_ids, dep_and_gids, dep_or_gids, dep_exclusive_gids));
     if (accuracy == DependencyClosure::INACCURATE) {
       effective_mode = CLOSURE_ONLY;

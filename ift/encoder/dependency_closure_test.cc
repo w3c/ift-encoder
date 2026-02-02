@@ -252,7 +252,6 @@ TEST_F(DependencyClosureTest, SingleSubst) {
     {{'A'}, ProbabilityBound::Zero()},
     {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
     {c2sc, ProbabilityBound::Zero()},
-    // TODO XXX add composite glyph AE instead of B?
   });
 
   Status s = CompareAnalysis({0});
@@ -529,17 +528,70 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesAndInitFontContex
   ASSERT_EQ(*s, (SegmentSet {2, 3}));
 }
 
+
+TEST_F(DependencyClosureTest, SegmentInteractionGroup) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  Reconfigure(liga, {
+    /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'x'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'q'}, ProbabilityBound::Zero()},
+    /* 3 */ {{'i'}, ProbabilityBound::Zero()},
+    /* 4 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    /* 5 */ {{ccmp}, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}),
+            (SegmentSet {1}));
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 2}),
+            (SegmentSet {1, 2}));
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
+            (SegmentSet {0, 3, 4, 5}));
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3, 5}),
+            (SegmentSet {0, 3, 4, 5}));
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 3, 5}),
+            (SegmentSet {0, 1, 3, 4, 5}));
+}
+
+TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  SubsetDefinition liga {'i'};
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  std::cerr << "Init font: " << liga.codepoints.ToString() << std::endl;
+  Reconfigure(liga, {
+    /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'x'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'q'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    /* 4 */ {{ccmp}, ProbabilityBound::Zero()},
+  });
+
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}),
+            (SegmentSet {1}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
+            (SegmentSet {0, 3, 4}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3}),
+            (SegmentSet {0, 3, 4}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({4}),
+            (SegmentSet {0, 3, 4}));
+}
+
 }  // namespace ift::encoder
 
-// TODO XXXX CFF seac test.
-// TODO XXXX allow liga if context is satisfied, reject otherwise.
-// TODO XXXX contextual always rejected (since recursion is hard to reason about).
+// TODO(garretrieger): missing tests
+// - CFF seac test.
+// - COLRv1 font tests.
 
 // TODO(garretrieger) more tests (once functionality is available):
-// - Test case exposing the current exclusive check failure (exclusive glyph reachable via intermediate).
 // - Test case with a feature segment + otherwise disjunctive GSUB (eg. smcp single sub)
-// - support for disjunctive GSUB types.
 // - case where init font makes a conjunctive thing exclusive (eg. UVS and/or liga).
 // - liga
 // - UVS, including when mixed with init font.
-// - COLRv1 font tests.
+

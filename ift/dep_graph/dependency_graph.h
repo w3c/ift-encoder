@@ -30,7 +30,6 @@ namespace ift::dep_graph {
  * Allows exploring glyph depedencies within a font.
  */
 class DependencyGraph {
- // TODO XXXX some basic tests for this class.
  public:
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,

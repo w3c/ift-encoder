@@ -83,6 +83,8 @@ class DependencyClosure {
   // may be overestimated.
   absl::StatusOr<common::SegmentSet> SegmentsThatInteractWith(const common::GlyphSet& glyphs);
 
+  absl::StatusOr<common::SegmentSet> SegmentInteractionGroup(const common::SegmentSet& segments);
+
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
 
@@ -99,10 +101,6 @@ class DependencyClosure {
   }
 
   AnalysisAccuracy TraversalAccuracy(const dep_graph::Traversal& traversal) const;
-
-  static absl::StatusOr<common::IntSet> FullFeatureSet(
-      const RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face);
 
   static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
       hb_face_t* face);
@@ -126,8 +124,11 @@ class DependencyClosure {
     absl::btree_set<hb_tag_t>& features_to_check
   ) const;
 
+  common::SegmentSet ConnectedSegments(segment_index_t s);
+  common::SegmentSet InitFontConnections();
+
   absl::Status EnsureReachabilityIndexPopulated();
-  absl::Status UpdateReachabilityIndex(const common::SegmentSet& segments);
+  absl::Status UpdateReachabilityIndex(common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
   void ClearReachabilityIndex();
   void ClearReachabilityIndex(segment_index_t segment);
@@ -144,16 +145,16 @@ class DependencyClosure {
 
   // Reachability indexes: these indexes are used to quickly locate segments reachable
   // from glyph and features (and in reverse as well).
+  bool reachability_index_valid_ = false;
   absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
   absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
   absl::flat_hash_map<hb_tag_t, common::SegmentSet> segments_that_can_reach_feature_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>> features_that_can_be_reached_;
 
-
-
-  // TODO XXXXX cache segment -> context glyphs and utilize in SegmentsThatInteractWith()
-
-
+  absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_have_context_glyph_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet> segment_context_glyphs_;
+  absl::flat_hash_map<hb_tag_t, common::SegmentSet> segments_that_have_context_feature_;
+  absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>> segment_context_features_;
 
   uint64_t accurate_results_ = 0;
   uint64_t inaccurate_results_ = 0;

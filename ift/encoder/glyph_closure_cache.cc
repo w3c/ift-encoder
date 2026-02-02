@@ -1,5 +1,6 @@
 #include "ift/encoder/glyph_closure_cache.h"
 
+#include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
 #include "common/try.h"
@@ -13,6 +14,8 @@ using common::GlyphSet;
 using common::hb_set_unique_ptr;
 using common::make_hb_set;
 using common::SegmentSet;
+using common::CodepointSet;
+using common::FontHelper;
 
 namespace ift::encoder {
 
@@ -155,6 +158,30 @@ Status GlyphClosureCache::AnalyzeSegment(
   exclusive_gids.intersect(D_dropped);
 
   return absl::OkStatus();
+}
+
+StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(const SubsetDefinition& definition) {
+  SubsetDefinition expanded = definition;
+  bool changed = true;
+  while (changed) {
+    GlyphSet closure_gids = TRY(GlyphClosure(expanded));
+
+    CodepointSet closure_unicodes =
+        FontHelper::GidsToUnicodes(Face(), closure_gids);
+
+    changed = false;
+    if (!closure_gids.is_subset_of(expanded.gids)) {
+      changed = true;
+      expanded.gids.union_set(closure_gids);
+    }
+
+    if (!closure_unicodes.is_subset_of(expanded.codepoints)) {
+      changed = true;
+      expanded.codepoints.union_set(closure_unicodes);
+    }
+  }
+
+  return expanded;
 }
 
 }  // namespace ift::encoder

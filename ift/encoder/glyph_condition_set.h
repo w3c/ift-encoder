@@ -1,6 +1,7 @@
 #ifndef IFT_ENCODER_GLYPH_CONDITION_SET_H_
 #define IFT_ENCODER_GLYPH_CONDITION_SET_H_
 
+#include <ostream>
 #include "absl/container/flat_hash_map.h"
 #include "common/int_set.h"
 #include "ift/encoder/types.h"
@@ -34,6 +35,9 @@ class GlyphConditionSet {
  public:
   GlyphConditionSet(uint32_t num_glyphs) { gid_conditions_.resize(num_glyphs); }
 
+  friend void PrintTo(const GlyphConditionSet& conditions, std::ostream* os);
+  static void PrintDiff(const GlyphConditionSet& a, const GlyphConditionSet& b);
+
   const GlyphConditions& ConditionsFor(glyph_id_t gid) const {
     return gid_conditions_[gid];
   }
@@ -60,10 +64,36 @@ class GlyphConditionSet {
 
   // Clears out any stored information for glyphs and segments in this condition
   // set.
+  void InvalidateGlyphInformation(const common::GlyphSet& glyphs) {
+    common::SegmentSet touched;
+    for (uint32_t gid : glyphs) {
+      auto& condition = gid_conditions_[gid];
+      touched.union_set(condition.and_segments);
+      touched.union_set(condition.or_segments);
+      condition.and_segments.clear();
+      condition.or_segments.clear();
+    }
+
+    for (uint32_t segment_index : touched) {
+      segment_to_gid_conditions_[segment_index].subtract(glyphs);
+    }
+  }
+
+  void InvalidateGlyphInformation(const common::SegmentSet& segments) {
+    common::GlyphSet touched;
+    for (uint32_t segment_index : segments) {
+      auto& entry = segment_to_gid_conditions_[segment_index];
+      touched.union_set(entry);
+      entry.clear();
+    }
+
+    for (uint32_t gid : touched) {
+      gid_conditions_[gid].RemoveSegments(segments);
+    }
+  }
+
   void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
                                   const common::SegmentSet& segments) {
-    // Remove all segments we touched here from gid_conditions so they can be
-    // recalculated.
     for (uint32_t gid : glyphs) {
       gid_conditions_[gid].RemoveSegments(segments);
     }
