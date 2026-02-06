@@ -35,20 +35,15 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
   // - Ligatures: at least in simple non-nested cases we should be able to generate the corresponding conditions.
   // - Features: features create conjunctive conditions, we should be able to handle these.
 
-  if (traversal.HasOnlyLigaConditionalGlyphs()) {
-    // When liga glyphs are present and accurate analysis is still possible
-    // if all of the liga glyphs have been reached.
-    GlyphSet required_liga = traversal.RequiredLigaGlyphs();
-    required_liga.subtract(traversal.ReachableGlyphs());
-    required_liga.subtract(segmentation_info_->InitFontGlyphs());
-    if (!required_liga.empty()) {
-      // TODO(garretrieger): if there are nested ligatures this may be too simplisitic. Since reachable glyphs
-      // might contain things are aren't actually accessible from the starting point (ie. ligature which
-      // isn't triggerable from the starting set adds a glyph that unlocks it). Try and construct a
-      // test case to demonstrate this.
-      return AnalysisAccuracy::INACCURATE;
-    }
-  } else if (traversal.HasConditionalGlyphs()) {
+  // TODO XXXX inaccurate if context was not enforced on the traversal.
+  // TODO XXXXXX track a set of glyphs which are inscope for an accurate traversal. These are glyphs
+  // that are reachable only via non-contextual edges.
+
+  if (traversal.HasPendingEdges()) {
+    return AnalysisAccuracy::INACCURATE;
+  }
+
+  if (traversal.HasContextGlyphs()) {
     // TODO(garretrieger): it should be possible to support at least liga when all of
     // the liga glyphs have been reached.
     return AnalysisAccuracy::INACCURATE;
@@ -66,7 +61,7 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
     }
   }
 
-  if (traversal.ReachableGlyphs().intersects(context_glyphs_)) {
+  if (traversal.ReachedGlyphs().intersects(context_glyphs_)) {
     return AnalysisAccuracy::INACCURATE;
   }
 
@@ -86,25 +81,25 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
 
   // TODO(garretrieger): can we do an incremental update of incoming_edge_counts_, and context?
   // not high priority as this does not currently show up as problematic in profiles.
-  btree_set<Node> nodes;
+  SegmentSet non_empty_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
     if (segmentation_info_->Segments().at(s).Definition().Empty()) {
       continue;
     }
-    nodes.insert(Node::Segment(s));
+    non_empty_segments.insert(s);
   }
 
-  Traversal traversal = TRY(graph_.TraverseGraph(nodes));
+  Traversal traversal = TRY(graph_.ClosureTraversal(non_empty_segments));
   incoming_edge_counts_ = traversal.TraversedIncomingEdgeCounts();
 
   context_glyphs_ = traversal.ContextGlyphs();
-  init_font_features_ = TRY(InitFeatureSet(segmentation_info_, original_face_.get()));
 
   // The init font may have reachable glyphs which are not in the init font closure,
   // we need to record the context glyphs from these as they are potential interaction
   // points.
   init_font_context_glyphs_.clear();
   init_font_context_features_.clear();
+  init_font_features_ = TRY(graph_.InitFontFeatureSet());
   Traversal init_font_traversal = TRY(graph_.TraverseGraph({Node::InitFont()},
     &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
@@ -126,7 +121,7 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
     }
   }
 
-  init_font_reachable_glyphs_ = init_font_traversal.ReachableGlyphs();
+  init_font_reachable_glyphs_ = init_font_traversal.ReachedGlyphs();
   init_font_reachable_glyphs_.subtract(segmentation_info_->InitFontGlyphs());
 
   return absl::OkStatus();
@@ -164,7 +159,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   // - Handle simple disjunctive GSUB lookups (may need conjunction with features).
   // - Handle simple conjunctive GSUB lookups (eg. liga)
   // - Handle features in the input segment (once GSUB is supported).
-  btree_set<Node> start_nodes;
+  SegmentSet start_nodes;
   for (segment_index_t segment_id : segments) {
     if (segment_id >= segmentation_info_->Segments().size()) {
       return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
@@ -176,18 +171,17 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
       continue;
     }
 
-    start_nodes.insert(Node::Segment(segment_id));
+    start_nodes.insert(segment_id);
   }
 
-  Traversal traversal = TRY(graph_.TraverseGraph(start_nodes));
+  Traversal traversal = TRY(graph_.ClosureTraversal(start_nodes));
   if (TraversalAccuracy(traversal) == INACCURATE) {
     inaccurate_results_++;
     return INACCURATE;
   }
 
-
   btree_set<Node> shared_nodes; // set of nodes which are accessible from outside this subgraph.
-  for (auto [node, count] : traversal.TraversedIncomingEdgeCounts()) {
+  for (const auto& [node, count] : traversal.TraversedIncomingEdgeCounts()) {
     unsigned incoming_edge_count = incoming_edge_counts_.at(node);
 
     if (node.IsGlyph()) {
@@ -206,6 +200,8 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   // We need to find glyphs that are reachable from other segments, which are those
   // glyphs that are reachable from any shared_glyphs found above.
   Traversal all_shared_nodes = TRY(graph_.TraverseGraph(shared_nodes));
+  // TODO XXXX this needs fixing with respect to closure which may not have traversed as broadly.
+  //      eg. effectively unreachable UVS edges, add a test case to demonstrate the problem
   if (TraversalAccuracy(all_shared_nodes) == INACCURATE) {
     inaccurate_results_++;
     return INACCURATE;
@@ -223,22 +219,6 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 
   accurate_results_++;
   return ACCURATE;
-}
-
-StatusOr<IntSet> DependencyClosure::InitFeatureSet(
-    const RequestedSegmentationInformation* segmentation_info,
-    hb_face_t* face) {
-  hb_subset_input_t* input = hb_subset_input_create_or_fail();
-  if (!input) {
-    return absl::InternalError("Failed to create subset input object.");
-  }
-
-  segmentation_info->InitFontSegment().ConfigureInput(input, face);
-  IntSet features(
-      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
-  hb_subset_input_destroy(input);
-
-  return features;
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet& glyphs) {
@@ -479,7 +459,7 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
 
   auto traversal = TRY(graph_.TraverseGraph(btree_set<Node> {Node::Segment(s)}));
 
-  for (glyph_id_t g : traversal.ReachableGlyphs()) {
+  for (glyph_id_t g : traversal.ReachedGlyphs()) {
     segments_that_can_reach_[g].insert(s);
     glyphs_that_can_be_reached_[s].insert(g);
   }

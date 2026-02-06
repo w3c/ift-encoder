@@ -83,15 +83,15 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(74 /* f */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(77 /* i */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(444 /* fi */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(446 /* fi */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(74 /* f */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(77 /* i */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(444 /* fi */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(446 /* fi */));
 
   r = graph.TraverseGraph({Node::InitFont()}, &segmentation_info.FullClosure(), &segmentation_info.FullDefinition().codepoints);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal_scoped = *r;
-  ASSERT_EQ(traversal_scoped.ReachableGlyphs(), (GlyphSet {
+  ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet {
     74 /* f */,
     77 /* i */,
     444 /* fi */,
@@ -157,7 +157,7 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
 
   // Gravecomb interacts with 'i' as only a context glyph, so it's
   // own traversal is just it's self.
-  ASSERT_EQ(traversal.ReachableGlyphs(), (GlyphSet {168 /* gravecomb */}));
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {168 /* gravecomb */}));
   ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
 }
 

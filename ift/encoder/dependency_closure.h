@@ -105,10 +105,6 @@ class DependencyClosure {
   static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
       hb_face_t* face);
 
-  static absl::StatusOr<common::IntSet> InitFeatureSet(
-    const RequestedSegmentationInformation* segmentation_info,
-    hb_face_t* face);
-
   void ReachabilityInitFontAddToCheck(
     common::GlyphSet& visited_glyphs,
     absl::btree_set<hb_tag_t>& visited_features,
@@ -140,8 +136,8 @@ class DependencyClosure {
   common::GlyphSet context_glyphs_;
   common::GlyphSet init_font_reachable_glyphs_;
   common::GlyphSet init_font_context_glyphs_;
+  absl::flat_hash_set<hb_tag_t> init_font_features_;
   absl::flat_hash_set<hb_tag_t> init_font_context_features_;
-  common::IntSet init_font_features_;
 
   // Reachability indexes: these indexes are used to quickly locate segments reachable
   // from glyph and features (and in reverse as well).
