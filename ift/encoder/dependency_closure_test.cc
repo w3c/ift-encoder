@@ -247,17 +247,17 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
   Reconfigure(face.get(), {}, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-    {{'A'}, ProbabilityBound::Zero()},
-    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
-    {c2sc, ProbabilityBound::Zero()},
+    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+    /* 4 */ {c2sc, ProbabilityBound::Zero()},
   });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-   // s2sc not in init font which A passes through.
+   // c2sc not in init font which A passes through.
   s = RejectedAnalysis(2);
   ASSERT_TRUE(s.ok()) << s;
   s = RejectedAnalysis(3);
@@ -267,10 +267,10 @@ TEST_F(DependencyClosureTest, SingleSubst) {
 
   // With c2sc in the init font, we can now analyze the single subst's
   Reconfigure(face.get(), c2sc, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-    {{'A'}, ProbabilityBound::Zero()},
-    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
   });
 
   s = CompareAnalysis({0});
@@ -376,23 +376,35 @@ TEST_F(DependencyClosureTest, Rejected_UVS) {
     {{0xfe00}, ProbabilityBound::Zero()},
   });
 
-  // UVS isn't supported yet.
+  // Unsatisfied UVS constraints aren't supported yet
+  // for accurate analysis.
   Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 
   s = RejectedAnalysis(1);
   ASSERT_TRUE(s.ok()) << s;
 
+  // However, if the constraints are satisfied then
+  // analysis is allowed.
+  s = CompareAnalysis({0, 1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  Reconfigure(noto_sans_jp.get(), {}, {
+    {{0x4fae, 0xfe00}, ProbabilityBound::Zero()},
+  });
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+
   Reconfigure(noto_sans_jp.get(), {0x4fae}, {
     {{0xfe00}, ProbabilityBound::Zero()},
   });
-  s = RejectedAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(noto_sans_jp.get(), {0xfe00}, {
     {{0x4fae}, ProbabilityBound::Zero()},
   });
-  s = RejectedAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -424,7 +436,9 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 
-  segmentation_info.ReassignInitSubset(closure_cache, {'a'});
+  s = segmentation_info.ReassignInitSubset(closure_cache, {'a'});
+  ASSERT_TRUE(s.ok()) << s;
+
   s = dependency_closure->SegmentsChanged(true, SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
