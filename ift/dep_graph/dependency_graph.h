@@ -41,26 +41,21 @@ class DependencyGraph {
     return DependencyGraph(segmentation_info, face, full_feature_set);
   }
 
-  // Traverse the full depedency graph (segments, unicodes, and gids), starting at one or more
-  // specific starting nodes. All edges are traversed regardless of whether their context conditions
-  // are satisfied or not.
+  // Traverse the full dependency graph (segments, unicodes, and gids), starting at one or more
+  // specific starting nodes. Attempts to mimic hb glyph closure and does the traversal in phases
+  // by table. Additionally if enforce_context is true, edges will only be traversed when their
+  // requirements have been reached.
   //
   // If filter is non-null, then only glyph nodes in that set will be traversed. If filter is
   // null then the filter defaults to the set of non init font glyphs in segmentation info.
-  absl::StatusOr<Traversal> TraverseGraph(
+  absl::StatusOr<Traversal> ClosureTraversal(const common::SegmentSet& start, bool enforce_context = true) const;
+  absl::StatusOr<Traversal> ClosureTraversal(
     const absl::btree_set<Node>& nodes,
     const common::GlyphSet* glyph_filter_ptr = nullptr,
-    const common::CodepointSet* unicode_filter_ptr = nullptr
+    const common::CodepointSet* unicode_filter_ptr = nullptr,
+    bool enforce_context = true
   ) const;
 
-  // Traverse the full dependency graph (segments, unicodes, and gids), starting at one or more
-  // specific starting nodes. Unlike TraverseGraph this respects context conditions and won't
-  // traverse and edge until it's conditions are satisfied. This attempts to mimic as closely
-  // as possible the behaviour of harfbuzz's closure operation. However, the result is not always
-  // gauranteed to match.
-  //
-  // TODO return value to signal accuracy.
-  absl::StatusOr<Traversal> ClosureTraversal(const common::SegmentSet& start) const;
 
   const absl::flat_hash_set<hb_tag_t>& FullFeatureSet() const {
     return full_feature_set_;
@@ -85,7 +80,12 @@ class DependencyGraph {
     TraversalContext* context
   ) const;
 
-  void HandleUnicodeOutgoingEdges(
+  absl::Status ClosureSubTraversal(
+    const TraversalContext* base_context,
+    hb_tag_t table,
+    Traversal& traversal) const;
+
+  absl::Status HandleUnicodeOutgoingEdges(
     hb_codepoint_t unicode,
     TraversalContext* context
   ) const;

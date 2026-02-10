@@ -79,7 +79,7 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
 
   GlyphSet all_g = GlyphSet::all();
   CodepointSet all_u = CodepointSet::all();
-  auto r = graph.TraverseGraph({Node::InitFont()}, &all_g, &all_u);
+  auto r = graph.ClosureTraversal({Node::InitFont()}, &all_g, &all_u);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
@@ -88,7 +88,7 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(444 /* fi */));
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(446 /* fi */));
 
-  r = graph.TraverseGraph({Node::InitFont()}, &segmentation_info.FullClosure(), &segmentation_info.FullDefinition().codepoints);
+  r = graph.ClosureTraversal({Node::InitFont()}, &segmentation_info.FullClosure(), &segmentation_info.FullDefinition().codepoints);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal_scoped = *r;
   ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet {
@@ -111,7 +111,7 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
     {{0x2044 /* fraction */}, ProbabilityBound::Zero()},
   });
 
-  auto r = graph.TraverseGraph({
+  auto r = graph.ClosureTraversal({
     Node::Segment(0),
     Node::Segment(1),
     Node::Segment(2),
@@ -149,7 +149,7 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
     {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
   });
 
-  auto r = graph.TraverseGraph({
+  auto r = graph.ClosureTraversal({
     Node::Segment(0),
   });
   ASSERT_TRUE(r.ok()) << r.status();
@@ -160,6 +160,33 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
   ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {168 /* gravecomb */}));
   ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
 }
+
+TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{0x133 /* ij */}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+    Node::Segment(1),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  // gravecomb interacts with 'i', but that interaction isn't reachable since 'i'
+  // only becomes available after GSUB traversal is finished in the later glyf phase.
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    168 /* gravecomb */,
+    77 /* i */,
+    78 /* j */,
+    740 /* ij */,
+  }));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+}
+
+// TODO(garretrieger):
+// - basic math, CFF, and COLR tests.
 
 // TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DepedencyClosureTest
 // for coverage of DepedencyGraph functionality. We should add some basic tests here that test DepedencyGraph

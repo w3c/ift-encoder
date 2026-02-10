@@ -30,38 +30,37 @@ namespace ift::encoder {
 DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const Traversal& traversal) const {
   // TODO(garretrieger): there's several types of depedencies that we do not handle yet and as a result
   // consider inaccurate. Adding support for these will allow the dep graph to be used more widely:
-  // - UVS edges. Simple case when all conditions are satisfied, more complex case is generating conjunctive
-  //   conditions from them.
+  // - UVS edges: more complex case is generating conjunctive conditions from them.
   // - Ligatures: at least in simple non-nested cases we should be able to generate the corresponding conditions.
   // - Features: features create conjunctive conditions, we should be able to handle these.
 
-  // TODO XXXX inaccurate if context was not enforced on the traversal.
-  // TODO XXXXXX track a set of glyphs which are inscope for an accurate traversal. These are glyphs
-  // that are reachable only via non-contextual edges.
-
   if (traversal.HasPendingEdges()) {
+    // pending edges means there is conjunction.
     return AnalysisAccuracy::INACCURATE;
   }
 
   if (traversal.HasContextGlyphs()) {
-    // TODO(garretrieger): it should be possible to support at least liga when all of
-    // the liga glyphs have been reached.
+    // avoid all contextual edges for accurate analysis, these have complex interactions.
     return AnalysisAccuracy::INACCURATE;
   }
 
   for (hb_tag_t tag : traversal.ContextLayoutFeatures()) {
+    // non init font context features implies conjunction.
     if (!init_font_features_.contains(tag)) {
       return AnalysisAccuracy::INACCURATE;
     }
   }
 
   for (hb_tag_t tag : traversal.ReachedLayoutFeatures()) {
+    // non init font context features implies conjunction.
     if (!init_font_features_.contains(tag)) {
       return AnalysisAccuracy::INACCURATE;
     }
   }
 
   if (traversal.ReachedGlyphs().intersects(context_glyphs_)) {
+    // A glyph which appears in a context may have complicated interactions with other segments
+    // that aren't captured by the direct traversal.
     return AnalysisAccuracy::INACCURATE;
   }
 
@@ -71,27 +70,24 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
 Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSet& segments) {
   VLOG(1) << "DependencyClosure::SegmentsChanged()";
 
-  TRYV(UpdateReachabilityIndex(segments));
-
   if (!init_font_change && segmentation_info_->SegmentsAreDisjoint()) {
     // If the init font is not changed and all segments are disjoint then there won't be any changes to incoming
     // edge counts as segment modifications will just shift outgoing edges around between segments.
+    TRYV(UpdateReachabilityIndex(segments));
     return absl::OkStatus();
   }
 
   // TODO(garretrieger): can we do an incremental update of incoming_edge_counts_, and context?
   // not high priority as this does not currently show up as problematic in profiles.
-  SegmentSet non_empty_segments;
+  SegmentSet start_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
     if (segmentation_info_->Segments().at(s).Definition().Empty()) {
       continue;
     }
-    non_empty_segments.insert(s);
+    start_segments.insert(s);
   }
 
-  Traversal traversal = TRY(graph_.ClosureTraversal(non_empty_segments));
-  incoming_edge_counts_ = traversal.TraversedIncomingEdgeCounts();
-
+  Traversal traversal = TRY(graph_.ClosureTraversal(start_segments, false));
   context_glyphs_ = traversal.ContextGlyphs();
 
   // The init font may have reachable glyphs which are not in the init font closure,
@@ -100,8 +96,8 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
   init_font_context_glyphs_.clear();
   init_font_context_features_.clear();
   init_font_features_ = TRY(graph_.InitFontFeatureSet());
-  Traversal init_font_traversal = TRY(graph_.TraverseGraph({Node::InitFont()},
-    &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints));
+  Traversal init_font_traversal = TRY(graph_.ClosureTraversal({Node::InitFont()},
+    &segmentation_info_->FullClosure(), &segmentation_info_->FullDefinition().codepoints, false));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
     if (segmentation_info_->NonInitFontGlyphs().contains(g)) {
       context_glyphs_.union_set(context);
@@ -124,6 +120,10 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSe
   init_font_reachable_glyphs_ = init_font_traversal.ReachedGlyphs();
   init_font_reachable_glyphs_.subtract(segmentation_info_->InitFontGlyphs());
 
+  // Note: reachability index must be updated after context_glyphs_, init_font_* sets are populated.
+  // since it utilizes those to assess traversal accuracy.
+  TRYV(UpdateReachabilityIndex(segments));
+
   return absl::OkStatus();
 }
 
@@ -131,6 +131,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) {
 
+  // TODO XXXXX rewrite this comment to reflect the new approach.
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
   // This aims to have identical output to GlyphClosureCache::AnalyzeSegment()
@@ -159,66 +160,88 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   // - Handle simple disjunctive GSUB lookups (may need conjunction with features).
   // - Handle simple conjunctive GSUB lookups (eg. liga)
   // - Handle features in the input segment (once GSUB is supported).
-  SegmentSet start_nodes;
-  for (segment_index_t segment_id : segments) {
+
+  // If we have more than one segment we need to retraverse because combining two previously interacting
+  // segments may result in a new combined accurate traversal. If only one segment is present we can
+  // look up the traversal from the reachability index.
+  GlyphSet reachable_glyphs;
+  if (segments.size() > 1) {
+    SegmentSet start_nodes;
+    for (segment_index_t segment_id : segments) {
+      if (segment_id >= segmentation_info_->Segments().size()) {
+        return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
+      }
+
+      const Segment& segment = segmentation_info_->Segments().at(segment_id);
+      if (segment.Definition().Empty()) {
+        // Empty segments are ignored.
+        continue;
+      }
+
+      start_nodes.insert(segment_id);
+    }
+
+    Traversal traversal = TRY(graph_.ClosureTraversal(start_nodes));
+    if (TraversalAccuracy(traversal) == INACCURATE) {
+      inaccurate_results_++;
+      return INACCURATE;
+    }
+    reachable_glyphs = traversal.ReachedGlyphs();
+  } else {
+    segment_index_t segment_id = *segments.begin();
     if (segment_id >= segmentation_info_->Segments().size()) {
       return absl::InvalidArgumentError(absl::StrCat("Segment index ", segment_id, " is out of bounds."));
     }
 
-    const Segment& segment = segmentation_info_->Segments().at(segment_id);
-    if (segment.Definition().Empty()) {
-      // Empty segments are ignored.
-      continue;
+    auto maybe_glyphs = AccurateReachedGlyphsFor(segment_id);
+    if (!maybe_glyphs.has_value()) {
+      inaccurate_results_++;
+      return INACCURATE;
+    }
+    reachable_glyphs = *maybe_glyphs;
+  }
+
+  // Now we need to test each reached glyph to see if we have fully accurate reachability information
+  // with which to make an exclusive or disjunctive determination.
+
+  for (glyph_id_t gid : reachable_glyphs) {
+    if (!GlyphHasFullyAccurateReachability(gid, segments)) {
+      inaccurate_results_++;
+      return INACCURATE;
     }
 
-    start_nodes.insert(segment_id);
-  }
-
-  Traversal traversal = TRY(graph_.ClosureTraversal(start_nodes));
-  if (TraversalAccuracy(traversal) == INACCURATE) {
-    inaccurate_results_++;
-    return INACCURATE;
-  }
-
-  btree_set<Node> shared_nodes; // set of nodes which are accessible from outside this subgraph.
-  for (const auto& [node, count] : traversal.TraversedIncomingEdgeCounts()) {
-    unsigned incoming_edge_count = incoming_edge_counts_.at(node);
-
-    if (node.IsGlyph()) {
-      exclusive_gids.insert(node.Id());
-    }
-
-    if (count < incoming_edge_count) {
-      shared_nodes.insert(node);
-    } else if (count != incoming_edge_count) {
-      return absl::InternalError(absl::StrCat(
-        "Should not happen traversed incoming edge count is greater than "
-        "the precomputed incoming edge counts: ", node.ToString(), " = ", count, " > ", incoming_edge_count));
+    if (segments_that_can_reach_.at(gid).is_subset_of(segments)) {
+      exclusive_gids.insert(gid);
+    } else {
+      or_gids.insert(gid);
     }
   }
-
-  // We need to find glyphs that are reachable from other segments, which are those
-  // glyphs that are reachable from any shared_glyphs found above.
-  Traversal all_shared_nodes = TRY(graph_.TraverseGraph(shared_nodes));
-  // TODO XXXX this needs fixing with respect to closure which may not have traversed as broadly.
-  //      eg. effectively unreachable UVS edges, add a test case to demonstrate the problem
-  if (TraversalAccuracy(all_shared_nodes) == INACCURATE) {
-    inaccurate_results_++;
-    return INACCURATE;
-  }
-
-  // Now we can make the glyph condition categorizations
-  // any glyphs not in 'shared_glyphs' are only reachable from
-  // the iput segment so are exclusive. Everything else is disjunctive.
-  for (auto [node, _] : all_shared_nodes.TraversedIncomingEdgeCounts()) {
-    if (node.IsGlyph()) {
-      or_gids.insert(node.Id());
-    }
-  }
-  exclusive_gids.subtract(or_gids);
 
   accurate_results_++;
   return ACCURATE;
+}
+
+bool DependencyClosure::GlyphHasFullyAccurateReachability(
+  glyph_id_t gid, const SegmentSet& excluded) const {
+
+  const SegmentSet& segments_ref = segments_that_can_reach_.at(gid);
+  if (segments_ref.is_subset_of(excluded)) {
+    // If the only segments which can possibly reach this gid are in excluded
+    // then the new combined segment should be exclusive and hence accurate
+    // with respect to the gid.
+    return true;
+  }
+
+  auto accurate_segments_it = accurate_segments_that_can_reach_.find(gid);
+  if (accurate_segments_it == accurate_segments_that_can_reach_.end()) {
+    return false;
+  }
+
+  SegmentSet accurate_segments = accurate_segments_it->second;
+  SegmentSet segments = segments_ref;
+  accurate_segments.subtract(excluded);
+  segments.subtract(excluded);
+  return accurate_segments == segments;
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet& glyphs) {
@@ -394,7 +417,7 @@ Status DependencyClosure::ReachabilitySegmentsAddToCheck(
     }
 
     visited_segments.insert(s);
-    auto traversal = TRY(graph_.TraverseGraph({Node::Segment(s)}));
+    auto traversal = TRY(graph_.ClosureTraversal({s}, false));
 
     GlyphSet additional = traversal.ContextGlyphs();
     additional.subtract(visited_glyphs);
@@ -417,6 +440,7 @@ Status DependencyClosure::EnsureReachabilityIndexPopulated() {
 }
 
 Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
+  // TODO XXXXX traversals here should incorporate closure phasing.
   if (reachability_index_valid_) {
     // If indices have existing data, then we need to ensure prior entries for the
     // segments to be updated are cleared out.
@@ -433,6 +457,8 @@ Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
     segments = SegmentSet::all();
     for (glyph_id_t gid : segmentation_info_->FullClosure()) {
       segments_that_can_reach_.insert(std::pair(gid, SegmentSet()));
+      // "accurate" indices do not have entries for all segments/glyphs.
+
       segments_that_have_context_glyph_.insert(std::pair(gid, SegmentSet {}));
     }
     for (hb_tag_t tag : graph_.FullFeatureSet()) {
@@ -453,12 +479,29 @@ Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
 
 Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
   glyphs_that_can_be_reached_.insert(std::pair(s, GlyphSet {}));
+  // "accurate" indices do not have entries for all segments/glyphs.
+
   segment_context_glyphs_.insert(std::pair(s, GlyphSet {}));
   features_that_can_be_reached_.insert(std::pair(s, btree_set<hb_tag_t> {}));
   segment_context_features_.insert(std::pair(s, btree_set<hb_tag_t> {}));
 
-  auto traversal = TRY(graph_.TraverseGraph(btree_set<Node> {Node::Segment(s)}));
+  {
+    auto context_traversal = TRY(graph_.ClosureTraversal({s}, true));
+    // TODO XXXX the context_glyphs_ (needed for accuracy check) set may not be
+    // populated yet, ensure that it is prior to any UpdateReachabilityIndex() calls.
+    if (TraversalAccuracy(context_traversal) == ACCURATE) {
+      accurate_glyphs_that_can_be_reached_.insert(std::pair(s, GlyphSet {}));
+      for (glyph_id_t g : context_traversal.ReachedGlyphs()) {
+        if (segmentation_info_->InitFontGlyphs().contains(g)) {
+          continue;
+        }
+        accurate_segments_that_can_reach_[g].insert(s);
+        accurate_glyphs_that_can_be_reached_[s].insert(g);
+      }
+    }
+  }
 
+  auto traversal = TRY(graph_.ClosureTraversal({s}, false));
   for (glyph_id_t g : traversal.ReachedGlyphs()) {
     segments_that_can_reach_[g].insert(s);
     glyphs_that_can_be_reached_[s].insert(g);
@@ -485,6 +528,10 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
 void DependencyClosure::ClearReachabilityIndex() {
   glyphs_that_can_be_reached_.clear();
   segments_that_can_reach_.clear();
+
+  accurate_glyphs_that_can_be_reached_.clear();
+  accurate_segments_that_can_reach_.clear();
+
   segments_that_can_reach_feature_.clear();
   features_that_can_be_reached_.clear();
 
@@ -502,6 +549,24 @@ void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
       segments_that_can_reach_[gid].erase(segment);
     }
     glyphs->second.clear();
+  }
+
+  // Note: for the accurate_* indices, unlike the other indices we want
+  // to remove entries completely (as opposed to leaving empty sets) since
+  // absence of an entry is meaningful.
+  glyphs = accurate_glyphs_that_can_be_reached_.find(segment);
+  if (glyphs != accurate_glyphs_that_can_be_reached_.end()) {
+    for (glyph_id_t gid : glyphs->second) {
+      auto segments = accurate_segments_that_can_reach_.find(gid);
+      if (segments == accurate_segments_that_can_reach_.end()) {
+        continue;
+      }
+      segments->second.erase(segment);
+      if (segments->second.empty()) {
+        accurate_segments_that_can_reach_.erase(segments);
+      }
+    }
+    accurate_glyphs_that_can_be_reached_.erase(glyphs);
   }
 
   auto features = features_that_can_be_reached_.find(segment);

@@ -2,6 +2,7 @@
 #define IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 
 #include <memory>
+#include <optional>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -100,6 +101,18 @@ class DependencyClosure {
         incoming_edge_counts_() {
   }
 
+  std::optional<common::GlyphSet> AccurateReachedGlyphsFor(segment_index_t s) const {
+    auto it = accurate_glyphs_that_can_be_reached_.find(s);
+    if (it == accurate_glyphs_that_can_be_reached_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
+  // Returns true if all segments that can reach gid have accurate reachability in the index.
+  // Segments in the excluded set are ignored for this check.
+  bool GlyphHasFullyAccurateReachability(glyph_id_t gid, const common::SegmentSet& excluded) const;
+
   AnalysisAccuracy TraversalAccuracy(const dep_graph::Traversal& traversal) const;
 
   static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
@@ -142,8 +155,15 @@ class DependencyClosure {
   // Reachability indexes: these indexes are used to quickly locate segments reachable
   // from glyph and features (and in reverse as well).
   bool reachability_index_valid_ = false;
+
   absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
   absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
+
+  // This index only includes segments where the traversal is considered accurate (ie. reproduces
+  // glyph closure exactly) it is a subset of segments_that_can_reach_/glyphs_that_can_be_reached_.
+  absl::flat_hash_map<glyph_id_t, common::SegmentSet> accurate_segments_that_can_reach_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet> accurate_glyphs_that_can_be_reached_;
+
   absl::flat_hash_map<hb_tag_t, common::SegmentSet> segments_that_can_reach_feature_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>> features_that_can_be_reached_;
 
