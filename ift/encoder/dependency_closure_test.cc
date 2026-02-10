@@ -479,10 +479,10 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
   Reconfigure(WithDefaultFeatures(), {
-    {{'x'}, ProbabilityBound::Zero()},
-    {{'q'}, ProbabilityBound::Zero()},
-    {{'i'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    /* 0 */ {{'x'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'q'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
   });
 
   ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
@@ -578,7 +578,6 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   SubsetDefinition liga {'i'};
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  std::cerr << "Init font: " << liga.codepoints.ToString() << std::endl;
   Reconfigure(liga, {
     /* 0 */ {{'f'}, ProbabilityBound::Zero()},
     /* 1 */ {{'x'}, ProbabilityBound::Zero()},
@@ -598,6 +597,11 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
 }
 
 }  // namespace ift::encoder
+
+// TODO XXXX test where the closure includes a context that is fully satisfied.
+// this case should still be rejected.
+
+// TODO XXXX partial invalidation tests including w/ "accurate" indices.
 
 // TODO(garretrieger): missing tests
 // - CFF seac test.

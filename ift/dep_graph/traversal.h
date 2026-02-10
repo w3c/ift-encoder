@@ -19,15 +19,11 @@ class Traversal {
   void Merge(const Traversal& other) {
     has_pending_edges_ = has_pending_edges_ | other.has_pending_edges_;
 
-    for (const auto& [node, count] : other.incoming_edges_) {
-      incoming_edges_[node] += count;
-    }
-
     for (const auto& [glyph, glyphs] : other.context_per_glyph_) {
       context_per_glyph_[glyph].union_set(glyphs);
     }
 
-    for (const auto& [glyph, features] : other.context_per_glyph_) {
+    for (const auto& [glyph, features] : other.context_features_per_glyph_) {
       for (hb_tag_t f : features) {
         context_features_per_glyph_[glyph].insert(f);
       }
@@ -49,12 +45,7 @@ class Traversal {
     context_glyphs_.union_set(other.context_glyphs_);
   }
 
-  void VisitInitNode(Node node) {
-    incoming_edges_.insert(std::make_pair(node, 0));
-  }
-
   void Visit(Node dest) {
-    incoming_edges_[dest]++;
     if (dest.IsGlyph()) {
       reached_glyphs_.insert(dest.Id());
     }
@@ -87,10 +78,6 @@ class Traversal {
 
   bool HasPendingEdges() const {
     return has_pending_edges_;
-  }
-
-  const absl::flat_hash_map<Node, uint64_t>& TraversedIncomingEdgeCounts() const {
-    return incoming_edges_;
   }
 
   const absl::flat_hash_set<hb_tag_t>& TraversedTables() const {
@@ -129,13 +116,8 @@ class Traversal {
   }
 
  private:
-  // TODO XXX add flag for presence of pending edges.
-  // TODO XXX remove edge specific Visit* methods, have the complete context sets
-  // be passed at the end of traversal. Possibly same for incoming edges?
-  absl::flat_hash_map<Node, uint64_t> incoming_edges_;
-
   bool has_pending_edges_ = false;
-  // TODO XXXX should we track if context was enforced?
+
   common::GlyphSet reached_glyphs_;
   common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet> context_per_glyph_;
@@ -144,7 +126,6 @@ class Traversal {
   absl::flat_hash_set<hb_tag_t> reached_feature_tags_;
   absl::flat_hash_set<hb_tag_t> context_feature_tags_;
   absl::flat_hash_set<hb_tag_t> tables_;
-  // TODO XXXX review all fields and see what we can remove
 };
 
 }  // namespace ift::dep_graph
