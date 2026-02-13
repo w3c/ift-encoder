@@ -408,6 +408,18 @@ TEST_F(DependencyClosureTest, Rejected_UVS) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{'i',
+      0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  // The segment contains everything needed to activated the i + gravecomb contextual
+  // lookup, but should still be rejected on account of passing through a contextual lookup.
+  Status s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, BidiMirroring) {
   // Test that the dep graph analysis accounts for bidi mirroring in the
   // harfbuzz closure
@@ -598,16 +610,12 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
 
 }  // namespace ift::encoder
 
-// TODO XXXX test where the closure includes a context that is fully satisfied.
-// this case should still be rejected.
-
-// TODO XXXX partial invalidation tests including w/ "accurate" indices.
-
 // TODO(garretrieger): missing tests
 // - CFF seac test.
 // - COLRv1 font tests.
 
 // TODO(garretrieger) more tests (once functionality is available):
+// - partial invalidation tests including w/ "accurate" indices.
 // - Test case with a feature segment + otherwise disjunctive GSUB (eg. smcp single sub)
 // - case where init font makes a conjunctive thing exclusive (eg. UVS and/or liga).
 // - liga
