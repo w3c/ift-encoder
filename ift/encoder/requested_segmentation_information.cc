@@ -1,9 +1,12 @@
 #include "ift/encoder/requested_segmentation_information.h"
 
+#include <memory>
 #include <vector>
 
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
+
+using absl::StatusOr;
 
 namespace ift::encoder {
 
@@ -28,9 +31,21 @@ static bool CheckSegmentsAreDisjoint(const SubsetDefinition& init_segment,
   return segments_disjoint;
 }
 
+StatusOr<std::unique_ptr<RequestedSegmentationInformation>> RequestedSegmentationInformation::Create(
+  std::vector<Segment> segments, SubsetDefinition init_font_segment,
+  GlyphClosureCache& closure_cache,
+  UnmappedGlyphHandling unmapped_glyph_handling) {
+
+  std::unique_ptr<RequestedSegmentationInformation> info(
+    new RequestedSegmentationInformation(segments, init_font_segment, unmapped_glyph_handling));
+  TRYV(info->ReassignInitSubset(closure_cache, init_font_segment));
+  info->segments_disjoint_ = CheckSegmentsAreDisjoint(init_font_segment, info->segments_);
+  return info;
+}
+
 RequestedSegmentationInformation::RequestedSegmentationInformation(
-    std::vector<Segment> segments, SubsetDefinition init_font_segment,
-    GlyphClosureCache& closure_cache,
+    std::vector<Segment> segments,
+    SubsetDefinition init_font_segment,
     UnmappedGlyphHandling unmapped_glyph_handling)
     : segments_(std::move(segments)),
       init_font_segment_(),
@@ -40,10 +55,6 @@ RequestedSegmentationInformation::RequestedSegmentationInformation(
   for (const auto& s : segments_) {
     full_definition_.Union(s.Definition());
   }
-
-  ReassignInitSubset(closure_cache, std::move(init_font_segment));
-
-  segments_disjoint_ = CheckSegmentsAreDisjoint(init_font_segment, segments_);
 }
 
 }  // namespace ift::encoder

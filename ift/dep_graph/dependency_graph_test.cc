@@ -1,4 +1,5 @@
 #include "ift/dep_graph/dependency_graph.h"
+#include <memory>
 
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -31,8 +32,8 @@ class DependencyGraphTest : public ::testing::Test {
   DependencyGraphTest() :
   face(from_file("common/testdata/Roboto-Regular.ttf")),
   closure_cache(face.get()),
-  segmentation_info(segments, WithDefaultFeatures({}), closure_cache, PATCH),
-  graph(*DependencyGraph::Create(&segmentation_info, face.get()))
+  segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures({}), closure_cache, PATCH)),
+  graph(*DependencyGraph::Create(segmentation_info.get(), face.get()))
   {}
 
   static hb_face_unique_ptr from_file(const char* filename) {
@@ -52,8 +53,8 @@ class DependencyGraphTest : public ::testing::Test {
 
   public:
   void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments) {
-    segmentation_info = RequestedSegmentationInformation(new_segments, new_init, closure_cache, PATCH);
-    graph = *DependencyGraph::Create(&segmentation_info, face.get());
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    graph = *DependencyGraph::Create(segmentation_info.get(), face.get());
   }
 
   private:
@@ -67,7 +68,7 @@ class DependencyGraphTest : public ::testing::Test {
   GlyphClosureCache closure_cache;
 
   public:
-  RequestedSegmentationInformation segmentation_info;
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   DependencyGraph graph;
 };
 
@@ -88,7 +89,7 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(444 /* fi */));
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(446 /* fi */));
 
-  r = graph.ClosureTraversal({Node::InitFont()}, &segmentation_info.FullClosure(), &segmentation_info.FullDefinition().codepoints);
+  r = graph.ClosureTraversal({Node::InitFont()}, &segmentation_info->FullClosure(), &segmentation_info->FullDefinition().codepoints);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal_scoped = *r;
   ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet {
@@ -120,7 +121,7 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {
     0,
     21,  /* one */
     77,  /* i */

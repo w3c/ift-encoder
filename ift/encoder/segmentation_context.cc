@@ -98,7 +98,7 @@ StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
 Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   // Figure out what's going to change before making the change so that we
   // can utilize the dep graph to locate affected segments.
-  new_def = TRY(glyph_closure_cache.ExpandClosure(new_def));
+  new_def = TRY(glyph_closure_cache->ExpandClosure(new_def));
   GlyphSet removed_gids = SegmentationInfo().NonInitFontGlyphs();
   removed_gids.intersect(new_def.gids);
 
@@ -121,7 +121,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     segments_to_reprocess = TRY((*dependency_closure_)->SegmentInteractionGroup(segments_with_changed_defs));
   }
 
-  TRYV(segmentation_info_->ReassignInitSubset(glyph_closure_cache, new_def));
+  TRYV(segmentation_info_->ReassignInitSubset(*glyph_closure_cache, new_def));
 
   if (dependency_closure_.has_value()) {
     TRYV((*dependency_closure_)->SegmentsChanged(true, segments_to_reprocess));
@@ -185,7 +185,7 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   }
 
   if (effective_mode == CLOSURE_ONLY || effective_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH) {
-    TRYV(glyph_closure_cache.AnalyzeSegment(
+    TRYV(glyph_closure_cache->AnalyzeSegment(
       *segmentation_info_, segment_ids, and_gids, or_gids, exclusive_gids));
   } else {
     or_gids.union_set(dep_or_gids);

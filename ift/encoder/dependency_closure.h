@@ -12,7 +12,6 @@
 #include "common/try.h"
 #include "hb.h"
 #include "ift/dep_graph/dependency_graph.h"
-#include "ift/dep_graph/node.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -97,8 +96,7 @@ class DependencyClosure {
     hb_face_t* face)
       : segmentation_info_(segmentation_info),
         original_face_(common::make_hb_face(hb_face_reference(face))),
-        graph_(std::move(graph)),
-        incoming_edge_counts_() {
+        graph_(std::move(graph)) {
   }
 
   std::optional<common::GlyphSet> AccurateReachedGlyphsFor(segment_index_t s) const {
@@ -136,16 +134,13 @@ class DependencyClosure {
   common::SegmentSet ConnectedSegments(segment_index_t s);
   common::SegmentSet InitFontConnections();
 
-  absl::Status EnsureReachabilityIndexPopulated();
   absl::Status UpdateReachabilityIndex(common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
-  void ClearReachabilityIndex();
   void ClearReachabilityIndex(segment_index_t segment);
 
   const RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
-  absl::flat_hash_map<dep_graph::Node, uint64_t> incoming_edge_counts_;
   common::GlyphSet context_glyphs_;
   common::GlyphSet init_font_reachable_glyphs_;
   common::GlyphSet init_font_context_glyphs_;

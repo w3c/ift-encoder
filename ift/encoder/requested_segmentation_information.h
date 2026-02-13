@@ -1,6 +1,7 @@
 #ifndef IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 #define IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 
+#include <memory>
 #include "common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
@@ -16,11 +17,17 @@ namespace ift::encoder {
  */
 class RequestedSegmentationInformation {
  public:
-  RequestedSegmentationInformation(
+  static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>> Create(
       std::vector<Segment> segments, SubsetDefinition init_font_segment,
       GlyphClosureCache& closure_cache,
       UnmappedGlyphHandling unmapped_glyph_handling);
 
+ private:
+  RequestedSegmentationInformation(
+      std::vector<Segment> segments, SubsetDefinition init_font_segment,
+      UnmappedGlyphHandling unmapped_glyph_handling);
+
+ public:
   // Merge all of the segments in to_merge into base, assigned it
   // a new subset definition "merged_segment".
   uint32_t AssignMergedSegment(segment_index_t base,
@@ -41,7 +48,6 @@ class RequestedSegmentationInformation {
     const SubsetDefinition& new_def) {
 
     init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
-    init_font_glyphs_ = init_font_segment_.gids;
 
     full_definition_.Union(init_font_segment_);
     {
@@ -82,7 +88,7 @@ class RequestedSegmentationInformation {
     return result;
   }
 
-  const common::GlyphSet& InitFontGlyphs() const { return init_font_glyphs_; }
+  const common::GlyphSet& InitFontGlyphs() const { return init_font_segment_.gids; }
   common::GlyphSet NonInitFontGlyphs() const {
     common::GlyphSet out = full_closure_;
     out.subtract(InitFontGlyphs());
@@ -122,7 +128,6 @@ class RequestedSegmentationInformation {
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;
   SubsetDefinition full_definition_;
-  common::GlyphSet init_font_glyphs_;
   common::GlyphSet full_closure_;
   bool segments_disjoint_;
   enum UnmappedGlyphHandling unmapped_glyph_handling_;
