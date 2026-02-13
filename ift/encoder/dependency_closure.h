@@ -2,6 +2,7 @@
 #define IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 
 #include <memory>
+#include <optional>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -11,7 +12,6 @@
 #include "common/try.h"
 #include "hb.h"
 #include "ift/dep_graph/dependency_graph.h"
-#include "ift/dep_graph/node.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -96,18 +96,25 @@ class DependencyClosure {
     hb_face_t* face)
       : segmentation_info_(segmentation_info),
         original_face_(common::make_hb_face(hb_face_reference(face))),
-        graph_(std::move(graph)),
-        incoming_edge_counts_() {
+        graph_(std::move(graph)) {
   }
+
+  std::optional<common::GlyphSet> AccurateReachedGlyphsFor(segment_index_t s) const {
+    auto it = accurate_glyphs_that_can_be_reached_.find(s);
+    if (it == accurate_glyphs_that_can_be_reached_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
+  // Returns true if all segments that can reach gid have accurate reachability in the index.
+  // Segments in the excluded set are ignored for this check.
+  bool GlyphHasFullyAccurateReachability(glyph_id_t gid, const common::SegmentSet& excluded) const;
 
   AnalysisAccuracy TraversalAccuracy(const dep_graph::Traversal& traversal) const;
 
   static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
       hb_face_t* face);
-
-  static absl::StatusOr<common::IntSet> InitFeatureSet(
-    const RequestedSegmentationInformation* segmentation_info,
-    hb_face_t* face);
 
   void ReachabilityInitFontAddToCheck(
     common::GlyphSet& visited_glyphs,
@@ -127,27 +134,31 @@ class DependencyClosure {
   common::SegmentSet ConnectedSegments(segment_index_t s);
   common::SegmentSet InitFontConnections();
 
-  absl::Status EnsureReachabilityIndexPopulated();
   absl::Status UpdateReachabilityIndex(common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
-  void ClearReachabilityIndex();
   void ClearReachabilityIndex(segment_index_t segment);
 
   const RequestedSegmentationInformation* segmentation_info_;
   common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
-  absl::flat_hash_map<dep_graph::Node, uint64_t> incoming_edge_counts_;
   common::GlyphSet context_glyphs_;
   common::GlyphSet init_font_reachable_glyphs_;
   common::GlyphSet init_font_context_glyphs_;
+  absl::flat_hash_set<hb_tag_t> init_font_features_;
   absl::flat_hash_set<hb_tag_t> init_font_context_features_;
-  common::IntSet init_font_features_;
 
   // Reachability indexes: these indexes are used to quickly locate segments reachable
   // from glyph and features (and in reverse as well).
   bool reachability_index_valid_ = false;
+
   absl::flat_hash_map<glyph_id_t, common::SegmentSet> segments_that_can_reach_;
   absl::flat_hash_map<segment_index_t, common::GlyphSet> glyphs_that_can_be_reached_;
+
+  // This index only includes segments where the traversal is considered accurate (ie. reproduces
+  // glyph closure exactly) it is a subset of segments_that_can_reach_/glyphs_that_can_be_reached_.
+  absl::flat_hash_map<glyph_id_t, common::SegmentSet> accurate_segments_that_can_reach_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet> accurate_glyphs_that_can_be_reached_;
+
   absl::flat_hash_map<hb_tag_t, common::SegmentSet> segments_that_can_reach_feature_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>> features_that_can_be_reached_;
 

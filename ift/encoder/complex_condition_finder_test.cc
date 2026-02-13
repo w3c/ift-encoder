@@ -50,7 +50,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
   StatusOr<GlyphSet> SegmentClosure(SegmentationContext& context,
                                     const SegmentSet& segments) {
     SubsetDefinition closure_def = CombinedDefinition(context, segments);
-    return context.glyph_closure_cache.GlyphClosure(closure_def);
+    return context.glyph_closure_cache->GlyphClosure(closure_def);
   }
 
   SegmentationContext TestContext(bool basic_closure_analysis) {
@@ -97,7 +97,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,
@@ -128,7 +128,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_Partial) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                 },
@@ -145,7 +145,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_IncompleteExistingCondition) {
   context.glyph_condition_set.AddOrCondition(748, 6);
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                 },
@@ -158,7 +158,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_GlyphsNotInClosure) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(
       context.SegmentationInfo(), context.glyph_condition_set,
-      context.glyph_closure_cache,
+      *context.glyph_closure_cache,
       {
           748,
           40  // this is not in the full closure.
@@ -173,7 +173,7 @@ TEST_F(ComplexConditionFinderTest,
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,
@@ -192,7 +192,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithExistingConditions) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,
@@ -213,7 +213,7 @@ TEST_F(ComplexConditionFinderTest,
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,
@@ -229,7 +229,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_RejectsInitFontGlyphs) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(
       context.SegmentationInfo(), context.glyph_condition_set,
-      context.glyph_closure_cache,
+      *context.glyph_closure_cache,
       {
           748,
           74,  // f - in the init closure
@@ -243,7 +243,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_ClosureRespectsInitFont) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(
       context.SegmentationInfo(), context.glyph_condition_set,
-      context.glyph_closure_cache,
+      *context.glyph_closure_cache,
       {
           446,  // fi ligature - combines i with f from the init font
       },
@@ -260,7 +260,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithInscope) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,
@@ -277,7 +277,7 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithBadInscope) {
 
   auto r = FindSupersetDisjunctiveConditionsFor(context.SegmentationInfo(),
                                                 context.glyph_condition_set,
-                                                context.glyph_closure_cache,
+                                                *context.glyph_closure_cache,
                                                 {
                                                     748,
                                                     756,

@@ -70,7 +70,7 @@ class GlyphGroupingsTest : public ::testing::Test {
 
     closure_cache_ = std::make_unique<GlyphClosureCache>(roboto_.get());
     requested_segmentation_info_ =
-        std::make_unique<RequestedSegmentationInformation>(
+        *RequestedSegmentationInformation::Create(
             segments_, init_font_segment, *closure_cache_, PATCH);
 
     glyph_conditions_ = std::make_unique<GlyphConditionSet>(num_glyphs);
@@ -138,7 +138,7 @@ class GlyphGroupingsTest : public ::testing::Test {
     AddInitSubsetDefaults(init_font_segment);
 
     requested_segmentation_info_complex_ =
-        std::make_unique<RequestedSegmentationInformation>(
+        *RequestedSegmentationInformation::Create(
             segments_complex_, init_font_segment, *closure_cache_,
             FIND_CONDITIONS);
   }
@@ -588,11 +588,11 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_LeaveUnmapped) {
   SubsetDefinition init_font_segment;
   AddInitSubsetDefaults(init_font_segment);
-  RequestedSegmentationInformation segmentation_info(
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info = *RequestedSegmentationInformation::Create(
       segments_complex_, init_font_segment, *closure_cache_, PATCH);
 
   auto sc = glyph_groupings_complex_.GroupGlyphs(
-      segmentation_info, *glyph_conditions_complex_, *closure_cache_, std::nullopt,
+      *segmentation_info, *glyph_conditions_complex_, *closure_cache_, std::nullopt,
       glyphs_to_group_complex_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 

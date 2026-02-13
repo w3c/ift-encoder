@@ -1,4 +1,5 @@
 #include "ift/dep_graph/dependency_graph.h"
+#include <memory>
 
 #include "common/font_data.h"
 #include "common/int_set.h"
@@ -31,8 +32,9 @@ class DependencyGraphTest : public ::testing::Test {
   DependencyGraphTest() :
   face(from_file("common/testdata/Roboto-Regular.ttf")),
   closure_cache(face.get()),
-  segmentation_info(segments, WithDefaultFeatures({}), closure_cache, PATCH),
-  graph(*DependencyGraph::Create(&segmentation_info, face.get()))
+  noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
+  segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures({}), closure_cache, PATCH)),
+  graph(*DependencyGraph::Create(segmentation_info.get(), face.get()))
   {}
 
   static hb_face_unique_ptr from_file(const char* filename) {
@@ -52,8 +54,14 @@ class DependencyGraphTest : public ::testing::Test {
 
   public:
   void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments) {
-    segmentation_info = RequestedSegmentationInformation(new_segments, new_init, closure_cache, PATCH);
-    graph = *DependencyGraph::Create(&segmentation_info, face.get());
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    graph = *DependencyGraph::Create(segmentation_info.get(), face.get());
+  }
+
+  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init, std::vector<Segment> new_segments) {
+    closure_cache = GlyphClosureCache(new_face);
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    graph = *DependencyGraph::Create(segmentation_info.get(), new_face);
   }
 
   private:
@@ -67,7 +75,8 @@ class DependencyGraphTest : public ::testing::Test {
   GlyphClosureCache closure_cache;
 
   public:
-  RequestedSegmentationInformation segmentation_info;
+  hb_face_unique_ptr noto_sans_jp;
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   DependencyGraph graph;
 };
 
@@ -79,19 +88,19 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
 
   GlyphSet all_g = GlyphSet::all();
   CodepointSet all_u = CodepointSet::all();
-  auto r = graph.TraverseGraph({Node::InitFont()}, &all_g, &all_u);
+  auto r = graph.ClosureTraversal({Node::InitFont()}, &all_g, &all_u);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(74 /* f */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(77 /* i */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(444 /* fi */));
-  ASSERT_TRUE(traversal.ReachableGlyphs().contains(446 /* fi */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(74 /* f */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(77 /* i */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(444 /* fi */));
+  ASSERT_TRUE(traversal.ReachedGlyphs().contains(446 /* fi */));
 
-  r = graph.TraverseGraph({Node::InitFont()}, &segmentation_info.FullClosure(), &segmentation_info.FullDefinition().codepoints);
+  r = graph.ClosureTraversal({Node::InitFont()}, &segmentation_info->FullClosure(), &segmentation_info->FullDefinition().codepoints);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal_scoped = *r;
-  ASSERT_EQ(traversal_scoped.ReachableGlyphs(), (GlyphSet {
+  ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet {
     74 /* f */,
     77 /* i */,
     444 /* fi */,
@@ -111,7 +120,7 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
     {{0x2044 /* fraction */}, ProbabilityBound::Zero()},
   });
 
-  auto r = graph.TraverseGraph({
+  auto r = graph.ClosureTraversal({
     Node::Segment(0),
     Node::Segment(1),
     Node::Segment(2),
@@ -120,7 +129,7 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {
     0,
     21,  /* one */
     77,  /* i */
@@ -149,7 +158,7 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
     {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
   });
 
-  auto r = graph.TraverseGraph({
+  auto r = graph.ClosureTraversal({
     Node::Segment(0),
   });
   ASSERT_TRUE(r.ok()) << r.status();
@@ -157,9 +166,77 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
 
   // Gravecomb interacts with 'i' as only a context glyph, so it's
   // own traversal is just it's self.
-  ASSERT_EQ(traversal.ReachableGlyphs(), (GlyphSet {168 /* gravecomb */}));
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {168 /* gravecomb */}));
   ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
 }
+
+TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{0x133 /* ij */}, ProbabilityBound::Zero()},
+    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+    Node::Segment(1),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  // gravecomb interacts with 'i', but that interaction isn't reachable since 'i'
+  // only becomes available after GSUB traversal is finished in the later glyf phase.
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    168 /* gravecomb */,
+    77 /* i */,
+    78 /* j */,
+    740 /* ij */,
+  }));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+}
+
+TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
+  /* <map uv="0x4fae" uvs="0xfe00" name="uniFA30"/>  */
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}), {
+    {{0x4fae}, ProbabilityBound::Zero()},
+    {{0xfa30}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    2684 /* U+4fae */
+  }));
+  // the edge for the UVS sub to U+FA30 never gets traversed since it can't be reached without
+  // U+FE00 present.
+  ASSERT_FALSE(traversal.HasPendingEdges());
+}
+
+TEST_F(DependencyGraphTest, IgnoreUnreachable_Liga) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{'f'}, ProbabilityBound::Zero()},
+    {{0xfb01 /* fi */}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    74 /* f */
+  }));
+  // the edge for the fi ligature never gets traversed since it can't be reached without
+  // i present.
+  ASSERT_FALSE(traversal.HasPendingEdges());
+}
+
+// TODO(garretrieger):
+// - basic math, CFF, and COLR tests.
 
 // TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DepedencyClosureTest
 // for coverage of DepedencyGraph functionality. We should add some basic tests here that test DepedencyGraph

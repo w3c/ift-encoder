@@ -31,8 +31,8 @@ class DependencyClosureTest : public ::testing::Test {
     double_nested_face(from_file("common/testdata/double-nested-components.ttf")),
     noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
     closure_cache(face.get()),
-    segmentation_info(segments, WithDefaultFeatures(), closure_cache, PATCH),
-    dependency_closure(*DependencyClosure::Create(&segmentation_info, face.get()))
+    segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures(), closure_cache, PATCH)),
+    dependency_closure(*DependencyClosure::Create(segmentation_info.get(), face.get()))
   {}
 
   static SubsetDefinition WithDefaultFeatures() {
@@ -69,14 +69,14 @@ class DependencyClosureTest : public ::testing::Test {
   };
 
   void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments) {
-    segmentation_info = RequestedSegmentationInformation(new_segments, new_init, closure_cache, PATCH);
-    dependency_closure = *DependencyClosure::Create(&segmentation_info, face.get());
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    dependency_closure = *DependencyClosure::Create(segmentation_info.get(), face.get());
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init, std::vector<Segment> new_segments) {
     closure_cache = GlyphClosureCache(new_face);
-    segmentation_info = RequestedSegmentationInformation(new_segments, new_init, closure_cache, PATCH);
-    dependency_closure = *DependencyClosure::Create(&segmentation_info, new_face);
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    dependency_closure = *DependencyClosure::Create(segmentation_info.get(), new_face);
   }
 
   Status RejectedAnalysis(segment_index_t segment) {
@@ -102,7 +102,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet expected_and_gids;
     GlyphSet expected_or_gids;
     GlyphSet expected_exclusive_gids;
-    TRYV(closure_cache.AnalyzeSegment(segmentation_info, segments, expected_and_gids, expected_or_gids, expected_exclusive_gids));
+    TRYV(closure_cache.AnalyzeSegment(*segmentation_info, segments, expected_and_gids, expected_or_gids, expected_exclusive_gids));
 
     std::string message;
     bool success = true;
@@ -139,7 +139,7 @@ class DependencyClosureTest : public ::testing::Test {
   hb_face_unique_ptr double_nested_face;
   hb_face_unique_ptr noto_sans_jp;
   GlyphClosureCache closure_cache;
-  RequestedSegmentationInformation segmentation_info;
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   std::unique_ptr<DependencyClosure> dependency_closure;
 };
 
@@ -247,17 +247,17 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
   Reconfigure(face.get(), {}, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-    {{'A'}, ProbabilityBound::Zero()},
-    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
-    {c2sc, ProbabilityBound::Zero()},
+    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+    /* 4 */ {c2sc, ProbabilityBound::Zero()},
   });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-   // s2sc not in init font which A passes through.
+   // c2sc not in init font which A passes through.
   s = RejectedAnalysis(2);
   ASSERT_TRUE(s.ok()) << s;
   s = RejectedAnalysis(3);
@@ -267,10 +267,10 @@ TEST_F(DependencyClosureTest, SingleSubst) {
 
   // With c2sc in the init font, we can now analyze the single subst's
   Reconfigure(face.get(), c2sc, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-    {{'A'}, ProbabilityBound::Zero()},
-    {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
   });
 
   s = CompareAnalysis({0});
@@ -376,23 +376,47 @@ TEST_F(DependencyClosureTest, Rejected_UVS) {
     {{0xfe00}, ProbabilityBound::Zero()},
   });
 
-  // UVS isn't supported yet.
+  // Unsatisfied UVS constraints aren't supported yet
+  // for accurate analysis.
   Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 
   s = RejectedAnalysis(1);
   ASSERT_TRUE(s.ok()) << s;
 
+  // However, if the constraints are satisfied then
+  // analysis is allowed.
+  s = CompareAnalysis({0, 1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  Reconfigure(noto_sans_jp.get(), {}, {
+    {{0x4fae, 0xfe00}, ProbabilityBound::Zero()},
+  });
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+
   Reconfigure(noto_sans_jp.get(), {0x4fae}, {
     {{0xfe00}, ProbabilityBound::Zero()},
   });
-  s = RejectedAnalysis(0);
+  s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(noto_sans_jp.get(), {0xfe00}, {
     {{0x4fae}, ProbabilityBound::Zero()},
   });
-  s = RejectedAnalysis(0);
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{'i',
+      0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+  });
+
+  // The segment contains everything needed to activated the i + gravecomb contextual
+  // lookup, but should still be rejected on account of passing through a contextual lookup.
+  Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -424,7 +448,9 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 
-  segmentation_info.ReassignInitSubset(closure_cache, {'a'});
+  s = segmentation_info->ReassignInitSubset(closure_cache, {'a'});
+  ASSERT_TRUE(s.ok()) << s;
+
   s = dependency_closure->SegmentsChanged(true, SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
@@ -465,13 +491,13 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
   Reconfigure(WithDefaultFeatures(), {
-    {{'x'}, ProbabilityBound::Zero()},
-    {{'q'}, ProbabilityBound::Zero()},
-    {{'i'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+    /* 0 */ {{'x'}, ProbabilityBound::Zero()},
+    /* 1 */ {{'q'}, ProbabilityBound::Zero()},
+    /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+    /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
   });
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
@@ -490,7 +516,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
     {{ccmp}, ProbabilityBound::Zero()},
   });
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
@@ -504,7 +530,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
     {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
   });
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
@@ -521,7 +547,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesAndInitFontContex
     {ccmp, ProbabilityBound::Zero()},
   });
 
-  ASSERT_EQ(segmentation_info.FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
@@ -564,7 +590,6 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   SubsetDefinition liga {'i'};
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  std::cerr << "Init font: " << liga.codepoints.ToString() << std::endl;
   Reconfigure(liga, {
     /* 0 */ {{'f'}, ProbabilityBound::Zero()},
     /* 1 */ {{'x'}, ProbabilityBound::Zero()},
@@ -590,6 +615,7 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
 // - COLRv1 font tests.
 
 // TODO(garretrieger) more tests (once functionality is available):
+// - partial invalidation tests including w/ "accurate" indices.
 // - Test case with a feature segment + otherwise disjunctive GSUB (eg. smcp single sub)
 // - case where init font makes a conjunctive thing exclusive (eg. UVS and/or liga).
 // - liga

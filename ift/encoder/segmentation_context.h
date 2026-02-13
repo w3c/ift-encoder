@@ -54,9 +54,17 @@ class SegmentationContext {
     uint32_t init_font_brotli_quality) {
     // TODO(garretrieger): argument list is getting long, switch to a builder pattern
     // for construction.
+
+    std::unique_ptr<GlyphClosureCache> closure_cache = std::make_unique<GlyphClosureCache>(face);
+    std::unique_ptr<RequestedSegmentationInformation> segmentation_info = TRY(RequestedSegmentationInformation::Create(
+          segments, initial_segment, *closure_cache, unmapped_glyph_handling));
+
     SegmentationContext context(
-      face, initial_segment, segments, unmapped_glyph_handling,
-      condition_analysis_mode, brotli_quality, init_font_brotli_quality);
+      face, unmapped_glyph_handling,
+      condition_analysis_mode, brotli_quality, init_font_brotli_quality,
+      std::move(closure_cache),
+      std::move(segmentation_info)
+    );
 
     if ((condition_analysis_mode == CLOSURE_AND_DEP_GRAPH) ||
         (condition_analysis_mode == CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
@@ -66,19 +74,21 @@ class SegmentationContext {
   }
 
  private:
-  SegmentationContext(hb_face_t* face, const SubsetDefinition& initial_segment,
-                      const std::vector<Segment>& segments,
-                      UnmappedGlyphHandling unmapped_glyph_handling,
-                      ConditionAnalysisMode condition_analysis_mode,
-                      uint32_t brotli_quality,
-                      uint32_t init_font_brotli_quality)
+  SegmentationContext(
+    hb_face_t* face,
+    UnmappedGlyphHandling unmapped_glyph_handling,
+    ConditionAnalysisMode condition_analysis_mode,
+    uint32_t brotli_quality,
+    uint32_t init_font_brotli_quality,
+    std::unique_ptr<GlyphClosureCache> closure_cache,
+    std::unique_ptr<RequestedSegmentationInformation> segmentation_info
+  )
       : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
         patch_size_cache_for_init_font(
             NewPatchSizeCache(face, init_font_brotli_quality)),
-        glyph_closure_cache(face),
+        glyph_closure_cache(std::move(closure_cache)),
         original_face(common::make_hb_face(hb_face_reference(face))),
-        segmentation_info_(std::make_unique<RequestedSegmentationInformation>(
-          segments, initial_segment, glyph_closure_cache, unmapped_glyph_handling)),
+        segmentation_info_(std::move(segmentation_info)),
         dependency_closure_(std::nullopt),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(hb_face_get_glyph_count(face)),
@@ -105,19 +115,19 @@ class SegmentationContext {
     }
 
     uint64_t potential_closures =
-      glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() +
+      glyph_closure_cache->CacheHits() + glyph_closure_cache->CacheMisses() +
       dep_graph_closures;
 
-    double hb_subset_rate = 100.0 * ((double) glyph_closure_cache.CacheMisses() / (double) potential_closures);
-    double cache_hit_rate = 100.0 * ((double) glyph_closure_cache.CacheHits() / (double) potential_closures);
+    double hb_subset_rate = 100.0 * ((double) glyph_closure_cache->CacheMisses() / (double) potential_closures);
+    double cache_hit_rate = 100.0 * ((double) glyph_closure_cache->CacheHits() / (double) potential_closures);
     double dep_graph_hit_rate = 100.0 * ((double) dep_graph_closures / (double) potential_closures);
-    uint64_t other_closures = glyph_closure_cache.CacheHits() + glyph_closure_cache.CacheMisses() - (2 * dep_graph_inaccurate);
+    uint64_t other_closures = glyph_closure_cache->CacheHits() + glyph_closure_cache->CacheMisses() - (2 * dep_graph_inaccurate);
 
     VLOG(0) << ">> Of " << potential_closures << " potential closure operations:" << std::endl
-      << "  " << glyph_closure_cache.CacheMisses() << " (" << hb_subset_rate << "%)  were handled by hb-subset-plan" << std::endl
+      << "  " << glyph_closure_cache->CacheMisses() << " (" << hb_subset_rate << "%)  were handled by hb-subset-plan" << std::endl
       << "  " << dep_graph_closures
       << " (" << dep_graph_hit_rate << "%) were handled by dep graph" << std::endl
-      << "  " << glyph_closure_cache.CacheHits() << " (" << cache_hit_rate << "%) were provided by the cache" << std::endl
+      << "  " << glyph_closure_cache->CacheHits() << " (" << cache_hit_rate << "%) were provided by the cache" << std::endl
       << "  " << other_closures << " were from something other than AnalyzeSegment()" << std::endl;
   }
 
@@ -196,7 +206,7 @@ class SegmentationContext {
       maybe_dep_closure = (*dependency_closure_).get();
     }
     return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
-                                       glyph_closure_cache, maybe_dep_closure,
+                                       *glyph_closure_cache, maybe_dep_closure,
                                        glyphs, modified_segments);
   }
 
@@ -232,7 +242,7 @@ class SegmentationContext {
   // Caches and logging
   std::unique_ptr<PatchSizeCache> patch_size_cache;
   std::unique_ptr<PatchSizeCache> patch_size_cache_for_init_font;
-  GlyphClosureCache glyph_closure_cache;
+  std::unique_ptr<GlyphClosureCache> glyph_closure_cache;
 
   // Init
   common::hb_face_unique_ptr original_face;

@@ -321,6 +321,21 @@ TEST_F(IntSetTest, IsSubsetOf) {
   ASSERT_TRUE(b.is_subset_of(b));
 }
 
+TEST_F(IntSetTest, IsSubsetOf_HbRegression) {
+  // Tests that we have the hb_set_is_subset() bug fix in:
+  // https://github.com/harfbuzz/harfbuzz/pull/5742
+
+  IntSet small;
+  IntSet large {0xFFF};
+
+  small.insert(0x0FF);
+  small.insert(0xFFF);
+  small.erase(0x0FF); // introduce an empty page
+
+  ASSERT_TRUE(small.is_subset_of(large));
+  ASSERT_TRUE(large.is_subset_of(small));
+}
+
 TEST_F(IntSetTest, Union) {
   IntSet a{5, 8};
   IntSet b{8, 11};

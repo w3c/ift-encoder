@@ -11,14 +11,15 @@ namespace ift::dep_graph {
 
 // A single node in a fonts glyph depedency graph.
 class Node {
+ public:
   enum NodeType {
-    INIT_FONT,
-    SEGMENT,
-    UNICODE,
-    GLYPH,
+    INIT_FONT = 0x01,
+    SEGMENT = 0x02,
+    UNICODE = 0x04,
+    GLYPH = 0x08,
+    FEATURE = 0x10,
   };
 
- public:
   static Node InitFont() {
     return Node(0, INIT_FONT);
   }
@@ -35,10 +36,18 @@ class Node {
     return Node(id, SEGMENT);
   }
 
-  bool IsUnicode() const { return type_ == UNICODE; };
-  bool IsGlyph() const { return type_ == GLYPH; };
-  bool IsSegment() const { return type_ == SEGMENT; };
-  bool IsInitFont() const { return type_ == INIT_FONT; };
+  static Node Feature(hb_tag_t tag) {
+    return Node(tag, FEATURE);
+  }
+
+  bool IsUnicode() const { return type_ == UNICODE; }
+  bool IsGlyph() const { return type_ == GLYPH; }
+  bool IsSegment() const { return type_ == SEGMENT; }
+  bool IsInitFont() const { return type_ == INIT_FONT; }
+  bool IsFeature() const { return type_ == FEATURE; }
+  bool Matches(uint32_t filter) const {
+    return filter & type_;
+  }
 
   uint32_t Id() const { return id_; }
 
@@ -49,35 +58,36 @@ class Node {
       case UNICODE:
         return absl::StrCat("u", id_);
       case GLYPH:
-      default:
         return absl::StrCat("g", id_);
+      default:
+        return absl::StrCat("X", id_);
       }
-    }
+  }
 
-    bool operator<(const Node& other) const {
-      if (type_ != other.type_) {
-        return type_ < other.type_;
-      }
-      return id_ < other.id_;
+  bool operator<(const Node& other) const {
+    if (type_ != other.type_) {
+      return type_ < other.type_;
     }
+    return id_ < other.id_;
+  }
 
-    bool operator==(const Node& other) const {
-      return id_ == other.id_ && type_ == other.type_;
-    }
+  bool operator==(const Node& other) const {
+    return id_ == other.id_ && type_ == other.type_;
+  }
 
-    bool operator!=(const Node& other) const {
-      return !(*this == other);
-    }
+  bool operator!=(const Node& other) const {
+    return !(*this == other);
+  }
 
-    template <typename H>
-    friend H AbslHashValue(H h, const Node& n) {
-      return H::combine(std::move(h), n.id_, n.type_);
-    }
+  template <typename H>
+  friend H AbslHashValue(H h, const Node& n) {
+    return H::combine(std::move(h), n.id_, n.type_);
+  }
 
-   private:
-    Node(uint32_t id, NodeType type) : id_(id), type_(type) {}
-    uint32_t id_;
-    NodeType type_;
+ private:
+  Node(uint32_t id, NodeType type) : id_(id), type_(type) {}
+  uint32_t id_;
+  NodeType type_;
 };
 
 }  // namespace ift::dep_graph
