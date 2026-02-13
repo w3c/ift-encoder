@@ -32,6 +32,7 @@ class DependencyGraphTest : public ::testing::Test {
   DependencyGraphTest() :
   face(from_file("common/testdata/Roboto-Regular.ttf")),
   closure_cache(face.get()),
+  noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
   segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures({}), closure_cache, PATCH)),
   graph(*DependencyGraph::Create(segmentation_info.get(), face.get()))
   {}
@@ -57,6 +58,12 @@ class DependencyGraphTest : public ::testing::Test {
     graph = *DependencyGraph::Create(segmentation_info.get(), face.get());
   }
 
+  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init, std::vector<Segment> new_segments) {
+    closure_cache = GlyphClosureCache(new_face);
+    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    graph = *DependencyGraph::Create(segmentation_info.get(), new_face);
+  }
+
   private:
   std::vector<Segment> segments = {
     /* 0 */ {{'a'}, ProbabilityBound::Zero()},
@@ -68,6 +75,7 @@ class DependencyGraphTest : public ::testing::Test {
   GlyphClosureCache closure_cache;
 
   public:
+  hb_face_unique_ptr noto_sans_jp;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   DependencyGraph graph;
 };
@@ -184,6 +192,47 @@ TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
     740 /* ij */,
   }));
   ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+}
+
+TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
+  /* <map uv="0x4fae" uvs="0xfe00" name="uniFA30"/>  */
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}), {
+    {{0x4fae}, ProbabilityBound::Zero()},
+    {{0xfa30}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    2684 /* U+4fae */
+  }));
+  // the edge for the UVS sub to U+FA30 never gets traversed since it can't be reached without
+  // U+FE00 present.
+  ASSERT_FALSE(traversal.HasPendingEdges());
+}
+
+TEST_F(DependencyGraphTest, IgnoreUnreachable_Liga) {
+  Reconfigure(WithDefaultFeatures({}), {
+    {{'f'}, ProbabilityBound::Zero()},
+    {{0xfb01 /* fi */}, ProbabilityBound::Zero()},
+  });
+
+  auto r = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
+    74 /* f */
+  }));
+  // the edge for the fi ligature never gets traversed since it can't be reached without
+  // i present.
+  ASSERT_FALSE(traversal.HasPendingEdges());
 }
 
 // TODO(garretrieger):

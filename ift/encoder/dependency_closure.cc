@@ -131,35 +131,31 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) {
 
-  // TODO XXXXX rewrite this comment to reflect the new approach.
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
   // This aims to have identical output to GlyphClosureCache::AnalyzeSegment()
   // which uses harfbuzz glyph closure to infer conditions.
   //
-  // The high level process works like this:
-  // 1. Input segment is converted to a list of codepoints, and those to their nominal glyphs.
-  // 2. We walk the dependency graph from the nominal glyphs. During traversal edges
-  //    are filtered out that are not in the space of all segments (eg. we don't traverse
-  //    into the subgraph of the init font)
-  // 3. All glyphs encountered during the traversal are categorized into OR, AND, or EXCLUSIVE
-  //    based on the details of the traversal.
+  // Condition analysis using the dep graph is not always able to accurately
+  // reproduce the closure based conditions, so this method returns an indication
+  // of the accuracy of the analysis. AnalysisAccuracy::INACCURATE is returned
+  // when something in the dep graph is encountered which may cause results
+  // to diverge from the closure approach.
   //
-  // EXCLUSIVE: glyphs that are reachable only from this segment and/or the init font subgraph.
-  // OR: Non exclusive glyphs that are reached via disjunctive dependencies, for example glyf components.
-  // AND: Non exclusive glyphs that are via via conjunctive dependencies, for example UVS.
+  // This implementation relies on precomputed reachability indices, the approach is this:
+  // 1. The accurate_* indices record reachable glyphs from a starting segment where
+  //    the traversal should exactly match closure.
+  // 2. If an accurate traversal from the starting segments is available, and each glyph
+  //    is only reachable from other accurate traversals then we can form accurate conditions.
+  // 3. In that case for each glyph we can distinguish whether it's an exclusive, or disjunctive
+  //    condition by checking the index to see if only the input segments can reach that specific
+  //    glyph.
   //
   // TODO(garretrieger): This implementation is still early stages and is missing quite a bit,
   // here's a list of some additional things that are needed:
-  //
-  // - CFF/CFF2 seac components.
-  // - preprocess to find the set of VS in the graph, for now disallow segments
-  //   that intersect these.
-  // - or, just add proper support for UVS handling. These would be treated as conjunctive.
-  //   will need to extract the VS codepoints from the graph edges.
-  // - Handle simple disjunctive GSUB lookups (may need conjunction with features).
-  // - Handle simple conjunctive GSUB lookups (eg. liga)
-  // - Handle features in the input segment (once GSUB is supported).
+  // - Only handles disjunctive and exclusive conditions, anything conjunctive will report
+  //   an inaccurate analysis. We should be able to at least support simple conjunctive cases
+  //   without too much trouble (for example UVS, non-nested liga's, and segments with layout features).
 
   // If we have more than one segment we need to retraverse because combining two previously interacting
   // segments may result in a new combined accurate traversal. If only one segment is present we can
@@ -203,7 +199,6 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 
   // Now we need to test each reached glyph to see if we have fully accurate reachability information
   // with which to make an exclusive or disjunctive determination.
-
   for (glyph_id_t gid : reachable_glyphs) {
     if (!GlyphHasFullyAccurateReachability(gid, segments)) {
       inaccurate_results_++;
@@ -429,7 +424,6 @@ Status DependencyClosure::ReachabilitySegmentsAddToCheck(
 }
 
 Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
-  // TODO XXXXX traversals here should incorporate closure phasing.
   if (reachability_index_valid_) {
     // If indices have existing data, then we need to ensure prior entries for the
     // segments to be updated are cleared out.
@@ -476,8 +470,6 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
 
   {
     auto context_traversal = TRY(graph_.ClosureTraversal({s}, true));
-    // TODO XXXX the context_glyphs_ (needed for accuracy check) set may not be
-    // populated yet, ensure that it is prior to any UpdateReachabilityIndex() calls.
     if (TraversalAccuracy(context_traversal) == ACCURATE) {
       accurate_glyphs_that_can_be_reached_.insert(std::pair(s, GlyphSet {}));
       for (glyph_id_t g : context_traversal.ReachedGlyphs()) {

@@ -42,6 +42,68 @@ static constexpr hb_tag_t CFF = HB_TAG('C', 'F', 'F', ' ');
 
 class TraversalContext;
 
+static bool HbSetIsSubset(const hb_set_t* glyphs, const GlyphSet& reached) {
+  hb_codepoint_t g = HB_CODEPOINT_INVALID;
+  while (hb_set_next(glyphs, &g)) {
+    if (!reached.contains(g)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool HbSetIntersects(const hb_set_t* glyphs, const GlyphSet& reached) {
+  hb_codepoint_t g = HB_CODEPOINT_INVALID;
+  while (hb_set_next(glyphs, &g)) {
+    if (reached.contains(g)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static StatusOr<bool> LigaSetSatisfied(hb_depend_t* depend, hb_codepoint_t liga_set, const GlyphSet& reached) {
+  hb_set_unique_ptr liga_glyphs = make_hb_set();
+  if (!hb_depend_get_set_from_index(depend, liga_set, liga_glyphs.get())) {
+    return absl::InternalError("ConstraintsSatisfied(): Ligature set lookup failed.");
+  }
+
+  // All liga glyphs must be reached.
+  return HbSetIsSubset(liga_glyphs.get(), reached);
+}
+
+static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend, hb_codepoint_t context_set_index, const GlyphSet& reached) {
+  // the context set is actually a set of sets.
+  hb_set_unique_ptr context_sets = make_hb_set();
+  if (!hb_depend_get_set_from_index(depend, context_set_index, context_sets.get())) {
+    return absl::InternalError("ContextSetSatisfied(): Context set lookup failed.");
+  }
+
+  GlyphSet glyphs;
+  hb_codepoint_t set_id = HB_CODEPOINT_INVALID;
+  while (hb_set_next(context_sets.get(), &set_id)) {
+    if (set_id < 0x80000000) {
+      // special case, set of one element.
+      if (!reached.contains(set_id)) {
+        return false;
+      }
+      continue;
+    }
+
+    hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
+    hb_set_unique_ptr context_glyphs = make_hb_set();
+    if (!hb_depend_get_set_from_index(depend, actual_set_id, context_glyphs.get())) {
+      return absl::InternalError("Context sub set lookup failed.");
+    }
+
+    // need minimum of one glyph in each sub-group to be reached.
+    if (!HbSetIntersects(context_glyphs.get(), reached)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Tracks an edge who's context requirements are not yet satisfied.
 class PendingEdge {
  public:
@@ -110,68 +172,6 @@ class PendingEdge {
   }
 
  private:
-
-  static bool HbSetIsSubset(const hb_set_t* glyphs, const GlyphSet& reached) {
-    hb_codepoint_t g = HB_CODEPOINT_INVALID;
-    while (hb_set_next(glyphs, &g)) {
-      if (!reached.contains(g)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool HbSetIntersects(const hb_set_t* glyphs, const GlyphSet& reached) {
-    hb_codepoint_t g = HB_CODEPOINT_INVALID;
-    while (hb_set_next(glyphs, &g)) {
-      if (reached.contains(g)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static StatusOr<bool> LigaSetSatisfied(hb_depend_t* depend, hb_codepoint_t liga_set, const GlyphSet& reached) {
-    hb_set_unique_ptr liga_glyphs = make_hb_set();
-    if (!hb_depend_get_set_from_index(depend, liga_set, liga_glyphs.get())) {
-      return absl::InternalError("ConstraintsSatisfied(): Ligature set lookup failed.");
-    }
-
-    // All liga glyphs must be reached.
-    return HbSetIsSubset(liga_glyphs.get(), reached);
-  }
-
-  static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend, hb_codepoint_t context_set_index, const GlyphSet& reached) {
-    // the context set is actually a set of sets.
-    hb_set_unique_ptr context_sets = make_hb_set();
-    if (!hb_depend_get_set_from_index(depend, context_set_index, context_sets.get())) {
-      return absl::InternalError("ContextSetSatisfied(): Context set lookup failed.");
-    }
-
-    GlyphSet glyphs;
-    hb_codepoint_t set_id = HB_CODEPOINT_INVALID;
-    while (hb_set_next(context_sets.get(), &set_id)) {
-      if (set_id < 0x80000000) {
-        // special case, set of one element.
-        if (!reached.contains(set_id)) {
-          return false;
-        }
-        continue;
-      }
-
-      hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
-      hb_set_unique_ptr context_glyphs = make_hb_set();
-      if (!hb_depend_get_set_from_index(depend, actual_set_id, context_glyphs.get())) {
-        return absl::InternalError("Context sub set lookup failed.");
-      }
-
-      // need minimum of one glyph in each sub-group to be reached.
-      if (!HbSetIntersects(context_glyphs.get(), reached)) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   PendingEdge(Node dest_) : dest(dest_) {}
 
@@ -307,18 +307,24 @@ class TraversalContext {
   }
 
   Status TraverseContextualEdgeTo(glyph_id_t gid, hb_tag_t feature, hb_codepoint_t context_set) {
+    if (!TRY(ContextSetSatisfied(depend, context_set, *full_closure))) {
+      // Not possible for this edge to be activated so it can be ignored.
+      return absl::OkStatus();
+    }
+
     PendingEdge edge = PendingEdge::Context(feature, gid, context_set);
     Node dest = Node::Glyph(gid);
-    // TODO XXXX check if it's possible for the constraints to be satisfied in the full closure.
-    // ignore the edge if not.
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
   Status TraverseLigatureEdgeTo(glyph_id_t gid, hb_tag_t feature, hb_codepoint_t liga_set_index) {
+    if (!TRY(LigaSetSatisfied(depend, liga_set_index, *full_closure))) {
+      // Not possible for this edge to be activated so it can be ignored.
+      return absl::OkStatus();
+    }
+
     PendingEdge edge = PendingEdge::Ligature(feature, gid, liga_set_index);
     Node dest = Node::Glyph(gid);
-    // TODO XXXX check if it's possible for the constraints to be satisfied in the full closure.
-    // ignore the edge if not. Also need a test case covering this situation.
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
@@ -499,9 +505,12 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   bool enforce_context
 ) const {
 
-  // TODO XXXX need to properly handle the init font's impact on the closure:
-  // - pre-populate pending edges from the init font traversal (ie. any reachable glyphs that
-  //   are not in the current reached set, only the first level is needed).
+  // TODO(garretrieger): context edges don't have edges for each participating glyph,
+  // so for full correctness in matching closure we should introduce pending edges for
+  // any unsatisfied edges out of the init font. However, this behaviour will probably
+  // need to be optional as it's not desirable for the current dependency closure use
+  // cases which specifically ignore context as inaccurate, but would be needed if
+  // we eventually want to try and handle some context cases in accurate analysis.
   CodepointSet non_init_font_codepoints;
   if (unicode_filter_ptr == nullptr) {
     non_init_font_codepoints = segmentation_info_->FullDefinition().codepoints;
