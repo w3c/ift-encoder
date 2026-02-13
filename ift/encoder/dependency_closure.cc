@@ -245,8 +245,6 @@ bool DependencyClosure::GlyphHasFullyAccurateReachability(
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet& glyphs) {
-  TRYV(EnsureReachabilityIndexPopulated());
-
   // TODO(garretrieger): we can narrow the set by considering context glyphs per activated glyph
   // instead of just the whole set of context glyphs.
 
@@ -301,8 +299,6 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet&
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentInteractionGroup(const SegmentSet& segments) {
-  TRYV(EnsureReachabilityIndexPopulated());
-
   SegmentSet to_check = segments;
   SegmentSet visited;
 
@@ -432,13 +428,6 @@ Status DependencyClosure::ReachabilitySegmentsAddToCheck(
   return absl::OkStatus();
 }
 
-Status DependencyClosure::EnsureReachabilityIndexPopulated() {
-  if (reachability_index_valid_) {
-    return absl::OkStatus();
-  }
-  return UpdateReachabilityIndex(SegmentSet::all());
-}
-
 Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
   // TODO XXXXX traversals here should incorporate closure phasing.
   if (reachability_index_valid_) {
@@ -523,23 +512,6 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
   }
 
   return absl::OkStatus();
-}
-
-void DependencyClosure::ClearReachabilityIndex() {
-  glyphs_that_can_be_reached_.clear();
-  segments_that_can_reach_.clear();
-
-  accurate_glyphs_that_can_be_reached_.clear();
-  accurate_segments_that_can_reach_.clear();
-
-  segments_that_can_reach_feature_.clear();
-  features_that_can_be_reached_.clear();
-
-  segments_that_have_context_glyph_.clear();
-  segment_context_glyphs_.clear();
-  segments_that_have_context_feature_.clear();
-  segment_context_features_.clear();
-  reachability_index_valid_ = false;
 }
 
 void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {

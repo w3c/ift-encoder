@@ -342,7 +342,7 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   inital_subset.gids.union_set(moved_glyphs);
 
   GlyphSet new_glyph_closure =
-      TRY(merger.Context().glyph_closure_cache.GlyphClosure(inital_subset));
+      TRY(merger.Context().glyph_closure_cache->GlyphClosure(inital_subset));
 
   GlyphSet glyph_closure_delta = new_glyph_closure;
   glyph_closure_delta.subtract(
