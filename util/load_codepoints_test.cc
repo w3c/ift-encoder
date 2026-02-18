@@ -168,9 +168,14 @@ TEST_F(LoadCodepointsTest, BuiltInFrequenciesList) {
   auto result = util::BuiltInFrequenciesList();
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_FALSE(result->empty());
+
   EXPECT_TRUE(result->contains("Script_latin.riegeli"));
   EXPECT_FALSE((*result)["Script_latin.riegeli"].empty());
   EXPECT_TRUE((*result)["Script_latin.riegeli"].contains('Q'));
+
+  EXPECT_TRUE(result->contains("Script_japanese.riegeli@*"));
+  EXPECT_FALSE((*result)["Script_japanese.riegeli@*"].empty());
+  EXPECT_TRUE((*result)["Script_japanese.riegeli@*"].contains(0x304C /* が */));
 }
 
 }  // namespace util

@@ -55,6 +55,16 @@ script:
 ./check-format.sh --fix
 ```
 
+## Documentation
+
+The documents under [docs/experimental](docs/experimental) provide some more detailed designs of various aspects of the IFT encoder. Of note:
+* [compiler.md](docs/experimental)
+* [closure_glyph_segmentation.md](docs/experimental/closure_glyph_segmentation.md)
+* [closure_glyph_segmentation_merging.md](docs/experimental/closure_glyph_segmentation_merging.md)
+* [closure_glyph_segmentation_complex_conditions.md](docs/experimental/closure_glyph_segmentation_complex_conditions.md)
+
+Provide a detailed design of how the two major pieces (segmentation and compilation) of IFT font encoding work.
+
 ## Generating compile_commands.json for IDE
 
 This repo is configured to use [hedron](https://github.com/hedronvision/bazel-compile-commands-extractor) to produce a

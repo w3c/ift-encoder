@@ -103,6 +103,7 @@ cc_binary(
         "@ift_encoder_data//:freq_data",
     ],
     deps = [
+        ":auto_segmenter_config",
         ":load_codepoints",
         ":segmentation_plan_cc_proto",
         ":segmenter_config_cc_proto",
@@ -155,6 +156,23 @@ cc_library(
 )
 
 cc_library(
+    name = "auto_segmenter_config",
+    srcs = [
+        "auto_segmenter_config.cc",
+    ],
+    hdrs = [
+        "auto_segmenter_config.h",
+    ],
+    deps = [
+        ":load_codepoints",
+        ":segmenter_config_cc_proto",
+        "//common",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@harfbuzz",
+    ],
+)
+
+cc_library(
     name = "load_codepoints",
     srcs = [
         "load_codepoints.cc",
@@ -189,6 +207,24 @@ cc_library(
         "//common",
         "//ift/encoder",
         "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "auto_segmenter_config_test",
+    size = "small",
+    srcs = [
+        "auto_segmenter_config_test.cc",
+    ],
+    data = [
+        "//common:testdata",
+        "@ift_encoder_data//:freq_data",
+    ],
+    deps = [
+        ":auto_segmenter_config",
+        "//common",
+        "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
@@ -244,6 +280,28 @@ cc_test(
     deps = [
         ":segmenter_config_util",
         "@googletest//:gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "generate_segmenter_config",
+    srcs = [
+        "generate_segmenter_config.cc",
+    ],
+    data = [
+        "@ift_encoder_data//:freq_data",
+    ],
+    deps = [
+        ":auto_segmenter_config",
+        ":load_codepoints",
+        ":segmenter_config_cc_proto",
+        "//common",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/status",
+        "@harfbuzz",
+        "@protobuf",
     ],
 )
 
