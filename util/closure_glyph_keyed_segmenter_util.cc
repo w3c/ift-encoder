@@ -23,6 +23,7 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "util/auto_segmenter_config.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
 #include "util/segmenter_config.pb.h"
@@ -41,6 +42,14 @@ ABSL_FLAG(
     std::string, config, "config.textpb",
     "Path to a text proto file containing the configuration for the segmenter. "
     "Should contain a single SegmenterConfig message.");
+
+ABSL_FLAG(bool, auto_config, false,
+          "If set the segmenter configuration will be automatically generated "
+          "based on the input font.");
+
+ABSL_FLAG(std::string, primary_script, "Script_latin",
+          "When auto_config is enabled this sets the primary script or "
+          "language frequency data file to use.");
 
 ABSL_FLAG(bool, output_segmentation_plan, false,
           "If set a segmentation plan representing the determined segmentation "
@@ -81,9 +90,15 @@ using ift::encoder::Segment;
 using ift::encoder::SegmentationCost;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
+using util::AutoSegmenterConfig;
 using util::SegmenterConfigUtil;
 
-static StatusOr<SegmenterConfig> LoadConfig() {
+static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
+  if (absl::GetFlag(FLAGS_auto_config)) {
+    return AutoSegmenterConfig::GenerateConfig(
+        font, absl::GetFlag(FLAGS_primary_script));
+  }
+
   FontData config_text =
       TRY(util::LoadFile(absl::GetFlag(FLAGS_config).c_str()));
   SegmenterConfig config;
@@ -191,9 +206,10 @@ static Status OutputFallbackGlyphCount(hb_face_t* original_face,
 static Status Main(const std::vector<char*> args) {
   hb_face_unique_ptr font =
       TRY(LoadFont(absl::GetFlag(FLAGS_input_font).c_str()));
-  SegmenterConfig config = TRY(LoadConfig());
+  SegmenterConfig config = TRY(LoadConfig(font.get()));
 
-  SegmenterConfigUtil config_util(absl::GetFlag(FLAGS_config));
+  SegmenterConfigUtil config_util(
+      absl::GetFlag(FLAGS_auto_config) ? "" : absl::GetFlag(FLAGS_config));
 
   CodepointSet font_codepoints = FontHelper::ToCodepointsSet(font.get());
   btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(font.get());
