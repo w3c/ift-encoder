@@ -108,37 +108,33 @@ static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend, hb_codepoint_t co
 class PendingEdge {
  public:
   static PendingEdge Uvs(hb_codepoint_t a, hb_codepoint_t b, glyph_id_t gid) {
-    PendingEdge edge(Node::Glyph(gid));
-    edge.required_codepoints = std::make_pair(a, b);
-    edge.table_tag = cmap;
+    PendingEdge edge(Node::Glyph(gid), cmap);
+    edge.required_codepoints_ = std::make_pair(a, b);
     return edge;
   }
 
   static PendingEdge Gsub(hb_tag_t feature, glyph_id_t gid) {
-    PendingEdge edge(Node::Glyph(gid));
-    edge.required_feature = feature;
-    edge.table_tag = GSUB;
+    PendingEdge edge(Node::Glyph(gid), GSUB);
+    edge.required_feature_ = feature;
     return edge;
   }
 
   static PendingEdge Ligature(hb_tag_t feature, glyph_id_t gid, hb_codepoint_t liga_set_index) {
-    PendingEdge edge(Node::Glyph(gid));
-    edge.required_feature = feature;
-    edge.required_liga_set_index = liga_set_index;
-    edge.table_tag = GSUB;
+    PendingEdge edge(Node::Glyph(gid), GSUB);
+    edge.required_feature_ = feature;
+    edge.required_liga_set_index_ = liga_set_index;
     return edge;
   }
 
   static PendingEdge Context(hb_tag_t feature, glyph_id_t gid, hb_codepoint_t context_set_index) {
-    PendingEdge edge(Node::Glyph(gid));
-    edge.required_feature = feature;
-    edge.required_context_set_index = context_set_index;
-    edge.table_tag = GSUB;
+    PendingEdge edge(Node::Glyph(gid), GSUB);
+    edge.required_feature_ = feature;
+    edge.required_context_set_index_ = context_set_index;
     return edge;
   }
 
   std::optional<hb_tag_t> RequiredLayoutFeature() const {
-    return required_feature;
+    return required_feature_;
   }
 
   Status DoTraversal(TraversalContext& context) const;
@@ -150,22 +146,24 @@ class PendingEdge {
     const flat_hash_set<hb_tag_t>& reached_features
   ) const {
 
-    if (required_codepoints.has_value() &&
-        (!reached_unicodes.contains(required_codepoints->first) ||
-         !reached_unicodes.contains(required_codepoints->second))) {
+    if (required_codepoints_.has_value() &&
+        (!reached_unicodes.contains(required_codepoints_->first) ||
+         !reached_unicodes.contains(required_codepoints_->second))) {
       return false;
     }
 
-    if (required_feature.has_value() && !reached_features.contains(*required_feature)) {
+    if (required_feature_.has_value() && !reached_features.contains(*required_feature_)) {
       return false;
     }
 
-    if (required_liga_set_index.has_value()) {
-      return LigaSetSatisfied(depend, *required_liga_set_index, reached_glyphs);
+    if (required_liga_set_index_.has_value() &&
+        !TRY(LigaSetSatisfied(depend, *required_liga_set_index_, reached_glyphs))) {
+      return false;
     }
 
-    if (required_context_set_index.has_value()) {
-      return ContextSetSatisfied(depend, *required_context_set_index, reached_glyphs);
+    if (required_context_set_index_.has_value() &&
+        !TRY(ContextSetSatisfied(depend, *required_context_set_index_, reached_glyphs))) {
+      return false;
     }
 
     return true;
@@ -173,20 +171,23 @@ class PendingEdge {
 
  private:
 
-  PendingEdge(Node dest_) : dest(dest_) {}
+  PendingEdge(Node dest, hb_tag_t table_tag) : dest_(dest), table_tag_(table_tag) {}
 
-  Node dest;
-  hb_tag_t table_tag;
+  Node dest_;
+  hb_tag_t table_tag_;
 
-  std::optional<hb_tag_t> required_feature = std::nullopt;
-  std::optional<uint32_t> required_liga_set_index;
-  std::optional<uint32_t> required_context_set_index;
-  std::optional<std::pair<hb_codepoint_t, hb_codepoint_t>> required_codepoints = std::nullopt;
+  std::optional<hb_tag_t> required_feature_ = std::nullopt;
+  std::optional<uint32_t> required_liga_set_index_ = std::nullopt;
+  std::optional<uint32_t> required_context_set_index_ = std::nullopt;
+  std::optional<std::pair<hb_codepoint_t, hb_codepoint_t>> required_codepoints_ = std::nullopt;
 };
 
+// Tracks the details of an inprogress traversal.
 class TraversalContext {
  public:
-  // These filter out edges from being traversed.
+  hb_depend_t* depend = nullptr;
+
+  // Only edges from these tables will be followed.
   flat_hash_set<hb_tag_t> table_filter = {
     cmap,
     glyf,
@@ -195,23 +196,43 @@ class TraversalContext {
     MATH,
     CFF
   };
-  hb_depend_t* depend = nullptr;
+
+  // Only edges that originate from and end at glyphs from this filter will be followed.
   const GlyphSet* glyph_filter = nullptr;
-  const GlyphSet* full_closure = nullptr;
+
+  // For unicode based edges (unicode-unicode, unicode-gid), they will only be followed
+  // when all unicodes are in this filter.
   const CodepointSet* unicode_filter = nullptr;
+
+  // The set of all glyphs in the full closure.
+  const GlyphSet* full_closure = nullptr;
+
+  // For GSUB edges, they will only be followed when the features are in this filter.
   const flat_hash_set<hb_tag_t>* feature_filter = nullptr;
+
+  // Only edges between node types in this filter will be followed, bitmask
+  // using the NodeType enum values.
   uint32_t node_type_filter = 0xFFFFFFFF;
 
+  // If true, then for conjunctive type edges (UVS/Ligature/Context) they will only
+  // be followed when the context is satisfied (ie. appropriate glyphs are reached).
   bool enforce_context = false;
 
+  // Results of the traversal.
   Traversal traversal;
 
+  // Sets the nodes from which traversal starts.
   void SetStartNodes(const btree_set<Node>& start) {
     for (Node node : start) {
       Reached(node);
     }
   }
 
+  // Preloads all of the reached glyphs/unicodes/features sets to be those in the init font
+  // of segmentation_info.
+  //
+  // When context is enforced this will allow conjunctive edges that intersect the initial font
+  // to be traversed.
   void SetReachedToInitFont(
     const RequestedSegmentationInformation& segmentation_info,
     const flat_hash_set<hb_tag_t>& init_features) {
@@ -221,6 +242,7 @@ class TraversalContext {
     reached_features_ = init_features;
   }
 
+  // Returns the next node to be visited.
   std::optional<Node> GetNext() {
     if (next_.empty()) {
       return std::nullopt;
@@ -247,6 +269,10 @@ class TraversalContext {
     return !next_.empty();
   }
 
+  // Returns true if one or more pending edges remains.
+  //
+  // Pending edges are conjunctive edges which have been encountered who's conditions
+  // are not yet satisfied.
   bool HasPendingEdges() const {
     return !pending_edges_.empty();
   }
@@ -268,6 +294,10 @@ class TraversalContext {
     Reached(dest);
   }
 
+  // Traverse an edge with the associated PendingEdge.
+  //
+  // Will check if the pending edge is satisfied. If it is the edge will be traversed,
+  // otherwise it will be added to the pending edge set.
   Status TraverseEdgeTo(Node dest, PendingEdge edge, hb_tag_t table_tag) {
     if (!table_filter.contains(table_tag)) {
       return absl::OkStatus();
@@ -397,9 +427,7 @@ class TraversalContext {
 
     if (feature_filter != nullptr && layout_feature.has_value() &&
         !feature_filter->contains(*layout_feature)) {
-      if (!enforce_context || !reached_features_.contains(*layout_feature)) {
-        return false;
-      }
+      return false;
     }
 
     if (unicode_filter != nullptr && node.IsUnicode()) {
@@ -432,18 +460,18 @@ class TraversalContext {
 };
 
 Status PendingEdge::DoTraversal(TraversalContext& context) const {
-  if (table_tag == GSUB && required_feature.has_value()) {
-    if (required_context_set_index.has_value()) {
-      GlyphSet context_glyphs = TRY(context.GetContextSet(*required_context_set_index));
-      context.traversal.VisitContextual(dest, *required_feature, context_glyphs);
+  if (table_tag_ == GSUB && required_feature_.has_value()) {
+    if (required_context_set_index_.has_value()) {
+      GlyphSet context_glyphs = TRY(context.GetContextSet(*required_context_set_index_));
+      context.traversal.VisitContextual(dest_, *required_feature_, context_glyphs);
     } else {
-      context.traversal.VisitGsub(dest, *required_feature);
+      context.traversal.VisitGsub(dest_, *required_feature_);
     }
   } else {
-    context.traversal.Visit(dest, table_tag);
+    context.traversal.Visit(dest_, table_tag_);
   }
 
-  context.Reached(dest);
+  context.Reached(dest_);
   return absl::OkStatus();
 }
 
