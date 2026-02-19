@@ -23,17 +23,6 @@ cc_proto_library(
 )
 
 proto_library(
-    name = "unicode_count_proto",
-    srcs = ["unicode_count.proto"],
-)
-
-cc_proto_library(
-    name = "unicode_count_cc_proto",
-    visibility = ["//visibility:public"],
-    deps = [":unicode_count_proto"],
-)
-
-proto_library(
     name = "common_proto",
     srcs = ["common.proto"],
     visibility = [
@@ -178,12 +167,13 @@ cc_library(
         "load_codepoints.h",
     ],
     deps = [
-        ":unicode_count_cc_proto",
         "//common",
         "//ift/freq",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
+        "@ift_encoder_data//:codepoint_count_cc_proto",
+        "@ift_encoder_data//:metadata_cc_proto",
         "@riegeli//riegeli/bytes:fd_reader",
         "@riegeli//riegeli/records:record_reader",
     ],
@@ -284,12 +274,12 @@ cc_binary(
         "generate_riegeli_test_data.cc",
     ],
     deps = [
-        ":unicode_count_cc_proto",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/status",
         "@riegeli//riegeli/bytes:fd_writer",
         "@riegeli//riegeli/records:record_writer",
+        "@ift_encoder_data//:codepoint_count_cc_proto",
     ],
 )
 

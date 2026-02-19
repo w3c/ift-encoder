@@ -1,6 +1,0 @@
-edition = "2023";
-
-message CodepointCount {
-  repeated uint32 codepoints = 1 [features.repeated_field_encoding = PACKED];
-  uint64 count = 2;
-}
