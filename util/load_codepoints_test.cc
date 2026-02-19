@@ -164,4 +164,13 @@ TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
   EXPECT_EQ(result->CoveredCodepoints().size(), 1363);
 }
 
+TEST_F(LoadCodepointsTest, BuiltInFrequenciesList) {
+  auto result = util::BuiltInFrequenciesList();
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_FALSE(result->empty());
+  EXPECT_TRUE(result->contains("Script_latin.riegeli"));
+  EXPECT_FALSE((*result)["Script_latin.riegeli"].empty());
+  EXPECT_TRUE((*result)["Script_latin.riegeli"].contains('Q'));
+}
+
 }  // namespace util

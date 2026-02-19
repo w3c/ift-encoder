@@ -9,9 +9,10 @@
 #include "absl/strings/str_cat.h"
 #include "riegeli/bytes/fd_writer.h"
 #include "riegeli/records/record_writer.h"
-#include "util/unicode_count.pb.h"
+#include "codepoint_count.pb.h"
 
 using absl::StrCat;
+using ift_encoder_data::CodepointCount;
 
 ABSL_FLAG(std::string, output_path, "", "Path to write the output file.");
 

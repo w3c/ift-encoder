@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "common/font_data.h"
 #include "common/font_helper.h"
@@ -43,12 +44,17 @@ absl::StatusOr<common::FontData> LoadFile(const char* path);
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
     const char* path);
 
-// Loads frequency data from https://github.com/w3c/ift-encoder-data
+// loads frequency data from https://github.com/w3c/ift-encoder-data
 //
 // name is the file name to load.
 // Append "@*" to the name to load all sharded files for a name.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
     const char* name);
+
+// Returns a list of all built-in frequency data sets and the codepoints
+// they cover.
+absl::StatusOr<absl::flat_hash_map<std::string, common::CodepointSet>>
+BuiltInFrequenciesList();
 
 // Given a filepath if it ends with @* this will expand the path into
 // the list of paths matching the pattern: <path>-?????-of-?????
