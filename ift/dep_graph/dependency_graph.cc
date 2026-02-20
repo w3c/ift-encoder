@@ -677,7 +677,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
   hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
 
   while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                   &dep_gid, &layout_tag, &ligature_set, &context_set)) {
+                                   &dep_gid, &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
     Node dest = Node::Glyph(dep_gid);
     if (table_tag == HB_TAG('G', 'S', 'U', 'B')) {
       if (context_set != HB_CODEPOINT_INVALID) {
@@ -807,7 +807,7 @@ flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge
     hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
     hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
     while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                     &dep_gid, &variation_selector, &ligature_set, &context_set)) {
+                                     &dep_gid, &variation_selector, &ligature_set, &context_set, nullptr /* flags */)) {
       if (table_tag != cmap) {
         continue;
       }

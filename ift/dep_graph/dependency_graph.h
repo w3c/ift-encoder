@@ -38,7 +38,11 @@ class DependencyGraph {
       hb_face_t* face) {
     auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
     auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
-    return DependencyGraph(segmentation_info, face, full_feature_set);
+    hb_depend_t* depend = hb_depend_from_face_or_fail(face);
+    if (!depend) {
+      return absl::InternalError("Call to hb_depend_from_face_or_fail() failed.");
+    }
+    return DependencyGraph(segmentation_info, depend, face, full_feature_set);
   }
 
   // Traverse the full dependency graph (segments, unicodes, and gids), starting at one or more
@@ -68,12 +72,13 @@ class DependencyGraph {
  private:
 
   DependencyGraph(const ift::encoder::RequestedSegmentationInformation* segmentation_info,
+                  hb_depend_t* depend,
                     hb_face_t* face, absl::flat_hash_set<hb_tag_t> full_feature_set)
       : segmentation_info_(segmentation_info),
         original_face_(common::make_hb_face(hb_face_reference(face))),
         full_feature_set_(full_feature_set),
         unicode_to_gid_(UnicodeToGid(face)),
-        dependency_graph_(hb_depend_from_face(face), &hb_depend_destroy),
+        dependency_graph_(depend, &hb_depend_destroy),
         variation_selector_implied_edges_(ComputeUVSEdges()) {}
 
   absl::StatusOr<Traversal> TraverseGraph(
