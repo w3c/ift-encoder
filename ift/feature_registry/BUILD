@@ -2,8 +2,9 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary")
 
+# Can be used to generate feature_registry.h when there is an update to the csv.
 genrule(
-    name = "feature_registry_h",
+    name = "generate_feature_registry_h",
     srcs = [
         "@ift_spec//:feature-registry.csv",
     ],
@@ -18,8 +19,8 @@ genrule(
 
 cc_library(
     name = "feature_registry",
-    srcs = [
-        ":feature_registry_h",
+    hdrs = [
+        "feature_registry.h",
     ],
     visibility = [
         "//ift/encoder:__pkg__",
