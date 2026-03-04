@@ -235,6 +235,86 @@ TEST_F(DependencyGraphTest, IgnoreUnreachable_Liga) {
   ASSERT_FALSE(traversal.HasPendingEdges());
 }
 
+TEST_F(DependencyGraphTest, ImpliedFeatureEdge) {
+  SubsetDefinition c2sc;
+  c2sc.feature_tags = {HB_TAG('c', '2', 's', 'c')};
+  Reconfigure(WithDefaultFeatures({'A'}), {
+    {{'B'}, ProbabilityBound::Zero()},
+    {c2sc, ProbabilityBound::Zero()},
+  });
+
+  /* ### s0 ### */
+  auto traversal = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
+    38, /* B */
+  }));
+  ASSERT_TRUE(traversal->HasPendingEdges());
+
+  /* ### s1 ### */
+  traversal = graph.ClosureTraversal({
+    Node::Segment(1),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
+    563, /* smcap A */
+  }));
+  ASSERT_TRUE(traversal->HasPendingEdges());
+
+  /* ### s0 + s1 ### */
+  traversal = graph.ClosureTraversal({
+    Node::Segment(0),
+    Node::Segment(1),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
+    38, /* B */
+    562, /* smcap B */
+    563, /* smcap A */
+  }));
+  ASSERT_FALSE(traversal->HasPendingEdges());
+}
+
+TEST_F(DependencyGraphTest, ImpliedFeatureEdge_Liga) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  Reconfigure({'f'}, {
+    {{'i'}, ProbabilityBound::Zero()},
+    {liga, ProbabilityBound::Zero()},
+  });
+
+  /* s0 constraints not satisfied */
+  auto traversal = graph.ClosureTraversal({
+    Node::Segment(0),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
+    77, /* i */
+  }));
+  ASSERT_TRUE(traversal->HasPendingEdges());
+
+  /* s0 + s1 all constraints satisfied */
+  traversal = graph.ClosureTraversal({
+    Node::Segment(0),
+    Node::Segment(1),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
+    /* f is in init */
+    77, /* i */
+    444, /* fi */
+    446, /* ffi */
+  }));
+  ASSERT_FALSE(traversal->HasPendingEdges());
+}
+
 // TODO(garretrieger):
 // - basic math, CFF, and COLR tests.
 

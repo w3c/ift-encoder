@@ -356,9 +356,9 @@ TEST_F(FontHelperTest, GvarData) {
 
   data = FontHelper::GvarData(roboto_vf.get(), 5);
   ASSERT_TRUE(data.ok()) << data.status();
-  ASSERT_EQ(data->size(), 250);
+  ASSERT_EQ(data->size(), 252);
   const uint8_t expected[11] = {0x80, 0x06, 0x00, 0x2c, 0x00, 0x2a,
-                                0x00, 0x02, 0x00, 0x26, 0x00};
+                                0x00, 0x04, 0x00, 0x26, 0x00};
   string_view expected_str((const char*)expected, 11);
   ASSERT_EQ(data->substr(0, 11), expected_str);
 }
@@ -448,7 +448,7 @@ TEST_F(FontHelperTest, GvarSharedTupleCount) {
 }
 
 TEST_F(FontHelperTest, GvarData_NotFound) {
-  auto data = FontHelper::GvarData(roboto_vf.get(), 1300);
+  auto data = FontHelper::GvarData(roboto_vf.get(), 1400);
   ASSERT_TRUE(absl::IsNotFound(data.status())) << data.status();
 }
 

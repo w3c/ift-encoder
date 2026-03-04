@@ -2,6 +2,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/font_helper.h"
 #include "common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
@@ -30,6 +31,7 @@ class DependencyClosureTest : public ::testing::Test {
     face(from_file("common/testdata/Roboto-Regular.ttf")),
     double_nested_face(from_file("common/testdata/double-nested-components.ttf")),
     noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
+    roboto_vf(from_file("common/testdata/Roboto[wdth,wght].ttf")),
     closure_cache(face.get()),
     segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures(), closure_cache, PATCH)),
     dependency_closure(*DependencyClosure::Create(segmentation_info.get(), face.get()))
@@ -138,6 +140,7 @@ class DependencyClosureTest : public ::testing::Test {
   hb_face_unique_ptr face;
   hb_face_unique_ptr double_nested_face;
   hb_face_unique_ptr noto_sans_jp;
+  hb_face_unique_ptr roboto_vf;
   GlyphClosureCache closure_cache;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   std::unique_ptr<DependencyClosure> dependency_closure;
@@ -355,7 +358,7 @@ TEST_F(DependencyClosureTest, Rejected_InitFontContext) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
-TEST_F(DependencyClosureTest, Rejected_Features) {
+TEST_F(DependencyClosureTest, Noop_Features) {
   SubsetDefinition features;
   features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));
   Reconfigure({}, {
@@ -366,7 +369,7 @@ TEST_F(DependencyClosureTest, Rejected_Features) {
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = RejectedAnalysis(1);
+  s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -606,6 +609,30 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
             (SegmentSet {0, 3, 4}));
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({4}),
             (SegmentSet {0, 3, 4}));
+}
+
+TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
+  SubsetDefinition init;
+  init.codepoints = {0x30}; /* zero */
+  init.gids = {20};
+
+  SubsetDefinition s0 {8320};
+  SubsetDefinition s1 {};
+  s1.feature_tags.insert(HB_TAG('s', 'u', 'b', 's'));
+
+  Reconfigure(roboto_vf.get(), init, {
+    /* 0 */ {s0, ProbabilityBound::Zero()},
+    /* 1 */ {s1, ProbabilityBound::Zero()},
+  });
+
+  Status s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = CompareAnalysis({0, 1});
+  ASSERT_TRUE(s.ok()) << s;
 }
 
 }  // namespace ift::encoder

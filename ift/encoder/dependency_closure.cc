@@ -44,20 +44,6 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const T
     return AnalysisAccuracy::INACCURATE;
   }
 
-  for (hb_tag_t tag : traversal.ContextLayoutFeatures()) {
-    // non init font context features implies conjunction.
-    if (!init_font_features_.contains(tag)) {
-      return AnalysisAccuracy::INACCURATE;
-    }
-  }
-
-  for (hb_tag_t tag : traversal.ReachedLayoutFeatures()) {
-    // non init font context features implies conjunction.
-    if (!init_font_features_.contains(tag)) {
-      return AnalysisAccuracy::INACCURATE;
-    }
-  }
-
   if (traversal.ReachedGlyphs().intersects(context_glyphs_)) {
     // A glyph which appears in a context may have complicated interactions with other segments
     // that aren't captured by the direct traversal.

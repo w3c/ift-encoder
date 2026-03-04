@@ -79,7 +79,9 @@ class DependencyGraph {
         full_feature_set_(full_feature_set),
         unicode_to_gid_(UnicodeToGid(face)),
         dependency_graph_(depend, &hb_depend_destroy),
-        variation_selector_implied_edges_(ComputeUVSEdges()) {}
+        variation_selector_implied_edges_(ComputeUVSEdges()),
+        layout_fature_implied_edges_(ComputeFeatureEdges())
+  {}
 
   absl::StatusOr<Traversal> TraverseGraph(
     TraversalContext* context
@@ -97,6 +99,20 @@ class DependencyGraph {
 
   absl::Status HandleGlyphOutgoingEdges(
     encoder::glyph_id_t gid,
+    TraversalContext* context
+  ) const;
+
+  absl::Status HandleGsubGlyphOutgoingEdges(
+    encoder::glyph_id_t source_gid,
+    encoder::glyph_id_t dest_gid,
+    hb_tag_t layout_tag,
+    hb_codepoint_t ligature_set,
+    hb_codepoint_t context_set,
+    TraversalContext* context
+  ) const;
+
+  absl::Status HandleFeatureOutgoingEdges(
+    hb_tag_t feature_tag,
     TraversalContext* context
   ) const;
 
@@ -136,9 +152,38 @@ class DependencyGraph {
     hb_codepoint_t gid;
   };
 
+  struct LayoutFeatureEdge {
+    hb_codepoint_t source_gid;
+    hb_codepoint_t dest_gid;
+    hb_codepoint_t ligature_set;
+    hb_codepoint_t context_set;
+
+    bool operator==(const LayoutFeatureEdge& other) const {
+      return source_gid == other.dest_gid &&
+        dest_gid == other.dest_gid &&
+        ligature_set == other.ligature_set &&
+        context_set == other.context_set;
+    }
+
+    bool operator<(const LayoutFeatureEdge& other) const {
+      if (source_gid != other.source_gid) {
+        return source_gid < other.source_gid;
+      }
+      if (dest_gid != other.dest_gid) {
+        return dest_gid < other.dest_gid;
+      }
+      if (ligature_set != other.ligature_set) {
+        return ligature_set < other.ligature_set;
+      }
+      return context_set < other.context_set;
+    }
+  };
+
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> ComputeUVSEdges() const;
+  absl::flat_hash_map<hb_tag_t, absl::btree_set<LayoutFeatureEdge>> ComputeFeatureEdges() const;
 
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> variation_selector_implied_edges_;
+  absl::flat_hash_map<hb_tag_t, absl::btree_set<LayoutFeatureEdge>> layout_fature_implied_edges_;
 };
 
 }  // namespace ift::dep_graph
