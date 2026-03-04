@@ -113,21 +113,24 @@ class PendingEdge {
     return edge;
   }
 
-  static PendingEdge Gsub(hb_tag_t feature, glyph_id_t gid) {
-    PendingEdge edge(Node::Glyph(gid), GSUB);
+  static PendingEdge Gsub(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid) {
+    PendingEdge edge(Node::Glyph(dest_gid), GSUB);
+    edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
     return edge;
   }
 
-  static PendingEdge Ligature(hb_tag_t feature, glyph_id_t gid, hb_codepoint_t liga_set_index) {
-    PendingEdge edge(Node::Glyph(gid), GSUB);
+  static PendingEdge Ligature(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid, hb_codepoint_t liga_set_index) {
+    PendingEdge edge(Node::Glyph(dest_gid), GSUB);
+    edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
     edge.required_liga_set_index_ = liga_set_index;
     return edge;
   }
 
-  static PendingEdge Context(hb_tag_t feature, glyph_id_t gid, hb_codepoint_t context_set_index) {
-    PendingEdge edge(Node::Glyph(gid), GSUB);
+  static PendingEdge Context(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid, hb_codepoint_t context_set_index) {
+    PendingEdge edge(Node::Glyph(dest_gid), GSUB);
+    edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
     edge.required_context_set_index_ = context_set_index;
     return edge;
@@ -145,6 +148,10 @@ class PendingEdge {
     const GlyphSet& reached_glyphs,
     const flat_hash_set<hb_tag_t>& reached_features
   ) const {
+
+    if (required_glyph_.has_value() && !reached_glyphs.contains(*required_glyph_)) {
+      return false;
+    }
 
     if (required_codepoints_.has_value() &&
         (!reached_unicodes.contains(required_codepoints_->first) ||
@@ -176,6 +183,7 @@ class PendingEdge {
   Node dest_;
   hb_tag_t table_tag_;
 
+  std::optional<glyph_id_t> required_glyph_ = std::nullopt;
   std::optional<hb_tag_t> required_feature_ = std::nullopt;
   std::optional<uint32_t> required_liga_set_index_ = std::nullopt;
   std::optional<uint32_t> required_context_set_index_ = std::nullopt;
@@ -330,31 +338,31 @@ class TraversalContext {
     return TraverseEdgeTo(dest, edge, cmap);
   }
 
-  Status TraverseGsubEdgeTo(glyph_id_t gid, hb_tag_t feature) {
-    PendingEdge edge = PendingEdge::Gsub(feature, gid);
-    Node dest = Node::Glyph(gid);
+  Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature) {
+    PendingEdge edge = PendingEdge::Gsub(source_gid, feature, dest_gid);
+    Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
-  Status TraverseContextualEdgeTo(glyph_id_t gid, hb_tag_t feature, hb_codepoint_t context_set) {
+  Status TraverseContextualEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature, hb_codepoint_t context_set) {
     if (!TRY(ContextSetSatisfied(depend, context_set, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::Context(feature, gid, context_set);
-    Node dest = Node::Glyph(gid);
+    PendingEdge edge = PendingEdge::Context(source_gid, feature, dest_gid, context_set);
+    Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
-  Status TraverseLigatureEdgeTo(glyph_id_t gid, hb_tag_t feature, hb_codepoint_t liga_set_index) {
+  Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature, hb_codepoint_t liga_set_index) {
     if (!TRY(LigaSetSatisfied(depend, liga_set_index, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::Ligature(feature, gid, liga_set_index);
-    Node dest = Node::Glyph(gid);
+    PendingEdge edge = PendingEdge::Ligature(source_gid, feature, dest_gid, liga_set_index);
+    Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
@@ -501,11 +509,13 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(TraversalContext* context) co
       HandleSegmentOutgoingEdges(next->Id(), context);
     }
 
+    if (next->IsFeature()) {
+      TRYV(HandleFeatureOutgoingEdges(next->Id(), context));
+    }
+
     if (next->IsInitFont()) {
       HandleSubsetDefinitionOutgoingEdges(segmentation_info_->InitFontSegment(), context);
     }
-
-    // Features don't have any outgoing edges
   }
 
   if (context->HasPendingEdges()) {
@@ -627,6 +637,14 @@ Status DependencyGraph::ClosureSubTraversal(
     start_nodes.insert(Node::Glyph(gid));
   }
 
+  if (table == GSUB) {
+    // For GSUB we also need to consider reached features as starting nodes
+    // since those have outgoing GSUB edges.
+    for (hb_tag_t feature : traversal_full.ReachedLayoutFeatures()) {
+      start_nodes.insert(Node::Feature(feature));
+    }
+  }
+
   TraversalContext context = *base_context;
   context.SetStartNodes(start_nodes);
   context.table_filter = {table};
@@ -680,13 +698,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
                                    &dep_gid, &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
     Node dest = Node::Glyph(dep_gid);
     if (table_tag == HB_TAG('G', 'S', 'U', 'B')) {
-      if (context_set != HB_CODEPOINT_INVALID) {
-        TRYV(context->TraverseContextualEdgeTo(dep_gid, layout_tag, context_set));
-      } else if (ligature_set != HB_CODEPOINT_INVALID) {
-        TRYV(context->TraverseLigatureEdgeTo(dep_gid, layout_tag, ligature_set));
-      } else {
-        TRYV(context->TraverseGsubEdgeTo(dep_gid, layout_tag));
-      }
+      TRYV(HandleGsubGlyphOutgoingEdges(gid, dep_gid, layout_tag, ligature_set, context_set, context));
       continue;
     }
 
@@ -699,6 +711,44 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
     }
   }
 
+  return absl::OkStatus();
+}
+
+Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
+  glyph_id_t source_gid,
+  glyph_id_t dest_gid,
+  hb_tag_t layout_tag,
+  hb_codepoint_t ligature_set,
+  hb_codepoint_t context_set,
+  TraversalContext* context
+) const {
+  if (context_set != HB_CODEPOINT_INVALID) {
+    return context->TraverseContextualEdgeTo(source_gid, dest_gid, layout_tag, context_set);
+  } else if (ligature_set != HB_CODEPOINT_INVALID) {
+    return context->TraverseLigatureEdgeTo(source_gid, dest_gid, layout_tag, ligature_set);
+  } else {
+    return context->TraverseGsubEdgeTo(source_gid, dest_gid, layout_tag);
+  }
+}
+
+Status DependencyGraph::HandleFeatureOutgoingEdges(
+    hb_tag_t feature_tag,
+    TraversalContext* context
+) const {
+  if (!context->table_filter.contains(GSUB)) {
+    // All feature edges are GSUB edges so we can skip
+    // this if GSUB is being filtered out.
+    return absl::OkStatus();
+  }
+
+  auto edges = layout_fature_implied_edges_.find(feature_tag);
+  if (edges == layout_fature_implied_edges_.end()) {
+    // No outgoing edges
+    return absl::OkStatus();
+  }
+  for (const auto& edge : edges->second) {
+    TRYV(HandleGsubGlyphOutgoingEdges(edge.source_gid, edge.dest_gid, feature_tag, edge.ligature_set, edge.context_set, context));
+  }
   return absl::OkStatus();
 }
 
@@ -820,6 +870,34 @@ flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge
       edges[variation_selector].push_back(VariationSelectorEdge {
         .unicode = u,
         .gid = dep_gid,
+      });
+    }
+  }
+
+  return edges;
+}
+
+flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>> DependencyGraph::ComputeFeatureEdges() const {
+  flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>> edges;
+
+  for (glyph_id_t gid = 0; gid < hb_face_get_glyph_count(original_face_.get()); gid++) {
+    hb_codepoint_t index = 0;
+    hb_tag_t table_tag = HB_CODEPOINT_INVALID;
+    hb_codepoint_t dest_gid = HB_CODEPOINT_INVALID;
+    hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
+    hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
+    hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
+    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
+                                     &dest_gid, &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
+      if (table_tag != GSUB || layout_tag == HB_CODEPOINT_INVALID) {
+        continue;
+      }
+
+      edges[layout_tag].insert(LayoutFeatureEdge {
+        .source_gid = gid,
+        .dest_gid = dest_gid,
+        .ligature_set = ligature_set,
+        .context_set = context_set,
       });
     }
   }
