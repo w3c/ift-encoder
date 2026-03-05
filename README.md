@@ -5,11 +5,11 @@ This code repository contains an implementation of an
 
 ## Status
 
-This implementation is still in the early stages and as at the moment is work in progress. 
+This implementation is still in the early stages and as at the moment is work in progress.
 We aim to keep it updated and consistent with the current IFT specification working draft
 found [here](https://w3c.github.io/IFT/Overview.html).
 
-The current implementation is capable of producing a spec-compliant encoding, but does not 
+The current implementation is capable of producing a spec-compliant encoding, but does not
 yet fully support all aspects of the specification. Notably:
 
 *  Format 1 patch maps are not generated.
@@ -32,6 +32,19 @@ and run all of the tests:
 ```sh
 bazel test ...
 ```
+
+### Building without Depedency Graph Support
+
+By default this depends on the experimental harfbuzz dependency graph API which isn't yet in mainline harfbuzz.
+The dependency graph functionality can be disabled at compile time using the `harfbuzz_dep_graph` build flag.
+For example:
+
+```sh
+bazel build --//:harfbuzz_dep_graph=False ...
+bazel test --//:harfbuzz_dep_graph=False ...
+```
+
+Disabling the harfbuzz dependency graph api will cause segmenter runs using the `CLOSURE_AND_DEP_GRAPH` and `CLOSURE_AND_VALIDATE_DEP_GRAPH` condition analysis modes to fail.
 
 ## Code Style
 

@@ -9,10 +9,6 @@ cc_library(
         "compiler.cc",
         "compiler.h",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
     visibility = [
         "//ift:__subpackages__",
         "//ift/client:__pkg__",
@@ -60,7 +56,6 @@ cc_library(
         "candidate_merge.h",
         "complex_condition_finder.cc",
         "complex_condition_finder.h",
-        "dependency_closure.cc",
         "dependency_closure.h",
         "estimated_patch_size_cache.cc",
         "estimated_patch_size_cache.h",
@@ -78,11 +73,14 @@ cc_library(
         "requested_segmentation_information.h",
         "segmentation_context.cc",
         "segmentation_context.h",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
+    ] + select({
+        "//:use_harfbuzz_dep_graph": [
+            "dependency_closure.cc",
+        ],
+        "//conditions:default": [
+            "dependency_closure_disabled.cc",
+        ],
+    }),
     visibility = [
     ],
     deps = [
@@ -145,9 +143,6 @@ cc_library(
         "subset_definition.h",
         "types.h",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-    ],
     visibility = [
         "//visibility:public",
     ],
@@ -203,10 +198,6 @@ cc_test(
     srcs = [
         "glyph_segmentation_test.cc",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
     data = [
         "//common:testdata",
         "//ift:testdata",
@@ -224,10 +215,6 @@ cc_test(
     size = "medium",
     srcs = [
         "complex_condition_finder_test.cc",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
     ],
     data = [
         "//common:testdata",
@@ -247,10 +234,6 @@ cc_test(
     srcs = [
         "closure_glyph_segmenter_test.cc",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
     data = [
         "//common:testdata",
         "//ift:testdata",
@@ -267,10 +250,6 @@ cc_test(
     size = "small",
     srcs = [
         "glyph_closure_cache_test.cc",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
     ],
     data = [
         "//common:testdata",
@@ -289,10 +268,6 @@ cc_test(
     data = [
         "//common:testdata",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
     deps = [
         ":segmentation_context",
         "//common",
@@ -306,10 +281,6 @@ cc_test(
     srcs = [
         "candidate_merge_test.cc",
         "mock_patch_size_cache.h",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
     ],
     data = [
         "//common:testdata",
@@ -339,13 +310,12 @@ cc_test(
 cc_test(
     name = "dependency_closure_test",
     size = "small",
-    srcs = [
-        "dependency_closure_test.cc",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
+    srcs = select({
+        "//:use_harfbuzz_dep_graph": [
+            "dependency_closure_test.cc",
+        ],
+        "//conditions:default": [],
+    }),
     data = [
         "//common:testdata",
     ],

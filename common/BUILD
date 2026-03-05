@@ -40,9 +40,6 @@ cc_library(
         "try.h",
         "woff2.h",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-    ],
     visibility = [
         "//visibility:public",
     ],

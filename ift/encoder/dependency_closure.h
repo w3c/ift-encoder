@@ -11,8 +11,11 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
-#include "ift/dep_graph/dependency_graph.h"
 #include "ift/encoder/types.h"
+
+#ifdef HB_DEPEND_API
+#include "ift/dep_graph/dependency_graph.h"
+#endif
 
 namespace ift::encoder {
 
@@ -29,10 +32,14 @@ class DependencyClosure {
   static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face) {
+#ifndef HB_DEPEND_API
+    return std::unique_ptr<DependencyClosure>(new DependencyClosure());
+#else
     dep_graph::DependencyGraph graph = TRY(dep_graph::DependencyGraph::Create(segmentation_info, face));
     auto result = std::unique_ptr<DependencyClosure>(new DependencyClosure(std::move(graph), segmentation_info, face));
     TRYV(result->SegmentsChanged(true, common::SegmentSet::all()));
     return result;
+#endif
   }
 
   enum AnalysisAccuracy {
@@ -90,6 +97,9 @@ class DependencyClosure {
 
  private:
 
+  #ifndef HB_DEPEND_API
+  DependencyClosure() {}
+  #else
   DependencyClosure(
     dep_graph::DependencyGraph&& graph,
     const RequestedSegmentationInformation* segmentation_info,
@@ -166,6 +176,7 @@ class DependencyClosure {
   absl::flat_hash_map<segment_index_t, common::GlyphSet> segment_context_glyphs_;
   absl::flat_hash_map<hb_tag_t, common::SegmentSet> segments_that_have_context_feature_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>> segment_context_features_;
+  #endif
 
   uint64_t accurate_results_ = 0;
   uint64_t inaccurate_results_ = 0;

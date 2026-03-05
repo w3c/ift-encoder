@@ -110,11 +110,17 @@ cc_library(
     ],
     copts = [
         "-DHAVE_CONFIG_H",
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
         "-Iexternal/w3c_patch_subset_incxfer/third_party/harfbuzz",
     ] + select({
         ":macos": ["-DHAVE_XLOCALE_H=1"],
+        "//conditions:default": [],
+    }),
+    defines = [
+        "HB_EXPERIMENTAL_API",
+    ] + select({
+        "@ift_encoder//:use_harfbuzz_dep_graph": [
+            "HB_DEPEND_API",
+        ],
         "//conditions:default": [],
     }),
     includes = [
