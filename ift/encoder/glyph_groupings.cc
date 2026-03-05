@@ -26,6 +26,7 @@ namespace ift::encoder {
 
 void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   unmapped_glyphs_.erase(gid);
+  found_condition_glyphs_.erase(gid);
 
   auto it = glyph_to_condition_.find(gid);
   if (it == glyph_to_condition_.end()) {
@@ -343,6 +344,7 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
           segmentation_info, glyph_condition_set, closure_cache,
           unmapped_glyphs_, inscope));
 
+  found_condition_glyphs_.union_set(unmapped_glyphs_);
   unmapped_glyphs_.clear();
   for (const auto& [s, g] : complex_conditions) {
     if (s.empty()) {

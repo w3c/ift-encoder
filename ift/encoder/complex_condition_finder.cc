@@ -103,7 +103,7 @@ struct Context {
                   SegmentSet to_be_tested, GlyphSet glyphs) {
     SegmentSet all = sub_condition;
     all.union_set(to_be_tested);
-    SubsetDefinition task_definition = CombinedDefinition(all);
+    SubsetDefinition task_definition = segmentation_info->CombinedDefinition(all);
     return Task{
         .full_condition = full_condition,
         .sub_condition = sub_condition,
@@ -138,7 +138,7 @@ struct Context {
 
   // Returns true if all glyphs are in the closure of segments.
   StatusOr<bool> InClosure(const SegmentSet& segments, const GlyphSet& glyphs) {
-    GlyphSet closure = TRY(SegmentClosure(segments));
+    GlyphSet closure = TRY(glyph_closure_cache->SegmentClosure(segmentation_info, segments));
     return glyphs.is_subset_of(closure);
   }
 
@@ -146,7 +146,7 @@ struct Context {
       const SegmentSet& segments, const GlyphSet& glyphs) {
     SegmentSet except = all_segments;
     except.subtract(segments);
-    GlyphSet closure_glyphs = TRY(SegmentClosure(except));
+    GlyphSet closure_glyphs = TRY(glyph_closure_cache->SegmentClosure(segmentation_info, except));
     closure_glyphs.intersect(glyphs);
 
     except.intersect(inscope_segments);
@@ -248,27 +248,6 @@ struct Context {
     queue.push_back(CreateTask(task.full_condition, {}, remaining,
                                additional_condition_glyphs));
     return absl::OkStatus();
-  }
-
-  SubsetDefinition CombinedDefinition(const SegmentSet& segments) {
-    // TODO(garretrieger): this approach is inefficient vs the subtraction
-    // method, add the special case path or remove use of this function in
-    // favour of incrementally produced defs.
-    SubsetDefinition def;
-    for (segment_index_t s : segments) {
-      def.Union(segmentation_info->Segments().at(s).Definition());
-    }
-
-    // Init font subset definition must be part of the closure input
-    // since it contributes to reachability of things.
-    def.Union(segmentation_info->InitFontSegment());
-
-    return def;
-  }
-
-  StatusOr<GlyphSet> SegmentClosure(const SegmentSet& segments) {
-    SubsetDefinition closure_def = CombinedDefinition(segments);
-    return glyph_closure_cache->GlyphClosure(closure_def);
   }
 };
 

@@ -124,6 +124,22 @@ class RequestedSegmentationInformation {
     return segments;
   }
 
+  SubsetDefinition CombinedDefinition(const common::SegmentSet& segments) const {
+    // TODO(garretrieger): this approach is inefficient vs the subtraction
+    // method, add the special case path or remove use of this function in
+    // favour of incrementally produced defs.
+    SubsetDefinition def;
+    for (segment_index_t s : segments) {
+      def.Union(Segments().at(s).Definition());
+    }
+
+    // Init font subset definition must be part of the closure input
+    // since it contributes to reachability of things.
+    def.Union(InitFontSegment());
+
+    return def;
+  }
+
  private:
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;

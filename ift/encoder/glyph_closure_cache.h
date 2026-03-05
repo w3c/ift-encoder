@@ -23,6 +23,18 @@ class GlyphClosureCache {
   absl::StatusOr<common::GlyphSet> GlyphClosure(
       const SubsetDefinition& segment);
 
+  absl::StatusOr<common::GlyphSet> SegmentClosure(
+    const RequestedSegmentationInformation* segmentation_info,
+    const common::SegmentSet& segments);
+
+  // Checks if a disjunction accross segments satisifies the closure require for glyphs,
+  // returns true if there are potential additional conditions beyond segments that may
+  // activate glyphs.
+  absl::StatusOr<bool> HasAdditionalConditions(
+      const RequestedSegmentationInformation* segmentation_info,
+      const common::SegmentSet& segments, const common::GlyphSet& glyphs);
+
+  // Analyzes the provided segments with AnalyzeSegment() and returns just the or_gids
   absl::StatusOr<common::GlyphSet> CodepointsToOrGids(
       const RequestedSegmentationInformation& segmentation_info,
       const common::SegmentSet& segment_ids);
