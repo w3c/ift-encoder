@@ -22,6 +22,8 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "common/woff2.h"
+#include "ift/encoder/activation_condition.h"
+#include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
@@ -114,6 +116,65 @@ static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
   }
 }
 
+// Returns true if the glyph groupings a and b are equivalent (not necessarily equal).
+//
+// Complex condition finding can return multiple possible valid conditions for a glyph
+// so for these we allowe differences as long as the closure condition is satisfied
+// (that is there are no additional conditions.)
+static StatusOr<bool> GlyphGroupingsAreEquivalent(
+  const SegmentationContext& context,
+  const GlyphGroupings& a,
+  const GlyphGroupings& b
+) {
+  if (a.ConditionsAndGlyphs() == b.ConditionsAndGlyphs()) {
+    return true;
+  }
+
+  for (glyph_id_t gid = 0; gid < hb_face_get_glyph_count(context.original_face.get()); gid++) {
+    auto maybe_cond_a = a.GlyphToCondition(gid);
+    auto maybe_cond_b = b.GlyphToCondition(gid);
+
+    if (maybe_cond_a.has_value() != maybe_cond_b.has_value()) {
+      return false;
+    }
+
+    if (!maybe_cond_a.has_value()) {
+      continue;
+    }
+
+    ActivationCondition cond_a = *maybe_cond_a;
+    ActivationCondition cond_b = *maybe_cond_b;
+
+    if (cond_a == cond_b) {
+      continue;
+    }
+
+    if (!a.FoundConditionGlyphs().contains(gid) || !b.FoundConditionGlyphs().contains(gid)) {
+      // diffs only allowed if gid is a found conditions gid in both a and b.
+      return false;
+    }
+
+    if (cond_a.conditions().size() > 1 || cond_b.conditions().size() > 1) {
+      // diffs only allowed for purely disjunctive conditions
+      return false;
+    }
+
+    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(&context.SegmentationInfo(),
+      cond_a.TriggeringSegments(), GlyphSet {gid}))) {
+      return false;
+    }
+
+    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(&context.SegmentationInfo(),
+      cond_b.TriggeringSegments(), GlyphSet {gid}))) {
+      return false;
+    }
+
+    // If no additional conditions are present on either side then we allow the diff.
+  }
+
+  return true;
+}
+
 /*
  * Checks that the incrementally generated glyph conditions and groupings in
  * context match what would have been produced by a non incremental process.
@@ -145,14 +206,18 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   TRYV(non_incremental_context.GroupGlyphs(
       context.SegmentationInfo().FullClosure(), {}));
 
+  bool glyph_groupings_diffs_allowed = false;
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
-    VLOG(0) << "-- incremental grouping";
-    VLOG(0) << "++ non-incremental grouping";
-    PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
-              non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
-    return absl::FailedPreconditionError(
-        "conditions_and_glyphs aren't correct.");
+    if (!TRY(GlyphGroupingsAreEquivalent(context, context.glyph_groupings, non_incremental_context.glyph_groupings))) {
+      VLOG(0) << "-- incremental grouping";
+      VLOG(0) << "++ non-incremental grouping";
+      PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
+                non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
+      return absl::FailedPreconditionError(
+          "conditions_and_glyphs aren't correct.");
+    }
+    glyph_groupings_diffs_allowed = true;
   }
 
   if (non_incremental_context.glyph_condition_set !=
@@ -160,7 +225,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     return absl::FailedPreconditionError("glyph_condition_set isn't correct.");
   }
 
-  if (non_incremental_context.glyph_groupings != context.glyph_groupings) {
+  if (!glyph_groupings_diffs_allowed &&
+      non_incremental_context.glyph_groupings != context.glyph_groupings) {
     return absl::FailedPreconditionError("glyph groups aren't correct.");
   }
 
@@ -538,6 +604,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         continue;
       }
 
+      VLOG(0) << "Last merge group finished. Producing final segmentation.";
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
       context.patch_size_cache->LogBrotliCallCount();

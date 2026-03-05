@@ -19,6 +19,28 @@ using common::FontHelper;
 
 namespace ift::encoder {
 
+StatusOr<common::GlyphSet> GlyphClosureCache::SegmentClosure(
+  const RequestedSegmentationInformation* segmentation_info,
+  const common::SegmentSet& segments) {
+  SubsetDefinition closure_def = segmentation_info->CombinedDefinition(segments);
+  return GlyphClosure(closure_def);
+}
+
+StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
+  const RequestedSegmentationInformation* segmentation_info,
+  const SegmentSet& segments,
+  const GlyphSet& glyphs
+) {
+  SegmentSet except;
+  if (!segmentation_info->Segments().empty()) {
+    except.insert_range(0, segmentation_info->Segments().size() - 1);
+  }
+  except.subtract(segments);
+
+  GlyphSet closure_glyphs = TRY(SegmentClosure(segmentation_info, except));
+  return closure_glyphs.intersects(glyphs);
+}
+
 StatusOr<common::GlyphSet> GlyphClosureCache::GlyphClosure(
     const SubsetDefinition& segment) {
   auto it = glyph_closure_cache_.find(segment);

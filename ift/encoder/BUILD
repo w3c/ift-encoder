@@ -263,6 +263,27 @@ cc_test(
 )
 
 cc_test(
+    name = "glyph_closure_cache_test",
+    size = "small",
+    srcs = [
+        "glyph_closure_cache_test.cc",
+    ],
+    copts = [
+        "-DHB_EXPERIMENTAL_API",
+        "-DHB_DEPEND_API",
+    ],
+    data = [
+        "//common:testdata",
+    ],
+    deps = [
+        ":encoder",
+        ":segmentation_info",
+        "//common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "glyph_groupings_test",
     srcs = ["glyph_groupings_test.cc"],
     data = [

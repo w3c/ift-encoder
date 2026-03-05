@@ -79,6 +79,10 @@ class GlyphGroupings {
   // which will be placed in the fallback (always loaded) patch.
   common::GlyphSet UnmappedGlyphs() const { return unmapped_glyphs_; }
 
+  // Returns the set of glyphs that were unmapped but had conditions
+  // found for them.
+  const common::GlyphSet& FoundConditionGlyphs() const { return found_condition_glyphs_; }
+
   // Returns a list of conditions which include segment.
   const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(
       segment_index_t segment) const {
@@ -333,6 +337,10 @@ class GlyphGroupings {
   // These glyphs aren't mapped by any conditions and as a result should be
   // included in the fallback patch.
   common::GlyphSet unmapped_glyphs_;
+
+  // These glyphs were previously considered unmapped, but have had conditions
+  // found for them.
+  common::GlyphSet found_condition_glyphs_;
 };
 
 }  // namespace ift::encoder
