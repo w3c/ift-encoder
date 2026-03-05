@@ -89,53 +89,49 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
   ASSERT_EQ(config_string, R"(unmapped_glyph_handling: FIND_CONDITIONS
 generate_table_keyed_segments: true
 brotli_quality: 11
+brotli_quality_for_initial_font_merging: 11
+base_heuristic_config {
+  min_patch_size: 2500
+}
 base_cost_config {
   use_bigrams: true
   min_group_size: 4
-  optimization_cutoff_fraction: 0.01
-}
-ungrouped_config {
-  min_patch_size: 2500
+  optimization_cutoff_fraction: 0.005
 }
 preprocess_merging_group_size_for_ungrouped: 4
 merge_groups {
   name: "Cyrillic"
-  preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.001
+  preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "Script_cyrillic.riegeli"
   }
 }
 merge_groups {
   name: "Greek"
-  preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.001
+  preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "Script_greek.riegeli"
   }
 }
 merge_groups {
   name: "Latin"
-  preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.001
+  preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "Script_latin.riegeli"
     initial_font_merge_threshold: -60
-    initial_font_merge_probability_threshold: 0.4
+    initial_font_merge_probability_threshold: 0.25
   }
 }
 merge_groups {
   name: "Symbols"
-  preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.001
+  preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "Script_symbols.riegeli"
   }
 }
 merge_groups {
   name: "Fallback"
-  preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.001
+  preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "fallback.riegeli"
   }
@@ -273,6 +269,26 @@ TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
     ASSERT_TRUE(base_script.ok())
         << "No mapping for " << language << ": " << base_script.status();
   }
+}
+
+TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      face_.get(), std::nullopt, 1);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_EQ(config_or->brotli_quality(), 0);
+  EXPECT_EQ(config_or->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
+  EXPECT_EQ(config_or->base_cost_config().use_bigrams(), false);
+  EXPECT_EQ(config_or->brotli_quality_for_initial_font_merging(), 0);
+  EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
+
+  auto config_or_8 = AutoSegmenterConfig::GenerateConfig(
+      face_.get(), std::nullopt, 8);
+  ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
+  EXPECT_EQ(config_or_8->brotli_quality(), 11);
+  EXPECT_EQ(config_or_8->unmapped_glyph_handling(), FIND_CONDITIONS);
+  EXPECT_EQ(config_or_8->base_cost_config().use_bigrams(), true);
+  EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
+  EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(), 0.005);
 }
 
 }  // namespace

@@ -1,9 +1,9 @@
 #include <google/protobuf/text_format.h>
 
 #include <cstdint>
-#include <cstdio>
 #include <iostream>
 #include <vector>
+#include <chrono>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
@@ -42,6 +42,9 @@ ABSL_FLAG(
     std::string, config, "config.textpb",
     "Path to a text proto file containing the configuration for the segmenter. "
     "Should contain a single SegmenterConfig message.");
+
+ABSL_FLAG(int, auto_config_quality, 0,
+          "The quality level to use when auto_config is enabled. A value of 0 means auto pick. Valid values are 1-8.");
 
 ABSL_FLAG(bool, auto_config, false,
           "If set the segmenter configuration will be automatically generated "
@@ -95,8 +98,12 @@ using util::SegmenterConfigUtil;
 
 static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
   if (absl::GetFlag(FLAGS_auto_config)) {
+    std::optional<int> quality_level = std::nullopt;
+    if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
+      quality_level = absl::GetFlag(FLAGS_auto_config_quality);
+    }
     return AutoSegmenterConfig::GenerateConfig(
-        font, absl::GetFlag(FLAGS_primary_script));
+        font, absl::GetFlag(FLAGS_primary_script), quality_level);
   }
 
   FontData config_text =
@@ -143,7 +150,7 @@ static Status Analysis(hb_face_t* font,
     group_index++;
   }
 
-  std::cerr << "total_cost_across_groups = " << overall_cost << std::endl;
+  std::cerr << "total_cost_across_groups = " << (uint64_t) overall_cost << std::endl;
 
   return absl::OkStatus();
 }
@@ -224,8 +231,13 @@ static Status Main(const std::vector<char*> args) {
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
       config.unmapped_glyph_handling(), config.condition_analysis_mode());
+
+  auto start_time = std::chrono::high_resolution_clock::now();
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       font.get(), init_segment, segments, merge_groups));
+  auto end_time = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> duration = end_time - start_time;
+  std::cerr << "CodepointToGlyphSegments took: " << duration.count() << " seconds" << std::endl;
 
   if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
     SegmentationPlan plan = segmentation.ToSegmentationPlanProto();

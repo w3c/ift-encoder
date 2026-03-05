@@ -21,7 +21,8 @@ class AutoSegmenterConfig {
   //                 Defaults to "Script_latin" if not provided.
   static absl::StatusOr<SegmenterConfig> GenerateConfig(
       hb_face_t* face,
-      std::optional<std::string> primary_script = std::nullopt);
+      std::optional<std::string> primary_script = std::nullopt,
+      std::optional<int> quality_level = std::nullopt);
 
   // Returns the base script for a given language.
   // For example, "Language_fr" -> "Script_latin".
