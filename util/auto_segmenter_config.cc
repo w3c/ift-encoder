@@ -27,6 +27,29 @@ namespace util {
 
 static constexpr uint32_t kMinimumGroupSize = 4;
 
+// Quality Table:
+// Quality | bigrams | find conditions | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging | preprocess threshold
+// 1       | No      | No              | 0           | 0               | 60%                       | 5%          | Yes                | 5%
+// 2       | Yes     | No              | 0           | 0               | 55%                       | 4%          | Yes                | 4%
+// 3       | Yes     | Yes             | 0           | 0               | 50%                       | 3%          | Yes                | 3%
+// 4       | Yes     | Yes             | 0           | 9               | 45%                       | 2%          | Yes                | 2%
+// 5       | Yes     | Yes             | 9           | 9               | 40%                       | 1%          | Yes                | 1%
+// 6       | Yes     | Yes             | 9           | 11              | 30%                       | 0.5%        | Yes                | 0.5%
+// 7       | Yes     | Yes             | 11          | 11              | 25%                       | 0.5%        | Yes                | 0.05%
+// 8       | Yes     | Yes             | 11          | 11              | 25%                       | 0.5%        | No                 | na
+enum Quality {
+  MIN = 1, // Alias for ONE
+  ONE = 1,
+  TWO = 2,
+  THREE = 3,
+  FOUR = 4,
+  FIVE = 5,
+  SIX = 6,
+  SEVEN = 7,
+  EIGHT = 8,
+  MAX = 8, // Alias for EIGHT
+};
+
 // TODO(garretrieger): define a very basic set of quality levels first (see next TODO),
 //   start with just a lowest and highest to set the upper and lower bounds for quality
 //   settings (maybe also a mid point). To begin use number of codepoints to select quality
@@ -464,24 +487,140 @@ static Status ApplyPrimaryScript(
   return absl::OkStatus();
 }
 
+static void ApplyQualityLevelTo(Quality quality, HeuristicConfiguration& config) {
+  config.set_min_patch_size(2500);
+}
+
+static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
+  config.set_min_group_size(kMinimumGroupSize);
+
+  if (quality == ONE) {
+    config.set_use_bigrams(false);
+  } else {
+    config.set_use_bigrams(true);
+  }
+
+  switch (quality) {
+    case ONE: config.set_optimization_cutoff_fraction(0.05); break;
+    case TWO: config.set_optimization_cutoff_fraction(0.04); break;
+    case THREE: config.set_optimization_cutoff_fraction(0.03); break;
+    case FOUR: config.set_optimization_cutoff_fraction(0.02); break;
+    case FIVE: config.set_optimization_cutoff_fraction(0.01); break;
+    case SIX:
+    case SEVEN:
+    case EIGHT:
+    default: config.set_optimization_cutoff_fraction(0.005); break;
+  }
+}
+
+static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
+  if (merge_group.has_cost_config()) {
+    if (quality >= ONE && quality <= SEVEN) {
+      merge_group.set_preprocess_merging_group_size(kMinimumGroupSize);
+    } else {
+      merge_group.set_preprocess_merging_group_size(1);
+    }
+
+    switch (quality) {
+      case ONE: merge_group.set_preprocess_merging_probability_threshold(0.05); break;
+      case TWO: merge_group.set_preprocess_merging_probability_threshold(0.04); break;
+      case THREE: merge_group.set_preprocess_merging_probability_threshold(0.03); break;
+      case FOUR: merge_group.set_preprocess_merging_probability_threshold(0.02); break;
+      case FIVE: merge_group.set_preprocess_merging_probability_threshold(0.01); break;
+      case SIX: merge_group.set_preprocess_merging_probability_threshold(0.005); break;
+      case SEVEN: merge_group.set_preprocess_merging_probability_threshold(0.0005); break;
+      case EIGHT:
+      default: merge_group.clear_preprocess_merging_probability_threshold(); break;
+    }
+
+    if (merge_group.mutable_cost_config()->has_initial_font_merge_threshold()) {
+      switch (quality) {
+        case ONE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.60); break;
+        case TWO: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.55); break;
+        case THREE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.50); break;
+        case FOUR: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.45); break;
+        case FIVE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.40); break;
+        case SIX: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.30); break;
+        case SEVEN:
+        case EIGHT:
+        default: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.25); break;
+      }
+    }
+  }
+}
+
+static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
+  config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize);
+
+  if (quality == ONE || quality == TWO) {
+    config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
+  } else {
+    config.set_unmapped_glyph_handling(FIND_CONDITIONS);
+  }
+
+  switch (quality) {
+    case ONE:
+    case TWO:
+    case THREE:
+      config.set_brotli_quality(0);
+      break;
+    case FOUR:
+    case FIVE:
+      config.set_brotli_quality(9);
+      break;
+    case SIX:
+    case SEVEN:
+    case EIGHT:
+    default:
+      config.set_brotli_quality(11);
+      break;
+  }
+
+  switch (quality) {
+    case ONE:
+    case TWO:
+    case THREE:
+    case FOUR:
+      config.set_brotli_quality_for_initial_font_merging(0);
+      break;
+    case FIVE:
+    case SIX:
+      config.set_brotli_quality_for_initial_font_merging(9);
+      break;
+    case SEVEN:
+    case EIGHT:
+    default:
+      config.set_brotli_quality_for_initial_font_merging(11);
+      break;
+  }
+
+  ApplyQualityLevelTo(quality, *config.mutable_base_heuristic_config());
+  ApplyQualityLevelTo(quality, *config.mutable_base_cost_config());
+
+  for (auto& merge_group : *config.mutable_merge_groups()) {
+    ApplyQualityLevelTo(quality, merge_group);
+  }
+}
+
 absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
-    hb_face_t* face, std::optional<std::string> primary_script) {
+    hb_face_t* face, std::optional<std::string> primary_script, std::optional<int> quality_level) {
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
   config.set_generate_feature_segments(true);
-  config.set_unmapped_glyph_handling(FIND_CONDITIONS);
   config.set_condition_analysis_mode(CLOSURE_AND_DEP_GRAPH);
 
   auto* base_plan = config.mutable_base_segmentation_plan();
   base_plan->set_jump_ahead(2);
   base_plan->set_use_prefetch_lists(true);
 
-  config.mutable_ungrouped_config()->set_min_patch_size(2500);
-
   // Collect codepoints
   auto freq_list = TRY(BuiltInFrequenciesList());
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   uint32_t cp_count = unicodes.size();
+  Quality quality = cp_count > 2000 ? MIN : MAX;
+  if (quality_level.has_value() && quality_level.value() >= ONE && quality_level.value() <= MAX) {
+    quality = static_cast<Quality>(quality_level.value());
+  }
 
   // Detect scripts by intersection with frequency data
   btree_set<std::string> detected_scripts = DetectScripts(freq_list, unicodes);
@@ -491,18 +630,6 @@ absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // (including accounting for pairs only within merge groups), and then select
   // the cutoffs and premerging to keep the number of brotli ops within a
   // specific range.
-  auto* base_cost = config.mutable_base_cost_config();
-  base_cost->set_use_bigrams(true);
-  base_cost->set_min_group_size(
-      kMinimumGroupSize);  // as recommended by the spec.
-  config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize);
-  base_cost->set_optimization_cutoff_fraction(0.01);
-
-  if (cp_count > 2000) {
-    config.set_brotli_quality(9);
-  } else {
-    config.set_brotli_quality(11);
-  }
 
   TRYV(ApplyPrimaryScript(freq_list, primary_script.value_or("Script_latin"),
                           detected_scripts));
@@ -515,19 +642,14 @@ absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     mg->set_name(ScriptName(script));
     auto* cost = mg->mutable_cost_config();
 
-    // TODO(garretrieger): use a heuristic to select probability threshold based
-    // on estimated number of brotli ops (assuming O(n^2) on codepoints in the
-    // group).
-    mg->set_preprocess_merging_group_size(kMinimumGroupSize);
-    mg->set_preprocess_merging_probability_threshold(0.001);
-
     cost->set_built_in_freq_data_name(script);
     if (script == primary_script_file) {
       // TODO(garretrieger): customize these values based on the quality level
       cost->set_initial_font_merge_threshold(-60);
-      cost->set_initial_font_merge_probability_threshold(0.40);
     }
   }
+
+  ApplyQualityLevelTo(quality, config);
 
   return config;
 }

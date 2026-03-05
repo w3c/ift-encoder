@@ -20,6 +20,9 @@ ABSL_FLAG(std::string, input_font, "in.ttf",
 ABSL_FLAG(std::string, primary_script, "Script_latin",
           "The primary script or language frequency data file to use.");
 
+ABSL_FLAG(int, quality, 0,
+          "The quality level to use. A value of 0 means auto pick. Valid values are 1-8.");
+
 using absl::Status;
 using common::hb_face_unique_ptr;
 using util::AutoSegmenterConfig;
@@ -29,8 +32,13 @@ static Status Main(const std::vector<char*> args) {
   auto font_data = TRY(util::LoadFile(input_font_path.c_str()));
   hb_face_unique_ptr font = font_data.face();
 
+  std::optional<int> quality_level = std::nullopt;
+  if (absl::GetFlag(FLAGS_quality) > 0) {
+    quality_level = absl::GetFlag(FLAGS_quality);
+  }
+
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), absl::GetFlag(FLAGS_primary_script)));
+      font.get(), absl::GetFlag(FLAGS_primary_script), quality_level));
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {
