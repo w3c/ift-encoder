@@ -16,6 +16,7 @@ bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "rules_rust", version = "0.68.1")
 bazel_dep(name = "glib", version = "2.82.2.bcr.7")
 bazel_dep(name = "brotli", version = "1.2.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 
 # Frequency Data
 bazel_dep(name = "ift_encoder_data", version = "git")

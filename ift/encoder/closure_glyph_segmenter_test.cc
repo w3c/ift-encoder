@@ -36,9 +36,16 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
         segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY),
 
+#ifdef HB_DEPEND_API
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH),
         segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH),
-        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH) {
+        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH)
+#else
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY),
+        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
+        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY)
+#endif
+         {
     roboto = from_file("common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");

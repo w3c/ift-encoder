@@ -57,9 +57,6 @@ cc_test(
         "table_keyed_diff_test.cc",
         "url_template_test.cc",
     ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-    ],
     data = [
         "//common:testdata",
         "//ift:testdata",
@@ -79,9 +76,6 @@ cc_test(
     size = "medium",
     srcs = [
         "integration_test.cc",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
     ],
     data = [
         "//common:testdata",

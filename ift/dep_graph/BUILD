@@ -1,18 +1,18 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+
 cc_library(
     name = "dep_graph",
-    srcs = [
-        "dependency_graph.h",
-        "dependency_graph.cc",
-        "node.h",
-        "traversal.h",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
+    srcs = select({
+        "//:use_harfbuzz_dep_graph": [
+            "dependency_graph.h",
+            "dependency_graph.cc",
+            "node.h",
+            "traversal.h",
+        ],
+        "//conditions:default": [],
+    }),
     visibility = [
         "//ift/encoder:__pkg__",
     ],
@@ -31,13 +31,12 @@ cc_library(
 cc_test(
     name = "dependency_graph_test",
     size = "small",
-    srcs = [
-        "dependency_graph_test.cc",
-    ],
-    copts = [
-        "-DHB_EXPERIMENTAL_API",
-        "-DHB_DEPEND_API",
-    ],
+    srcs = select({
+        "//:use_harfbuzz_dep_graph": [
+            "dependency_graph_test.cc",
+        ],
+        "//conditions:default": [],
+    }),
     data = [
         "//common:testdata",
     ],
