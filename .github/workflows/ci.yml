@@ -22,6 +22,10 @@ jobs:
         run: |
           "${GITHUB_WORKSPACE}/bin/bazel" test -c opt ... --test_output=all
 
+      - name: Test (Default Build, No Dep Graph)
+        run: |
+          "${GITHUB_WORKSPACE}/bin/bazel" test --//:harfbuzz_dep_graph=False ... --test_output=all
+
   check_tests_osx:
     name: Check Tests (Mac OS)
     runs-on: macos-latest
