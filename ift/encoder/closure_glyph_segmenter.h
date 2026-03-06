@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 
+#include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
@@ -11,6 +12,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 #include "util/common.pb.h"
+#include "util/segmentation_plan.pb.h"
 #include "util/segmenter_config.pb.h"
 
 namespace ift::encoder {
@@ -88,6 +90,12 @@ class ClosureGlyphSegmenter {
                             const GlyphSegmentation& segmentation,
                             uint32_t& fallback_glyphs_size,
                             uint32_t& all_glyphs_size) const;
+
+  static void AddTableKeyedSegments(
+      SegmentationPlan& plan,
+      const absl::btree_map<common::SegmentSet, MergeStrategy>& merge_groups,
+      const std::vector<SubsetDefinition>& segments,
+      const SubsetDefinition& init_segment);
 
  private:
   uint32_t brotli_quality_;
