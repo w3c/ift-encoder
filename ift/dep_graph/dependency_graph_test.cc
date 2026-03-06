@@ -318,8 +318,8 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge_Liga) {
 // TODO(garretrieger):
 // - basic math, CFF, and COLR tests.
 
-// TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DepedencyClosureTest
-// for coverage of DepedencyGraph functionality. We should add some basic tests here that test DepedencyGraph
+// TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DependencyClosureTest
+// for coverage of DependencyGraph functionality. We should add some basic tests here that test DepedencyGraph
 // core features in isolation.
 
 }  // namespace ift::dep_graph

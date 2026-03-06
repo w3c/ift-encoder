@@ -28,7 +28,7 @@ using ift::dep_graph::Traversal;
 namespace ift::encoder {
 
 DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(const Traversal& traversal) const {
-  // TODO(garretrieger): there's several types of depedencies that we do not handle yet and as a result
+  // TODO(garretrieger): there's several types of dependencies that we do not handle yet and as a result
   // consider inaccurate. Adding support for these will allow the dep graph to be used more widely:
   // - UVS edges: more complex case is generating conjunctive conditions from them.
   // - Ligatures: at least in simple non-nested cases we should be able to generate the corresponding conditions.

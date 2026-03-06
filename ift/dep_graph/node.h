@@ -10,7 +10,7 @@
 
 namespace ift::dep_graph {
 
-// A single node in a fonts glyph depedency graph.
+// A single node in a fonts glyph dependency graph.
 class Node {
  public:
   enum NodeType {

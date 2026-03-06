@@ -7,17 +7,17 @@ enum ConditionAnalysisMode {
   // Analyzes glyph conditions using closure analysis only.
   CLOSURE_ONLY = 0;
 
-  // Attempts to analyze glyph conditions using a depedency
+  // Attempts to analyze glyph conditions using a dependency
   // graph where possible. When not possible it falls back
   // to closure analysis. This is for many cases much faster
-  // then pure closure based analysis. However, the depedency
+  // then pure closure based analysis. However, the dependency
   // graph approach is still experimental and may (rarely) produce
   // different results than the pure closure analysis approach.
   CLOSURE_AND_DEP_GRAPH = 1;
 
-  // Always runs both closure and depedency graph analysis, the
+  // Always runs both closure and dependency graph analysis, the
   // results are compared and an error is raised if they differ.
-  // Useful primarily for testing the accuracy of the depedency
+  // Useful primarily for testing the accuracy of the dependency
   // graph approach.
   CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
 }

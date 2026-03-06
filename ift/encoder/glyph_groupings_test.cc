@@ -635,7 +635,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
 }
 
 #ifdef HB_DEPEND_API
-TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDepedencyGraph) {
+TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDependencyGraph) {
   std::unique_ptr<DependencyClosure> dep_closure = *DependencyClosure::Create(
     requested_segmentation_info_complex_.get(), roboto_.get());
 
