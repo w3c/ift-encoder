@@ -734,4 +734,37 @@ Status ClosureGlyphSegmenter::FallbackCost(
   return absl::OkStatus();
 }
 
+void ClosureGlyphSegmenter::AddTableKeyedSegments(
+    SegmentationPlan& plan,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const std::vector<SubsetDefinition>& segments,
+    const SubsetDefinition& init_segment) {
+  std::vector<SubsetDefinition> table_keyed_segments;
+  for (const auto& [segment_ids, _] : merge_groups) {
+    SubsetDefinition new_segment;
+    for (uint32_t s : segment_ids) {
+      new_segment.Union(segments.at(s));
+    }
+    new_segment.Subtract(init_segment);
+    table_keyed_segments.push_back(new_segment);
+  }
+
+  uint32_t max_id = 0;
+  for (const auto& [id, _] : plan.segments()) {
+    if (id > max_id) {
+      max_id = id;
+    }
+  }
+
+  uint32_t next_id = max_id + 1;
+  auto* plan_segments = plan.mutable_segments();
+  for (const SubsetDefinition& def : table_keyed_segments) {
+    GlyphSegmentation::SubsetDefinitionToSegment(def,
+                                                 (*plan_segments)[next_id]);
+    SegmentsProto* segment_ids = plan.add_non_glyph_segments();
+    segment_ids->add_values(next_id);
+    next_id++;
+  }
+}
+
 }  // namespace ift::encoder

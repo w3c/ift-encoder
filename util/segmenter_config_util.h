@@ -4,16 +4,28 @@
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
+#include "hb.h"
+#include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "util/segmentation_plan.pb.h"
 #include "util/segmenter_config.pb.h"
 
 namespace util {
+
+struct SegmentationResult {
+  ift::encoder::GlyphSegmentation segmentation;
+  SegmentationPlan plan;
+  absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy> merge_groups;
+};
 
 class SegmenterConfigUtil {
  public:
   SegmenterConfigUtil(std::string config_file_path)
       : config_file_path_(config_file_path) {}
+
+  absl::StatusOr<SegmentationResult> RunSegmenter(
+      hb_face_t* face, const SegmenterConfig& config);
 
   ift::encoder::SubsetDefinition SegmentProtoToSubsetDefinition(
       const SegmentProto& segment);

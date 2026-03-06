@@ -64,9 +64,15 @@ cc_binary(
     srcs = [
         "font2ift.cc",
     ],
+    data = [
+        "@ift_encoder_data//:freq_data",
+    ],
     deps = [
+        ":auto_config_flags",
+        ":auto_segmenter_config",
         ":load_codepoints",
         ":segmentation_plan_cc_proto",
+        ":segmenter_config_util",
         "//common",
         "//ift",
         "//ift/encoder",
@@ -76,6 +82,7 @@ cc_binary(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
+        "//util:segmenter_config_cc_proto",
     ],
 )
 
@@ -103,6 +110,7 @@ cc_binary(
         "@ift_encoder_data//:freq_data",
     ],
     deps = [
+        ":auto_config_flags",
         ":auto_segmenter_config",
         ":load_codepoints",
         ":segmentation_plan_cc_proto",
@@ -135,6 +143,16 @@ cc_binary(
         "@abseil-cpp//absl/log:initialize",
         "@abseil-cpp//absl/status:status",
         "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "auto_config_flags",
+    srcs = ["auto_config_flags.cc"],
+    hdrs = ["auto_config_flags.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/flags:flag",
     ],
 )
 
@@ -203,10 +221,12 @@ cc_library(
     ],
     deps = [
         ":load_codepoints",
+        ":segmentation_plan_cc_proto",
         ":segmenter_config_cc_proto",
         "//common",
         "//ift/encoder",
         "@abseil-cpp//absl/status:statusor",
+        "@harfbuzz",
     ],
 )
 
