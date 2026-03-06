@@ -197,7 +197,7 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
     if (and_gids != dep_and_gids ||
         or_gids != dep_or_gids ||
         exclusive_gids != dep_exclusive_gids) {
-      LOG(ERROR) << "Mismatch between closure and depedency analysis conditions for segments " << segment_ids.ToString();
+      LOG(ERROR) << "Mismatch between closure and dependency analysis conditions for segments " << segment_ids.ToString();
       for (segment_index_t s : segment_ids) {
         LOG(ERROR) << "segment[" << s << "].codepoints = " << segmentation_info_->Segments().at(s).Definition().codepoints.ToString();
         LOG(ERROR) << "segment[" << s << "].features.size() = " << segmentation_info_->Segments().at(s).Definition().feature_tags.size();
@@ -207,7 +207,7 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
       PrintDiff("EXC", exclusive_gids, dep_exclusive_gids);
       LOG(ERROR) << "init codepoints = " << segmentation_info_->InitFontSegment().codepoints.ToString();
       LOG(ERROR) << "init glyphs = " << segmentation_info_->InitFontGlyphs().ToString();
-      return absl::InternalError("Depedency graph conditions does not match the closure analysis conditions");
+      return absl::InternalError("Dependency graph conditions does not match the closure analysis conditions");
     }
   }
 

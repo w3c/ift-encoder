@@ -27,9 +27,9 @@ namespace ift::dep_graph {
 class TraversalContext;
 
 /*
- * Wrapper around harfbuzz's glyph depedency graph API.
+ * Wrapper around harfbuzz's glyph dependency graph API.
  *
- * Allows exploring glyph depedencies within a font.
+ * Allows exploring glyph dependencies within a font.
  */
 class DependencyGraph {
  public:

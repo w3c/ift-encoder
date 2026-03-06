@@ -22,7 +22,7 @@ namespace ift::encoder {
 class RequestedSegmentationInformation;
 
 /*
- * Performs closure analysis (like GlyphClosureCache) using a depedency graph
+ * Performs closure analysis (like GlyphClosureCache) using a dependency graph
  * instead of closure. The dependency graph is not always accurate (overestimating
  * the true closure in some cases) so this returns a signal on the accuracy of
  * the analysis.
@@ -86,7 +86,7 @@ class DependencyClosure {
   // Finds the complete set of segments that may have some interaction on the presence of glyphs
   // in the glyph closure.
   //
-  // Utilizes the depedency graph to make the determination, so it's possible that the result
+  // Utilizes the dependency graph to make the determination, so it's possible that the result
   // may be overestimated.
   absl::StatusOr<common::SegmentSet> SegmentsThatInteractWith(const common::GlyphSet& glyphs);
 

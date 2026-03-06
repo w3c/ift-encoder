@@ -33,7 +33,7 @@ and run all of the tests:
 bazel test ...
 ```
 
-### Building without Depedency Graph Support
+### Building without Dependency Graph Support
 
 By default this depends on the experimental harfbuzz dependency graph API which isn't yet in mainline harfbuzz.
 The dependency graph functionality can be disabled at compile time using the `harfbuzz_dep_graph` build flag.
