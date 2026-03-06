@@ -19,6 +19,11 @@ class AutoSegmenterConfig {
   // primary_script: an optional name of a script or language frequency data
   //                 file (e.g., "Script_cyrillic", "Language_fr").
   //                 Defaults to "Script_latin" if not provided.
+  //
+  // quality_level: ranges from 1-8, sets the segmenting time to segmentation
+  //                quality tradeoff. Lower values have shorter segmenting times,
+  //                high values have longer segmenting times but typically results
+  //                in better segmentation quality.
   static absl::StatusOr<SegmenterConfig> GenerateConfig(
       hb_face_t* face,
       std::optional<std::string> primary_script = std::nullopt,

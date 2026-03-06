@@ -2,7 +2,6 @@
 
 #include <cctype>
 #include <string>
-#include <unordered_map>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
@@ -49,12 +48,6 @@ enum Quality {
   EIGHT = 8,
   MAX = 8, // Alias for EIGHT
 };
-
-// TODO(garretrieger): define a very basic set of quality levels first (see next TODO),
-//   start with just a lowest and highest to set the upper and lower bounds for quality
-//   settings (maybe also a mid point). To begin use number of codepoints to select quality
-//   level. Do some testing on segmentation times at low and high to get a sense of
-//   how times are impacted.
 
 // TODO(garretrieger): do something analagous to brotli quality levels
 // where we define a series of levels which correspond to a set of
@@ -291,7 +284,7 @@ StatusOr<std::string> AutoSegmenterConfig::GetBaseScriptForLanguage(
   }
 
   static const auto* lang_to_script =
-      new std::unordered_map<std::string, std::string>{
+      new flat_hash_map<std::string, std::string> {
           {"Language_af", "Script_latin"},
           {"Language_ak", "Script_latin"},
           {"Language_am", "Script_ethiopic"},
@@ -602,7 +595,7 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   }
 }
 
-absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
+StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     hb_face_t* face, std::optional<std::string> primary_script, std::optional<int> quality_level) {
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
@@ -617,9 +610,22 @@ absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   auto freq_list = TRY(BuiltInFrequenciesList());
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   uint32_t cp_count = unicodes.size();
-  Quality quality = cp_count > 2000 ? MIN : MAX;
-  if (quality_level.has_value() && quality_level.value() >= ONE && quality_level.value() <= MAX) {
+
+  // TODO(garretrieger): more sophisticated scheme for auto picking quality level.
+  // roughly we want to estimate the expected cost of each quality level and pick
+  // based on that.
+  Quality quality = THREE;
+  if (cp_count <= 1000) {
+    quality = MAX;
+  } else if (cp_count <= 3000) {
+    quality_level = SIX;
+  }
+
+  if (quality_level.has_value() && quality_level.value() >= MIN && quality_level.value() <= MAX) {
     quality = static_cast<Quality>(quality_level.value());
+    VLOG(0) << "Using specified quality level for segmenting: " << quality;
+  } else {
+    VLOG(0) << "Quality level unspecified, auto picked: " << quality;
   }
 
   // Detect scripts by intersection with frequency data
@@ -644,7 +650,6 @@ absl::StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
 
     cost->set_built_in_freq_data_name(script);
     if (script == primary_script_file) {
-      // TODO(garretrieger): customize these values based on the quality level
       cost->set_initial_font_merge_threshold(-60);
     }
   }

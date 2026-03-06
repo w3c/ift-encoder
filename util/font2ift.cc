@@ -9,6 +9,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/log/globals.h"
+#include "absl/log/initialize.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "common/axis_range.h"
@@ -21,23 +23,30 @@
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
+#include "util/auto_config_flags.h"
+#include "util/auto_segmenter_config.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
+#include "util/segmenter_config.pb.h"
+#include "util/segmenter_config_util.h"
 
 /*
- * Utility that converts a standard font file into an IFT font file following a
+ * Utility that converts a standard font file into an IFT font file optionally following a
  * supplied segmentation plan.
  *
  * Configuration is provided as a textproto file following the
  * segmentation_plan.proto schema.
+ *
+ * If no configuration is supplied it will be auto generated.
  */
 
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
 
-ABSL_FLAG(std::string, plan, "",
+ABSL_FLAG(std::string, plan, "auto",
           "Path to a plan file which is a textproto following the "
-          "segmentation_plan.proto schema.");
+          "segmentation_plan.proto schema. If set to \"auto\", then "
+          "segmentation plan will be automatically generated.");
 
 ABSL_FLAG(std::string, output_path, "./",
           "Path to write output files under (base font and patches).");
@@ -49,6 +58,10 @@ ABSL_FLAG(bool, woff2_encode, true,
           "If enabled the output font will be woff2 encoded. Transformations "
           "in woff2 will be disabled when necessary to keep the woff2 encoding "
           "compatible with IFT.");
+
+ABSL_FLAG(
+    int, verbosity, 0,
+    "Log verbosity level from. 0 is least verbose, higher values are more.");
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -68,6 +81,7 @@ using ift::encoder::Compiler;
 using ift::encoder::design_space_t;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
+using util::AutoSegmenterConfig;
 
 // TODO(garretrieger): add check that all glyph patches have at least one
 // activation condition.
@@ -258,22 +272,44 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   return absl::OkStatus();
 }
 
-int main(int argc, char** argv) {
-  auto args = absl::ParseCommandLine(argc, argv);
-
-  auto config_text = util::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
-  if (!config_text.ok()) {
-    std::cerr << "Failed to load config file: " << config_text.status()
-              << std::endl;
-    return -1;
-  }
-
+StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
   SegmentationPlan plan;
-  if (!google::protobuf::TextFormat::ParseFromString(config_text->str(),
-                                                     &plan)) {
-    std::cerr << "Failed to parse input config." << std::endl;
-    return -1;
+  if (absl::GetFlag(FLAGS_plan).empty() || absl::GetFlag(FLAGS_plan) == "auto") {
+    std::cerr << ">> auto generating segmentation plan:" << std::endl;
+    std::optional<int> quality_level = std::nullopt;
+    if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
+      quality_level = absl::GetFlag(FLAGS_auto_config_quality);
+    }
+    auto config = AutoSegmenterConfig::GenerateConfig(
+        font, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
+    if (!config.ok()) {
+      return absl::InternalError(StrCat("Failed to generate config: ", config.status().message()));
+    }
+    util::SegmenterConfigUtil config_util("");
+    auto result = config_util.RunSegmenter(font, *config);
+    if (!result.ok()) {
+      return absl::InternalError(StrCat("Failed to run segmenter: ", result.status().message()));
+    }
+    plan = std::move(result->plan);
+  } else {
+    auto config_text = util::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
+    if (!config_text.ok()) {
+      return absl::InternalError(StrCat("Failed to load config file: ", config_text.status().message()));
+    }
+
+    if (!google::protobuf::TextFormat::ParseFromString(config_text->str(),
+                                                       &plan)) {
+      return absl::InternalError("Failed to parse input config.");
+    }
   }
+  return plan;
+}
+
+int main(int argc, char** argv) {
+  absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+  absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
+  auto args = absl::ParseCommandLine(argc, argv);
+  absl::InitializeLog();
 
   auto font = load_font(absl::GetFlag(FLAGS_input_font).c_str());
   if (!font.ok()) {
@@ -281,10 +317,16 @@ int main(int argc, char** argv) {
     return -1;
   }
 
+  auto plan = CreateSegmentationPlan(font->get());
+  if (!plan.ok()) {
+    std::cerr << plan.status().message() << std::endl;
+    return -1;
+  }
+
   Compiler compiler;
   compiler.SetFace(font->get());
 
-  auto sc = ConfigureCompiler(plan, compiler);
+  auto sc = ConfigureCompiler(*plan, compiler);
   if (!sc.ok()) {
     std::cerr << "Failed to apply configuration to the encoder: " << sc
               << std::endl;

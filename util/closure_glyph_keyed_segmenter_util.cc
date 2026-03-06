@@ -23,6 +23,7 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "util/auto_config_flags.h"
 #include "util/auto_segmenter_config.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
@@ -39,20 +40,11 @@ ABSL_FLAG(std::string, input_font, "in.ttf",
           "Name of the font to convert to IFT.");
 
 ABSL_FLAG(
-    std::string, config, "config.textpb",
+    std::string, config, "auto",
     "Path to a text proto file containing the configuration for the segmenter. "
-    "Should contain a single SegmenterConfig message.");
-
-ABSL_FLAG(int, auto_config_quality, 0,
-          "The quality level to use when auto_config is enabled. A value of 0 means auto pick. Valid values are 1-8.");
-
-ABSL_FLAG(bool, auto_config, false,
-          "If set the segmenter configuration will be automatically generated "
-          "based on the input font.");
-
-ABSL_FLAG(std::string, primary_script, "Script_latin",
-          "When auto_config is enabled this sets the primary script or "
-          "language frequency data file to use.");
+    "Should contain a single SegmenterConfig message. If set to \"auto\", then "
+    "segmenter configuration will be automatically generated "
+    "based on the input font.");
 
 ABSL_FLAG(bool, output_segmentation_plan, false,
           "If set a segmentation plan representing the determined segmentation "
@@ -97,13 +89,13 @@ using util::AutoSegmenterConfig;
 using util::SegmenterConfigUtil;
 
 static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
-  if (absl::GetFlag(FLAGS_auto_config)) {
+  if (absl::GetFlag(FLAGS_config) == "auto") {
     std::optional<int> quality_level = std::nullopt;
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
     return AutoSegmenterConfig::GenerateConfig(
-        font, absl::GetFlag(FLAGS_primary_script), quality_level);
+        font, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
   }
 
   FontData config_text =
@@ -155,39 +147,6 @@ static Status Analysis(hb_face_t* font,
   return absl::OkStatus();
 }
 
-static void AddTableKeyedSegments(
-    SegmentationPlan& plan,
-    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
-    const std::vector<SubsetDefinition>& segments,
-    const SubsetDefinition& init_segment) {
-  std::vector<SubsetDefinition> table_keyed_segments;
-  for (const auto& [segment_ids, _] : merge_groups) {
-    SubsetDefinition new_segment;
-    for (uint32_t s : segment_ids) {
-      new_segment.Union(segments.at(s));
-    }
-    new_segment.Subtract(init_segment);
-    table_keyed_segments.push_back(new_segment);
-  }
-
-  uint32_t max_id = 0;
-  for (const auto& [id, _] : plan.segments()) {
-    if (id > max_id) {
-      max_id = id;
-    }
-  }
-
-  uint32_t next_id = max_id + 1;
-  auto* plan_segments = plan.mutable_segments();
-  for (const SubsetDefinition& def : table_keyed_segments) {
-    GlyphSegmentation::SubsetDefinitionToSegment(def,
-                                                 (*plan_segments)[next_id]);
-    SegmentsProto* segment_ids = plan.add_non_glyph_segments();
-    segment_ids->add_values(next_id);
-    next_id++;
-  }
-}
-
 static Status OutputFallbackGlyphCount(hb_face_t* original_face,
                                        const ClosureGlyphSegmenter& segmenter,
                                        const GlyphSegmentation& segmentation) {
@@ -216,49 +175,29 @@ static Status Main(const std::vector<char*> args) {
   SegmenterConfig config = TRY(LoadConfig(font.get()));
 
   SegmenterConfigUtil config_util(
-      absl::GetFlag(FLAGS_auto_config) ? "" : absl::GetFlag(FLAGS_config));
-
-  CodepointSet font_codepoints = FontHelper::ToCodepointsSet(font.get());
-  btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(font.get());
-  SubsetDefinition init_segment =
-      config_util.SegmentProtoToSubsetDefinition(config.initial_segment());
-
-  std::vector<SubsetDefinition> segments;
-  btree_map<SegmentSet, MergeStrategy> merge_groups =
-      TRY(config_util.ConfigToMergeGroups(config, font_codepoints,
-                                          font_features, segments));
-
-  ClosureGlyphSegmenter segmenter(
-      config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
-      config.unmapped_glyph_handling(), config.condition_analysis_mode());
+      (absl::GetFlag(FLAGS_config) == "auto") ? "" : absl::GetFlag(FLAGS_config));
 
   auto start_time = std::chrono::high_resolution_clock::now();
-  GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
-      font.get(), init_segment, segments, merge_groups));
+  auto result = TRY(config_util.RunSegmenter(font.get(), config));
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> duration = end_time - start_time;
   std::cerr << "CodepointToGlyphSegments took: " << duration.count() << " seconds" << std::endl;
 
+  GlyphSegmentation segmentation = std::move(result.segmentation);
+  SegmentationPlan plan = std::move(result.plan);
+
   if (absl::GetFlag(FLAGS_output_segmentation_plan)) {
-    SegmentationPlan plan = segmentation.ToSegmentationPlanProto();
     if (!absl::GetFlag(FLAGS_include_initial_codepoints_in_config)) {
       // Requested to not include init codepoints in the generated config.
       plan.clear_initial_codepoints();
     }
-
-    if (config.generate_table_keyed_segments()) {
-      AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
-    }
-
-    SegmentationPlan combined = config.base_segmentation_plan();
-    combined.MergeFrom(plan);
 
     // TODO(garretrieger): assign a basic (single segment) table keyed config.
     // Later on the input to this util should include information on how the
     // segments should be grouped together for the table keyed portion of the
     // font.
     std::string config_string;
-    TextFormat::PrintToString(combined, &config_string);
+    TextFormat::PrintToString(plan, &config_string);
     std::cout << config_string;
   } else {
     // No config requested, just output a simplified plain text representation
@@ -267,6 +206,9 @@ static Status Main(const std::vector<char*> args) {
   }
 
   if (absl::GetFlag(FLAGS_output_fallback_glyph_count)) {
+    ClosureGlyphSegmenter segmenter(
+        config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
+        config.unmapped_glyph_handling(), config.condition_analysis_mode());
     TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }
 
@@ -275,7 +217,7 @@ static Status Main(const std::vector<char*> args) {
   }
 
   std::cerr << ">> Analysis" << std::endl;
-  return Analysis(font.get(), merge_groups, segmentation);
+  return Analysis(font.get(), result.merge_groups, segmentation);
 }
 
 int main(int argc, char** argv) {
