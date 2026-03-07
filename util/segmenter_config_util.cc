@@ -2,8 +2,11 @@
 
 #include <cstdint>
 
+#include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/encoder/closure_glyph_segmenter.h"
+#include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/feature_registry/feature_registry.h"
@@ -20,6 +23,8 @@ using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::feature_registry::DefaultFeatureTags;
 using ift::freq::UnicodeFrequencies;
+using ift::encoder::ClosureGlyphSegmenter;
+using ift::encoder::GlyphSegmentation;
 
 namespace util {
 
@@ -275,6 +280,41 @@ SegmenterConfigUtil::ConfigToMergeGroups(
   merge_groups.insert(std::make_pair(uncovered_segments, strategy));
 
   return merge_groups;
+}
+
+StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
+    hb_face_t* face, const SegmenterConfig& config) {
+  CodepointSet font_codepoints = common::FontHelper::ToCodepointsSet(face);
+  btree_set<hb_tag_t> font_features = common::FontHelper::GetFeatureTags(face);
+  SubsetDefinition init_segment =
+      SegmentProtoToSubsetDefinition(config.initial_segment());
+
+  std::vector<SubsetDefinition> segments;
+  btree_map<SegmentSet, MergeStrategy> merge_groups =
+      TRY(ConfigToMergeGroups(config, font_codepoints, font_features, segments));
+
+  ClosureGlyphSegmenter segmenter(
+      config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
+      config.unmapped_glyph_handling(), config.condition_analysis_mode());
+
+  GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
+      face, init_segment, segments, merge_groups));
+
+  SegmentationPlan plan = segmentation.ToSegmentationPlanProto();
+
+  if (config.generate_table_keyed_segments()) {
+    ClosureGlyphSegmenter::AddTableKeyedSegments(
+        plan, merge_groups, segments, init_segment);
+  }
+
+  SegmentationPlan combined = config.base_segmentation_plan();
+  combined.MergeFrom(plan);
+
+  return SegmentationResult{
+      std::move(segmentation),
+      std::move(combined),
+      std::move(merge_groups),
+  };
 }
 
 }  // namespace util
