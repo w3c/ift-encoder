@@ -520,8 +520,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   btree_map<SegmentSet, SegmentSet> with_shared;
   std::vector<Segment> segments =
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
-  SegmentationContext context = TRY(InitializeSegmentationContext(
-      face, initial_segment, std::move(segments)));
+  SegmentationContext context = TRY(SegmentationContext::InitializeSegmentationContext(
+      face, initial_segment, std::move(segments),
+      unmapped_glyph_handling_, condition_analysis_mode_,
+      brotli_quality_, init_font_merging_brotli_quality_));
 
   std::vector<Merger> mergers =
       TRY(ToMergers(context, with_shared, merge_groups));
@@ -632,38 +634,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   return absl::InternalError("unreachable");
-}
-
-StatusOr<SegmentationContext>
-ClosureGlyphSegmenter::InitializeSegmentationContext(
-    hb_face_t* face, SubsetDefinition initial_segment,
-    std::vector<Segment> segments) const {
-  if (!hb_face_get_glyph_count(face)) {
-    return absl::InvalidArgumentError("Provided font has no glyphs.");
-  }
-
-  // The IFT compiler has a set of defaults always included in the initial font
-  // add them here so we correctly factor them into the generated segmentation.
-  AddInitSubsetDefaults(initial_segment);
-
-  // No merging is done during init.
-  SegmentationContext context =
-    TRY(SegmentationContext::Create(face, initial_segment, segments,
-                              unmapped_glyph_handling_, condition_analysis_mode_,
-                              brotli_quality_, init_font_merging_brotli_quality_));
-
-  // ### Generate the initial conditions and groupings by processing all
-  // segments and glyphs. ###
-  VLOG(0) << "Forming initial segmentation plan.";
-  for (segment_index_t segment_index = 0;
-       segment_index < context.SegmentationInfo().Segments().size();
-       segment_index++) {
-    TRY(context.ReprocessSegment(segment_index));
-  }
-
-  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs(), {}));
-
-  return context;
 }
 
 StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(

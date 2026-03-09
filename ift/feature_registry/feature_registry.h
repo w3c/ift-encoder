@@ -5,7 +5,7 @@
 #include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 
-namespace ift::feature_registry {
+namespace ift::featurge_registry {
 
 static const absl::flat_hash_set<hb_tag_t>& DefaultFeatureTags() {
   static const absl::NoDestructor<absl::flat_hash_set<hb_tag_t>> kDefaultFeatures((absl::flat_hash_set<hb_tag_t>) {

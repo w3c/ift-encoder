@@ -123,7 +123,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -189,7 +192,10 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -254,7 +260,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -306,7 +315,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -394,7 +406,10 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -445,7 +460,10 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   auto context =
-      segmenter.InitializeSegmentationContext(roboto.get(), {}, segments);
+      SegmentationContext::InitializeSegmentationContext(
+          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+          segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(

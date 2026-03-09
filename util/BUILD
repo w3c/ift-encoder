@@ -7,6 +7,9 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 proto_library(
     name = "segmentation_plan_proto",
     srcs = ["segmentation_plan.proto"],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":common_proto",
     ],
@@ -15,7 +18,7 @@ proto_library(
 cc_proto_library(
     name = "segmentation_plan_cc_proto",
     visibility = [
-        "//ift/encoder:__pkg__",
+        "//visibility:public",
     ],
     deps = [
         ":segmentation_plan_proto",
@@ -150,7 +153,6 @@ cc_library(
     name = "auto_config_flags",
     srcs = ["auto_config_flags.cc"],
     hdrs = ["auto_config_flags.h"],
-    visibility = ["//visibility:public"],
     deps = [
         "@abseil-cpp//absl/flags:flag",
     ],
@@ -188,6 +190,9 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_set",
         "@harfbuzz",
     ],
+    visibility = [
+        "//visibility:public",
+    ]
 )
 
 cc_library(
@@ -228,6 +233,9 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@harfbuzz",
     ],
+    visibility = [
+        "//visibility:public",
+    ]
 )
 
 cc_test(

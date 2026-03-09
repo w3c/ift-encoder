@@ -54,7 +54,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
   }
 
   SegmentationContext TestContext(bool basic_closure_analysis) {
-    auto context = *segmenter.InitializeSegmentationContext(
+    auto context = *SegmentationContext::InitializeSegmentationContext(
         roboto.get(), {'f'},
         {
             /* 0 */ {{0x54}, ProbabilityBound::Zero()},
@@ -65,7 +65,10 @@ class ComplexConditionFinderTest : public ::testing::Test {
             /* 5 */ {{0x21A}, ProbabilityBound::Zero()},
             /* 6 */ {{0xF6C3}, ProbabilityBound::Zero()},
             /* 7 */ {{0x69}, ProbabilityBound::Zero()},
-        });
+        },
+        segmenter.unmapped_glyph_handling(),
+        segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+        segmenter.init_font_merging_brotli_quality());
 
     if (!basic_closure_analysis) {
       // initialaztion populates the basic conditions, clear those

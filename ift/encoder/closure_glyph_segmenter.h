@@ -8,7 +8,6 @@
 #include "absl/status/statusor.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
-#include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 #include "util/common.pb.h"
@@ -65,16 +64,6 @@ class ClosureGlyphSegmenter {
       absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups) const;
 
   /*
-   * Generates a segmentation context for the provided segmentation input.
-   *
-   * This context will contain the initial groupings without doing any merging.
-   * Useful for writing tests that require a initialized segmentation context.
-   */
-  absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
-      hb_face_t* face, SubsetDefinition initial_segment,
-      std::vector<Segment> segments) const;
-
-  /*
    * Computes the total cost (expected number of bytes transferred) for a given
    * segmentation with respect to the provided frequency data.
    */
@@ -96,6 +85,11 @@ class ClosureGlyphSegmenter {
       const absl::btree_map<common::SegmentSet, MergeStrategy>& merge_groups,
       const std::vector<SubsetDefinition>& segments,
       const SubsetDefinition& init_segment);
+
+  uint32_t brotli_quality() const { return brotli_quality_; }
+  uint32_t init_font_merging_brotli_quality() const { return init_font_merging_brotli_quality_; }
+  UnmappedGlyphHandling unmapped_glyph_handling() const { return unmapped_glyph_handling_; }
+  ConditionAnalysisMode condition_analysis_mode() const { return condition_analysis_mode_; }
 
  private:
   uint32_t brotli_quality_;

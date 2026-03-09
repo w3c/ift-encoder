@@ -17,7 +17,6 @@
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
-#include "ift/proto/patch_map.h"
 #include "ift/table_keyed_diff.h"
 
 namespace ift::encoder {

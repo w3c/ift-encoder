@@ -66,7 +66,9 @@ cc_test(
 cc_library(
     name = "mock_probability_calculator",
     hdrs = ["mock_probability_calculator.h"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//ift/encoder:__pkg__",
+    ],
     deps = [
         ":freq",
         "//ift/encoder:common",

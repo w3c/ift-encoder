@@ -8,6 +8,7 @@
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/types.h"
 
 using absl::Status;
@@ -212,6 +213,42 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   }
 
   return absl::OkStatus();
+}
+
+StatusOr<SegmentationContext>
+SegmentationContext::InitializeSegmentationContext(
+    hb_face_t* face, SubsetDefinition initial_segment,
+    std::vector<Segment> segments,
+    UnmappedGlyphHandling unmapped_glyph_handling,
+    ConditionAnalysisMode condition_analysis_mode,
+    uint32_t brotli_quality,
+    uint32_t init_font_brotli_quality) {
+  if (!hb_face_get_glyph_count(face)) {
+    return absl::InvalidArgumentError("Provided font has no glyphs.");
+  }
+
+  // The IFT compiler has a set of defaults always included in the initial font
+  // add them here so we correctly factor them into the generated segmentation.
+  AddInitSubsetDefaults(initial_segment);
+
+  // No merging is done during init.
+  SegmentationContext context =
+    TRY(SegmentationContext::Create(face, initial_segment, segments,
+                              unmapped_glyph_handling, condition_analysis_mode,
+                              brotli_quality, init_font_brotli_quality));
+
+  // ### Generate the initial conditions and groupings by processing all
+  // segments and glyphs. ###
+  VLOG(0) << "Forming initial segmentation plan.";
+  for (segment_index_t segment_index = 0;
+       segment_index < context.SegmentationInfo().Segments().size();
+       segment_index++) {
+    TRY(context.ReprocessSegment(segment_index));
+  }
+
+  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs(), {}));
+
+  return context;
 }
 
 }  // namespace ift::encoder
