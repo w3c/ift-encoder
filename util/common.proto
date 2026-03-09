@@ -1,5 +1,7 @@
 edition = "2023";
 
+package ift.proto;
+
 // A list of unicode code points.
 message Codepoints {
   repeated uint32 values = 1;

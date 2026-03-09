@@ -38,8 +38,8 @@ class ClosureGlyphSegmenter {
  public:
   ClosureGlyphSegmenter(uint32_t brotli_quality,
                         uint32_t init_font_merging_brotli_quality,
-                        UnmappedGlyphHandling unmapped_glyph_handling,
-                        ConditionAnalysisMode condition_analysis_mode)
+                        ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
+                        ift::proto::ConditionAnalysisMode condition_analysis_mode)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
         unmapped_glyph_handling_(unmapped_glyph_handling),
@@ -81,21 +81,21 @@ class ClosureGlyphSegmenter {
                             uint32_t& all_glyphs_size) const;
 
   static void AddTableKeyedSegments(
-      SegmentationPlan& plan,
+      ift::proto::SegmentationPlan& plan,
       const absl::btree_map<common::SegmentSet, MergeStrategy>& merge_groups,
       const std::vector<SubsetDefinition>& segments,
       const SubsetDefinition& init_segment);
 
   uint32_t brotli_quality() const { return brotli_quality_; }
   uint32_t init_font_merging_brotli_quality() const { return init_font_merging_brotli_quality_; }
-  UnmappedGlyphHandling unmapped_glyph_handling() const { return unmapped_glyph_handling_; }
-  ConditionAnalysisMode condition_analysis_mode() const { return condition_analysis_mode_; }
+  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling() const { return unmapped_glyph_handling_; }
+  ift::proto::ConditionAnalysisMode condition_analysis_mode() const { return condition_analysis_mode_; }
 
  private:
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
-  UnmappedGlyphHandling unmapped_glyph_handling_;
-  ConditionAnalysisMode condition_analysis_mode_;
+  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling_;
+  ift::proto::ConditionAnalysisMode condition_analysis_mode_;
 };
 
 }  // namespace ift::encoder

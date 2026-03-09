@@ -119,7 +119,7 @@ class ActivationCondition {
       const common::SegmentSet& merged_segments, const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
-  ActivationConditionProto ToConfigProto() const;
+  ift::proto::ActivationConditionProto ToConfigProto() const;
 
   bool operator<(const ActivationCondition& other) const;
 

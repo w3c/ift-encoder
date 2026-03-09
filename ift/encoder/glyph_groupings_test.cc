@@ -18,6 +18,10 @@
 #include "ift/freq/probability_bound.h"
 #include "ift/encoder/init_subset_defaults.h"
 
+using ift::proto::PATCH;
+using ift::proto::FIND_CONDITIONS;
+
+
 namespace ift::encoder {
 
 using absl::btree_map;

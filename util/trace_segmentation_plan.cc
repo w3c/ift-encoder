@@ -13,6 +13,11 @@
 #include "util/segmentation_plan.pb.h"
 #include "common/try.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmentProto;
+using ift::proto::ActivationConditionProto;
+
+
 using absl::Status;
 using absl::StatusOr;
 using common::CodepointSet;

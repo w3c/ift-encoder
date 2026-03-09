@@ -13,6 +13,12 @@
 #include "hb.h"
 #include "util/load_codepoints.h"
 
+using ift::proto::SegmenterConfig;
+using ift::proto::CLOSURE_AND_DEP_GRAPH;
+using ift::proto::MOVE_TO_INIT_FONT;
+using ift::proto::FIND_CONDITIONS;
+
+
 namespace util {
 namespace {
 

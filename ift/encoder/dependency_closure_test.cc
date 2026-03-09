@@ -15,6 +15,9 @@
 #include "util/common.pb.h"
 #include "ift/encoder/requested_segmentation_information.h"
 
+using ift::proto::PATCH;
+
+
 using absl::Status;
 using common::hb_face_unique_ptr;
 using common::CodepointSet;

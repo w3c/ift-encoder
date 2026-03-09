@@ -1,5 +1,7 @@
 edition = "2023";
 
+package ift.proto;
+
 import "util/common.proto";
 
 // This message is used to configure an IFT compiler to generate and IFT encoding of some input font.

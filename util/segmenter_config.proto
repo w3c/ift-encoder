@@ -1,5 +1,7 @@
 edition = "2023";
 
+package ift.proto;
+
 import "util/segmentation_plan.proto";
 import "util/common.proto";
 

@@ -8,7 +8,7 @@
 
 namespace util {
 
-absl::StatusOr<SegmentationPlan> convert_iftb(absl::string_view iftb_dump,
+absl::StatusOr<ift::proto::SegmentationPlan> convert_iftb(absl::string_view iftb_dump,
                                               hb_face_t* face);
 
 }

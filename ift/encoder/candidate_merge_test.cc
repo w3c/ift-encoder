@@ -15,6 +15,10 @@
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 
+using ift::proto::CLOSURE_ONLY;
+using ift::proto::PATCH;
+
+
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;

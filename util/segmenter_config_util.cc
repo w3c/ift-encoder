@@ -13,6 +13,15 @@
 #include "ift/freq/unicode_frequencies.h"
 #include "util/load_codepoints.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmentProto;
+using ift::proto::SegmenterConfig;
+using ift::proto::CostConfiguration;
+using ift::proto::HeuristicConfiguration;
+using ift::proto::MergeGroup;
+using ift::proto::SegmentsProto;
+
+
 using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
