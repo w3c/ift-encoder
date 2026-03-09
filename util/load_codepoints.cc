@@ -11,6 +11,7 @@
 #include "absl/strings/strip.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
+#include "common/try.h"
 #include "hb.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "riegeli/bytes/fd_reader.h"

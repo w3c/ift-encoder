@@ -8,14 +8,14 @@ cc_library(
         "format_2_patch_map.h",
         "ift_table.cc",
         "ift_table.h",
-        "patch_encoding.h",
         "patch_map.cc",
+    ],
+    hdrs = [
+        "patch_encoding.h",
         "patch_map.h",
     ],
     visibility = [
-        "//ift:__pkg__",
-        "//ift/encoder:__pkg__",
-        "//util:__pkg__",
+        "//visibility:public",
     ],
     deps = [
         "//common",

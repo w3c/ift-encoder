@@ -9,6 +9,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "util/common.pb.h"
+#include "common/try.h"
 
 namespace ift::encoder {
 

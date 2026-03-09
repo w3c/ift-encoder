@@ -11,6 +11,7 @@
 #include "common/int_set.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
+#include "common/try.h"
 
 using absl::Status;
 using absl::StatusOr;

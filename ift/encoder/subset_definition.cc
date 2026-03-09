@@ -7,6 +7,7 @@
 #include "common/axis_range.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
+#include "common/try.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 

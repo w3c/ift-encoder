@@ -5,17 +5,17 @@ cc_library(
     name = "encoder",
     srcs = [
         "closure_glyph_segmenter.cc",
-        "closure_glyph_segmenter.h",
         "compiler.cc",
-        "compiler.h",
+    ],
+    hdrs = [
+      "closure_glyph_segmenter.h",
+      "compiler.h",
     ],
     visibility = [
-        "//ift:__subpackages__",
-        "//ift/client:__pkg__",
-        "//js_client:__pkg__",
-        "//util:__pkg__",
+        "//visibility:public",
     ],
     deps = [
+        ":merge_strategy",
         ":activation_condition",
         ":common",
         ":segmentation_context",
@@ -64,8 +64,6 @@ cc_library(
         "glyph_groupings.cc",
         "glyph_groupings.h",
         "invalidation_set.h",
-        "merge_strategy.cc",
-        "merge_strategy.h",
         "merger.cc",
         "merger.h",
         "patch_size_cache.h",
@@ -84,6 +82,7 @@ cc_library(
     visibility = [
     ],
     deps = [
+        ":merge_strategy",
         ":segmentation_info",
         ":activation_condition",
         ":common",
@@ -124,22 +123,29 @@ cc_library(
     name = "activation_condition",
     srcs = [
         "activation_condition.cc",
-        "activation_condition.h",
         "glyph_segmentation.cc",
+    ],
+    hdrs = [
+        "activation_condition.h",
         "glyph_segmentation.h",
     ],
     deps = [
         ":common",
         "//ift/freq",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
 )
 
 cc_library(
     name = "common",
     srcs = [
+        "subset_definition.cc",
+    ],
+    hdrs = [
         "init_subset_defaults.h",
         "segment.h",
-        "subset_definition.cc",
         "subset_definition.h",
         "types.h",
     ],
@@ -154,6 +160,22 @@ cc_library(
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
+    ],
+)
+
+cc_library(
+    name = "merge_strategy",
+    srcs = [
+        "merge_strategy.cc",
+    ],
+    hdrs = [
+        "merge_strategy.h",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "//ift/freq",
     ],
 )
 

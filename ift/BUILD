@@ -5,12 +5,11 @@ cc_library(
     name = "ift",
     srcs = [
         "glyph_keyed_diff.cc",
-        "glyph_keyed_diff.h",
         "table_keyed_diff.cc",
-        "table_keyed_diff.h",
         "url_template.cc",
     ],
     hdrs = [
+        "glyph_keyed_diff.h",
         "table_keyed_diff.h",
         "url_template.h",
     ],
@@ -42,7 +41,7 @@ cc_library(
         "testdata/test_segments.h",
     ],
     visibility = [
-        "//visibility:public",
+        "//ift/encoder:__pkg__",
     ],
     deps = [
         "@abseil-cpp//absl/container:flat_hash_set",

@@ -12,7 +12,6 @@ cc_library(
         "brotli_binary_diff.cc",
         "brotli_binary_patch.cc",
         "compat_id.cc",
-        "compat_id.h",
         "file_font_provider.cc",
         "font_helper.cc",
         "hb_set_unique_ptr.cc",
@@ -37,7 +36,6 @@ cc_library(
         "hb_set_unique_ptr.h",
         "int_set.h",
         "sparse_bit_set.h",
-        "try.h",
         "woff2.h",
     ],
     visibility = [
@@ -55,7 +53,13 @@ cc_library(
         "@brotli//:brotlienc",
         "@harfbuzz",
         "@woff2",
+        ":try",
     ],
+)
+
+cc_library(
+    name = "try",
+    hdrs = ["try.h"],
 )
 
 cc_library(
@@ -71,7 +75,7 @@ cc_library(
         "mock_font_provider.h",
     ],
     visibility = [
-        "//visibility:public",
+
     ],
     deps = [
         ":common",
@@ -83,7 +87,9 @@ filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
     visibility = [
-        "//visibility:public",
+        "//ift:__subpackages__",
+        "//brotli:__pkg__",
+        "//util:__pkg__",
     ],
 )
 

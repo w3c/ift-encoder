@@ -73,6 +73,20 @@ class SegmentationContext {
     return context;
   }
 
+  /*
+   * Generates a segmentation context for the provided segmentation input.
+   *
+   * This context will contain the initial groupings without doing any merging.
+   * Useful for writing tests that require a initialized segmentation context.
+   */
+  static absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
+      hb_face_t* face, SubsetDefinition initial_segment,
+      std::vector<Segment> segments,
+      UnmappedGlyphHandling unmapped_glyph_handling,
+      ConditionAnalysisMode condition_analysis_mode,
+      uint32_t brotli_quality,
+      uint32_t init_font_brotli_quality);
+
  private:
   SegmentationContext(
     hb_face_t* face,
