@@ -14,6 +14,15 @@
 #include "util/load_codepoints.h"
 #include "util/segmenter_config.pb.h"
 
+using ift::proto::SegmenterConfig;
+using ift::proto::CostConfiguration;
+using ift::proto::HeuristicConfiguration;
+using ift::proto::MergeGroup;
+using ift::proto::CLOSURE_AND_DEP_GRAPH;
+using ift::proto::MOVE_TO_INIT_FONT;
+using ift::proto::FIND_CONDITIONS;
+
+
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;

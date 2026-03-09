@@ -30,6 +30,11 @@
 #include "util/segmenter_config.pb.h"
 #include "util/segmenter_config_util.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::ActivationConditionProto;
+using ift::proto::DesignSpace;
+
+
 /*
  * Utility that converts a standard font file into an IFT font file optionally following a
  * supplied segmentation plan.

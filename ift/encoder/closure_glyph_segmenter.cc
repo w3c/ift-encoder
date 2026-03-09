@@ -36,6 +36,12 @@
 #include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::UnmappedGlyphHandling;
+using ift::proto::SegmentsProto;
+using ift::proto::MOVE_TO_INIT_FONT;
+
+
 using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;

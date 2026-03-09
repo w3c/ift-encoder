@@ -24,7 +24,7 @@ class AutoSegmenterConfig {
   //                quality tradeoff. Lower values have shorter segmenting times,
   //                high values have longer segmenting times but typically results
   //                in better segmentation quality.
-  static absl::StatusOr<SegmenterConfig> GenerateConfig(
+  static absl::StatusOr<ift::proto::SegmenterConfig> GenerateConfig(
       hb_face_t* face,
       std::optional<std::string> primary_script = std::nullopt,
       std::optional<int> quality_level = std::nullopt);

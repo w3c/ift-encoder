@@ -21,12 +21,12 @@ class RequestedSegmentationInformation {
   static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>> Create(
       std::vector<Segment> segments, SubsetDefinition init_font_segment,
       GlyphClosureCache& closure_cache,
-      UnmappedGlyphHandling unmapped_glyph_handling);
+      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
 
  private:
   RequestedSegmentationInformation(
       std::vector<Segment> segments, SubsetDefinition init_font_segment,
-      UnmappedGlyphHandling unmapped_glyph_handling);
+      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
 
  public:
   // Merge all of the segments in to_merge into base, assigned it
@@ -70,7 +70,7 @@ class RequestedSegmentationInformation {
     return absl::OkStatus();
   }
 
-  UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
+  ift::proto::UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
     return unmapped_glyph_handling_;
   }
 
@@ -147,7 +147,7 @@ class RequestedSegmentationInformation {
   SubsetDefinition full_definition_;
   common::GlyphSet full_closure_;
   bool segments_disjoint_;
-  enum UnmappedGlyphHandling unmapped_glyph_handling_;
+  enum ift::proto::UnmappedGlyphHandling unmapped_glyph_handling_;
 };
 
 }  // namespace ift::encoder

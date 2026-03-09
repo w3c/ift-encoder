@@ -30,6 +30,12 @@
 #include "util/segmenter_config.pb.h"
 #include "util/segmenter_config_util.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmenterConfig;
+using ift::proto::CLOSURE_ONLY;
+using ift::proto::PATCH;
+
+
 /*
  * Given a code point based segmentation creates an appropriate glyph based
  * segmentation and associated activation conditions that maintain the "closure

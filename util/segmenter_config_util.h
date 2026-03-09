@@ -15,7 +15,7 @@ namespace util {
 
 struct SegmentationResult {
   ift::encoder::GlyphSegmentation segmentation;
-  SegmentationPlan plan;
+  ift::proto::SegmentationPlan plan;
   absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy> merge_groups;
 };
 
@@ -25,14 +25,14 @@ class SegmenterConfigUtil {
       : config_file_path_(config_file_path) {}
 
   absl::StatusOr<SegmentationResult> RunSegmenter(
-      hb_face_t* face, const SegmenterConfig& config);
+      hb_face_t* face, const ift::proto::SegmenterConfig& config);
 
   ift::encoder::SubsetDefinition SegmentProtoToSubsetDefinition(
-      const SegmentProto& segment);
+      const ift::proto::SegmentProto& segment);
 
   absl::StatusOr<
       absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy>>
-  ConfigToMergeGroups(const SegmenterConfig& config,
+  ConfigToMergeGroups(const ift::proto::SegmenterConfig& config,
                       const common::CodepointSet& font_codepoints,
                       const absl::btree_set<hb_tag_t>& font_features,
                       std::vector<ift::encoder::SubsetDefinition>& segments);
@@ -53,7 +53,7 @@ class SegmenterConfigUtil {
   };
 
   std::vector<ift::encoder::SubsetDefinition> ConfigToSegments(
-      const SegmenterConfig& config,
+      const ift::proto::SegmenterConfig& config,
       const ift::encoder::SubsetDefinition& init_segment,
       const common::CodepointSet& font_codepoints,
       const absl::btree_set<hb_tag_t>& font_features,
@@ -63,18 +63,18 @@ class SegmenterConfigUtil {
       const std::string& frequency_data_file_path, bool built_in);
 
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToStrategy(
-      const CostConfiguration& base, const CostConfiguration& config,
+      const ift::proto::CostConfiguration& base, const ift::proto::CostConfiguration& config,
       common::CodepointSet& covered_codepoints);
 
   absl::StatusOr<std::pair<common::SegmentSet, ift::encoder::MergeStrategy>>
   ProtoToMergeGroup(const std::vector<ift::encoder::SubsetDefinition>& segments,
                     const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
-                    const HeuristicConfiguration& base_heuristic,
-                    const CostConfiguration& base_cost,
-                    const MergeGroup& group);
+                    const ift::proto::HeuristicConfiguration& base_heuristic,
+                    const ift::proto::CostConfiguration& base_cost,
+                    const ift::proto::MergeGroup& group);
 
   static common::SegmentSet MapToIndices(
-      const SegmentsProto& segments,
+      const ift::proto::SegmentsProto& segments,
       const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index);
 
   std::string config_file_path_;

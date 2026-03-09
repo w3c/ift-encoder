@@ -13,6 +13,9 @@
 
 #include "gtest/gtest.h"
 
+using ift::proto::PATCH;
+
+
 using absl::flat_hash_map;
 using common::hb_face_unique_ptr;
 using common::CodepointSet;

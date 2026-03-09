@@ -99,9 +99,9 @@ class GlyphSegmentation {
   };
 
   static void SubsetDefinitionToSegment(const SubsetDefinition& def,
-                                        SegmentProto& segment_proto);
+                                        ift::proto::SegmentProto& segment_proto);
 
-  SegmentationPlan ToSegmentationPlanProto() const;
+  ift::proto::SegmentationPlan ToSegmentationPlanProto() const;
 
   static absl::Status GroupsToSegmentation(
       const absl::btree_map<common::SegmentSet, common::GlyphSet>&

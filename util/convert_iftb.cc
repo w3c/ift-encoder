@@ -11,6 +11,13 @@
 #include "hb.h"
 #include "util/segmentation_plan.pb.h"
 
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmentProto;
+using ift::proto::ActivationConditionProto;
+using ift::proto::SegmentsProto;
+using ift::proto::Glyphs;
+
+
 using absl::btree_map;
 using absl::StatusOr;
 using absl::string_view;

@@ -14,6 +14,9 @@
 #include "util/auto_segmenter_config.h"
 #include "util/load_codepoints.h"
 
+using ift::proto::SegmenterConfig;
+
+
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Path to the font file to analyze.");
 
