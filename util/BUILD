@@ -159,23 +159,6 @@ cc_library(
 )
 
 cc_library(
-    name = "convert_iftb",
-    srcs = [
-        "convert_iftb.cc",
-        "convert_iftb.h",
-    ],
-    deps = [
-        ":segmentation_plan_cc_proto",
-        "//common",
-        "@abseil-cpp//absl/container:btree",
-        "@abseil-cpp//absl/container:flat_hash_map",
-        "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/flags:parse",
-    ],
-)
-
-cc_library(
     name = "auto_segmenter_config",
     srcs = [
         "auto_segmenter_config.cc",
@@ -257,22 +240,6 @@ cc_test(
 )
 
 cc_test(
-    name = "convert_iftb_test",
-    size = "small",
-    srcs = [
-        "convert_iftb_test.cc",
-    ],
-    data = [
-        "testdata/Roboto-Regular.Awesome.ttf",
-        "testdata/convert-iftb-sample.txt",
-    ],
-    deps = [
-        ":convert_iftb",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "load_codepoints_test",
     size = "small",
     srcs = [
@@ -330,23 +297,6 @@ cc_binary(
         "@abseil-cpp//absl/status",
         "@harfbuzz",
         "@protobuf",
-    ],
-)
-
-cc_binary(
-    name = "iftb2config",
-    srcs = [
-        "iftb2config.cc",
-    ],
-    deps = [
-        ":convert_iftb",
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
-        "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/flags:parse",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
     ],
 )
 
