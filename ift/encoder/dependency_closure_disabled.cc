@@ -1,6 +1,5 @@
-#include "ift/encoder/dependency_closure.h"
-
 #include "common/int_set.h"
+#include "ift/encoder/dependency_closure.h"
 
 using absl::Status;
 using absl::StatusOr;
@@ -10,22 +9,33 @@ using common::SegmentSet;
 
 namespace ift::encoder {
 
-Status DependencyClosure::SegmentsChanged(bool init_font_change, const SegmentSet& segments) {
-  return absl::UnimplementedError("Depdency graph functionality was disabled during compilation and is unvailable");
+Status DependencyClosure::SegmentsChanged(bool init_font_change,
+                                          const SegmentSet& segments) {
+  return absl::UnimplementedError(
+      "Depdency graph functionality was disabled during compilation and is "
+      "unvailable");
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) {
-  return absl::UnimplementedError("Depdency graph functionality was disabled during compilation and is unvailable");
+  return absl::UnimplementedError(
+      "Depdency graph functionality was disabled during compilation and is "
+      "unvailable");
 }
 
-StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(const GlyphSet& glyphs) {
-  return absl::UnimplementedError("Depdency graph functionality was disabled during compilation and is unvailable");
+StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
+    const GlyphSet& glyphs) {
+  return absl::UnimplementedError(
+      "Depdency graph functionality was disabled during compilation and is "
+      "unvailable");
 }
 
-StatusOr<SegmentSet> DependencyClosure::SegmentInteractionGroup(const SegmentSet& segments) {
-  return absl::UnimplementedError("Depdency graph functionality was disabled during compilation and is unvailable");
+StatusOr<SegmentSet> DependencyClosure::SegmentInteractionGroup(
+    const SegmentSet& segments) {
+  return absl::UnimplementedError(
+      "Depdency graph functionality was disabled during compilation and is "
+      "unvailable");
 }
 
 }  // namespace ift::encoder

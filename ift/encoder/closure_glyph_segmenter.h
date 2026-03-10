@@ -36,10 +36,10 @@ struct SegmentationCost {
  */
 class ClosureGlyphSegmenter {
  public:
-  ClosureGlyphSegmenter(uint32_t brotli_quality,
-                        uint32_t init_font_merging_brotli_quality,
-                        ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-                        ift::proto::ConditionAnalysisMode condition_analysis_mode)
+  ClosureGlyphSegmenter(
+      uint32_t brotli_quality, uint32_t init_font_merging_brotli_quality,
+      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::proto::ConditionAnalysisMode condition_analysis_mode)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
         unmapped_glyph_handling_(unmapped_glyph_handling),
@@ -87,9 +87,15 @@ class ClosureGlyphSegmenter {
       const SubsetDefinition& init_segment);
 
   uint32_t brotli_quality() const { return brotli_quality_; }
-  uint32_t init_font_merging_brotli_quality() const { return init_font_merging_brotli_quality_; }
-  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling() const { return unmapped_glyph_handling_; }
-  ift::proto::ConditionAnalysisMode condition_analysis_mode() const { return condition_analysis_mode_; }
+  uint32_t init_font_merging_brotli_quality() const {
+    return init_font_merging_brotli_quality_;
+  }
+  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling() const {
+    return unmapped_glyph_handling_;
+  }
+  ift::proto::ConditionAnalysisMode condition_analysis_mode() const {
+    return condition_analysis_mode_;
+  }
 
  private:
   uint32_t brotli_quality_;

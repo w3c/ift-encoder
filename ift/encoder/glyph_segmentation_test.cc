@@ -15,7 +15,6 @@
 using ift::proto::CLOSURE_ONLY;
 using ift::proto::PATCH;
 
-
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;

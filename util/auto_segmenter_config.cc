@@ -14,14 +14,13 @@
 #include "util/load_codepoints.h"
 #include "util/segmenter_config.pb.h"
 
-using ift::proto::SegmenterConfig;
+using ift::proto::CLOSURE_AND_DEP_GRAPH;
 using ift::proto::CostConfiguration;
+using ift::proto::FIND_CONDITIONS;
 using ift::proto::HeuristicConfiguration;
 using ift::proto::MergeGroup;
-using ift::proto::CLOSURE_AND_DEP_GRAPH;
 using ift::proto::MOVE_TO_INIT_FONT;
-using ift::proto::FIND_CONDITIONS;
-
+using ift::proto::SegmenterConfig;
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -36,17 +35,22 @@ namespace util {
 static constexpr uint32_t kMinimumGroupSize = 4;
 
 // Quality Table:
-// Quality | bigrams | find conditions | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging | preprocess threshold
-// 1       | No      | No              | 0           | 0               | 60%                       | 5%          | Yes                | 5%
-// 2       | Yes     | No              | 0           | 0               | 55%                       | 4%          | Yes                | 4%
-// 3       | Yes     | Yes             | 0           | 0               | 50%                       | 3%          | Yes                | 3%
-// 4       | Yes     | Yes             | 0           | 9               | 45%                       | 2%          | Yes                | 2%
-// 5       | Yes     | Yes             | 9           | 9               | 40%                       | 1%          | Yes                | 1%
-// 6       | Yes     | Yes             | 9           | 11              | 30%                       | 0.5%        | Yes                | 0.5%
-// 7       | Yes     | Yes             | 11          | 11              | 25%                       | 0.5%        | Yes                | 0.05%
-// 8       | Yes     | Yes             | 11          | 11              | 25%                       | 0.5%        | No                 | na
+// Quality | bigrams | find conditions | init brotli | non init brotli | init
+// font merge threshold | opt cut off | preprocess merging | preprocess
+// threshold 1       | No      | No              | 0           | 0 | 60% | 5% |
+// Yes                | 5% 2       | Yes     | No              | 0           | 0
+// | 55%                       | 4%          | Yes                | 4% 3       |
+// Yes     | Yes             | 0           | 0               | 50% | 3% | Yes |
+// 3% 4       | Yes     | Yes             | 0           | 9               | 45%
+// | 2%          | Yes                | 2% 5       | Yes     | Yes             |
+// 9           | 9               | 40%                       | 1%          | Yes
+// | 1% 6       | Yes     | Yes             | 9           | 11              |
+// 30%                       | 0.5%        | Yes                | 0.5% 7       |
+// Yes     | Yes             | 11          | 11              | 25% | 0.5% | Yes
+// | 0.05% 8       | Yes     | Yes             | 11          | 11              |
+// 25%                       | 0.5%        | No                 | na
 enum Quality {
-  MIN = 1, // Alias for ONE
+  MIN = 1,  // Alias for ONE
   ONE = 1,
   TWO = 2,
   THREE = 3,
@@ -55,7 +59,7 @@ enum Quality {
   SIX = 6,
   SEVEN = 7,
   EIGHT = 8,
-  MAX = 8, // Alias for EIGHT
+  MAX = 8,  // Alias for EIGHT
 };
 
 // TODO(garretrieger): do something analagous to brotli quality levels
@@ -66,8 +70,8 @@ enum Quality {
 //
 // If we have the ability to estimate the number of brotli ops resulting from
 // a specific quality level (including a multiplier for the particular brotli
-// quality) then we can select a quality level which keeps brotli ops and closure
-// ops within a specific range.
+// quality) then we can select a quality level which keeps brotli ops and
+// closure ops within a specific range.
 //
 // Then can also have a flag/input to force a specific quality level.
 //
@@ -75,10 +79,11 @@ enum Quality {
 // tradeoffs:
 //
 // - unmapped_glyph_handling (global)
-//     Lower quality is to not find conditions (so use patch or init font), high quality
-//     is to find conditions.
+//     Lower quality is to not find conditions (so use patch or init font), high
+//     quality is to find conditions.
 //
-// - generate_feature_segments (global): high quality generate segment per feature, low quality put all optional features
+// - generate_feature_segments (global): high quality generate segment per
+// feature, low quality put all optional features
 //     in one segment.
 //
 // - brotli_quality (global)
@@ -119,26 +124,34 @@ enum Quality {
 //     Default is probably fine, but may be worth changing.
 //
 // - min/max patch_size (merge group, heuristic):
-//     Probably fixed value for all qualities, has minimal impact on performance.
+//     Probably fixed value for all qualities, has minimal impact on
+//     performance.
 //
 // We may want a quality level per merge group, for the init font merge,
 // and global
 //
 // Utilizing quality levels:
-// - Have a configurable setting to the auto config call which specifies a rough encoding budget
-//   (ie. O(1 min), O(10 min), O(1 hour)). Then try to estimate the encoding time at each
-//   quality level and select the quality level which gets estimated time within the budget.
-// - Brotli and closure ops can both contribute significantly to overall segmenting times,
-//   so we will need to first estimate the typical brotli and closure operation time cost
-//   for the particular font (eg. run a few random closures and brotli compressions)
-// - Then estimate the number of ops that are needed. For closure take into account
+// - Have a configurable setting to the auto config call which specifies a rough
+// encoding budget
+//   (ie. O(1 min), O(10 min), O(1 hour)). Then try to estimate the encoding
+//   time at each quality level and select the quality level which gets
+//   estimated time within the budget.
+// - Brotli and closure ops can both contribute significantly to overall
+// segmenting times,
+//   so we will need to first estimate the typical brotli and closure operation
+//   time cost for the particular font (eg. run a few random closures and brotli
+//   compressions)
+// - Then estimate the number of ops that are needed. For closure take into
+// account
 //   how much savings the dep graph can provide.
-// - Finall overall time can be estimated (number ops) * (op time) * (fixed scaling factor)
+// - Finall overall time can be estimated (number ops) * (op time) * (fixed
+// scaling factor)
 //   for both brotli and closure. Total time is the sum.
 
-// TODO(garretrieger): to help speed up init font processing times when latin is primary script
-// consider adding the latin alphabet (upper and lower) directly to the init font. Similar things
-// could be done for other scripts if we can find data on what the "core" alphabet is.
+// TODO(garretrieger): to help speed up init font processing times when latin is
+// primary script consider adding the latin alphabet (upper and lower) directly
+// to the init font. Similar things could be done for other scripts if we can
+// find data on what the "core" alphabet is.
 
 // TODO(garretrieger): collect data on brotli compression times as a function of
 // quality assuming group sizes of 4 using a CJK font
@@ -293,7 +306,7 @@ StatusOr<std::string> AutoSegmenterConfig::GetBaseScriptForLanguage(
   }
 
   static const auto* lang_to_script =
-      new flat_hash_map<std::string, std::string> {
+      new flat_hash_map<std::string, std::string>{
           {"Language_af", "Script_latin"},
           {"Language_ak", "Script_latin"},
           {"Language_am", "Script_ethiopic"},
@@ -489,7 +502,8 @@ static Status ApplyPrimaryScript(
   return absl::OkStatus();
 }
 
-static void ApplyQualityLevelTo(Quality quality, HeuristicConfiguration& config) {
+static void ApplyQualityLevelTo(Quality quality,
+                                HeuristicConfiguration& config) {
   config.set_min_patch_size(2500);
 }
 
@@ -503,15 +517,27 @@ static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
   }
 
   switch (quality) {
-    case ONE: config.set_optimization_cutoff_fraction(0.05); break;
-    case TWO: config.set_optimization_cutoff_fraction(0.04); break;
-    case THREE: config.set_optimization_cutoff_fraction(0.03); break;
-    case FOUR: config.set_optimization_cutoff_fraction(0.02); break;
-    case FIVE: config.set_optimization_cutoff_fraction(0.01); break;
+    case ONE:
+      config.set_optimization_cutoff_fraction(0.05);
+      break;
+    case TWO:
+      config.set_optimization_cutoff_fraction(0.04);
+      break;
+    case THREE:
+      config.set_optimization_cutoff_fraction(0.03);
+      break;
+    case FOUR:
+      config.set_optimization_cutoff_fraction(0.02);
+      break;
+    case FIVE:
+      config.set_optimization_cutoff_fraction(0.01);
+      break;
     case SIX:
     case SEVEN:
     case EIGHT:
-    default: config.set_optimization_cutoff_fraction(0.005); break;
+    default:
+      config.set_optimization_cutoff_fraction(0.005);
+      break;
   }
 }
 
@@ -524,28 +550,65 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
     }
 
     switch (quality) {
-      case ONE: merge_group.set_preprocess_merging_probability_threshold(0.05); break;
-      case TWO: merge_group.set_preprocess_merging_probability_threshold(0.04); break;
-      case THREE: merge_group.set_preprocess_merging_probability_threshold(0.03); break;
-      case FOUR: merge_group.set_preprocess_merging_probability_threshold(0.02); break;
-      case FIVE: merge_group.set_preprocess_merging_probability_threshold(0.01); break;
-      case SIX: merge_group.set_preprocess_merging_probability_threshold(0.005); break;
-      case SEVEN: merge_group.set_preprocess_merging_probability_threshold(0.0005); break;
+      case ONE:
+        merge_group.set_preprocess_merging_probability_threshold(0.05);
+        break;
+      case TWO:
+        merge_group.set_preprocess_merging_probability_threshold(0.04);
+        break;
+      case THREE:
+        merge_group.set_preprocess_merging_probability_threshold(0.03);
+        break;
+      case FOUR:
+        merge_group.set_preprocess_merging_probability_threshold(0.02);
+        break;
+      case FIVE:
+        merge_group.set_preprocess_merging_probability_threshold(0.01);
+        break;
+      case SIX:
+        merge_group.set_preprocess_merging_probability_threshold(0.005);
+        break;
+      case SEVEN:
+        merge_group.set_preprocess_merging_probability_threshold(0.0005);
+        break;
       case EIGHT:
-      default: merge_group.clear_preprocess_merging_probability_threshold(); break;
+      default:
+        merge_group.clear_preprocess_merging_probability_threshold();
+        break;
     }
 
     if (merge_group.mutable_cost_config()->has_initial_font_merge_threshold()) {
       switch (quality) {
-        case ONE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.60); break;
-        case TWO: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.55); break;
-        case THREE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.50); break;
-        case FOUR: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.45); break;
-        case FIVE: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.40); break;
-        case SIX: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.30); break;
+        case ONE:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.60);
+          break;
+        case TWO:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.55);
+          break;
+        case THREE:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.50);
+          break;
+        case FOUR:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.45);
+          break;
+        case FIVE:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.40);
+          break;
+        case SIX:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.30);
+          break;
         case SEVEN:
         case EIGHT:
-        default: merge_group.mutable_cost_config()->set_initial_font_merge_probability_threshold(0.25); break;
+        default:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.25);
+          break;
       }
     }
   }
@@ -605,7 +668,8 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 }
 
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
-    hb_face_t* face, std::optional<std::string> primary_script, std::optional<int> quality_level) {
+    hb_face_t* face, std::optional<std::string> primary_script,
+    std::optional<int> quality_level) {
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
   config.set_generate_feature_segments(true);
@@ -620,9 +684,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   uint32_t cp_count = unicodes.size();
 
-  // TODO(garretrieger): more sophisticated scheme for auto picking quality level.
-  // roughly we want to estimate the expected cost of each quality level and pick
-  // based on that.
+  // TODO(garretrieger): more sophisticated scheme for auto picking quality
+  // level. roughly we want to estimate the expected cost of each quality level
+  // and pick based on that.
   Quality quality = THREE;
   if (cp_count <= 1000) {
     quality = MAX;
@@ -630,7 +694,8 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     quality_level = SIX;
   }
 
-  if (quality_level.has_value() && quality_level.value() >= MIN && quality_level.value() <= MAX) {
+  if (quality_level.has_value() && quality_level.value() >= MIN &&
+      quality_level.value() <= MAX) {
     quality = static_cast<Quality>(quality_level.value());
     VLOG(0) << "Using specified quality level for segmenting: " << quality;
   } else {

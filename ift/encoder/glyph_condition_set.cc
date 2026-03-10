@@ -1,6 +1,6 @@
-#include "absl/log/log.h"
-
 #include "ift/encoder/glyph_condition_set.h"
+
+#include "absl/log/log.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -20,14 +20,15 @@ void PrintTo(const GlyphConditionSet& set, std::ostream* os) {
   *os << "}" << std::endl;
 }
 
-static void PrintCondition(
-  glyph_id_t gid, const GlyphConditions& condition, bool added) {
-  VLOG(0) << (added ? "++ " : "-- ") << "g" << gid
-    << ": OR " << condition.or_segments.ToString() << ", "
-    << ": AND " << condition.or_segments.ToString();
+static void PrintCondition(glyph_id_t gid, const GlyphConditions& condition,
+                           bool added) {
+  VLOG(0) << (added ? "++ " : "-- ") << "g" << gid << ": OR "
+          << condition.or_segments.ToString() << ", "
+          << ": AND " << condition.or_segments.ToString();
 }
 
-void GlyphConditionSet::PrintDiff(const GlyphConditionSet& a, const GlyphConditionSet& b) {
+void GlyphConditionSet::PrintDiff(const GlyphConditionSet& a,
+                                  const GlyphConditionSet& b) {
   auto it_a = a.gid_conditions_.begin();
   auto it_b = b.gid_conditions_.begin();
   glyph_id_t gid_a = 0;

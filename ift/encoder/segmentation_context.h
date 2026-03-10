@@ -46,29 +46,31 @@ namespace ift::encoder {
 class SegmentationContext {
  public:
   static absl::StatusOr<SegmentationContext> Create(
-    hb_face_t* face, const SubsetDefinition& initial_segment,
-    const std::vector<Segment>& segments,
-    ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-    ift::proto::ConditionAnalysisMode condition_analysis_mode,
-    uint32_t brotli_quality,
-    uint32_t init_font_brotli_quality) {
-    // TODO(garretrieger): argument list is getting long, switch to a builder pattern
-    // for construction.
+      hb_face_t* face, const SubsetDefinition& initial_segment,
+      const std::vector<Segment>& segments,
+      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::proto::ConditionAnalysisMode condition_analysis_mode,
+      uint32_t brotli_quality, uint32_t init_font_brotli_quality) {
+    // TODO(garretrieger): argument list is getting long, switch to a builder
+    // pattern for construction.
 
-    std::unique_ptr<GlyphClosureCache> closure_cache = std::make_unique<GlyphClosureCache>(face);
-    std::unique_ptr<RequestedSegmentationInformation> segmentation_info = TRY(RequestedSegmentationInformation::Create(
-          segments, initial_segment, *closure_cache, unmapped_glyph_handling));
+    std::unique_ptr<GlyphClosureCache> closure_cache =
+        std::make_unique<GlyphClosureCache>(face);
+    std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
+        TRY(RequestedSegmentationInformation::Create(segments, initial_segment,
+                                                     *closure_cache,
+                                                     unmapped_glyph_handling));
 
     SegmentationContext context(
-      face, unmapped_glyph_handling,
-      condition_analysis_mode, brotli_quality, init_font_brotli_quality,
-      std::move(closure_cache),
-      std::move(segmentation_info)
-    );
+        face, unmapped_glyph_handling, condition_analysis_mode, brotli_quality,
+        init_font_brotli_quality, std::move(closure_cache),
+        std::move(segmentation_info));
 
     if ((condition_analysis_mode == ift::proto::CLOSURE_AND_DEP_GRAPH) ||
-        (condition_analysis_mode == ift::proto::CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
-      context.dependency_closure_ = TRY(DependencyClosure::Create(context.segmentation_info_.get(), context.original_face.get()));
+        (condition_analysis_mode ==
+         ift::proto::CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
+      context.dependency_closure_ = TRY(DependencyClosure::Create(
+          context.segmentation_info_.get(), context.original_face.get()));
     }
     return context;
   }
@@ -84,19 +86,16 @@ class SegmentationContext {
       std::vector<Segment> segments,
       ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::proto::ConditionAnalysisMode condition_analysis_mode,
-      uint32_t brotli_quality,
-      uint32_t init_font_brotli_quality);
+      uint32_t brotli_quality, uint32_t init_font_brotli_quality);
 
  private:
   SegmentationContext(
-    hb_face_t* face,
-    ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-    ift::proto::ConditionAnalysisMode condition_analysis_mode,
-    uint32_t brotli_quality,
-    uint32_t init_font_brotli_quality,
-    std::unique_ptr<GlyphClosureCache> closure_cache,
-    std::unique_ptr<RequestedSegmentationInformation> segmentation_info
-  )
+      hb_face_t* face,
+      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::proto::ConditionAnalysisMode condition_analysis_mode,
+      uint32_t brotli_quality, uint32_t init_font_brotli_quality,
+      std::unique_ptr<GlyphClosureCache> closure_cache,
+      std::unique_ptr<RequestedSegmentationInformation> segmentation_info)
       : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
         patch_size_cache_for_init_font(
             NewPatchSizeCache(face, init_font_brotli_quality)),
@@ -108,6 +107,7 @@ class SegmentationContext {
         glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality),
         condition_analysis_mode_(condition_analysis_mode) {}
+
  public:
   unsigned BrotliQuality() const { return brotli_quality_; }
 
@@ -128,21 +128,32 @@ class SegmentationContext {
       dep_graph_inaccurate = (*dependency_closure_)->InaccurateResults();
     }
 
-    uint64_t potential_closures =
-      glyph_closure_cache->CacheHits() + glyph_closure_cache->CacheMisses() +
-      dep_graph_closures;
+    uint64_t potential_closures = glyph_closure_cache->CacheHits() +
+                                  glyph_closure_cache->CacheMisses() +
+                                  dep_graph_closures;
 
-    double hb_subset_rate = 100.0 * ((double) glyph_closure_cache->CacheMisses() / (double) potential_closures);
-    double cache_hit_rate = 100.0 * ((double) glyph_closure_cache->CacheHits() / (double) potential_closures);
-    double dep_graph_hit_rate = 100.0 * ((double) dep_graph_closures / (double) potential_closures);
-    uint64_t other_closures = glyph_closure_cache->CacheHits() + glyph_closure_cache->CacheMisses() - (2 * dep_graph_inaccurate);
+    double hb_subset_rate =
+        100.0 * ((double)glyph_closure_cache->CacheMisses() /
+                 (double)potential_closures);
+    double cache_hit_rate = 100.0 * ((double)glyph_closure_cache->CacheHits() /
+                                     (double)potential_closures);
+    double dep_graph_hit_rate =
+        100.0 * ((double)dep_graph_closures / (double)potential_closures);
+    uint64_t other_closures = glyph_closure_cache->CacheHits() +
+                              glyph_closure_cache->CacheMisses() -
+                              (2 * dep_graph_inaccurate);
 
-    VLOG(0) << ">> Of " << potential_closures << " potential closure operations:" << std::endl
-      << "  " << glyph_closure_cache->CacheMisses() << " (" << hb_subset_rate << "%)  were handled by hb-subset-plan" << std::endl
-      << "  " << dep_graph_closures
-      << " (" << dep_graph_hit_rate << "%) were handled by dep graph" << std::endl
-      << "  " << glyph_closure_cache->CacheHits() << " (" << cache_hit_rate << "%) were provided by the cache" << std::endl
-      << "  " << other_closures << " were from something other than AnalyzeSegment()" << std::endl;
+    VLOG(0) << ">> Of " << potential_closures
+            << " potential closure operations:" << std::endl
+            << "  " << glyph_closure_cache->CacheMisses() << " ("
+            << hb_subset_rate << "%)  were handled by hb-subset-plan"
+            << std::endl
+            << "  " << dep_graph_closures << " (" << dep_graph_hit_rate
+            << "%) were handled by dep graph" << std::endl
+            << "  " << glyph_closure_cache->CacheHits() << " ("
+            << cache_hit_rate << "%) were provided by the cache" << std::endl
+            << "  " << other_closures
+            << " were from something other than AnalyzeSegment()" << std::endl;
   }
 
   const common::SegmentSet& InertSegments() const { return inert_segments_; }
@@ -176,7 +187,7 @@ class SegmentationContext {
    * glyphs.
    */
   absl::Status InvalidateGlyphInformation(const common::GlyphSet& glyphs,
-                                  const common::SegmentSet& segments) {
+                                          const common::SegmentSet& segments) {
     // TODO(garretrieger): now that invalidation here is only for glyph
     // condition set we should consider changing this so that invalidation is
     // internal to glyph condition set reprocessing (like with GroupGlyphs).
@@ -214,7 +225,6 @@ class SegmentationContext {
   // calling this.
   absl::Status GroupGlyphs(const common::GlyphSet& glyphs,
                            const common::SegmentSet& modified_segments) {
-
     std::optional<DependencyClosure*> maybe_dep_closure = std::nullopt;
     if (dependency_closure_.has_value()) {
       maybe_dep_closure = (*dependency_closure_).get();

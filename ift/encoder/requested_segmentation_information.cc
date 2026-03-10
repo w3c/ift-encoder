@@ -8,7 +8,6 @@
 
 using ift::proto::UnmappedGlyphHandling;
 
-
 using absl::StatusOr;
 
 namespace ift::encoder {
@@ -34,21 +33,22 @@ static bool CheckSegmentsAreDisjoint(const SubsetDefinition& init_segment,
   return segments_disjoint;
 }
 
-StatusOr<std::unique_ptr<RequestedSegmentationInformation>> RequestedSegmentationInformation::Create(
-  std::vector<Segment> segments, SubsetDefinition init_font_segment,
-  GlyphClosureCache& closure_cache,
-  UnmappedGlyphHandling unmapped_glyph_handling) {
-
+StatusOr<std::unique_ptr<RequestedSegmentationInformation>>
+RequestedSegmentationInformation::Create(
+    std::vector<Segment> segments, SubsetDefinition init_font_segment,
+    GlyphClosureCache& closure_cache,
+    UnmappedGlyphHandling unmapped_glyph_handling) {
   std::unique_ptr<RequestedSegmentationInformation> info(
-    new RequestedSegmentationInformation(segments, init_font_segment, unmapped_glyph_handling));
+      new RequestedSegmentationInformation(segments, init_font_segment,
+                                           unmapped_glyph_handling));
   TRYV(info->ReassignInitSubset(closure_cache, init_font_segment));
-  info->segments_disjoint_ = CheckSegmentsAreDisjoint(init_font_segment, info->segments_);
+  info->segments_disjoint_ =
+      CheckSegmentsAreDisjoint(init_font_segment, info->segments_);
   return info;
 }
 
 RequestedSegmentationInformation::RequestedSegmentationInformation(
-    std::vector<Segment> segments,
-    SubsetDefinition init_font_segment,
+    std::vector<Segment> segments, SubsetDefinition init_font_segment,
     UnmappedGlyphHandling unmapped_glyph_handling)
     : segments_(std::move(segments)),
       init_font_segment_(),

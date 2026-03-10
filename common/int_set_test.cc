@@ -326,11 +326,11 @@ TEST_F(IntSetTest, IsSubsetOf_HbRegression) {
   // https://github.com/harfbuzz/harfbuzz/pull/5742
 
   IntSet small;
-  IntSet large {0xFFF};
+  IntSet large{0xFFF};
 
   small.insert(0x0FF);
   small.insert(0xFFF);
-  small.erase(0x0FF); // introduce an empty page
+  small.erase(0x0FF);  // introduce an empty page
 
   ASSERT_TRUE(small.is_subset_of(large));
   ASSERT_TRUE(large.is_subset_of(small));
@@ -356,7 +356,7 @@ TEST_F(IntSetTest, Union) {
 
   hb_set_unique_ptr d = make_hb_set(2, 12, 20);
   b.union_from(d.get());
-  ASSERT_EQ(b, (IntSet {8, 11, 12, 20}));
+  ASSERT_EQ(b, (IntSet{8, 11, 12, 20}));
 }
 
 TEST_F(IntSetTest, Intersect) {

@@ -4,9 +4,9 @@
 #include <string>
 
 #include "absl/strings/str_cat.h"
-#include "ift/encoder/types.h"
-#include "hb.h"
 #include "common/font_helper.h"
+#include "hb.h"
+#include "ift/encoder/types.h"
 
 namespace ift::dep_graph {
 
@@ -21,40 +21,28 @@ class Node {
     FEATURE = 0x10,
   };
 
-  static Node InitFont() {
-    return Node(0, INIT_FONT);
-  }
+  static Node InitFont() { return Node(0, INIT_FONT); }
 
-  static Node Glyph(encoder::glyph_id_t id) {
-    return Node(id, GLYPH);
-  }
+  static Node Glyph(encoder::glyph_id_t id) { return Node(id, GLYPH); }
 
-  static Node Unicode(hb_codepoint_t id) {
-    return Node(id, UNICODE);
-  }
+  static Node Unicode(hb_codepoint_t id) { return Node(id, UNICODE); }
 
-  static Node Segment(encoder::segment_index_t id) {
-    return Node(id, SEGMENT);
-  }
+  static Node Segment(encoder::segment_index_t id) { return Node(id, SEGMENT); }
 
-  static Node Feature(hb_tag_t tag) {
-    return Node(tag, FEATURE);
-  }
+  static Node Feature(hb_tag_t tag) { return Node(tag, FEATURE); }
 
   bool IsUnicode() const { return type_ == UNICODE; }
   bool IsGlyph() const { return type_ == GLYPH; }
   bool IsSegment() const { return type_ == SEGMENT; }
   bool IsInitFont() const { return type_ == INIT_FONT; }
   bool IsFeature() const { return type_ == FEATURE; }
-  bool Matches(uint32_t filter) const {
-    return filter & type_;
-  }
+  bool Matches(uint32_t filter) const { return filter & type_; }
 
   uint32_t Id() const { return id_; }
 
   std::string ToString() const {
     switch (type_) {
-    case SEGMENT:
+      case SEGMENT:
         return absl::StrCat("s", id_);
       case UNICODE:
         return absl::StrCat("u", id_);
@@ -64,7 +52,7 @@ class Node {
         return absl::StrCat(common::FontHelper::ToString(id_));
       default:
         return absl::StrCat("X", id_);
-      }
+    }
   }
 
   bool operator<(const Node& other) const {
@@ -78,9 +66,7 @@ class Node {
     return id_ == other.id_ && type_ == other.type_;
   }
 
-  bool operator!=(const Node& other) const {
-    return !(*this == other);
-  }
+  bool operator!=(const Node& other) const { return !(*this == other); }
 
   template <typename H>
   friend H AbslHashValue(H h, const Node& n) {

@@ -1,9 +1,9 @@
 #include <google/protobuf/text_format.h>
 
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <vector>
-#include <chrono>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
@@ -30,11 +30,10 @@
 #include "util/segmenter_config.pb.h"
 #include "util/segmenter_config_util.h"
 
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmenterConfig;
 using ift::proto::CLOSURE_ONLY;
 using ift::proto::PATCH;
-
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmenterConfig;
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -148,7 +147,8 @@ static Status Analysis(hb_face_t* font,
     group_index++;
   }
 
-  std::cerr << "total_cost_across_groups = " << (uint64_t) overall_cost << std::endl;
+  std::cerr << "total_cost_across_groups = " << (uint64_t)overall_cost
+            << std::endl;
 
   return absl::OkStatus();
 }
@@ -180,14 +180,16 @@ static Status Main(const std::vector<char*> args) {
       TRY(LoadFont(absl::GetFlag(FLAGS_input_font).c_str()));
   SegmenterConfig config = TRY(LoadConfig(font.get()));
 
-  SegmenterConfigUtil config_util(
-      (absl::GetFlag(FLAGS_config) == "auto") ? "" : absl::GetFlag(FLAGS_config));
+  SegmenterConfigUtil config_util((absl::GetFlag(FLAGS_config) == "auto")
+                                      ? ""
+                                      : absl::GetFlag(FLAGS_config));
 
   auto start_time = std::chrono::high_resolution_clock::now();
   auto result = TRY(config_util.RunSegmenter(font.get(), config));
   auto end_time = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> duration = end_time - start_time;
-  std::cerr << "CodepointToGlyphSegments took: " << duration.count() << " seconds" << std::endl;
+  std::cerr << "CodepointToGlyphSegments took: " << duration.count()
+            << " seconds" << std::endl;
 
   GlyphSegmentation segmentation = std::move(result.segmentation);
   SegmentationPlan plan = std::move(result.plan);
@@ -213,7 +215,8 @@ static Status Main(const std::vector<char*> args) {
 
   if (absl::GetFlag(FLAGS_output_fallback_glyph_count)) {
     ClosureGlyphSegmenter segmenter(
-        config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
+        config.brotli_quality(),
+        config.brotli_quality_for_initial_font_merging(),
         config.unmapped_glyph_handling(), config.condition_analysis_mode());
     TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }

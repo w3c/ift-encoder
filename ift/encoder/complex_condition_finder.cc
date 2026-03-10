@@ -103,7 +103,8 @@ struct Context {
                   SegmentSet to_be_tested, GlyphSet glyphs) {
     SegmentSet all = sub_condition;
     all.union_set(to_be_tested);
-    SubsetDefinition task_definition = segmentation_info->CombinedDefinition(all);
+    SubsetDefinition task_definition =
+        segmentation_info->CombinedDefinition(all);
     return Task{
         .full_condition = full_condition,
         .sub_condition = sub_condition,
@@ -138,7 +139,8 @@ struct Context {
 
   // Returns true if all glyphs are in the closure of segments.
   StatusOr<bool> InClosure(const SegmentSet& segments, const GlyphSet& glyphs) {
-    GlyphSet closure = TRY(glyph_closure_cache->SegmentClosure(segmentation_info, segments));
+    GlyphSet closure =
+        TRY(glyph_closure_cache->SegmentClosure(segmentation_info, segments));
     return glyphs.is_subset_of(closure);
   }
 
@@ -146,7 +148,8 @@ struct Context {
       const SegmentSet& segments, const GlyphSet& glyphs) {
     SegmentSet except = all_segments;
     except.subtract(segments);
-    GlyphSet closure_glyphs = TRY(glyph_closure_cache->SegmentClosure(segmentation_info, except));
+    GlyphSet closure_glyphs =
+        TRY(glyph_closure_cache->SegmentClosure(segmentation_info, except));
     closure_glyphs.intersect(glyphs);
 
     except.intersect(inscope_segments);

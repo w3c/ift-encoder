@@ -1,51 +1,52 @@
 #include "ift/encoder/dependency_closure.h"
+
 #include <memory>
 #include <vector>
 
+#include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
+#include "gtest/gtest.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
+#include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
-#include "common/font_data.h"
-#include "gtest/gtest.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 #include "util/common.pb.h"
-#include "ift/encoder/requested_segmentation_information.h"
 
 using ift::proto::PATCH;
 
-
 using absl::Status;
-using common::hb_face_unique_ptr;
 using common::CodepointSet;
-using common::SegmentSet;
 using common::FontData;
 using common::GlyphSet;
+using common::hb_face_unique_ptr;
+using common::SegmentSet;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
 
 class DependencyClosureTest : public ::testing::Test {
  protected:
-  DependencyClosureTest() :
-    face(from_file("common/testdata/Roboto-Regular.ttf")),
-    double_nested_face(from_file("common/testdata/double-nested-components.ttf")),
-    noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
-    roboto_vf(from_file("common/testdata/Roboto[wdth,wght].ttf")),
-    closure_cache(face.get()),
-    segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures(), closure_cache, PATCH)),
-    dependency_closure(*DependencyClosure::Create(segmentation_info.get(), face.get()))
-  {}
+  DependencyClosureTest()
+      : face(from_file("common/testdata/Roboto-Regular.ttf")),
+        double_nested_face(
+            from_file("common/testdata/double-nested-components.ttf")),
+        noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
+        roboto_vf(from_file("common/testdata/Roboto[wdth,wght].ttf")),
+        closure_cache(face.get()),
+        segmentation_info(*RequestedSegmentationInformation::Create(
+            segments, WithDefaultFeatures(), closure_cache, PATCH)),
+        dependency_closure(
+            *DependencyClosure::Create(segmentation_info.get(), face.get())) {}
 
   static SubsetDefinition WithDefaultFeatures() {
     SubsetDefinition def;
     AddInitSubsetDefaults(def);
     return def;
   }
-
 
   static SubsetDefinition WithDefaultFeatures(CodepointSet codepoints) {
     SubsetDefinition def;
@@ -65,23 +66,29 @@ class DependencyClosureTest : public ::testing::Test {
   }
 
   std::vector<Segment> segments = {
-    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-    /* 3 */ {{'q'}, ProbabilityBound::Zero()},
-    /* 4 */ {{'A'}, ProbabilityBound::Zero()},
-    /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+      /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+      /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+      /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+      /* 3 */ {{'q'}, ProbabilityBound::Zero()},
+      /* 4 */ {{'A'}, ProbabilityBound::Zero()},
+      /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
   };
 
-  void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments) {
-    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
-    dependency_closure = *DependencyClosure::Create(segmentation_info.get(), face.get());
+  void Reconfigure(SubsetDefinition new_init,
+                   std::vector<Segment> new_segments) {
+    segmentation_info = *RequestedSegmentationInformation::Create(
+        new_segments, new_init, closure_cache, PATCH);
+    dependency_closure =
+        *DependencyClosure::Create(segmentation_info.get(), face.get());
   }
 
-  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init, std::vector<Segment> new_segments) {
+  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
+                   std::vector<Segment> new_segments) {
     closure_cache = GlyphClosureCache(new_face);
-    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
-    dependency_closure = *DependencyClosure::Create(segmentation_info.get(), new_face);
+    segmentation_info = *RequestedSegmentationInformation::Create(
+        new_segments, new_init, closure_cache, PATCH);
+    dependency_closure =
+        *DependencyClosure::Create(segmentation_info.get(), new_face);
   }
 
   Status RejectedAnalysis(segment_index_t segment) {
@@ -89,8 +96,11 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids, exclusive_gids)) == DependencyClosure::ACCURATE) {
-      return absl::InternalError("Dependency closure analysis should have been rejected.");
+    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids,
+                                               exclusive_gids)) ==
+        DependencyClosure::ACCURATE) {
+      return absl::InternalError(
+          "Dependency closure analysis should have been rejected.");
     }
     return absl::OkStatus();
   }
@@ -100,14 +110,19 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet or_gids;
     GlyphSet exclusive_gids;
 
-    if (TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids, exclusive_gids)) != DependencyClosure::ACCURATE) {
-      return absl::InternalError("Dependency closure analysis rejected unexpectedly.");
+    if (TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids,
+                                               exclusive_gids)) !=
+        DependencyClosure::ACCURATE) {
+      return absl::InternalError(
+          "Dependency closure analysis rejected unexpectedly.");
     }
 
     GlyphSet expected_and_gids;
     GlyphSet expected_or_gids;
     GlyphSet expected_exclusive_gids;
-    TRYV(closure_cache.AnalyzeSegment(*segmentation_info, segments, expected_and_gids, expected_or_gids, expected_exclusive_gids));
+    TRYV(closure_cache.AnalyzeSegment(*segmentation_info, segments,
+                                      expected_and_gids, expected_or_gids,
+                                      expected_exclusive_gids));
 
     std::string message;
     bool success = true;
@@ -117,7 +132,8 @@ class DependencyClosureTest : public ::testing::Test {
     if (!CompareGids("OR", or_gids, expected_or_gids, message)) {
       success = false;
     }
-    if (!CompareGids("EXCLUSIVE", exclusive_gids, expected_exclusive_gids, message)) {
+    if (!CompareGids("EXCLUSIVE", exclusive_gids, expected_exclusive_gids,
+                     message)) {
       success = false;
     }
 
@@ -127,7 +143,8 @@ class DependencyClosureTest : public ::testing::Test {
     return absl::OkStatus();
   }
 
-  bool CompareGids(absl::string_view name, const GlyphSet& actual, const GlyphSet& expected, std::string& message) {
+  bool CompareGids(absl::string_view name, const GlyphSet& actual,
+                   const GlyphSet& expected, std::string& message) {
     std::string op = " == ";
     bool result = true;
     if (actual != expected) {
@@ -135,8 +152,8 @@ class DependencyClosureTest : public ::testing::Test {
       result = false;
     }
 
-    absl::StrAppend(&message,
-      name, " glyphs: actual ", actual.ToString(), op, "expected ", expected.ToString(), "\n");
+    absl::StrAppend(&message, name, " glyphs: actual ", actual.ToString(), op,
+                    "expected ", expected.ToString(), "\n");
     return result;
   }
 
@@ -150,17 +167,18 @@ class DependencyClosureTest : public ::testing::Test {
 };
 
 TEST_F(DependencyClosureTest, AddsToSets) {
-    GlyphSet and_gids {101};
-    GlyphSet or_gids {102};
-    GlyphSet exclusive_gids {103};
+  GlyphSet and_gids{101};
+  GlyphSet or_gids{102};
+  GlyphSet exclusive_gids{103};
 
-    auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids, exclusive_gids);
-    ASSERT_TRUE(r.ok()) << r.status();
-    ASSERT_EQ(*r, DependencyClosure::ACCURATE);
+  auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids,
+                                              exclusive_gids);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_EQ(*r, DependencyClosure::ACCURATE);
 
-    ASSERT_EQ(and_gids, (GlyphSet {101}));
-    ASSERT_EQ(or_gids, (GlyphSet {102}));
-    ASSERT_EQ(exclusive_gids, (GlyphSet {69, 103}));
+  ASSERT_EQ(and_gids, (GlyphSet{101}));
+  ASSERT_EQ(or_gids, (GlyphSet{102}));
+  ASSERT_EQ(exclusive_gids, (GlyphSet{69, 103}));
 }
 
 TEST_F(DependencyClosureTest, Exclusive) {
@@ -189,19 +207,21 @@ TEST_F(DependencyClosureTest, LigaSatisfied) {
   ASSERT_TRUE(s.ok()) << s;
 
   // One half of the liga is in the init font
-  Reconfigure(face.get(), WithDefaultFeatures({'f'}), {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'i'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(face.get(), WithDefaultFeatures({'f'}),
+              {
+                  {{'a'}, ProbabilityBound::Zero()},
+                  {{'i'}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, UnicodeToGid_ExcludesInitFont) {
   // 0x7528 and 0x2F64 share the same glyph
-  Reconfigure(noto_sans_jp.get(), {0x7528}, {
-    {{0x2F64}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), {0x7528},
+              {
+                  {{0x2F64}, ProbabilityBound::Zero()},
+              });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
@@ -216,10 +236,11 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
   // have no extra incoming edges and with a naive implementation
   // would be classified as exclusive, where it should be disjunctive
   // since it's reachable via segment 1 (through b -> c -> d).
-  Reconfigure(double_nested_face.get(), {}, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(double_nested_face.get(), {},
+              {
+                  {{'a'}, ProbabilityBound::Zero()},
+                  {{'b'}, ProbabilityBound::Zero()},
+              });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({1});
@@ -227,23 +248,26 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
   s = CompareAnalysis({0, 1});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure(double_nested_face.get(), {'a'}, {
-    {{'b'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(double_nested_face.get(), {'a'},
+              {
+                  {{'b'}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure(double_nested_face.get(), {'b'}, {
-    {{'a'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(double_nested_face.get(), {'b'},
+              {
+                  {{'a'}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, CodepointNotInFont) {
-  Reconfigure(double_nested_face.get(), {}, {
-    {{'A'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(double_nested_face.get(), {},
+              {
+                  {{'A'}, ProbabilityBound::Zero()},
+              });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
@@ -252,18 +276,19 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   SubsetDefinition c2sc;
   c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
-  Reconfigure(face.get(), {}, {
-    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
-    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
-    /* 4 */ {c2sc, ProbabilityBound::Zero()},
-  });
+  Reconfigure(face.get(), {},
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+                  /* 4 */ {c2sc, ProbabilityBound::Zero()},
+              });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-   // c2sc not in init font which A passes through.
+  // c2sc not in init font which A passes through.
   s = RejectedAnalysis(2);
   ASSERT_TRUE(s.ok()) << s;
   s = RejectedAnalysis(3);
@@ -272,12 +297,13 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   ASSERT_TRUE(s.ok()) << s;
 
   // With c2sc in the init font, we can now analyze the single subst's
-  Reconfigure(face.get(), c2sc, {
-    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'A'}, ProbabilityBound::Zero()},
-    /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(face.get(), c2sc,
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'A'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+              });
 
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -314,9 +340,9 @@ TEST_F(DependencyClosureTest, DisjunctivePartialInInitFont) {
 TEST_F(DependencyClosureTest, AlreadyInInitFont) {
   // Analysis of something already in the init font is a noop.
   Reconfigure({'A'}, {
-    {{'A'}, ProbabilityBound::Zero()},
-    {{0xC1}, ProbabilityBound::Zero()},
-  });
+                         {{'A'}, ProbabilityBound::Zero()},
+                         {{0xC1}, ProbabilityBound::Zero()},
+                     });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
@@ -335,9 +361,9 @@ TEST_F(DependencyClosureTest, Rejected) {
 
 TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
   Reconfigure(WithDefaultFeatures({}), {
-    {{'i'}, ProbabilityBound::Zero()},
-    {{0x485}, ProbabilityBound::Zero()},
-  });
+                                           {{'i'}, ProbabilityBound::Zero()},
+                                           {{0x485}, ProbabilityBound::Zero()},
+                                       });
 
   Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
@@ -349,10 +375,11 @@ TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
 }
 
 TEST_F(DependencyClosureTest, Rejected_InitFontContext) {
-  Reconfigure(WithDefaultFeatures({'i'}), {
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-    {{0x485}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({'i'}),
+              {
+                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  {{0x485}, ProbabilityBound::Zero()},
+              });
 
   // Gravecomb doesn't pass through any contextual dependencies, but
   // it shows up as a context glyph for the init font subset.
@@ -365,9 +392,9 @@ TEST_F(DependencyClosureTest, Noop_Features) {
   SubsetDefinition features;
   features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));
   Reconfigure({}, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {features, ProbabilityBound::Zero()},
-  });
+                      {{'a'}, ProbabilityBound::Zero()},
+                      {features, ProbabilityBound::Zero()},
+                  });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -377,10 +404,11 @@ TEST_F(DependencyClosureTest, Noop_Features) {
 }
 
 TEST_F(DependencyClosureTest, Rejected_UVS) {
-  Reconfigure(noto_sans_jp.get(), {}, {
-    {{0x4fae}, ProbabilityBound::Zero()},
-    {{0xfe00}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), {},
+              {
+                  {{0x4fae}, ProbabilityBound::Zero()},
+                  {{0xfe00}, ProbabilityBound::Zero()},
+              });
 
   // Unsatisfied UVS constraints aren't supported yet
   // for accurate analysis.
@@ -395,33 +423,37 @@ TEST_F(DependencyClosureTest, Rejected_UVS) {
   s = CompareAnalysis({0, 1});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure(noto_sans_jp.get(), {}, {
-    {{0x4fae, 0xfe00}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), {},
+              {
+                  {{0x4fae, 0xfe00}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure(noto_sans_jp.get(), {0x4fae}, {
-    {{0xfe00}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), {0x4fae},
+              {
+                  {{0xfe00}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure(noto_sans_jp.get(), {0xfe00}, {
-    {{0x4fae}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), {0xfe00},
+              {
+                  {{0x4fae}, ProbabilityBound::Zero()},
+              });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
-  Reconfigure(WithDefaultFeatures({}), {
-    {{'i',
-      0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  {{'i', 0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+              });
 
-  // The segment contains everything needed to activated the i + gravecomb contextual
-  // lookup, but should still be rejected on account of passing through a contextual lookup.
+  // The segment contains everything needed to activated the i + gravecomb
+  // contextual lookup, but should still be rejected on account of passing
+  // through a contextual lookup.
   Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 }
@@ -430,9 +462,9 @@ TEST_F(DependencyClosureTest, BidiMirroring) {
   // Test that the dep graph analysis accounts for bidi mirroring in the
   // harfbuzz closure
   Reconfigure({}, {
-    {{0x2264 /* less equal */}, ProbabilityBound::Zero()},
-    {{0x2265 /* greater equal */}, ProbabilityBound::Zero()},
-  });
+                      {{0x2264 /* less equal */}, ProbabilityBound::Zero()},
+                      {{0x2265 /* greater equal */}, ProbabilityBound::Zero()},
+                  });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -445,9 +477,9 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   // Test that the dep graph analysis accounts for bidi mirroring in the
   // harfbuzz closure
   Reconfigure({}, {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-  });
+                      {{'a'}, ProbabilityBound::Zero()},
+                      {{'b'}, ProbabilityBound::Zero()},
+                  });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -468,150 +500,155 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
   Reconfigure(WithDefaultFeatures(), {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-    {{'f'}, ProbabilityBound::Zero()},
-    {{'i'}, ProbabilityBound::Zero()},
-  });
+                                         {{'a'}, ProbabilityBound::Zero()},
+                                         {{'b'}, ProbabilityBound::Zero()},
+                                         {{'f'}, ProbabilityBound::Zero()},
+                                         {{'i'}, ProbabilityBound::Zero()},
+                                     });
 
   auto s = dependency_closure->SegmentsThatInteractWith({69 /* a */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {0}));
+  ASSERT_EQ(*s, (SegmentSet{0}));
 
   s = dependency_closure->SegmentsThatInteractWith({70 /* b */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {1}));
+  ASSERT_EQ(*s, (SegmentSet{1}));
 
   s = dependency_closure->SegmentsThatInteractWith({69, 70});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {0, 1}));
+  ASSERT_EQ(*s, (SegmentSet{0, 1}));
 
   s = dependency_closure->SegmentsThatInteractWith({74 /* f */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2}));
+  ASSERT_EQ(*s, (SegmentSet{2}));
 
   s = dependency_closure->SegmentsThatInteractWith({444});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
-  Reconfigure(WithDefaultFeatures(), {
-    /* 0 */ {{'x'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'q'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-    /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'x'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+              });
 
-  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(),
+            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
-
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({}, {
-    {{'x'}, ProbabilityBound::Zero()},
-    {{'q'}, ProbabilityBound::Zero()},
-    {{'i'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-    {{ccmp}, ProbabilityBound::Zero()},
-  });
+                      {{'x'}, ProbabilityBound::Zero()},
+                      {{'q'}, ProbabilityBound::Zero()},
+                      {{'i'}, ProbabilityBound::Zero()},
+                      {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                      {{ccmp}, ProbabilityBound::Zero()},
+                  });
 
-  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(),
+            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2, 3, 4}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3, 4}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
-  Reconfigure(WithDefaultFeatures({'i'}), {
-    {{'x'}, ProbabilityBound::Zero()},
-    {{'q'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({'i'}),
+              {
+                  {{'x'}, ProbabilityBound::Zero()},
+                  {{'q'}, ProbabilityBound::Zero()},
+                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+              });
 
-  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(),
+            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2}));
+  ASSERT_EQ(*s, (SegmentSet{2}));
 }
 
-TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesAndInitFontContext) {
+TEST_F(DependencyClosureTest,
+       SegmentsThatInteractWith_FeaturesAndInitFontContext) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({'i'}, {
-    {{'x'}, ProbabilityBound::Zero()},
-    {{'q'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-    {ccmp, ProbabilityBound::Zero()},
-  });
+                         {{'x'}, ProbabilityBound::Zero()},
+                         {{'q'}, ProbabilityBound::Zero()},
+                         {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                         {ccmp, ProbabilityBound::Zero()},
+                     });
 
-  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {0, 77, 85, 92, 141, 168, 609}));
+  ASSERT_EQ(segmentation_info->FullClosure(),
+            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
   auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet {2, 3}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
-
 
 TEST_F(DependencyClosureTest, SegmentInteractionGroup) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  Reconfigure(liga, {
-    /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'x'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'q'}, ProbabilityBound::Zero()},
-    /* 3 */ {{'i'}, ProbabilityBound::Zero()},
-    /* 4 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-    /* 5 */ {{ccmp}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(liga,
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'x'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 4 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  /* 5 */ {{ccmp}, ProbabilityBound::Zero()},
+              });
 
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}),
-            (SegmentSet {1}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1}));
 
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 2}),
-            (SegmentSet {1, 2}));
+            (SegmentSet{1, 2}));
 
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
-            (SegmentSet {0, 3, 4, 5}));
+            (SegmentSet{0, 3, 4, 5}));
 
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3, 5}),
-            (SegmentSet {0, 3, 4, 5}));
+            (SegmentSet{0, 3, 4, 5}));
 
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 3, 5}),
-            (SegmentSet {0, 1, 3, 4, 5}));
+            (SegmentSet{0, 1, 3, 4, 5}));
 }
 
 TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
-  SubsetDefinition liga {'i'};
+  SubsetDefinition liga{'i'};
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  Reconfigure(liga, {
-    /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'x'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'q'}, ProbabilityBound::Zero()},
-    /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-    /* 4 */ {{ccmp}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(liga,
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'x'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  /* 4 */ {{ccmp}, ProbabilityBound::Zero()},
+              });
 
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}),
-            (SegmentSet {1}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1}));
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
-            (SegmentSet {0, 3, 4}));
+            (SegmentSet{0, 3, 4}));
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3}),
-            (SegmentSet {0, 3, 4}));
+            (SegmentSet{0, 3, 4}));
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({4}),
-            (SegmentSet {0, 3, 4}));
+            (SegmentSet{0, 3, 4}));
 }
 
 TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
@@ -619,14 +656,15 @@ TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
   init.codepoints = {0x30}; /* zero */
   init.gids = {20};
 
-  SubsetDefinition s0 {8320};
-  SubsetDefinition s1 {};
+  SubsetDefinition s0{8320};
+  SubsetDefinition s1{};
   s1.feature_tags.insert(HB_TAG('s', 'u', 'b', 's'));
 
-  Reconfigure(roboto_vf.get(), init, {
-    /* 0 */ {s0, ProbabilityBound::Zero()},
-    /* 1 */ {s1, ProbabilityBound::Zero()},
-  });
+  Reconfigure(roboto_vf.get(), init,
+              {
+                  /* 0 */ {s0, ProbabilityBound::Zero()},
+                  /* 1 */ {s1, ProbabilityBound::Zero()},
+              });
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -646,8 +684,9 @@ TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
 
 // TODO(garretrieger) more tests (once functionality is available):
 // - partial invalidation tests including w/ "accurate" indices.
-// - Test case with a feature segment + otherwise disjunctive GSUB (eg. smcp single sub)
-// - case where init font makes a conjunctive thing exclusive (eg. UVS and/or liga).
+// - Test case with a feature segment + otherwise disjunctive GSUB (eg. smcp
+// single sub)
+// - case where init font makes a conjunctive thing exclusive (eg. UVS and/or
+// liga).
 // - liga
 // - UVS, including when mixed with init font.
-

@@ -9,8 +9,6 @@
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
-
-
 using testing::UnorderedElementsAre;
 
 namespace ift::proto {

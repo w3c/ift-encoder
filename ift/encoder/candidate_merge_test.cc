@@ -18,7 +18,6 @@
 using ift::proto::CLOSURE_ONLY;
 using ift::proto::PATCH;
 
-
 using common::CodepointSet;
 using common::FontData;
 using common::hb_face_unique_ptr;
@@ -126,11 +125,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -195,11 +193,10 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -263,11 +260,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   };
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -318,11 +314,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
       {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -409,11 +404,10 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
@@ -463,11 +457,10 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
       std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  auto context =
-      SegmentationContext::InitializeSegmentationContext(
-          roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-          segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-          segmenter.init_font_merging_brotli_quality());
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(

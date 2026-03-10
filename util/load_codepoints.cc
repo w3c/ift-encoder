@@ -9,23 +9,21 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
+#include "codepoint_count.pb.h"
 #include "common/font_data.h"
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "metadata.pb.h"
 #include "riegeli/bytes/fd_reader.h"
 #include "riegeli/records/record_reader.h"
-#include "codepoint_count.pb.h"
-#include "metadata.pb.h"
 
-
-
+using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using absl::flat_hash_map;
 using common::CodepointSet;
 using common::FontData;
 using common::hb_blob_unique_ptr;
@@ -223,7 +221,8 @@ BuiltInFrequenciesList() {
   std::string path = "../ift_encoder_data+/data/metadata.binpb";
   std::ifstream in(path, std::ios::binary);
   if (!in.is_open()) {
-    return absl::NotFoundError(StrCat("Metadata file ", path, " was not found."));
+    return absl::NotFoundError(
+        StrCat("Metadata file ", path, " was not found."));
   }
   DatasetMetadata metadata;
   if (!metadata.ParseFromIstream(&in)) {

@@ -2,6 +2,7 @@
 #define IFT_ENCODER_GLYPH_CONDITION_SET_H_
 
 #include <ostream>
+
 #include "absl/container/flat_hash_map.h"
 #include "common/int_set.h"
 #include "ift/encoder/types.h"

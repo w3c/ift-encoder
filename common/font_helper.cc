@@ -258,7 +258,8 @@ CodepointSet FontHelper::GidsToUnicodes(hb_face_t* face, const GlyphSet& gids) {
   return result;
 }
 
-flat_hash_map<uint32_t, CodepointSet> FontHelper::GidToUnicodeMap(hb_face_t* face) {
+flat_hash_map<uint32_t, CodepointSet> FontHelper::GidToUnicodeMap(
+    hb_face_t* face) {
   hb_map_t* unicode_to_gid = hb_map_create();
   hb_face_collect_nominal_glyph_mapping(face, unicode_to_gid, nullptr);
 
