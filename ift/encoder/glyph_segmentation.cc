@@ -14,11 +14,11 @@
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
-using ift::proto::Codepoints;
-using ift::proto::Features;
-using ift::proto::Glyphs;
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmentProto;
+using ift::config::Codepoints;
+using ift::config::Features;
+using ift::config::Glyphs;
+using ift::config::SegmentationPlan;
+using ift::config::SegmentProto;
 
 using absl::btree_map;
 using absl::btree_set;

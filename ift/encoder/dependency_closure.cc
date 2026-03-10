@@ -10,7 +10,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/types.h"
 
-using ift::proto::Features;
+using ift::config::Features;
 
 using absl::btree_set;
 using absl::flat_hash_map;

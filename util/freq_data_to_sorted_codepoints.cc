@@ -11,8 +11,8 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "common/int_set.h"
+#include "ift/config/load_codepoints.h"
 #include "ift/freq/unicode_frequencies.h"
-#include "util/load_codepoints.h"
 
 using absl::StatusOr;
 using common::CodepointSet;
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
 
   const char* riegeli_file = args[1];
   StatusOr<UnicodeFrequencies> frequencies_status =
-      util::LoadFrequenciesFromRiegeli(riegeli_file);
+      ift::config::LoadFrequenciesFromRiegeli(riegeli_file);
 
   if (!frequencies_status.ok()) {
     std::cerr << "Failed to load frequencies from " << riegeli_file << ": "

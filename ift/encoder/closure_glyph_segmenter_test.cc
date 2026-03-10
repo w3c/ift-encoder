@@ -12,11 +12,11 @@
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
 
-using ift::proto::CLOSURE_AND_VALIDATE_DEP_GRAPH;
-using ift::proto::CLOSURE_ONLY;
-using ift::proto::FIND_CONDITIONS;
-using ift::proto::MOVE_TO_INIT_FONT;
-using ift::proto::PATCH;
+using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
+using ift::config::CLOSURE_ONLY;
+using ift::config::FIND_CONDITIONS;
+using ift::config::MOVE_TO_INIT_FONT;
+using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;

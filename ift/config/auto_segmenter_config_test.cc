@@ -1,4 +1,4 @@
-#include "util/auto_segmenter_config.h"
+#include "ift/config/auto_segmenter_config.h"
 
 #include <google/protobuf/text_format.h>
 
@@ -11,14 +11,14 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
-#include "util/load_codepoints.h"
+#include "ift/config/load_codepoints.h"
 
-using ift::proto::CLOSURE_AND_DEP_GRAPH;
-using ift::proto::FIND_CONDITIONS;
-using ift::proto::MOVE_TO_INIT_FONT;
-using ift::proto::SegmenterConfig;
+using ift::config::CLOSURE_AND_DEP_GRAPH;
+using ift::config::FIND_CONDITIONS;
+using ift::config::MOVE_TO_INIT_FONT;
+using ift::config::SegmenterConfig;
 
-namespace util {
+namespace ift::config {
 namespace {
 
 using ::common::hb_blob_unique_ptr;
@@ -263,7 +263,7 @@ TEST_F(AutoSegmenterConfigTest, Roboto_FullFileName_Language) {
 }
 
 TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
-  auto built_in_freqs_or = util::BuiltInFrequenciesList();
+  auto built_in_freqs_or = ift::config::BuiltInFrequenciesList();
   ASSERT_TRUE(built_in_freqs_or.ok());
   for (const auto& [file_name, _] : *built_in_freqs_or) {
     if (!absl::StartsWith(file_name, "Language_")) continue;
@@ -298,4 +298,4 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
 }
 
 }  // namespace
-}  // namespace util
+}  // namespace ift::config

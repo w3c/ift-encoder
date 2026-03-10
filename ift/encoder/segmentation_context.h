@@ -11,6 +11,7 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/estimated_patch_size_cache.h"
 #include "ift/encoder/glyph_closure_cache.h"
@@ -22,7 +23,6 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
-#include "util/segmenter_config.pb.h"
 
 namespace ift::encoder {
 
@@ -48,8 +48,8 @@ class SegmentationContext {
   static absl::StatusOr<SegmentationContext> Create(
       hb_face_t* face, const SubsetDefinition& initial_segment,
       const std::vector<Segment>& segments,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-      ift::proto::ConditionAnalysisMode condition_analysis_mode,
+      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality) {
     // TODO(garretrieger): argument list is getting long, switch to a builder
     // pattern for construction.
@@ -66,9 +66,9 @@ class SegmentationContext {
         init_font_brotli_quality, std::move(closure_cache),
         std::move(segmentation_info));
 
-    if ((condition_analysis_mode == ift::proto::CLOSURE_AND_DEP_GRAPH) ||
+    if ((condition_analysis_mode == ift::config::CLOSURE_AND_DEP_GRAPH) ||
         (condition_analysis_mode ==
-         ift::proto::CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
+         ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
       context.dependency_closure_ = TRY(DependencyClosure::Create(
           context.segmentation_info_.get(), context.original_face.get()));
     }
@@ -84,15 +84,15 @@ class SegmentationContext {
   static absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
       std::vector<Segment> segments,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-      ift::proto::ConditionAnalysisMode condition_analysis_mode,
+      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality);
 
  private:
   SegmentationContext(
       hb_face_t* face,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-      ift::proto::ConditionAnalysisMode condition_analysis_mode,
+      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::unique_ptr<GlyphClosureCache> closure_cache,
       std::unique_ptr<RequestedSegmentationInformation> segmentation_info)
@@ -162,7 +162,7 @@ class SegmentationContext {
     return *segmentation_info_;
   }
 
-  ift::proto::ConditionAnalysisMode GetConditionAnalysisMode() const {
+  ift::config::ConditionAnalysisMode GetConditionAnalysisMode() const {
     return condition_analysis_mode_;
   }
 
@@ -289,7 +289,7 @@ class SegmentationContext {
 
   unsigned brotli_quality_;
 
-  ift::proto::ConditionAnalysisMode condition_analysis_mode_;
+  ift::config::ConditionAnalysisMode condition_analysis_mode_;
 };
 
 }  // namespace ift::encoder

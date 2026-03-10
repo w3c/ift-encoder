@@ -1,9 +1,9 @@
 edition = "2023";
 
-package ift.proto;
+package ift.config;
 
-import "util/segmentation_plan.proto";
-import "util/common.proto";
+import "ift/config/segmentation_plan.proto";
+import "ift/config/common.proto";
 
 enum ConditionAnalysisMode {
   // Analyzes glyph conditions using closure analysis only.

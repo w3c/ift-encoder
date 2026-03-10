@@ -11,10 +11,10 @@
 #include "absl/status/status.h"
 #include "common/font_data.h"
 #include "common/try.h"
-#include "util/auto_segmenter_config.h"
-#include "util/load_codepoints.h"
+#include "ift/config/auto_segmenter_config.h"
+#include "ift/config/load_codepoints.h"
 
-using ift::proto::SegmenterConfig;
+using ift::config::SegmenterConfig;
 
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Path to the font file to analyze.");
@@ -28,11 +28,11 @@ ABSL_FLAG(int, quality, 0,
 
 using absl::Status;
 using common::hb_face_unique_ptr;
-using util::AutoSegmenterConfig;
+using ift::config::AutoSegmenterConfig;
 
 static Status Main(const std::vector<char*> args) {
   std::string input_font_path = absl::GetFlag(FLAGS_input_font);
-  auto font_data = TRY(util::LoadFile(input_font_path.c_str()));
+  auto font_data = TRY(ift::config::LoadFile(input_font_path.c_str()));
   hb_face_unique_ptr font = font_data.face();
 
   std::optional<int> quality_level = std::nullopt;

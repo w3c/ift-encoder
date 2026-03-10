@@ -6,7 +6,7 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
-using ift::proto::UnmappedGlyphHandling;
+using ift::config::UnmappedGlyphHandling;
 
 using absl::StatusOr;
 

@@ -32,7 +32,7 @@ using ift::freq::UnicodeFrequencies;
 using ift_encoder_data::CodepointCount;
 using ift_encoder_data::DatasetMetadata;
 
-namespace util {
+namespace ift::config {
 
 StatusOr<common::FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
@@ -240,4 +240,4 @@ BuiltInFrequenciesList() {
   return result;
 }
 
-}  // namespace util
+}  // namespace ift::config

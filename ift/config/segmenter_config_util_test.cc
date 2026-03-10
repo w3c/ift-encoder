@@ -1,4 +1,4 @@
-#include "util/segmenter_config_util.h"
+#include "ift/config/segmenter_config_util.h"
 
 #include <optional>
 #include <vector>
@@ -10,17 +10,17 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 
-using ift::proto::Features;
-using ift::proto::SegmenterConfig;
+using ift::config::Features;
+using ift::config::SegmenterConfig;
 
 using absl::btree_map;
 using absl::btree_set;
 using common::CodepointSet;
 using common::SegmentSet;
+using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
-using util::SegmenterConfigUtil;
 
 class SegmenterConfigUtilTest : public ::testing::Test {
  protected:

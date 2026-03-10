@@ -18,8 +18,8 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::proto::FIND_CONDITIONS;
-using ift::proto::PATCH;
+using ift::config::FIND_CONDITIONS;
+using ift::config::PATCH;
 
 namespace ift::encoder {
 

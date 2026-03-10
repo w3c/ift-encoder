@@ -6,10 +6,10 @@
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "common/int_set.h"
+#include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
-#include "util/segmentation_plan.pb.h"
 
 namespace ift::encoder {
 
@@ -98,9 +98,9 @@ class GlyphSegmentation {
   };
 
   static void SubsetDefinitionToSegment(
-      const SubsetDefinition& def, ift::proto::SegmentProto& segment_proto);
+      const SubsetDefinition& def, ift::config::SegmentProto& segment_proto);
 
-  ift::proto::SegmentationPlan ToSegmentationPlanProto() const;
+  ift::config::SegmentationPlan ToSegmentationPlanProto() const;
 
   static absl::Status GroupsToSegmentation(
       const absl::btree_map<common::SegmentSet, common::GlyphSet>&

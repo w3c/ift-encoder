@@ -18,22 +18,22 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/config/auto_segmenter_config.h"
+#include "ift/config/load_codepoints.h"
+#include "ift/config/segmentation_plan.pb.h"
+#include "ift/config/segmenter_config.pb.h"
+#include "ift/config/segmenter_config_util.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "util/auto_config_flags.h"
-#include "util/auto_segmenter_config.h"
-#include "util/load_codepoints.h"
-#include "util/segmentation_plan.pb.h"
-#include "util/segmenter_config.pb.h"
-#include "util/segmenter_config_util.h"
 
-using ift::proto::CLOSURE_ONLY;
-using ift::proto::PATCH;
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmenterConfig;
+using ift::config::CLOSURE_ONLY;
+using ift::config::PATCH;
+using ift::config::SegmentationPlan;
+using ift::config::SegmenterConfig;
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -83,6 +83,8 @@ using common::GlyphSet;
 using common::hb_face_unique_ptr;
 using common::SegmentSet;
 using google::protobuf::TextFormat;
+using ift::config::AutoSegmenterConfig;
+using ift::config::SegmenterConfigUtil;
 using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::MergeStrategy;
@@ -90,8 +92,6 @@ using ift::encoder::Segment;
 using ift::encoder::SegmentationCost;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
-using util::AutoSegmenterConfig;
-using util::SegmenterConfigUtil;
 
 static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
   if (absl::GetFlag(FLAGS_config) == "auto") {
@@ -104,7 +104,7 @@ static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
   }
 
   FontData config_text =
-      TRY(util::LoadFile(absl::GetFlag(FLAGS_config).c_str()));
+      TRY(ift::config::LoadFile(absl::GetFlag(FLAGS_config).c_str()));
   SegmenterConfig config;
   if (!google::protobuf::TextFormat::ParseFromString(config_text.str(),
                                                      &config)) {
@@ -115,7 +115,7 @@ static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
 }
 
 StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
-  return TRY(util::LoadFile(filename)).face();
+  return TRY(ift::config::LoadFile(filename)).face();
 }
 
 static Status Analysis(hb_face_t* font,
