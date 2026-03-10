@@ -10,12 +10,12 @@
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
 #include "common/try.h"
-#include "util/load_codepoints.h"
-#include "util/segmentation_plan.pb.h"
+#include "ift/config/load_codepoints.h"
+#include "ift/config/segmentation_plan.pb.h"
 
-using ift::proto::ActivationConditionProto;
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmentProto;
+using ift::config::ActivationConditionProto;
+using ift::config::SegmentationPlan;
+using ift::config::SegmentProto;
 
 using absl::Status;
 using absl::StatusOr;
@@ -41,7 +41,8 @@ StatusOr<SegmentationPlan> LoadPlan() {
     return absl::InvalidArgumentError("plan must be provided.");
   }
 
-  auto config_text = TRY(util::LoadFile(absl::GetFlag(FLAGS_plan).c_str()));
+  auto config_text =
+      TRY(ift::config::LoadFile(absl::GetFlag(FLAGS_plan).c_str()));
 
   SegmentationPlan plan;
   if (!google::protobuf::TextFormat::ParseFromString(config_text.str(),

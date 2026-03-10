@@ -1,25 +1,17 @@
-#include "util/segmenter_config_util.h"
+#include "ift/config/segmenter_config_util.h"
 
 #include <cstdint>
 
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/config/load_codepoints.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/feature_registry/feature_registry.h"
 #include "ift/freq/unicode_frequencies.h"
-#include "util/load_codepoints.h"
-
-using ift::proto::CostConfiguration;
-using ift::proto::HeuristicConfiguration;
-using ift::proto::MergeGroup;
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmenterConfig;
-using ift::proto::SegmentProto;
-using ift::proto::SegmentsProto;
 
 using absl::btree_map;
 using absl::btree_set;
@@ -34,14 +26,14 @@ using ift::encoder::SubsetDefinition;
 using ift::feature_registry::DefaultFeatureTags;
 using ift::freq::UnicodeFrequencies;
 
-namespace util {
+namespace ift::config {
 
 // Loads unicode frequency data from either a dedicated frequency data file or
 // from the codepoint and frequency entries if no data file is given.
 StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
     const std::string& frequency_data_file_path, bool built_in) {
   if (built_in) {
-    return util::LoadBuiltInFrequencies(frequency_data_file_path.c_str());
+    return LoadBuiltInFrequencies(frequency_data_file_path.c_str());
   }
 
   std::filesystem::path freq_path = frequency_data_file_path;
@@ -51,14 +43,14 @@ StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
     resolved_path = config_path.parent_path() / freq_path;
   }
 
-  return util::LoadFrequenciesFromRiegeli(resolved_path.c_str());
+  return LoadFrequenciesFromRiegeli(resolved_path.c_str());
 }
 
 SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
     const SegmentProto& segment) {
   SubsetDefinition def;
-  def.codepoints.union_set(util::Values(segment.codepoints()));
-  def.feature_tags = util::TagValues(segment.features());
+  def.codepoints.union_set(Values(segment.codepoints()));
+  def.feature_tags = TagValues(segment.features());
   return def;
 }
 
@@ -73,7 +65,7 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
   if (!config.feature_segments().empty()) {
     for (const auto& [id, features] : config.feature_segments()) {
       SubsetDefinition def;
-      def.feature_tags = util::TagValues(features);
+      def.feature_tags = TagValues(features);
       segments.push_back(def);
       segment_id_to_index[SegmentId{.feature = true, .id_value = id}] = index++;
     }
@@ -120,7 +112,7 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
   return segments;
 }
 
-StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToStrategy(
+StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
     const CostConfiguration& base, const CostConfiguration& config,
     CodepointSet& covered_codepoints) {
   CostConfiguration merged = base;
@@ -202,8 +194,8 @@ SegmenterConfigUtil::ProtoToMergeGroup(
 
   if (group.has_cost_config()) {
     CodepointSet covered_codepoints;
-    strategy = TRY(
-        ProtoToStrategy(base_cost, group.cost_config(), covered_codepoints));
+    strategy = TRY(ProtoToCostStrategy(base_cost, group.cost_config(),
+                                       covered_codepoints));
 
     if (group.has_segment_ids()) {
       segment_indices.union_set(MapToIndices(group.segment_ids(), id_to_index));
@@ -226,8 +218,7 @@ SegmenterConfigUtil::ProtoToMergeGroup(
       segment_indices.insert_range(0, id_to_index.size() - 1);
     }
 
-    strategy =
-        ::util::ProtoToStrategy(base_heuristic, group.heuristic_config());
+    strategy = ProtoToStrategy(base_heuristic, group.heuristic_config());
 
     strategy.SetPreClosureGroupSize(group.preprocess_merging_group_size());
     strategy.SetPreClosureProbabilityThreshold(1.0);
@@ -278,8 +269,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
     return merge_groups;
   }
 
-  MergeStrategy strategy = util::ProtoToStrategy(config.base_heuristic_config(),
-                                                 config.ungrouped_config());
+  MergeStrategy strategy = ProtoToStrategy(config.base_heuristic_config(),
+                                           config.ungrouped_config());
   strategy.SetName("Ungrouped");
   strategy.SetPreClosureGroupSize(
       config.preprocess_merging_group_size_for_ungrouped());
@@ -325,4 +316,4 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
   };
 }
 
-}  // namespace util
+}  // namespace ift::config

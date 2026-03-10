@@ -11,8 +11,8 @@
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
-using ift::proto::ActivationConditionProto;
-using ift::proto::SegmentsProto;
+using ift::config::ActivationConditionProto;
+using ift::config::SegmentsProto;
 
 using absl::btree_set;
 using absl::flat_hash_map;

@@ -13,7 +13,7 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::proto::PATCH;
+using ift::config::PATCH;
 
 using absl::flat_hash_map;
 using common::CodepointSet;

@@ -5,12 +5,12 @@
 
 #include "common/int_set.h"
 #include "common/try.h"
+#include "ift/config/common.pb.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
-#include "util/common.pb.h"
 
 namespace ift::encoder {
 
@@ -22,12 +22,12 @@ class RequestedSegmentationInformation {
   static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>>
   Create(std::vector<Segment> segments, SubsetDefinition init_font_segment,
          GlyphClosureCache& closure_cache,
-         ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
+         ift::config::UnmappedGlyphHandling unmapped_glyph_handling);
 
  private:
   RequestedSegmentationInformation(
       std::vector<Segment> segments, SubsetDefinition init_font_segment,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
+      ift::config::UnmappedGlyphHandling unmapped_glyph_handling);
 
  public:
   // Merge all of the segments in to_merge into base, assigned it
@@ -69,7 +69,7 @@ class RequestedSegmentationInformation {
     return absl::OkStatus();
   }
 
-  ift::proto::UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
+  ift::config::UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
     return unmapped_glyph_handling_;
   }
 
@@ -149,7 +149,7 @@ class RequestedSegmentationInformation {
   SubsetDefinition full_definition_;
   common::GlyphSet full_closure_;
   bool segments_disjoint_;
-  enum ift::proto::UnmappedGlyphHandling unmapped_glyph_handling_;
+  enum ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
 };
 
 }  // namespace ift::encoder

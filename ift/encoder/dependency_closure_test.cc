@@ -7,6 +7,7 @@
 #include "common/font_helper.h"
 #include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/config/common.pb.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -14,9 +15,8 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
-#include "util/common.pb.h"
 
-using ift::proto::PATCH;
+using ift::config::PATCH;
 
 using absl::Status;
 using common::CodepointSet;

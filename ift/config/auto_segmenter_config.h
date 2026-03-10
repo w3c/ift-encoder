@@ -1,5 +1,5 @@
-#ifndef UTIL_AUTO_SEGMENTER_CONFIG_H_
-#define UTIL_AUTO_SEGMENTER_CONFIG_H_
+#ifndef IFT_CONFIG_AUTO_SEGMENTER_CONFIG_H_
+#define IFT_CONFIG_AUTO_SEGMENTER_CONFIG_H_
 
 #include <optional>
 #include <string>
@@ -7,9 +7,9 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "hb.h"
-#include "util/segmenter_config.pb.h"
+#include "ift/config/segmenter_config.pb.h"
 
-namespace util {
+namespace ift::config {
 
 class AutoSegmenterConfig {
  public:
@@ -24,7 +24,7 @@ class AutoSegmenterConfig {
   //                quality tradeoff. Lower values have shorter segmenting
   //                times, high values have longer segmenting times but
   //                typically results in better segmentation quality.
-  static absl::StatusOr<ift::proto::SegmenterConfig> GenerateConfig(
+  static absl::StatusOr<SegmenterConfig> GenerateConfig(
       hb_face_t* face, std::optional<std::string> primary_script = std::nullopt,
       std::optional<int> quality_level = std::nullopt);
 
@@ -37,6 +37,6 @@ class AutoSegmenterConfig {
   AutoSegmenterConfig() = delete;
 };
 
-}  // namespace util
+}  // namespace ift::config
 
-#endif  // UTIL_AUTO_SEGMENTER_CONFIG_H_
+#endif  // IFT_CONFIG_AUTO_SEGMENTER_CONFIG_H_

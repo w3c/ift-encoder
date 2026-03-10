@@ -11,10 +11,10 @@
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/types.h"
 
-using ift::proto::CLOSURE_AND_VALIDATE_DEP_GRAPH;
-using ift::proto::CLOSURE_ONLY;
-using ift::proto::ConditionAnalysisMode;
-using ift::proto::UnmappedGlyphHandling;
+using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
+using ift::config::CLOSURE_ONLY;
+using ift::config::ConditionAnalysisMode;
+using ift::config::UnmappedGlyphHandling;
 
 using absl::Status;
 using absl::StatusOr;

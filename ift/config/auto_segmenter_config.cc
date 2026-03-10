@@ -1,4 +1,4 @@
-#include "util/auto_segmenter_config.h"
+#include "ift/config/auto_segmenter_config.h"
 
 #include <cctype>
 #include <string>
@@ -11,16 +11,8 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
-#include "util/load_codepoints.h"
-#include "util/segmenter_config.pb.h"
-
-using ift::proto::CLOSURE_AND_DEP_GRAPH;
-using ift::proto::CostConfiguration;
-using ift::proto::FIND_CONDITIONS;
-using ift::proto::HeuristicConfiguration;
-using ift::proto::MergeGroup;
-using ift::proto::MOVE_TO_INIT_FONT;
-using ift::proto::SegmenterConfig;
+#include "ift/config/load_codepoints.h"
+#include "ift/config/segmenter_config.pb.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -30,7 +22,7 @@ using absl::StatusOr;
 using common::CodepointSet;
 using common::FontHelper;
 
-namespace util {
+namespace ift::config {
 
 static constexpr uint32_t kMinimumGroupSize = 4;
 
@@ -733,4 +725,4 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   return config;
 }
 
-}  // namespace util
+}  // namespace ift::config

@@ -1,21 +1,21 @@
-#ifndef UTIL_SEGMENTER_CONFIG_UTIL_H_
-#define UTIL_SEGMENTER_CONFIG_UTIL_H_
+#ifndef IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
+#define IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
 #include "hb.h"
+#include "ift/config/segmentation_plan.pb.h"
+#include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
-#include "util/segmentation_plan.pb.h"
-#include "util/segmenter_config.pb.h"
 
-namespace util {
+namespace ift::config {
 
 struct SegmentationResult {
   ift::encoder::GlyphSegmentation segmentation;
-  ift::proto::SegmentationPlan plan;
+  SegmentationPlan plan;
   absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy> merge_groups;
 };
 
@@ -25,14 +25,14 @@ class SegmenterConfigUtil {
       : config_file_path_(config_file_path) {}
 
   absl::StatusOr<SegmentationResult> RunSegmenter(
-      hb_face_t* face, const ift::proto::SegmenterConfig& config);
+      hb_face_t* face, const SegmenterConfig& config);
 
   ift::encoder::SubsetDefinition SegmentProtoToSubsetDefinition(
-      const ift::proto::SegmentProto& segment);
+      const SegmentProto& segment);
 
   absl::StatusOr<
       absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy>>
-  ConfigToMergeGroups(const ift::proto::SegmenterConfig& config,
+  ConfigToMergeGroups(const SegmenterConfig& config,
                       const common::CodepointSet& font_codepoints,
                       const absl::btree_set<hb_tag_t>& font_features,
                       std::vector<ift::encoder::SubsetDefinition>& segments);
@@ -53,7 +53,7 @@ class SegmenterConfigUtil {
   };
 
   std::vector<ift::encoder::SubsetDefinition> ConfigToSegments(
-      const ift::proto::SegmenterConfig& config,
+      const SegmenterConfig& config,
       const ift::encoder::SubsetDefinition& init_segment,
       const common::CodepointSet& font_codepoints,
       const absl::btree_set<hb_tag_t>& font_features,
@@ -62,25 +62,24 @@ class SegmenterConfigUtil {
   absl::StatusOr<ift::freq::UnicodeFrequencies> GetFrequencyData(
       const std::string& frequency_data_file_path, bool built_in);
 
-  absl::StatusOr<ift::encoder::MergeStrategy> ProtoToStrategy(
-      const ift::proto::CostConfiguration& base,
-      const ift::proto::CostConfiguration& config,
+  absl::StatusOr<ift::encoder::MergeStrategy> ProtoToCostStrategy(
+      const CostConfiguration& base, const CostConfiguration& config,
       common::CodepointSet& covered_codepoints);
 
   absl::StatusOr<std::pair<common::SegmentSet, ift::encoder::MergeStrategy>>
   ProtoToMergeGroup(const std::vector<ift::encoder::SubsetDefinition>& segments,
                     const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
-                    const ift::proto::HeuristicConfiguration& base_heuristic,
-                    const ift::proto::CostConfiguration& base_cost,
-                    const ift::proto::MergeGroup& group);
+                    const HeuristicConfiguration& base_heuristic,
+                    const CostConfiguration& base_cost,
+                    const MergeGroup& group);
 
   static common::SegmentSet MapToIndices(
-      const ift::proto::SegmentsProto& segments,
+      const SegmentsProto& segments,
       const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index);
 
   std::string config_file_path_;
 };
 
-}  // namespace util
+}  // namespace ift::config
 
-#endif  // UTIL_SEGMENTER_CONFIG_UTIL_H_
+#endif  // IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_

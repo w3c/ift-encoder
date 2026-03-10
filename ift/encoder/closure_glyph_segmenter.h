@@ -6,13 +6,13 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
+#include "ift/config/common.pb.h"
+#include "ift/config/segmentation_plan.pb.h"
+#include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
-#include "util/common.pb.h"
-#include "util/segmentation_plan.pb.h"
-#include "util/segmenter_config.pb.h"
 
 namespace ift::encoder {
 
@@ -38,8 +38,8 @@ class ClosureGlyphSegmenter {
  public:
   ClosureGlyphSegmenter(
       uint32_t brotli_quality, uint32_t init_font_merging_brotli_quality,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling,
-      ift::proto::ConditionAnalysisMode condition_analysis_mode)
+      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
+      ift::config::ConditionAnalysisMode condition_analysis_mode)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
         unmapped_glyph_handling_(unmapped_glyph_handling),
@@ -81,7 +81,7 @@ class ClosureGlyphSegmenter {
                             uint32_t& all_glyphs_size) const;
 
   static void AddTableKeyedSegments(
-      ift::proto::SegmentationPlan& plan,
+      ift::config::SegmentationPlan& plan,
       const absl::btree_map<common::SegmentSet, MergeStrategy>& merge_groups,
       const std::vector<SubsetDefinition>& segments,
       const SubsetDefinition& init_segment);
@@ -90,18 +90,18 @@ class ClosureGlyphSegmenter {
   uint32_t init_font_merging_brotli_quality() const {
     return init_font_merging_brotli_quality_;
   }
-  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling() const {
+  ift::config::UnmappedGlyphHandling unmapped_glyph_handling() const {
     return unmapped_glyph_handling_;
   }
-  ift::proto::ConditionAnalysisMode condition_analysis_mode() const {
+  ift::config::ConditionAnalysisMode condition_analysis_mode() const {
     return condition_analysis_mode_;
   }
 
  private:
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
-  ift::proto::UnmappedGlyphHandling unmapped_glyph_handling_;
-  ift::proto::ConditionAnalysisMode condition_analysis_mode_;
+  ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
+  ift::config::ConditionAnalysisMode condition_analysis_mode_;
 };
 
 }  // namespace ift::encoder

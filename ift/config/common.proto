@@ -1,6 +1,6 @@
 edition = "2023";
 
-package ift.proto;
+package ift.config;
 
 // A list of unicode code points.
 message Codepoints {

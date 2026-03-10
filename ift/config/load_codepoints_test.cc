@@ -1,10 +1,10 @@
-#include "util/load_codepoints.h"
+#include "ift/config/load_codepoints.h"
 
 #include <cstdint>
 
 #include "gtest/gtest.h"
 
-namespace util {
+namespace ift::config {
 
 bool operator==(const CodepointAndFrequency& lhs,
                 const CodepointAndFrequency& rhs) {
@@ -17,24 +17,25 @@ class LoadCodepointsTest : public ::testing::Test {
 };
 
 TEST_F(LoadCodepointsTest, LoadCodepoints_NotFound) {
-  auto result = util::LoadCodepointsOrdered("not/found.txt");
+  auto result = ift::config::LoadCodepointsOrdered("not/found.txt");
   ASSERT_TRUE(absl::IsNotFound(result.status()));
 }
 
 TEST_F(LoadCodepointsTest, LoadCodepoints_InvalidFormat) {
-  auto result =
-      util::LoadCodepointsOrdered("util/testdata/codepoints_invalid_1.txt");
+  auto result = ift::config::LoadCodepointsOrdered(
+      "util/testdata/codepoints_invalid_1.txt");
   ASSERT_TRUE(absl::IsInvalidArgument(result.status()));
 }
 
 TEST_F(LoadCodepointsTest, LoadCodepoints_InvalidFormat_BadHex) {
-  auto result =
-      util::LoadCodepointsOrdered("util/testdata/codepoints_invalid_2.txt");
+  auto result = ift::config::LoadCodepointsOrdered(
+      "util/testdata/codepoints_invalid_2.txt");
   ASSERT_TRUE(absl::IsInvalidArgument(result.status()));
 }
 
 TEST_F(LoadCodepointsTest, LoadCodepoints) {
-  auto result = util::LoadCodepointsOrdered("util/testdata/codepoints.txt");
+  auto result =
+      ift::config::LoadCodepointsOrdered("util/testdata/codepoints.txt");
   ASSERT_TRUE(result.ok()) << result.status();
 
   std::vector<CodepointAndFrequency> expected = {
@@ -54,8 +55,8 @@ TEST_F(LoadCodepointsTest, LoadCodepoints) {
 }
 
 TEST_F(LoadCodepointsTest, LoadCodepointsWithFrequency) {
-  auto result =
-      util::LoadCodepointsOrdered("util/testdata/codepoints_with_freq.txt");
+  auto result = ift::config::LoadCodepointsOrdered(
+      "util/testdata/codepoints_with_freq.txt");
   ASSERT_TRUE(result.ok()) << result.status();
 
   std::vector<CodepointAndFrequency> expected = {
@@ -67,7 +68,7 @@ TEST_F(LoadCodepointsTest, LoadCodepointsWithFrequency) {
 }
 
 TEST_F(LoadCodepointsTest, LoadCodepointsWithFrequency_Invalid) {
-  auto result = util::LoadCodepointsOrdered(
+  auto result = ift::config::LoadCodepointsOrdered(
       "util/testdata/codepoints_with_freq_invalid.txt");
   ASSERT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
 }
@@ -75,8 +76,8 @@ TEST_F(LoadCodepointsTest, LoadCodepointsWithFrequency_Invalid) {
 // TODO test with bad formatted hex
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli) {
-  auto result =
-      util::LoadFrequenciesFromRiegeli("util/testdata/test_freq_data.riegeli");
+  auto result = ift::config::LoadFrequenciesFromRiegeli(
+      "util/testdata/test_freq_data.riegeli");
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x43, 0x43), 1.0);
@@ -87,7 +88,7 @@ TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli) {
 }
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded) {
-  auto result = util::LoadFrequenciesFromRiegeli(
+  auto result = ift::config::LoadFrequenciesFromRiegeli(
       "util/testdata/sharded/test_freq_data.riegeli@*");
   ASSERT_TRUE(result.ok()) << result.status();
 
@@ -99,13 +100,13 @@ TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded) {
 }
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_Sharded_DoesNotExist) {
-  auto result = util::LoadFrequenciesFromRiegeli(
+  auto result = ift::config::LoadFrequenciesFromRiegeli(
       "util/testdata/sharded/notfound.riegeli@*");
   ASSERT_TRUE(absl::IsNotFound(result.status())) << result.status();
 }
 
 TEST_F(LoadCodepointsTest, LoadFrequenciesFromRiegeli_BadData) {
-  auto result = util::LoadFrequenciesFromRiegeli(
+  auto result = ift::config::LoadFrequenciesFromRiegeli(
       "util/testdata/invalid_test_freq_data.riegeli");
   ASSERT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
 }
@@ -156,7 +157,7 @@ TEST_F(LoadCodepointsTest, ExpandShardedPath) {
 }
 
 TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
-  auto result = util::LoadBuiltInFrequencies("Script_latin.riegeli");
+  auto result = ift::config::LoadBuiltInFrequencies("Script_latin.riegeli");
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x20, 0x20), 1.0);
@@ -165,7 +166,7 @@ TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
 }
 
 TEST_F(LoadCodepointsTest, BuiltInFrequenciesList) {
-  auto result = util::BuiltInFrequenciesList();
+  auto result = ift::config::BuiltInFrequenciesList();
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_FALSE(result->empty());
 
@@ -178,4 +179,4 @@ TEST_F(LoadCodepointsTest, BuiltInFrequenciesList) {
   EXPECT_TRUE((*result)["Script_japanese.riegeli@*"].contains(0x304C /* が */));
 }
 
-}  // namespace util
+}  // namespace ift::config

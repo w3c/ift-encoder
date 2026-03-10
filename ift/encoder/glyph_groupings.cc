@@ -14,7 +14,7 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/types.h"
 
-using ift::proto::FIND_CONDITIONS;
+using ift::config::FIND_CONDITIONS;
 
 using absl::btree_map;
 using absl::btree_set;

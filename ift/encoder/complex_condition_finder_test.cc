@@ -10,8 +10,8 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::proto::CLOSURE_ONLY;
-using ift::proto::PATCH;
+using ift::config::CLOSURE_ONLY;
+using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;

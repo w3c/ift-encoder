@@ -2,13 +2,13 @@
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
 #include "common/int_set.h"
+#include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
-#include "util/segmentation_plan.pb.h"
 
 namespace ift::encoder {
 
@@ -119,7 +119,7 @@ class ActivationCondition {
       const common::SegmentSet& merged_segments, const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
-  ift::proto::ActivationConditionProto ToConfigProto() const;
+  ift::config::ActivationConditionProto ToConfigProto() const;
 
   bool operator<(const ActivationCondition& other) const;
 

@@ -1,5 +1,5 @@
-#ifndef UTIL_LOAD_CODEPOINTS_H_
-#define UTIL_LOAD_CODEPOINTS_H_
+#ifndef IFT_CONFIG_LOAD_CODEPOINTS_H_
+#define IFT_CONFIG_LOAD_CODEPOINTS_H_
 
 #include <optional>
 #include <vector>
@@ -12,7 +12,7 @@
 #include "common/int_set.h"
 #include "ift/freq/unicode_frequencies.h"
 
-namespace util {
+namespace ift::config {
 
 template <typename T>
 common::IntSet Values(const T& proto_set) {
@@ -98,6 +98,6 @@ struct CodepointAndFrequency {
 absl::StatusOr<std::vector<CodepointAndFrequency>> LoadCodepointsOrdered(
     const char* path);
 
-}  // namespace util
+}  // namespace ift::config
 
-#endif  // UTIL_LOAD_CODEPOINTS_H_
+#endif  // IFT_CONFIG_LOAD_CODEPOINTS_H_

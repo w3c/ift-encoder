@@ -19,20 +19,20 @@
 #include "common/int_set.h"
 #include "common/try.h"
 #include "hb.h"
+#include "ift/config/auto_segmenter_config.h"
+#include "ift/config/load_codepoints.h"
+#include "ift/config/segmentation_plan.pb.h"
+#include "ift/config/segmenter_config.pb.h"
+#include "ift/config/segmenter_config_util.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "util/auto_config_flags.h"
-#include "util/auto_segmenter_config.h"
-#include "util/load_codepoints.h"
-#include "util/segmentation_plan.pb.h"
-#include "util/segmenter_config.pb.h"
-#include "util/segmenter_config_util.h"
 
-using ift::proto::ActivationConditionProto;
-using ift::proto::DesignSpace;
-using ift::proto::SegmentationPlan;
+using ift::config::ActivationConditionProto;
+using ift::config::DesignSpace;
+using ift::config::SegmentationPlan;
 
 /*
  * Utility that converts a standard font file into an IFT font file optionally
@@ -80,12 +80,12 @@ using common::hb_face_unique_ptr;
 using common::IntSet;
 using common::make_hb_blob;
 using common::SegmentSet;
+using ift::config::AutoSegmenterConfig;
 using ift::encoder::ActivationCondition;
 using ift::encoder::Compiler;
 using ift::encoder::design_space_t;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::SubsetDefinition;
-using util::AutoSegmenterConfig;
 
 // TODO(garretrieger): add check that all glyph patches have at least one
 // activation condition.
@@ -95,7 +95,7 @@ using util::AutoSegmenterConfig;
 //                     covered by non glyph segments).
 
 StatusOr<hb_face_unique_ptr> load_font(const char* filename) {
-  return TRY(util::LoadFile(filename)).face();
+  return TRY(ift::config::LoadFile(filename)).face();
 }
 
 Status write_file(const std::string& name, const FontData& data) {
@@ -172,7 +172,7 @@ ActivationCondition FromProto(const ActivationConditionProto& condition) {
 Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   // First configure the glyph keyed segments, including features deps
   for (const auto& [id, gids] : plan.glyph_patches()) {
-    TRYV(compiler.AddGlyphDataPatch(id, util::Values(gids)));
+    TRYV(compiler.AddGlyphDataPatch(id, ift::config::Values(gids)));
   }
 
   std::vector<ActivationCondition> activation_conditions;
@@ -199,10 +199,10 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
   }
 
   // Initial subset definition
-  auto init_codepoints = util::Values(plan.initial_codepoints());
-  auto init_glyphs = util::Values(plan.initial_glyphs());
-  auto init_features = util::TagValues(plan.initial_features());
-  auto init_segments = util::Values(plan.initial_segments());
+  auto init_codepoints = ift::config::Values(plan.initial_codepoints());
+  auto init_glyphs = ift::config::Values(plan.initial_glyphs());
+  auto init_features = ift::config::TagValues(plan.initial_features());
+  auto init_segments = ift::config::Values(plan.initial_segments());
   auto init_design_space = TRY(to_design_space(plan.initial_design_space()));
 
   SubsetDefinition init_subset;
@@ -227,11 +227,11 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
 
   // Next configure the table keyed segments
   for (const auto& codepoints : plan.non_glyph_codepoint_segmentation()) {
-    compiler.AddNonGlyphDataSegment(util::Values(codepoints));
+    compiler.AddNonGlyphDataSegment(ift::config::Values(codepoints));
   }
 
   for (const auto& features : plan.non_glyph_feature_segmentation()) {
-    compiler.AddFeatureGroupSegment(util::TagValues(features));
+    compiler.AddFeatureGroupSegment(ift::config::TagValues(features));
   }
 
   for (const auto& design_space_proto :
@@ -291,7 +291,7 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
       return absl::InternalError(
           StrCat("Failed to generate config: ", config.status().message()));
     }
-    util::SegmenterConfigUtil config_util("");
+    ift::config::SegmenterConfigUtil config_util("");
     auto result = config_util.RunSegmenter(font, *config);
     if (!result.ok()) {
       return absl::InternalError(
@@ -299,7 +299,7 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
     }
     plan = std::move(result->plan);
   } else {
-    auto config_text = util::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
+    auto config_text = ift::config::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
     if (!config_text.ok()) {
       return absl::InternalError(StrCat("Failed to load config file: ",
                                         config_text.status().message()));

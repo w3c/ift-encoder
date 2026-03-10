@@ -9,11 +9,11 @@
 #include "common/font_data.h"
 #include "common/font_helper.h"
 #include "common/int_set.h"
-#include "util/load_codepoints.h"
-#include "util/segmentation_plan.pb.h"
+#include "ift/config/load_codepoints.h"
+#include "ift/config/segmentation_plan.pb.h"
 
-using ift::proto::Codepoints;
-using ift::proto::SegmentationPlan;
+using ift::config::Codepoints;
+using ift::config::SegmentationPlan;
 
 using absl::StatusOr;
 using absl::StrCat;
@@ -47,7 +47,7 @@ ProtoType ToSetProto(const CodepointSet& set) {
 }
 
 static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
-  auto config_text = util::LoadFile(path);
+  auto config_text = ift::config::LoadFile(path);
   if (!config_text.ok()) {
     return absl::NotFoundError(
         StrCat("Failed to load config file: ", config_text.status()));
@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
     std::string_view arg_str(arg);
 
     CodepointSet cps;
-    auto result = util::LoadCodepointsOrdered(arg);
+    auto result = ift::config::LoadCodepointsOrdered(arg);
     if (!result.ok()) {
       std::cerr << "Failed to load codepoints from " << arg << ": "
                 << result.status() << std::endl;
@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
   if (input_font.has_value()) {
     // If a font is supplied check if it contains any codepoints not accounted
     // for in an input subset. Add all of these to one last segment.
-    auto font_data = util::LoadFile(input_font->c_str());
+    auto font_data = ift::config::LoadFile(input_font->c_str());
     if (!font_data.ok()) {
       std::cerr << "Failed to load font, " << *input_font << std::endl;
       return -1;

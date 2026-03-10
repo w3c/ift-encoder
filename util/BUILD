@@ -4,64 +4,6 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
-proto_library(
-    name = "segmentation_plan_proto",
-    srcs = ["segmentation_plan.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
-    deps = [
-        ":common_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "segmentation_plan_cc_proto",
-    visibility = [
-        "//visibility:public",
-    ],
-    deps = [
-        ":segmentation_plan_proto",
-    ],
-)
-
-proto_library(
-    name = "common_proto",
-    srcs = ["common.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
-)
-
-cc_proto_library(
-    name = "common_cc_proto",
-    visibility = ["//visibility:public"],
-    deps = [":common_proto"],
-)
-
-proto_library(
-    name = "segmenter_config_proto",
-    srcs = ["segmenter_config.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
-    deps = [
-        ":common_proto",
-        ":segmentation_plan_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "segmenter_config_cc_proto",
-    visibility = [
-        "//ift/encoder:__pkg__",
-        "//util:__pkg__",
-    ],
-    deps = [
-        ":segmenter_config_proto",
-    ],
-)
-
 cc_binary(
     name = "font2ift",
     srcs = [
@@ -72,10 +14,10 @@ cc_binary(
     ],
     deps = [
         ":auto_config_flags",
-        ":auto_segmenter_config",
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
-        ":segmenter_config_util",
+        "//ift/config:auto_segmenter_config",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmentation_plan_cc_proto",
+        "//ift/config:segmenter_config_util",
         "//common",
         "//ift",
         "//ift/encoder",
@@ -85,7 +27,7 @@ cc_binary(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
-        "//util:segmenter_config_cc_proto",
+        "//ift/config:segmenter_config_cc_proto",
     ],
 )
 
@@ -95,8 +37,8 @@ cc_binary(
         "generate_table_keyed_config.cc",
     ],
     deps = [
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmentation_plan_cc_proto",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/status:statusor",
@@ -114,11 +56,11 @@ cc_binary(
     ],
     deps = [
         ":auto_config_flags",
-        ":auto_segmenter_config",
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
-        ":segmenter_config_cc_proto",
-        ":segmenter_config_util",
+        "//ift/config:auto_segmenter_config",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmentation_plan_cc_proto",
+        "//ift/config:segmenter_config_cc_proto",
+        "//ift/config:segmenter_config_util",
         "//common",
         "//ift",
         "//ift/encoder",
@@ -138,8 +80,8 @@ cc_binary(
         "trace_segmentation_plan.cc",
     ],
     deps = [
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmentation_plan_cc_proto",
         "//common",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
@@ -158,126 +100,6 @@ cc_library(
     ],
 )
 
-cc_library(
-    name = "auto_segmenter_config",
-    srcs = [
-        "auto_segmenter_config.cc",
-    ],
-    hdrs = [
-        "auto_segmenter_config.h",
-    ],
-    deps = [
-        ":load_codepoints",
-        ":segmenter_config_cc_proto",
-        "//common",
-        "@abseil-cpp//absl/container:flat_hash_set",
-        "@harfbuzz",
-    ],
-    visibility = [
-        "//visibility:public",
-    ]
-)
-
-cc_library(
-    name = "load_codepoints",
-    srcs = [
-        "load_codepoints.cc",
-    ],
-    hdrs = [
-        "load_codepoints.h",
-    ],
-    deps = [
-        "//common",
-        "//ift/freq",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@harfbuzz",
-        "@ift_encoder_data//:codepoint_count_cc_proto",
-        "@ift_encoder_data//:metadata_cc_proto",
-        "@riegeli//riegeli/bytes:fd_reader",
-        "@riegeli//riegeli/records:record_reader",
-    ],
-)
-
-cc_library(
-    name = "segmenter_config_util",
-    srcs = [
-        "segmenter_config_util.cc",
-    ],
-    hdrs = [
-        "segmenter_config_util.h",
-    ],
-    deps = [
-        ":load_codepoints",
-        ":segmentation_plan_cc_proto",
-        ":segmenter_config_cc_proto",
-        "//common",
-        "//ift/encoder",
-        "@abseil-cpp//absl/status:statusor",
-        "@harfbuzz",
-    ],
-    visibility = [
-        "//visibility:public",
-    ]
-)
-
-cc_test(
-    name = "auto_segmenter_config_test",
-    size = "small",
-    srcs = [
-        "auto_segmenter_config_test.cc",
-    ],
-    data = [
-        "//common:testdata",
-        "@ift_encoder_data//:freq_data",
-    ],
-    deps = [
-        ":auto_segmenter_config",
-        "//common",
-        "@googletest//:gtest_main",
-        "@harfbuzz",
-    ],
-)
-
-cc_test(
-    name = "load_codepoints_test",
-    size = "small",
-    srcs = [
-        "load_codepoints_test.cc",
-    ],
-    data = [
-        "testdata/codepoints.txt",
-        "testdata/codepoints_invalid_1.txt",
-        "testdata/codepoints_invalid_2.txt",
-        "testdata/codepoints_with_freq.txt",
-        "testdata/codepoints_with_freq_invalid.txt",
-        "testdata/invalid_test_freq_data.riegeli",
-        "testdata/test_freq_data.riegeli",
-        "@ift_encoder_data//:freq_data",
-    ] + glob([
-        "testdata/sharded/*",
-    ]),
-    deps = [
-        ":load_codepoints",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "segmenter_config_util_test",
-    size = "small",
-    srcs = [
-        "segmenter_config_util_test.cc",
-    ],
-    data = [
-        "testdata/test_freq_data.riegeli",
-    ],
-    deps = [
-        ":segmenter_config_util",
-        "@googletest//:gtest_main",
-    ],
-)
-
 cc_binary(
     name = "generate_segmenter_config",
     srcs = [
@@ -287,9 +109,9 @@ cc_binary(
         "@ift_encoder_data//:freq_data",
     ],
     deps = [
-        ":auto_segmenter_config",
-        ":load_codepoints",
-        ":segmenter_config_cc_proto",
+        "//ift/config:auto_segmenter_config",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmenter_config_cc_proto",
         "//common",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
@@ -321,10 +143,18 @@ cc_binary(
         "freq_data_to_sorted_codepoints.cc",
     ],
     deps = [
-        ":load_codepoints",
+        "//ift/config:load_codepoints",
         "//ift/freq",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/flags:parse",
         "@abseil-cpp//absl/status:statusor",
     ],
+)
+
+filegroup(
+    name = "testdata",
+    srcs = glob([
+        "testdata/**",
+    ]),
+    visibility = ["//:__subpackages__"],
 )

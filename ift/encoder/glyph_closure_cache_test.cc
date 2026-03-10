@@ -8,7 +8,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::proto::PATCH;
+using ift::config::PATCH;
 
 using absl::StatusOr;
 using common::CodepointSet;

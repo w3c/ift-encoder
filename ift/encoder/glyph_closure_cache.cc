@@ -8,7 +8,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
-using ift::proto::Glyphs;
+using ift::config::Glyphs;
 
 using absl::Status;
 using absl::StatusOr;
