@@ -1,9 +1,0 @@
-majorVersion: 0
-minorVersion: 1
-ID: bbf038d5 582c7194 b721ed1d e13c8483
-chunkCount: 3
-glyphCount: 7
-chunkSet indexes: 0
-gidMap: 0:0, 1:1, 2:1, 3:1, 4:2, 5:0, 6:2
-filesURI: ./Roboto-Regular_iftb/$3/chunk$3$2$1.br
-

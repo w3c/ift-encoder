@@ -159,7 +159,7 @@ Segmentation plans are in a [textproto format](https://protobuf.dev/reference/pr
 This repo currently provides a few experimental utilities that can generate segmentation plans for you. It is also
 possible to write plans by hand, or develop new utilities to generate plans.
 
-In this repo 3 options are currently provided:
+In this repo two options are currently provided:
 
 1. [Recommended] `util/closure_glyph_keyed_segmenter_util`: this utility uses a subsetting closure based approach
     to generate a glyph keyed segmentation plan (extension segments that augment glyph data). It can optionally
@@ -186,15 +186,6 @@ In this repo 3 options are currently provided:
     bazel run -c opt util:generate_table_keyed_config -- \
       --font=$(pwd)/myfont.ttf \
       latin.txt cyrillic.txt greek.txt > table_keyed.txtpb
-    ```
-
-3.  `util/iftb2config`: this utility converts a segmentation obtained from the
-    [binned incremental font transfer prototype](https://github.com/adobe/binned-ift-reference)
-    into and equivalent segmentation plan. Example execution:
-
-    ```sh
-    iftb -VV info my_iftb_font.ttf 2>&1 | \
-      bazel run util:iftb2config > segmentation_plan.txtpb
     ```
 
 If separate glyph keyed and table keyed configs were generated using #1 and #2 they can then be combined into one
