@@ -30,14 +30,13 @@
 #include "util/segmenter_config.pb.h"
 #include "util/segmenter_config_util.h"
 
-using ift::proto::SegmentationPlan;
 using ift::proto::ActivationConditionProto;
 using ift::proto::DesignSpace;
-
+using ift::proto::SegmentationPlan;
 
 /*
- * Utility that converts a standard font file into an IFT font file optionally following a
- * supplied segmentation plan.
+ * Utility that converts a standard font file into an IFT font file optionally
+ * following a supplied segmentation plan.
  *
  * Configuration is provided as a textproto file following the
  * segmentation_plan.proto schema.
@@ -279,7 +278,8 @@ Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
 
 StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
   SegmentationPlan plan;
-  if (absl::GetFlag(FLAGS_plan).empty() || absl::GetFlag(FLAGS_plan) == "auto") {
+  if (absl::GetFlag(FLAGS_plan).empty() ||
+      absl::GetFlag(FLAGS_plan) == "auto") {
     std::cerr << ">> auto generating segmentation plan:" << std::endl;
     std::optional<int> quality_level = std::nullopt;
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
@@ -288,18 +288,21 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
     auto config = AutoSegmenterConfig::GenerateConfig(
         font, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
     if (!config.ok()) {
-      return absl::InternalError(StrCat("Failed to generate config: ", config.status().message()));
+      return absl::InternalError(
+          StrCat("Failed to generate config: ", config.status().message()));
     }
     util::SegmenterConfigUtil config_util("");
     auto result = config_util.RunSegmenter(font, *config);
     if (!result.ok()) {
-      return absl::InternalError(StrCat("Failed to run segmenter: ", result.status().message()));
+      return absl::InternalError(
+          StrCat("Failed to run segmenter: ", result.status().message()));
     }
     plan = std::move(result->plan);
   } else {
     auto config_text = util::LoadFile(absl::GetFlag(FLAGS_plan).c_str());
     if (!config_text.ok()) {
-      return absl::InternalError(StrCat("Failed to load config file: ", config_text.status().message()));
+      return absl::InternalError(StrCat("Failed to load config file: ",
+                                        config_text.status().message()));
     }
 
     if (!google::protobuf::TextFormat::ParseFromString(config_text->str(),

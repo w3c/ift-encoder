@@ -9,14 +9,13 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "common/int_set.h"
+#include "common/try.h"
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
-#include "common/try.h"
 
+using ift::proto::ActivationConditionProto;
 using ift::proto::SegmentationPlan;
 using ift::proto::SegmentProto;
-using ift::proto::ActivationConditionProto;
-
 
 using absl::Status;
 using absl::StatusOr;

@@ -11,16 +11,15 @@
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
+#include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
-#include "ift/encoder/init_subset_defaults.h"
 
-using ift::proto::PATCH;
 using ift::proto::FIND_CONDITIONS;
-
+using ift::proto::PATCH;
 
 namespace ift::encoder {
 
@@ -73,9 +72,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     AddInitSubsetDefaults(init_font_segment);
 
     closure_cache_ = std::make_unique<GlyphClosureCache>(roboto_.get());
-    requested_segmentation_info_ =
-        *RequestedSegmentationInformation::Create(
-            segments_, init_font_segment, *closure_cache_, PATCH);
+    requested_segmentation_info_ = *RequestedSegmentationInformation::Create(
+        segments_, init_font_segment, *closure_cache_, PATCH);
 
     glyph_conditions_ = std::make_unique<GlyphConditionSet>(num_glyphs);
 
@@ -188,8 +186,8 @@ class GlyphGroupingsTest : public ::testing::Test {
 
 TEST_F(GlyphGroupingsTest, SimpleGrouping) {
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                         *glyph_conditions_, *closure_cache_, std::nullopt,
-                                         glyphs_to_group_, {});
+                                         *glyph_conditions_, *closure_cache_,
+                                         std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -213,8 +211,8 @@ TEST_F(GlyphGroupingsTest, SimpleGrouping) {
 
 TEST_F(GlyphGroupingsTest, SegmentChange) {
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                         *glyph_conditions_, *closure_cache_, std::nullopt,
-                                         glyphs_to_group_, {});
+                                         *glyph_conditions_, *closure_cache_,
+                                         std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now in the glyph condition set combine segments s1 into s0
@@ -248,8 +246,8 @@ TEST_F(GlyphGroupingsTest, SegmentChange) {
 
   // Recompute the grouping
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    new_conditions, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    new_conditions, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -275,8 +273,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -309,8 +307,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Combined Condition map:
@@ -344,16 +342,16 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {
 TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                         *glyph_conditions_, *closure_cache_, std::nullopt,
-                                         glyphs_to_group_, {});
+                                         *glyph_conditions_, *closure_cache_,
+                                         std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
-  sc =
-      glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                   *glyph_conditions_, *closure_cache_, std::nullopt, {}, {});
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, {}, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // UnionPatches + GroupGlyphs() will automatically invalidate and then fix
@@ -378,8 +376,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Invalidates) {
 TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // Form grouping without union's
   auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                         *glyph_conditions_, *closure_cache_, std::nullopt,
-                                         glyphs_to_group_, {});
+                                         *glyph_conditions_, *closure_cache_,
+                                         std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'b'}));
@@ -389,8 +387,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
   // and see if grouping correctly reforms the full mapping. Invalidates:
   // s0 -> {a, b}
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    ToGlyphs({'a', 'b'}), {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, ToGlyphs({'a', 'b'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Expected condition map:
@@ -412,8 +410,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_PartialUpdate) {
 
   // Do another partial invalidation this time on: s3 OR s4 -> {g, h}
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    ToGlyphs({'g', 'h'}), {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, ToGlyphs({'g', 'h'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Groupings should still be the same.
@@ -424,8 +422,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
   auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'a'}), ToGlyphs({'b'}));
   ASSERT_TRUE(sc.ok()) << sc;
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // The combination is a noop since it only combines things already in the
@@ -453,8 +451,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -481,8 +479,8 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Now in the glyph condition set combine segments s1 into s0
@@ -516,9 +514,9 @@ TEST_F(GlyphGroupingsTest, CombinePatches_SegmentChanges) {
   new_conditions.AddOrCondition(cp_to_gid_['j'], 3);
 
   // Recompute the grouping
-  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    new_conditions, *closure_cache_, std::nullopt,
-                                    ToGlyphs({'a', 'b', 'c', 'd'}), {});
+  sc = glyph_groupings_.GroupGlyphs(
+      *requested_segmentation_info_, new_conditions, *closure_cache_,
+      std::nullopt, ToGlyphs({'a', 'b', 'c', 'd'}), {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -542,8 +540,8 @@ TEST_F(GlyphGroupingsTest, EqualityRespectsPatchCombination) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   GlyphGroupings other(hb_face_get_glyph_count(roboto_.get()));
@@ -571,8 +569,8 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
-                                    *glyph_conditions_, *closure_cache_, std::nullopt,
-                                    glyphs_to_group_, {});
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -592,12 +590,13 @@ TEST_F(GlyphGroupingsTest, ExclusiveGlyphsRespectsPatchCombinations) {
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_LeaveUnmapped) {
   SubsetDefinition init_font_segment;
   AddInitSubsetDefaults(init_font_segment);
-  std::unique_ptr<RequestedSegmentationInformation> segmentation_info = *RequestedSegmentationInformation::Create(
-      segments_complex_, init_font_segment, *closure_cache_, PATCH);
+  std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
+      *RequestedSegmentationInformation::Create(
+          segments_complex_, init_font_segment, *closure_cache_, PATCH);
 
   auto sc = glyph_groupings_complex_.GroupGlyphs(
-      *segmentation_info, *glyph_conditions_complex_, *closure_cache_, std::nullopt,
-      glyphs_to_group_complex_, {});
+      *segmentation_info, *glyph_conditions_complex_, *closure_cache_,
+      std::nullopt, glyphs_to_group_complex_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
   // Condition map:
@@ -641,7 +640,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
 #ifdef HB_DEPEND_API
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDependencyGraph) {
   std::unique_ptr<DependencyClosure> dep_closure = *DependencyClosure::Create(
-    requested_segmentation_info_complex_.get(), roboto_.get());
+      requested_segmentation_info_complex_.get(), roboto_.get());
 
   auto sc = glyph_groupings_complex_.GroupGlyphs(
       *requested_segmentation_info_complex_, *glyph_conditions_complex_,

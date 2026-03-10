@@ -1,8 +1,10 @@
 #include "ift/dep_graph/dependency_graph.h"
+
 #include <memory>
 
 #include "common/font_data.h"
 #include "common/int_set.h"
+#include "gtest/gtest.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -11,16 +13,13 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
-#include "gtest/gtest.h"
-
 using ift::proto::PATCH;
 
-
 using absl::flat_hash_map;
-using common::hb_face_unique_ptr;
 using common::CodepointSet;
 using common::FontData;
 using common::GlyphSet;
+using common::hb_face_unique_ptr;
 using ift::encoder::glyph_id_t;
 using ift::encoder::GlyphClosureCache;
 using ift::encoder::RequestedSegmentationInformation;
@@ -32,13 +31,13 @@ namespace ift::dep_graph {
 
 class DependencyGraphTest : public ::testing::Test {
  protected:
-  DependencyGraphTest() :
-  face(from_file("common/testdata/Roboto-Regular.ttf")),
-  closure_cache(face.get()),
-  noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
-  segmentation_info(*RequestedSegmentationInformation::Create(segments, WithDefaultFeatures({}), closure_cache, PATCH)),
-  graph(*DependencyGraph::Create(segmentation_info.get(), face.get()))
-  {}
+  DependencyGraphTest()
+      : face(from_file("common/testdata/Roboto-Regular.ttf")),
+        closure_cache(face.get()),
+        noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
+        segmentation_info(*RequestedSegmentationInformation::Create(
+            segments, WithDefaultFeatures({}), closure_cache, PATCH)),
+        graph(*DependencyGraph::Create(segmentation_info.get(), face.get())) {}
 
   static hb_face_unique_ptr from_file(const char* filename) {
     hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
@@ -51,43 +50,48 @@ class DependencyGraphTest : public ::testing::Test {
   }
 
   static SubsetDefinition WithDefaultFeatures(SubsetDefinition def) {
-        AddInitSubsetDefaults(def);
+    AddInitSubsetDefaults(def);
     return def;
   }
 
-  public:
-  void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments) {
-    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+ public:
+  void Reconfigure(SubsetDefinition new_init,
+                   std::vector<Segment> new_segments) {
+    segmentation_info = *RequestedSegmentationInformation::Create(
+        new_segments, new_init, closure_cache, PATCH);
     graph = *DependencyGraph::Create(segmentation_info.get(), face.get());
   }
 
-  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init, std::vector<Segment> new_segments) {
+  void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
+                   std::vector<Segment> new_segments) {
     closure_cache = GlyphClosureCache(new_face);
-    segmentation_info = *RequestedSegmentationInformation::Create(new_segments, new_init, closure_cache, PATCH);
+    segmentation_info = *RequestedSegmentationInformation::Create(
+        new_segments, new_init, closure_cache, PATCH);
     graph = *DependencyGraph::Create(segmentation_info.get(), new_face);
   }
 
-  private:
+ private:
   std::vector<Segment> segments = {
-    /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-    /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-    /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+      /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+      /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+      /* 2 */ {{'i'}, ProbabilityBound::Zero()},
   };
 
   hb_face_unique_ptr face;
   GlyphClosureCache closure_cache;
 
-  public:
+ public:
   hb_face_unique_ptr noto_sans_jp;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   DependencyGraph graph;
 };
 
 TEST_F(DependencyGraphTest, InitFontTraversal) {
-  Reconfigure(WithDefaultFeatures({'f', 'i'}), {
-    {{'a'}, ProbabilityBound::Zero()},
-    {{'b'}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({'f', 'i'}),
+              {
+                  {{'a'}, ProbabilityBound::Zero()},
+                  {{'b'}, ProbabilityBound::Zero()},
+              });
 
   GlyphSet all_g = GlyphSet::all();
   CodepointSet all_u = CodepointSet::all();
@@ -100,15 +104,17 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(444 /* fi */));
   ASSERT_TRUE(traversal.ReachedGlyphs().contains(446 /* fi */));
 
-  r = graph.ClosureTraversal({Node::InitFont()}, &segmentation_info->FullClosure(), &segmentation_info->FullDefinition().codepoints);
+  r = graph.ClosureTraversal({Node::InitFont()},
+                             &segmentation_info->FullClosure(),
+                             &segmentation_info->FullDefinition().codepoints);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal_scoped = *r;
-  ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet {
-    74 /* f */,
-    77 /* i */,
-    444 /* fi */,
-    446 /* ffi */,
-  }));
+  ASSERT_EQ(traversal_scoped.ReachedGlyphs(), (GlyphSet{
+                                                  74 /* f */,
+                                                  77 /* i */,
+                                                  444 /* fi */,
+                                                  446 /* ffi */,
+                                              }));
 }
 
 TEST_F(DependencyGraphTest, ContextGlyphs) {
@@ -116,125 +122,129 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
   init.feature_tags.insert(HB_TAG('f', 'r', 'a', 'c'));
 
   Reconfigure(init, {
-    {{'i'}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                        {{'i'}, ProbabilityBound::Zero()},
+                        {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
 
-    {{'1'}, ProbabilityBound::Zero()},
-    {{0x2044 /* fraction */}, ProbabilityBound::Zero()},
-  });
+                        {{'1'}, ProbabilityBound::Zero()},
+                        {{0x2044 /* fraction */}, ProbabilityBound::Zero()},
+                    });
 
   auto r = graph.ClosureTraversal({
-    Node::Segment(0),
-    Node::Segment(1),
-    Node::Segment(2),
-    Node::Segment(3),
+      Node::Segment(0),
+      Node::Segment(1),
+      Node::Segment(2),
+      Node::Segment(3),
   });
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet {
-    0,
-    21,  /* one */
-    77,  /* i */
-    122, /* superscript one */
-    141, /* dotlessi */
-    168, /* gravecomb */
-    404, /* fraction */
-    454, /* one for fraction */
-    609  /* dotlessi wrapper */
-  }));
+  ASSERT_EQ(segmentation_info->FullClosure(), (GlyphSet{
+                                                  0, 21, /* one */
+                                                  77,    /* i */
+                                                  122,   /* superscript one */
+                                                  141,   /* dotlessi */
+                                                  168,   /* gravecomb */
+                                                  404,   /* fraction */
+                                                  454,   /* one for fraction */
+                                                  609    /* dotlessi wrapper */
+                                              }));
 
-  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {
-    168, /* gravecomb */
-    404, /* fraction */
-    454, /* one for fraction */
-  }));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet{
+                                           168, /* gravecomb */
+                                           404, /* fraction */
+                                           454, /* one for fraction */
+                                       }));
 
-  ASSERT_EQ(traversal.ContextPerGlyph(), (flat_hash_map<glyph_id_t, GlyphSet> {
-    {454, { 404, 454 }},
-    {609, { 168 }},
-  }));
+  ASSERT_EQ(traversal.ContextPerGlyph(), (flat_hash_map<glyph_id_t, GlyphSet>{
+                                             {454, {404, 454}},
+                                             {609, {168}},
+                                         }));
 }
 
 TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
-  Reconfigure(WithDefaultFeatures({'i'}), {
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({'i'}),
+              {
+                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+              });
 
   auto r = graph.ClosureTraversal({
-    Node::Segment(0),
+      Node::Segment(0),
   });
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
   // Gravecomb interacts with 'i' as only a context glyph, so it's
   // own traversal is just it's self.
-  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {168 /* gravecomb */}));
-  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{168 /* gravecomb */}));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet{}));
 }
 
 TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
-  Reconfigure(WithDefaultFeatures({}), {
-    {{0x133 /* ij */}, ProbabilityBound::Zero()},
-    {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  {{0x133 /* ij */}, ProbabilityBound::Zero()},
+                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+              });
 
   auto r = graph.ClosureTraversal({
-    Node::Segment(0),
-    Node::Segment(1),
+      Node::Segment(0),
+      Node::Segment(1),
   });
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  // gravecomb interacts with 'i', but that interaction isn't reachable since 'i'
-  // only becomes available after GSUB traversal is finished in the later glyf phase.
-  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
-    168 /* gravecomb */,
-    77 /* i */,
-    78 /* j */,
-    740 /* ij */,
-  }));
-  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet {}));
+  // gravecomb interacts with 'i', but that interaction isn't reachable since
+  // 'i' only becomes available after GSUB traversal is finished in the later
+  // glyf phase.
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{
+                                           168 /* gravecomb */,
+                                           77 /* i */,
+                                           78 /* j */,
+                                           740 /* ij */,
+                                       }));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet{}));
 }
 
 TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
   /* <map uv="0x4fae" uvs="0xfe00" name="uniFA30"/>  */
-  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}), {
-    {{0x4fae}, ProbabilityBound::Zero()},
-    {{0xfa30}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
+              {
+                  {{0x4fae}, ProbabilityBound::Zero()},
+                  {{0xfa30}, ProbabilityBound::Zero()},
+              });
 
   auto r = graph.ClosureTraversal({
-    Node::Segment(0),
+      Node::Segment(0),
   });
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
-    2684 /* U+4fae */
-  }));
-  // the edge for the UVS sub to U+FA30 never gets traversed since it can't be reached without
-  // U+FE00 present.
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{
+                                           2684 /* U+4fae */
+                                       }));
+  // the edge for the UVS sub to U+FA30 never gets traversed since it can't be
+  // reached without U+FE00 present.
   ASSERT_FALSE(traversal.HasPendingEdges());
 }
 
 TEST_F(DependencyGraphTest, IgnoreUnreachable_Liga) {
-  Reconfigure(WithDefaultFeatures({}), {
-    {{'f'}, ProbabilityBound::Zero()},
-    {{0xfb01 /* fi */}, ProbabilityBound::Zero()},
-  });
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  {{'f'}, ProbabilityBound::Zero()},
+                  {{0xfb01 /* fi */}, ProbabilityBound::Zero()},
+              });
 
   auto r = graph.ClosureTraversal({
-    Node::Segment(0),
+      Node::Segment(0),
   });
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet {
-    74 /* f */
-  }));
-  // the edge for the fi ligature never gets traversed since it can't be reached without
-  // i present.
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{
+                                           74 /* f */
+                                       }));
+  // the edge for the fi ligature never gets traversed since it can't be reached
+  // without i present.
   ASSERT_FALSE(traversal.HasPendingEdges());
 }
 
@@ -242,44 +252,44 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge) {
   SubsetDefinition c2sc;
   c2sc.feature_tags = {HB_TAG('c', '2', 's', 'c')};
   Reconfigure(WithDefaultFeatures({'A'}), {
-    {{'B'}, ProbabilityBound::Zero()},
-    {c2sc, ProbabilityBound::Zero()},
-  });
+                                              {{'B'}, ProbabilityBound::Zero()},
+                                              {c2sc, ProbabilityBound::Zero()},
+                                          });
 
   /* ### s0 ### */
   auto traversal = graph.ClosureTraversal({
-    Node::Segment(0),
+      Node::Segment(0),
   });
   ASSERT_TRUE(traversal.ok()) << traversal.status();
 
-  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
-    38, /* B */
-  }));
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet{
+                                            38, /* B */
+                                        }));
   ASSERT_TRUE(traversal->HasPendingEdges());
 
   /* ### s1 ### */
   traversal = graph.ClosureTraversal({
-    Node::Segment(1),
+      Node::Segment(1),
   });
   ASSERT_TRUE(traversal.ok()) << traversal.status();
 
-  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
-    563, /* smcap A */
-  }));
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet{
+                                            563, /* smcap A */
+                                        }));
   ASSERT_TRUE(traversal->HasPendingEdges());
 
   /* ### s0 + s1 ### */
   traversal = graph.ClosureTraversal({
-    Node::Segment(0),
-    Node::Segment(1),
+      Node::Segment(0),
+      Node::Segment(1),
   });
   ASSERT_TRUE(traversal.ok()) << traversal.status();
 
-  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
-    38, /* B */
-    562, /* smcap B */
-    563, /* smcap A */
-  }));
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet{
+                                            38,  /* B */
+                                            562, /* smcap B */
+                                            563, /* smcap A */
+                                        }));
   ASSERT_FALSE(traversal->HasPendingEdges());
 }
 
@@ -287,42 +297,43 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge_Liga) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   Reconfigure({'f'}, {
-    {{'i'}, ProbabilityBound::Zero()},
-    {liga, ProbabilityBound::Zero()},
-  });
+                         {{'i'}, ProbabilityBound::Zero()},
+                         {liga, ProbabilityBound::Zero()},
+                     });
 
   /* s0 constraints not satisfied */
   auto traversal = graph.ClosureTraversal({
-    Node::Segment(0),
+      Node::Segment(0),
   });
   ASSERT_TRUE(traversal.ok()) << traversal.status();
 
-  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
-    77, /* i */
-  }));
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet{
+                                            77, /* i */
+                                        }));
   ASSERT_TRUE(traversal->HasPendingEdges());
 
   /* s0 + s1 all constraints satisfied */
   traversal = graph.ClosureTraversal({
-    Node::Segment(0),
-    Node::Segment(1),
+      Node::Segment(0),
+      Node::Segment(1),
   });
   ASSERT_TRUE(traversal.ok()) << traversal.status();
 
-  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet {
-    /* f is in init */
-    77, /* i */
-    444, /* fi */
-    446, /* ffi */
-  }));
+  ASSERT_EQ(traversal->ReachedGlyphs(), (GlyphSet{
+                                            /* f is in init */
+                                            77,  /* i */
+                                            444, /* fi */
+                                            446, /* ffi */
+                                        }));
   ASSERT_FALSE(traversal->HasPendingEdges());
 }
 
 // TODO(garretrieger):
 // - basic math, CFF, and COLR tests.
 
-// TODO(garretrieger) we currently only have a few specialized tests, relyng primarily on DependencyClosureTest
-// for coverage of DependencyGraph functionality. We should add some basic tests here that test DepedencyGraph
+// TODO(garretrieger) we currently only have a few specialized tests, relyng
+// primarily on DependencyClosureTest for coverage of DependencyGraph
+// functionality. We should add some basic tests here that test DepedencyGraph
 // core features in isolation.
 
 }  // namespace ift::dep_graph

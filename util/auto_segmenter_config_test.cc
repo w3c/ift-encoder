@@ -13,11 +13,10 @@
 #include "hb.h"
 #include "util/load_codepoints.h"
 
-using ift::proto::SegmenterConfig;
 using ift::proto::CLOSURE_AND_DEP_GRAPH;
-using ift::proto::MOVE_TO_INIT_FONT;
 using ift::proto::FIND_CONDITIONS;
-
+using ift::proto::MOVE_TO_INIT_FONT;
+using ift::proto::SegmenterConfig;
 
 namespace util {
 namespace {
@@ -278,8 +277,8 @@ TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
 }
 
 TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
-  auto config_or = AutoSegmenterConfig::GenerateConfig(
-      face_.get(), std::nullopt, 1);
+  auto config_or =
+      AutoSegmenterConfig::GenerateConfig(face_.get(), std::nullopt, 1);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_EQ(config_or->brotli_quality(), 0);
   EXPECT_EQ(config_or->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
@@ -287,14 +286,15 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   EXPECT_EQ(config_or->brotli_quality_for_initial_font_merging(), 0);
   EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
 
-  auto config_or_8 = AutoSegmenterConfig::GenerateConfig(
-      face_.get(), std::nullopt, 8);
+  auto config_or_8 =
+      AutoSegmenterConfig::GenerateConfig(face_.get(), std::nullopt, 8);
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
   EXPECT_EQ(config_or_8->unmapped_glyph_handling(), FIND_CONDITIONS);
   EXPECT_EQ(config_or_8->base_cost_config().use_bigrams(), true);
   EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
-  EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(), 0.005);
+  EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(),
+            0.005);
 }
 
 }  // namespace

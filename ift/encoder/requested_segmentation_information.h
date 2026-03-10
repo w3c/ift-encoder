@@ -2,14 +2,15 @@
 #define IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 
 #include <memory>
+
 #include "common/int_set.h"
+#include "common/try.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "util/common.pb.h"
-#include "common/try.h"
 
 namespace ift::encoder {
 
@@ -18,10 +19,10 @@ namespace ift::encoder {
  */
 class RequestedSegmentationInformation {
  public:
-  static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>> Create(
-      std::vector<Segment> segments, SubsetDefinition init_font_segment,
-      GlyphClosureCache& closure_cache,
-      ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
+  static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>>
+  Create(std::vector<Segment> segments, SubsetDefinition init_font_segment,
+         GlyphClosureCache& closure_cache,
+         ift::proto::UnmappedGlyphHandling unmapped_glyph_handling);
 
  private:
   RequestedSegmentationInformation(
@@ -44,10 +45,8 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
-  absl::Status ReassignInitSubset(
-    GlyphClosureCache& closure_cache,
-    const SubsetDefinition& new_def) {
-
+  absl::Status ReassignInitSubset(GlyphClosureCache& closure_cache,
+                                  const SubsetDefinition& new_def) {
     init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
 
     full_definition_.Union(init_font_segment_);
@@ -89,7 +88,9 @@ class RequestedSegmentationInformation {
     return result;
   }
 
-  const common::GlyphSet& InitFontGlyphs() const { return init_font_segment_.gids; }
+  const common::GlyphSet& InitFontGlyphs() const {
+    return init_font_segment_.gids;
+  }
   common::GlyphSet NonInitFontGlyphs() const {
     common::GlyphSet out = full_closure_;
     out.subtract(InitFontGlyphs());
@@ -125,7 +126,8 @@ class RequestedSegmentationInformation {
     return segments;
   }
 
-  SubsetDefinition CombinedDefinition(const common::SegmentSet& segments) const {
+  SubsetDefinition CombinedDefinition(
+      const common::SegmentSet& segments) const {
     // TODO(garretrieger): this approach is inefficient vs the subtraction
     // method, add the special case path or remove use of this function in
     // favour of incrementally produced defs.

@@ -7,9 +7,9 @@
 #include "absl/flags/parse.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "codepoint_count.pb.h"
 #include "riegeli/bytes/fd_writer.h"
 #include "riegeli/records/record_writer.h"
-#include "codepoint_count.pb.h"
 
 using absl::StrCat;
 using ift_encoder_data::CodepointCount;

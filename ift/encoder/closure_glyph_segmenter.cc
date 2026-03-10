@@ -36,11 +36,10 @@
 #include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
-using ift::proto::SegmentationPlan;
-using ift::proto::UnmappedGlyphHandling;
-using ift::proto::SegmentsProto;
 using ift::proto::MOVE_TO_INIT_FONT;
-
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmentsProto;
+using ift::proto::UnmappedGlyphHandling;
 
 using absl::btree_map;
 using absl::btree_set;
@@ -122,21 +121,21 @@ static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
   }
 }
 
-// Returns true if the glyph groupings a and b are equivalent (not necessarily equal).
+// Returns true if the glyph groupings a and b are equivalent (not necessarily
+// equal).
 //
-// Complex condition finding can return multiple possible valid conditions for a glyph
-// so for these we allowe differences as long as the closure condition is satisfied
-// (that is there are no additional conditions.)
+// Complex condition finding can return multiple possible valid conditions for a
+// glyph so for these we allowe differences as long as the closure condition is
+// satisfied (that is there are no additional conditions.)
 static StatusOr<bool> GlyphGroupingsAreEquivalent(
-  const SegmentationContext& context,
-  const GlyphGroupings& a,
-  const GlyphGroupings& b
-) {
+    const SegmentationContext& context, const GlyphGroupings& a,
+    const GlyphGroupings& b) {
   if (a.ConditionsAndGlyphs() == b.ConditionsAndGlyphs()) {
     return true;
   }
 
-  for (glyph_id_t gid = 0; gid < hb_face_get_glyph_count(context.original_face.get()); gid++) {
+  for (glyph_id_t gid = 0;
+       gid < hb_face_get_glyph_count(context.original_face.get()); gid++) {
     auto maybe_cond_a = a.GlyphToCondition(gid);
     auto maybe_cond_b = b.GlyphToCondition(gid);
 
@@ -155,7 +154,8 @@ static StatusOr<bool> GlyphGroupingsAreEquivalent(
       continue;
     }
 
-    if (!a.FoundConditionGlyphs().contains(gid) || !b.FoundConditionGlyphs().contains(gid)) {
+    if (!a.FoundConditionGlyphs().contains(gid) ||
+        !b.FoundConditionGlyphs().contains(gid)) {
       // diffs only allowed if gid is a found conditions gid in both a and b.
       return false;
     }
@@ -165,17 +165,20 @@ static StatusOr<bool> GlyphGroupingsAreEquivalent(
       return false;
     }
 
-    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(&context.SegmentationInfo(),
-      cond_a.TriggeringSegments(), GlyphSet {gid}))) {
+    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(
+            &context.SegmentationInfo(), cond_a.TriggeringSegments(),
+            GlyphSet{gid}))) {
       return false;
     }
 
-    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(&context.SegmentationInfo(),
-      cond_b.TriggeringSegments(), GlyphSet {gid}))) {
+    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(
+            &context.SegmentationInfo(), cond_b.TriggeringSegments(),
+            GlyphSet{gid}))) {
       return false;
     }
 
-    // If no additional conditions are present on either side then we allow the diff.
+    // If no additional conditions are present on either side then we allow the
+    // diff.
   }
 
   return true;
@@ -215,7 +218,9 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   bool glyph_groupings_diffs_allowed = false;
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
-    if (!TRY(GlyphGroupingsAreEquivalent(context, context.glyph_groupings, non_incremental_context.glyph_groupings))) {
+    if (!TRY(GlyphGroupingsAreEquivalent(
+            context, context.glyph_groupings,
+            non_incremental_context.glyph_groupings))) {
       VLOG(0) << "-- incremental grouping";
       VLOG(0) << "++ non-incremental grouping";
       PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
@@ -526,10 +531,11 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   btree_map<SegmentSet, SegmentSet> with_shared;
   std::vector<Segment> segments =
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
-  SegmentationContext context = TRY(SegmentationContext::InitializeSegmentationContext(
-      face, initial_segment, std::move(segments),
-      unmapped_glyph_handling_, condition_analysis_mode_,
-      brotli_quality_, init_font_merging_brotli_quality_));
+  SegmentationContext context =
+      TRY(SegmentationContext::InitializeSegmentationContext(
+          face, initial_segment, std::move(segments), unmapped_glyph_handling_,
+          condition_analysis_mode_, brotli_quality_,
+          init_font_merging_brotli_quality_));
 
   std::vector<Merger> mergers =
       TRY(ToMergers(context, with_shared, merge_groups));

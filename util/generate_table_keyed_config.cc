@@ -12,9 +12,8 @@
 #include "util/load_codepoints.h"
 #include "util/segmentation_plan.pb.h"
 
-using ift::proto::SegmentationPlan;
 using ift::proto::Codepoints;
-
+using ift::proto::SegmentationPlan;
 
 using absl::StatusOr;
 using absl::StrCat;

@@ -21,12 +21,11 @@ class AutoSegmenterConfig {
   //                 Defaults to "Script_latin" if not provided.
   //
   // quality_level: ranges from 1-8, sets the segmenting time to segmentation
-  //                quality tradeoff. Lower values have shorter segmenting times,
-  //                high values have longer segmenting times but typically results
-  //                in better segmentation quality.
+  //                quality tradeoff. Lower values have shorter segmenting
+  //                times, high values have longer segmenting times but
+  //                typically results in better segmentation quality.
   static absl::StatusOr<ift::proto::SegmenterConfig> GenerateConfig(
-      hb_face_t* face,
-      std::optional<std::string> primary_script = std::nullopt,
+      hb_face_t* face, std::optional<std::string> primary_script = std::nullopt,
       std::optional<int> quality_level = std::nullopt);
 
   // Returns the base script for a given language.

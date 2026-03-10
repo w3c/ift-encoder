@@ -63,7 +63,8 @@ class SegmenterConfigUtil {
       const std::string& frequency_data_file_path, bool built_in);
 
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToStrategy(
-      const ift::proto::CostConfiguration& base, const ift::proto::CostConfiguration& config,
+      const ift::proto::CostConfiguration& base,
+      const ift::proto::CostConfiguration& config,
       common::CodepointSet& covered_codepoints);
 
   absl::StatusOr<std::pair<common::SegmentSet, ift::encoder::MergeStrategy>>

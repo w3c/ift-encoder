@@ -81,7 +81,9 @@ class GlyphGroupings {
 
   // Returns the set of glyphs that were unmapped but had conditions
   // found for them.
-  const common::GlyphSet& FoundConditionGlyphs() const { return found_condition_glyphs_; }
+  const common::GlyphSet& FoundConditionGlyphs() const {
+    return found_condition_glyphs_;
+  }
 
   // Returns a list of conditions which include segment.
   const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(
@@ -126,7 +128,8 @@ class GlyphGroupings {
   absl::Status GroupGlyphs(
       const RequestedSegmentationInformation& segmentation_info,
       const GlyphConditionSet& glyph_condition_set,
-      GlyphClosureCache& closure_cache, std::optional<DependencyClosure*> dependency_closure,
+      GlyphClosureCache& closure_cache,
+      std::optional<DependencyClosure*> dependency_closure,
       common::GlyphSet glyphs, const common::SegmentSet& modified_segments);
 
   // Converts this grouping into a finalized GlyphSegmentation.
@@ -155,8 +158,7 @@ class GlyphGroupings {
       const GlyphConditionSet& glyph_condition_set,
       const common::SegmentSet& inscope_segments,
       GlyphClosureCache& closure_cache,
-      std::optional<DependencyClosure*> dependency_closure
-    );
+      std::optional<DependencyClosure*> dependency_closure);
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.

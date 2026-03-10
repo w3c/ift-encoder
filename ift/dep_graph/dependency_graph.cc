@@ -1,34 +1,35 @@
 #include "ift/dep_graph/dependency_graph.h"
+
 #include <cstdint>
 #include <optional>
 #include <utility>
 
 #include "absl/log/log.h"
+#include "common/font_helper.h"
 #include "common/hb_set_unique_ptr.h"
 #include "common/int_set.h"
-#include "common/font_helper.h"
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
 
-using absl::Status;
-using absl::StatusOr;
+using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
-using absl::btree_set;
-using common::hb_set_unique_ptr;
-using common::make_hb_set;
+using absl::Status;
+using absl::StatusOr;
 using common::CodepointSet;
 using common::FontHelper;
 using common::GlyphSet;
+using common::hb_set_unique_ptr;
 using common::IntSet;
+using common::make_hb_set;
 using common::SegmentSet;
-using ift::encoder::Segment;
 using ift::encoder::glyph_id_t;
-using ift::encoder::segment_index_t;
 using ift::encoder::RequestedSegmentationInformation;
+using ift::encoder::Segment;
+using ift::encoder::segment_index_t;
 using ift::encoder::SubsetDefinition;
 
 namespace ift::dep_graph {
@@ -62,21 +63,28 @@ static bool HbSetIntersects(const hb_set_t* glyphs, const GlyphSet& reached) {
   return false;
 }
 
-static StatusOr<bool> LigaSetSatisfied(hb_depend_t* depend, hb_codepoint_t liga_set, const GlyphSet& reached) {
+static StatusOr<bool> LigaSetSatisfied(hb_depend_t* depend,
+                                       hb_codepoint_t liga_set,
+                                       const GlyphSet& reached) {
   hb_set_unique_ptr liga_glyphs = make_hb_set();
   if (!hb_depend_get_set_from_index(depend, liga_set, liga_glyphs.get())) {
-    return absl::InternalError("ConstraintsSatisfied(): Ligature set lookup failed.");
+    return absl::InternalError(
+        "ConstraintsSatisfied(): Ligature set lookup failed.");
   }
 
   // All liga glyphs must be reached.
   return HbSetIsSubset(liga_glyphs.get(), reached);
 }
 
-static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend, hb_codepoint_t context_set_index, const GlyphSet& reached) {
+static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend,
+                                          hb_codepoint_t context_set_index,
+                                          const GlyphSet& reached) {
   // the context set is actually a set of sets.
   hb_set_unique_ptr context_sets = make_hb_set();
-  if (!hb_depend_get_set_from_index(depend, context_set_index, context_sets.get())) {
-    return absl::InternalError("ContextSetSatisfied(): Context set lookup failed.");
+  if (!hb_depend_get_set_from_index(depend, context_set_index,
+                                    context_sets.get())) {
+    return absl::InternalError(
+        "ContextSetSatisfied(): Context set lookup failed.");
   }
 
   GlyphSet glyphs;
@@ -92,7 +100,8 @@ static StatusOr<bool> ContextSetSatisfied(hb_depend_t* depend, hb_codepoint_t co
 
     hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
     hb_set_unique_ptr context_glyphs = make_hb_set();
-    if (!hb_depend_get_set_from_index(depend, actual_set_id, context_glyphs.get())) {
+    if (!hb_depend_get_set_from_index(depend, actual_set_id,
+                                      context_glyphs.get())) {
       return absl::InternalError("Context sub set lookup failed.");
     }
 
@@ -113,14 +122,17 @@ class PendingEdge {
     return edge;
   }
 
-  static PendingEdge Gsub(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid) {
+  static PendingEdge Gsub(glyph_id_t source_gid, hb_tag_t feature,
+                          glyph_id_t dest_gid) {
     PendingEdge edge(Node::Glyph(dest_gid), GSUB);
     edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
     return edge;
   }
 
-  static PendingEdge Ligature(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid, hb_codepoint_t liga_set_index) {
+  static PendingEdge Ligature(glyph_id_t source_gid, hb_tag_t feature,
+                              glyph_id_t dest_gid,
+                              hb_codepoint_t liga_set_index) {
     PendingEdge edge(Node::Glyph(dest_gid), GSUB);
     edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
@@ -128,7 +140,9 @@ class PendingEdge {
     return edge;
   }
 
-  static PendingEdge Context(glyph_id_t source_gid, hb_tag_t feature, glyph_id_t dest_gid, hb_codepoint_t context_set_index) {
+  static PendingEdge Context(glyph_id_t source_gid, hb_tag_t feature,
+                             glyph_id_t dest_gid,
+                             hb_codepoint_t context_set_index) {
     PendingEdge edge(Node::Glyph(dest_gid), GSUB);
     edge.required_glyph_ = source_gid;
     edge.required_feature_ = feature;
@@ -143,13 +157,11 @@ class PendingEdge {
   Status DoTraversal(TraversalContext& context) const;
 
   StatusOr<bool> ConstraintsSatisfied(
-    hb_depend_t* depend,
-    const CodepointSet& reached_unicodes,
-    const GlyphSet& reached_glyphs,
-    const flat_hash_set<hb_tag_t>& reached_features
-  ) const {
-
-    if (required_glyph_.has_value() && !reached_glyphs.contains(*required_glyph_)) {
+      hb_depend_t* depend, const CodepointSet& reached_unicodes,
+      const GlyphSet& reached_glyphs,
+      const flat_hash_set<hb_tag_t>& reached_features) const {
+    if (required_glyph_.has_value() &&
+        !reached_glyphs.contains(*required_glyph_)) {
       return false;
     }
 
@@ -159,17 +171,20 @@ class PendingEdge {
       return false;
     }
 
-    if (required_feature_.has_value() && !reached_features.contains(*required_feature_)) {
+    if (required_feature_.has_value() &&
+        !reached_features.contains(*required_feature_)) {
       return false;
     }
 
     if (required_liga_set_index_.has_value() &&
-        !TRY(LigaSetSatisfied(depend, *required_liga_set_index_, reached_glyphs))) {
+        !TRY(LigaSetSatisfied(depend, *required_liga_set_index_,
+                              reached_glyphs))) {
       return false;
     }
 
     if (required_context_set_index_.has_value() &&
-        !TRY(ContextSetSatisfied(depend, *required_context_set_index_, reached_glyphs))) {
+        !TRY(ContextSetSatisfied(depend, *required_context_set_index_,
+                                 reached_glyphs))) {
       return false;
     }
 
@@ -177,8 +192,8 @@ class PendingEdge {
   }
 
  private:
-
-  PendingEdge(Node dest, hb_tag_t table_tag) : dest_(dest), table_tag_(table_tag) {}
+  PendingEdge(Node dest, hb_tag_t table_tag)
+      : dest_(dest), table_tag_(table_tag) {}
 
   Node dest_;
   hb_tag_t table_tag_;
@@ -187,7 +202,8 @@ class PendingEdge {
   std::optional<hb_tag_t> required_feature_ = std::nullopt;
   std::optional<uint32_t> required_liga_set_index_ = std::nullopt;
   std::optional<uint32_t> required_context_set_index_ = std::nullopt;
-  std::optional<std::pair<hb_codepoint_t, hb_codepoint_t>> required_codepoints_ = std::nullopt;
+  std::optional<std::pair<hb_codepoint_t, hb_codepoint_t>>
+      required_codepoints_ = std::nullopt;
 };
 
 // Tracks the details of an inprogress traversal.
@@ -196,34 +212,30 @@ class TraversalContext {
   hb_depend_t* depend = nullptr;
 
   // Only edges from these tables will be followed.
-  flat_hash_set<hb_tag_t> table_filter = {
-    cmap,
-    glyf,
-    GSUB,
-    COLR,
-    MATH,
-    CFF
-  };
+  flat_hash_set<hb_tag_t> table_filter = {cmap, glyf, GSUB, COLR, MATH, CFF};
 
-  // Only edges that originate from and end at glyphs from this filter will be followed.
+  // Only edges that originate from and end at glyphs from this filter will be
+  // followed.
   const GlyphSet* glyph_filter = nullptr;
 
-  // For unicode based edges (unicode-unicode, unicode-gid), they will only be followed
-  // when all unicodes are in this filter.
+  // For unicode based edges (unicode-unicode, unicode-gid), they will only be
+  // followed when all unicodes are in this filter.
   const CodepointSet* unicode_filter = nullptr;
 
   // The set of all glyphs in the full closure.
   const GlyphSet* full_closure = nullptr;
 
-  // For GSUB edges, they will only be followed when the features are in this filter.
+  // For GSUB edges, they will only be followed when the features are in this
+  // filter.
   const flat_hash_set<hb_tag_t>* feature_filter = nullptr;
 
   // Only edges between node types in this filter will be followed, bitmask
   // using the NodeType enum values.
   uint32_t node_type_filter = 0xFFFFFFFF;
 
-  // If true, then for conjunctive type edges (UVS/Ligature/Context) they will only
-  // be followed when the context is satisfied (ie. appropriate glyphs are reached).
+  // If true, then for conjunctive type edges (UVS/Ligature/Context) they will
+  // only be followed when the context is satisfied (ie. appropriate glyphs are
+  // reached).
   bool enforce_context = false;
 
   // Results of the traversal.
@@ -236,15 +248,14 @@ class TraversalContext {
     }
   }
 
-  // Preloads all of the reached glyphs/unicodes/features sets to be those in the init font
-  // of segmentation_info.
+  // Preloads all of the reached glyphs/unicodes/features sets to be those in
+  // the init font of segmentation_info.
   //
-  // When context is enforced this will allow conjunctive edges that intersect the initial font
-  // to be traversed.
+  // When context is enforced this will allow conjunctive edges that intersect
+  // the initial font to be traversed.
   void SetReachedToInitFont(
-    const RequestedSegmentationInformation& segmentation_info,
-    const flat_hash_set<hb_tag_t>& init_features) {
-
+      const RequestedSegmentationInformation& segmentation_info,
+      const flat_hash_set<hb_tag_t>& init_features) {
     reached_glyphs_ = segmentation_info.InitFontGlyphs();
     reached_unicodes_ = segmentation_info.InitFontSegment().codepoints;
     reached_features_ = init_features;
@@ -260,13 +271,16 @@ class TraversalContext {
     return node;
   }
 
-  // This checks all pending edges and if any have their constraints satisfied then they are
-  // traversed. Returns true if there are now more nodes in the next queue.
+  // This checks all pending edges and if any have their constraints satisfied
+  // then they are traversed. Returns true if there are now more nodes in the
+  // next queue.
   StatusOr<bool> CheckPending(hb_depend_t* depend_graph) {
     auto it = pending_edges_.begin();
     while (it != pending_edges_.end()) {
       const auto& pending = *it;
-      if (TRY(pending.ConstraintsSatisfied(depend_graph, reached_unicodes_, reached_glyphs_, reached_features_))) {
+      if (TRY(pending.ConstraintsSatisfied(depend_graph, reached_unicodes_,
+                                           reached_glyphs_,
+                                           reached_features_))) {
         TRYV(pending.DoTraversal(*this));
         pending_edges_.erase(it);
       } else {
@@ -279,14 +293,14 @@ class TraversalContext {
 
   // Returns true if one or more pending edges remains.
   //
-  // Pending edges are conjunctive edges which have been encountered who's conditions
-  // are not yet satisfied.
-  bool HasPendingEdges() const {
-    return !pending_edges_.empty();
-  }
+  // Pending edges are conjunctive edges which have been encountered who's
+  // conditions are not yet satisfied.
+  bool HasPendingEdges() const { return !pending_edges_.empty(); }
 
-  // Traverse an edge with no special context and/or additional information other than table tag
-  void TraverseEdgeTo(Node dest, std::optional<hb_tag_t> table_tag = std::nullopt) {
+  // Traverse an edge with no special context and/or additional information
+  // other than table tag
+  void TraverseEdgeTo(Node dest,
+                      std::optional<hb_tag_t> table_tag = std::nullopt) {
     if (!ShouldFollow(dest, std::nullopt)) {
       return;
     }
@@ -304,8 +318,8 @@ class TraversalContext {
 
   // Traverse an edge with the associated PendingEdge.
   //
-  // Will check if the pending edge is satisfied. If it is the edge will be traversed,
-  // otherwise it will be added to the pending edge set.
+  // Will check if the pending edge is satisfied. If it is the edge will be
+  // traversed, otherwise it will be added to the pending edge set.
   Status TraverseEdgeTo(Node dest, PendingEdge edge, hb_tag_t table_tag) {
     if (!table_filter.contains(table_tag)) {
       return absl::OkStatus();
@@ -316,7 +330,8 @@ class TraversalContext {
     }
 
     if (enforce_context &&
-        !TRY(edge.ConstraintsSatisfied(depend, reached_unicodes_, reached_glyphs_, reached_features_))) {
+        !TRY(edge.ConstraintsSatisfied(depend, reached_unicodes_,
+                                       reached_glyphs_, reached_features_))) {
       Pending(edge);
     } else {
       TRYV(edge.DoTraversal(*this));
@@ -326,8 +341,10 @@ class TraversalContext {
   }
 
   Status TraverseUvsEdge(hb_codepoint_t a, hb_codepoint_t b, glyph_id_t gid) {
-    bool can_reach_a = !unicode_filter || reached_unicodes_.contains(a) || unicode_filter->contains(a);
-    bool can_reach_b = !unicode_filter || reached_unicodes_.contains(b) || unicode_filter->contains(b);
+    bool can_reach_a = !unicode_filter || reached_unicodes_.contains(a) ||
+                       unicode_filter->contains(a);
+    bool can_reach_b = !unicode_filter || reached_unicodes_.contains(b) ||
+                       unicode_filter->contains(b);
     if (enforce_context && (!can_reach_a || !can_reach_b)) {
       // edge can't be reached, ignore.
       return absl::OkStatus();
@@ -338,30 +355,37 @@ class TraversalContext {
     return TraverseEdgeTo(dest, edge, cmap);
   }
 
-  Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature) {
+  Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
+                            hb_tag_t feature) {
     PendingEdge edge = PendingEdge::Gsub(source_gid, feature, dest_gid);
     Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
-  Status TraverseContextualEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature, hb_codepoint_t context_set) {
+  Status TraverseContextualEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
+                                  hb_tag_t feature,
+                                  hb_codepoint_t context_set) {
     if (!TRY(ContextSetSatisfied(depend, context_set, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::Context(source_gid, feature, dest_gid, context_set);
+    PendingEdge edge =
+        PendingEdge::Context(source_gid, feature, dest_gid, context_set);
     Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
 
-  Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t feature, hb_codepoint_t liga_set_index) {
+  Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
+                                hb_tag_t feature,
+                                hb_codepoint_t liga_set_index) {
     if (!TRY(LigaSetSatisfied(depend, liga_set_index, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::Ligature(source_gid, feature, dest_gid, liga_set_index);
+    PendingEdge edge =
+        PendingEdge::Ligature(source_gid, feature, dest_gid, liga_set_index);
     Node dest = Node::Glyph(dest_gid);
     return TraverseEdgeTo(dest, edge, GSUB);
   }
@@ -394,7 +418,8 @@ class TraversalContext {
   StatusOr<GlyphSet> GetContextSet(hb_codepoint_t context_set_id) const {
     // the context set is actually a set of sets.
     hb_set_unique_ptr context_sets = make_hb_set();
-    if (!hb_depend_get_set_from_index(depend, context_set_id, context_sets.get())) {
+    if (!hb_depend_get_set_from_index(depend, context_set_id,
+                                      context_sets.get())) {
       return absl::InternalError("Context set lookup failed.");
     }
 
@@ -409,7 +434,8 @@ class TraversalContext {
 
       hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
       hb_set_unique_ptr context_glyphs = make_hb_set();
-      if (!hb_depend_get_set_from_index(depend, actual_set_id, context_glyphs.get())) {
+      if (!hb_depend_get_set_from_index(depend, actual_set_id,
+                                        context_glyphs.get())) {
         return absl::InternalError("Context sub set lookup failed.");
       }
       glyphs.union_from(context_glyphs.get());
@@ -424,9 +450,7 @@ class TraversalContext {
   }
 
  private:
-  void Pending(PendingEdge edge) {
-    pending_edges_.push_back(edge);
-  }
+  void Pending(PendingEdge edge) { pending_edges_.push_back(edge); }
 
   bool ShouldFollow(Node node, std::optional<hb_tag_t> layout_feature) const {
     if (!node.Matches(node_type_filter)) {
@@ -453,8 +477,8 @@ class TraversalContext {
     return true;
   }
 
-  std::vector<Node> next_ {};
-  flat_hash_set<Node> visited_ {};
+  std::vector<Node> next_{};
+  flat_hash_set<Node> visited_{};
 
   // These track information about things that are needed to
   // activate context which is not yet seen.
@@ -470,8 +494,10 @@ class TraversalContext {
 Status PendingEdge::DoTraversal(TraversalContext& context) const {
   if (table_tag_ == GSUB && required_feature_.has_value()) {
     if (required_context_set_index_.has_value()) {
-      GlyphSet context_glyphs = TRY(context.GetContextSet(*required_context_set_index_));
-      context.traversal.VisitContextual(dest_, *required_feature_, context_glyphs);
+      GlyphSet context_glyphs =
+          TRY(context.GetContextSet(*required_context_set_index_));
+      context.traversal.VisitContextual(dest_, *required_feature_,
+                                        context_glyphs);
     } else {
       context.traversal.VisitGsub(dest_, *required_feature_);
     }
@@ -483,7 +509,8 @@ Status PendingEdge::DoTraversal(TraversalContext& context) const {
   return absl::OkStatus();
 }
 
-StatusOr<Traversal> DependencyGraph::TraverseGraph(TraversalContext* context) const {
+StatusOr<Traversal> DependencyGraph::TraverseGraph(
+    TraversalContext* context) const {
   VLOG(1) << "DependencyGraph::TraverseGraph(...)";
 
   while (true) {
@@ -514,7 +541,8 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(TraversalContext* context) co
     }
 
     if (next->IsInitFont()) {
-      HandleSubsetDefinitionOutgoingEdges(segmentation_info_->InitFontSegment(), context);
+      HandleSubsetDefinitionOutgoingEdges(segmentation_info_->InitFontSegment(),
+                                          context);
     }
   }
 
@@ -526,9 +554,7 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(TraversalContext* context) co
 }
 
 StatusOr<Traversal> DependencyGraph::ClosureTraversal(
-  const SegmentSet& start,
-  bool enforce_context
-) const {
+    const SegmentSet& start, bool enforce_context) const {
   btree_set<Node> start_nodes;
   for (segment_index_t s : start) {
     start_nodes.insert(Node::Segment(s));
@@ -537,22 +563,20 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 }
 
 StatusOr<Traversal> DependencyGraph::ClosureTraversal(
-  const absl::btree_set<Node>& nodes,
-  const GlyphSet* glyph_filter_ptr,
-  const CodepointSet* unicode_filter_ptr,
-  bool enforce_context
-) const {
-
-  // TODO(garretrieger): context edges don't have edges for each participating glyph,
-  // so for full correctness in matching closure we should introduce pending edges for
-  // any unsatisfied edges out of the init font. However, this behaviour will probably
-  // need to be optional as it's not desirable for the current dependency closure use
-  // cases which specifically ignore context as inaccurate, but would be needed if
-  // we eventually want to try and handle some context cases in accurate analysis.
+    const absl::btree_set<Node>& nodes, const GlyphSet* glyph_filter_ptr,
+    const CodepointSet* unicode_filter_ptr, bool enforce_context) const {
+  // TODO(garretrieger): context edges don't have edges for each participating
+  // glyph, so for full correctness in matching closure we should introduce
+  // pending edges for any unsatisfied edges out of the init font. However, this
+  // behaviour will probably need to be optional as it's not desirable for the
+  // current dependency closure use cases which specifically ignore context as
+  // inaccurate, but would be needed if we eventually want to try and handle
+  // some context cases in accurate analysis.
   CodepointSet non_init_font_codepoints;
   if (unicode_filter_ptr == nullptr) {
     non_init_font_codepoints = segmentation_info_->FullDefinition().codepoints;
-    non_init_font_codepoints.subtract(segmentation_info_->InitFontSegment().codepoints);
+    non_init_font_codepoints.subtract(
+        segmentation_info_->InitFontSegment().codepoints);
   }
 
   GlyphSet non_init_font_glyphs;
@@ -560,7 +584,8 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     non_init_font_glyphs = segmentation_info_->NonInitFontGlyphs();
   }
 
-  flat_hash_set<hb_tag_t> table_tags = FontHelper::GetTags(original_face_.get());
+  flat_hash_set<hb_tag_t> table_tags =
+      FontHelper::GetTags(original_face_.get());
   Traversal traversal_full;
 
   // Subsetting closure happens in phases which we need to mimic here:
@@ -573,17 +598,21 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   // 7. CFF closure
   //
   // Reference for the phases and ordering:
-  // _populate_gids_to_retain() from https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
+  // _populate_gids_to_retain() from
+  // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
 
   TraversalContext base_context;
   base_context.depend = dependency_graph_.get();
-  base_context.unicode_filter = unicode_filter_ptr ? unicode_filter_ptr : &non_init_font_codepoints;
-  base_context.glyph_filter = glyph_filter_ptr ? glyph_filter_ptr : &non_init_font_glyphs;
+  base_context.unicode_filter =
+      unicode_filter_ptr ? unicode_filter_ptr : &non_init_font_codepoints;
+  base_context.glyph_filter =
+      glyph_filter_ptr ? glyph_filter_ptr : &non_init_font_glyphs;
   base_context.full_closure = &segmentation_info_->FullClosure();
   base_context.feature_filter = &full_feature_set_;
   base_context.enforce_context = enforce_context;
   if (enforce_context) {
-    base_context.SetReachedToInitFont(*segmentation_info_, TRY(InitFontFeatureSet()));
+    base_context.SetReachedToInitFont(*segmentation_info_,
+                                      TRY(InitFontFeatureSet()));
   }
 
   /* ### Phase 1 + 2: Unicode and Unicode to glyph */
@@ -591,12 +620,10 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     TraversalContext context = base_context;
     context.SetStartNodes(nodes);
     context.table_filter = {cmap};
-    context.node_type_filter =
-      Node::NodeType::INIT_FONT |
-      Node::NodeType::SEGMENT |
-      Node::NodeType::UNICODE |
-      Node::NodeType::GLYPH |
-      Node::NodeType::FEATURE;
+    context.node_type_filter = Node::NodeType::INIT_FONT |
+                               Node::NodeType::SEGMENT |
+                               Node::NodeType::UNICODE | Node::NodeType::GLYPH |
+                               Node::NodeType::FEATURE;
     traversal_full = TRY(TraverseGraph(&context));
   }
 
@@ -629,9 +656,8 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 }
 
 Status DependencyGraph::ClosureSubTraversal(
-  const TraversalContext* base_context,
-  hb_tag_t table,
-  Traversal& traversal_full) const {
+    const TraversalContext* base_context, hb_tag_t table,
+    Traversal& traversal_full) const {
   btree_set<Node> start_nodes;
   for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
     start_nodes.insert(Node::Glyph(gid));
@@ -654,10 +680,7 @@ Status DependencyGraph::ClosureSubTraversal(
 }
 
 Status DependencyGraph::HandleUnicodeOutgoingEdges(
-    hb_codepoint_t unicode,
-    TraversalContext* context
-) const {
-
+    hb_codepoint_t unicode, TraversalContext* context) const {
   {
     auto it = unicode_to_gid_.find(unicode);
     if (it != unicode_to_gid_.end()) {
@@ -674,7 +697,7 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
 
   // The subsetter adds unicode bidi mirrors for any unicode codepoints,
   // so add a dep graph edge for those if they exist:
-  auto unicode_funcs = hb_unicode_funcs_get_default ();
+  auto unicode_funcs = hb_unicode_funcs_get_default();
   hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
   if (mirror != unicode) {
     context->TraverseEdgeTo(Node::Unicode(mirror));
@@ -684,9 +707,7 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
 }
 
 Status DependencyGraph::HandleGlyphOutgoingEdges(
-    glyph_id_t gid,
-    TraversalContext* context
-) const {
+    glyph_id_t gid, TraversalContext* context) const {
   hb_codepoint_t index = 0;
   hb_tag_t table_tag = HB_CODEPOINT_INVALID;
   hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
@@ -694,16 +715,19 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
   hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
   hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
 
-  while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                   &dep_gid, &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
+  while (hb_depend_get_glyph_entry(
+      dependency_graph_.get(), gid, index++, &table_tag, &dep_gid, &layout_tag,
+      &ligature_set, &context_set, nullptr /* flags */)) {
     Node dest = Node::Glyph(dep_gid);
     if (table_tag == HB_TAG('G', 'S', 'U', 'B')) {
-      TRYV(HandleGsubGlyphOutgoingEdges(gid, dep_gid, layout_tag, ligature_set, context_set, context));
+      TRYV(HandleGsubGlyphOutgoingEdges(gid, dep_gid, layout_tag, ligature_set,
+                                        context_set, context));
       continue;
     }
 
     if (table_tag == cmap && layout_tag != HB_CODEPOINT_INVALID) {
-      // cmap edges are tracked in a separate structure and handled in HandleUnicodeOutgoingEdges.
+      // cmap edges are tracked in a separate structure and handled in
+      // HandleUnicodeOutgoingEdges.
       continue;
     } else {
       // Just a regular edge
@@ -715,26 +739,22 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
 }
 
 Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
-  glyph_id_t source_gid,
-  glyph_id_t dest_gid,
-  hb_tag_t layout_tag,
-  hb_codepoint_t ligature_set,
-  hb_codepoint_t context_set,
-  TraversalContext* context
-) const {
+    glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t layout_tag,
+    hb_codepoint_t ligature_set, hb_codepoint_t context_set,
+    TraversalContext* context) const {
   if (context_set != HB_CODEPOINT_INVALID) {
-    return context->TraverseContextualEdgeTo(source_gid, dest_gid, layout_tag, context_set);
+    return context->TraverseContextualEdgeTo(source_gid, dest_gid, layout_tag,
+                                             context_set);
   } else if (ligature_set != HB_CODEPOINT_INVALID) {
-    return context->TraverseLigatureEdgeTo(source_gid, dest_gid, layout_tag, ligature_set);
+    return context->TraverseLigatureEdgeTo(source_gid, dest_gid, layout_tag,
+                                           ligature_set);
   } else {
     return context->TraverseGsubEdgeTo(source_gid, dest_gid, layout_tag);
   }
 }
 
 Status DependencyGraph::HandleFeatureOutgoingEdges(
-    hb_tag_t feature_tag,
-    TraversalContext* context
-) const {
+    hb_tag_t feature_tag, TraversalContext* context) const {
   if (!context->table_filter.contains(GSUB)) {
     // All feature edges are GSUB edges so we can skip
     // this if GSUB is being filtered out.
@@ -747,16 +767,15 @@ Status DependencyGraph::HandleFeatureOutgoingEdges(
     return absl::OkStatus();
   }
   for (const auto& edge : edges->second) {
-    TRYV(HandleGsubGlyphOutgoingEdges(edge.source_gid, edge.dest_gid, feature_tag, edge.ligature_set, edge.context_set, context));
+    TRYV(HandleGsubGlyphOutgoingEdges(edge.source_gid, edge.dest_gid,
+                                      feature_tag, edge.ligature_set,
+                                      edge.context_set, context));
   }
   return absl::OkStatus();
 }
 
 void DependencyGraph::HandleSegmentOutgoingEdges(
-    segment_index_t id,
-    TraversalContext* context
-  ) const {
-
+    segment_index_t id, TraversalContext* context) const {
   if (id >= segmentation_info_->Segments().size()) {
     // Unknown segment has no outgoing edges.
     return;
@@ -767,9 +786,7 @@ void DependencyGraph::HandleSegmentOutgoingEdges(
 }
 
 void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
-  const SubsetDefinition& subset_def,
-  TraversalContext* context
-) const {
+    const SubsetDefinition& subset_def, TraversalContext* context) const {
   for (hb_codepoint_t u : subset_def.codepoints) {
     context->TraverseEdgeTo(Node::Unicode(u));
   }
@@ -804,7 +821,8 @@ StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::FullFeatureSet(
   // By extracting the feature list of the harfbuzz subset input we will also
   // include the features that harfbuzz adds by default.
   segmentation_info->FullDefinition().ConfigureInput(input, face);
-  hb_set_t* features = hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_t* features =
+      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
 
   flat_hash_set<hb_tag_t> out;
   hb_tag_t feature = HB_CODEPOINT_INVALID;
@@ -826,7 +844,8 @@ StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::InitFeatureSet(
   }
 
   segmentation_info->InitFontSegment().ConfigureInput(input, face);
-  hb_set_t* features = hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
+  hb_set_t* features =
+      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG);
 
   flat_hash_set<hb_tag_t> out;
   hb_tag_t feature = HB_CODEPOINT_INVALID;
@@ -838,16 +857,20 @@ StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::InitFeatureSet(
   return out;
 }
 
-StatusOr<GlyphSet> DependencyGraph::GetLigaSet(hb_codepoint_t liga_set_id) const {
+StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
+    hb_codepoint_t liga_set_id) const {
   hb_set_unique_ptr out = make_hb_set();
-  if (!hb_depend_get_set_from_index(dependency_graph_.get(), liga_set_id, out.get())) {
+  if (!hb_depend_get_set_from_index(dependency_graph_.get(), liga_set_id,
+                                    out.get())) {
     return absl::InternalError("Ligature set lookup failed.");
   }
   GlyphSet glyphs(out.get());
   return glyphs;
 }
 
-flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge>> DependencyGraph::ComputeUVSEdges() const {
+flat_hash_map<hb_codepoint_t,
+              std::vector<DependencyGraph::VariationSelectorEdge>>
+DependencyGraph::ComputeUVSEdges() const {
   flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> edges;
   for (auto [u, gid] : unicode_to_gid_) {
     hb_codepoint_t index = 0;
@@ -856,20 +879,22 @@ flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge
     hb_codepoint_t variation_selector = HB_CODEPOINT_INVALID;
     hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
     hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
-    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                     &dep_gid, &variation_selector, &ligature_set, &context_set, nullptr /* flags */)) {
+    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++,
+                                     &table_tag, &dep_gid, &variation_selector,
+                                     &ligature_set, &context_set,
+                                     nullptr /* flags */)) {
       if (table_tag != cmap) {
         continue;
       }
 
       // each UVS edge is two edges in reality, record both:
-      edges[u].push_back(VariationSelectorEdge {
-        .unicode = variation_selector,
-        .gid = dep_gid,
+      edges[u].push_back(VariationSelectorEdge{
+          .unicode = variation_selector,
+          .gid = dep_gid,
       });
-      edges[variation_selector].push_back(VariationSelectorEdge {
-        .unicode = u,
-        .gid = dep_gid,
+      edges[variation_selector].push_back(VariationSelectorEdge{
+          .unicode = u,
+          .gid = dep_gid,
       });
     }
   }
@@ -877,27 +902,30 @@ flat_hash_map<hb_codepoint_t, std::vector<DependencyGraph::VariationSelectorEdge
   return edges;
 }
 
-flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>> DependencyGraph::ComputeFeatureEdges() const {
+flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>>
+DependencyGraph::ComputeFeatureEdges() const {
   flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>> edges;
 
-  for (glyph_id_t gid = 0; gid < hb_face_get_glyph_count(original_face_.get()); gid++) {
+  for (glyph_id_t gid = 0; gid < hb_face_get_glyph_count(original_face_.get());
+       gid++) {
     hb_codepoint_t index = 0;
     hb_tag_t table_tag = HB_CODEPOINT_INVALID;
     hb_codepoint_t dest_gid = HB_CODEPOINT_INVALID;
     hb_tag_t layout_tag = HB_CODEPOINT_INVALID;
     hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
     hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
-    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++, &table_tag,
-                                     &dest_gid, &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
+    while (hb_depend_get_glyph_entry(
+        dependency_graph_.get(), gid, index++, &table_tag, &dest_gid,
+        &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
       if (table_tag != GSUB || layout_tag == HB_CODEPOINT_INVALID) {
         continue;
       }
 
-      edges[layout_tag].insert(LayoutFeatureEdge {
-        .source_gid = gid,
-        .dest_gid = dest_gid,
-        .ligature_set = ligature_set,
-        .context_set = context_set,
+      edges[layout_tag].insert(LayoutFeatureEdge{
+          .source_gid = gid,
+          .dest_gid = dest_gid,
+          .ligature_set = ligature_set,
+          .context_set = context_set,
       });
     }
   }

@@ -13,14 +13,13 @@
 #include "ift/freq/unicode_frequencies.h"
 #include "util/load_codepoints.h"
 
-using ift::proto::SegmentationPlan;
-using ift::proto::SegmentProto;
-using ift::proto::SegmenterConfig;
 using ift::proto::CostConfiguration;
 using ift::proto::HeuristicConfiguration;
 using ift::proto::MergeGroup;
+using ift::proto::SegmentationPlan;
+using ift::proto::SegmenterConfig;
+using ift::proto::SegmentProto;
 using ift::proto::SegmentsProto;
-
 
 using absl::btree_map;
 using absl::btree_set;
@@ -28,12 +27,12 @@ using absl::flat_hash_map;
 using absl::StatusOr;
 using common::CodepointSet;
 using common::SegmentSet;
+using ift::encoder::ClosureGlyphSegmenter;
+using ift::encoder::GlyphSegmentation;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::feature_registry::DefaultFeatureTags;
 using ift::freq::UnicodeFrequencies;
-using ift::encoder::ClosureGlyphSegmenter;
-using ift::encoder::GlyphSegmentation;
 
 namespace util {
 
@@ -299,8 +298,8 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
       SegmentProtoToSubsetDefinition(config.initial_segment());
 
   std::vector<SubsetDefinition> segments;
-  btree_map<SegmentSet, MergeStrategy> merge_groups =
-      TRY(ConfigToMergeGroups(config, font_codepoints, font_features, segments));
+  btree_map<SegmentSet, MergeStrategy> merge_groups = TRY(
+      ConfigToMergeGroups(config, font_codepoints, font_features, segments));
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
@@ -312,8 +311,8 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
   SegmentationPlan plan = segmentation.ToSegmentationPlanProto();
 
   if (config.generate_table_keyed_segments()) {
-    ClosureGlyphSegmenter::AddTableKeyedSegments(
-        plan, merge_groups, segments, init_segment);
+    ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
+                                                 init_segment);
   }
 
   SegmentationPlan combined = config.base_segmentation_plan();

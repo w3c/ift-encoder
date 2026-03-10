@@ -14,7 +14,6 @@
 using ift::proto::ActivationConditionProto;
 using ift::proto::SegmentsProto;
 
-
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::Span;

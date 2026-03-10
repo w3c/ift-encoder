@@ -103,8 +103,8 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
-  TRYV(merger.Context().InvalidateGlyphInformation(invalidated_glyphs_,
-                                                   segments_to_merge_with_base));
+  TRYV(merger.Context().InvalidateGlyphInformation(
+      invalidated_glyphs_, segments_to_merge_with_base));
 
   if (new_segment_is_inert) {
     // The newly formed segment will be inert which means we can construct the

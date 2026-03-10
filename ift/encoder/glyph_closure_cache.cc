@@ -10,30 +10,28 @@
 
 using ift::proto::Glyphs;
 
-
 using absl::Status;
 using absl::StatusOr;
+using common::CodepointSet;
+using common::FontHelper;
 using common::GlyphSet;
 using common::hb_set_unique_ptr;
 using common::make_hb_set;
 using common::SegmentSet;
-using common::CodepointSet;
-using common::FontHelper;
 
 namespace ift::encoder {
 
 StatusOr<common::GlyphSet> GlyphClosureCache::SegmentClosure(
-  const RequestedSegmentationInformation* segmentation_info,
-  const common::SegmentSet& segments) {
-  SubsetDefinition closure_def = segmentation_info->CombinedDefinition(segments);
+    const RequestedSegmentationInformation* segmentation_info,
+    const common::SegmentSet& segments) {
+  SubsetDefinition closure_def =
+      segmentation_info->CombinedDefinition(segments);
   return GlyphClosure(closure_def);
 }
 
 StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
-  const RequestedSegmentationInformation* segmentation_info,
-  const SegmentSet& segments,
-  const GlyphSet& glyphs
-) {
+    const RequestedSegmentationInformation* segmentation_info,
+    const SegmentSet& segments, const GlyphSet& glyphs) {
   SegmentSet except;
   if (!segmentation_info->Segments().empty()) {
     except.insert_range(0, segmentation_info->Segments().size() - 1);
@@ -185,7 +183,8 @@ Status GlyphClosureCache::AnalyzeSegment(
   return absl::OkStatus();
 }
 
-StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(const SubsetDefinition& definition) {
+StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(
+    const SubsetDefinition& definition) {
   SubsetDefinition expanded = definition;
   bool changed = true;
   while (changed) {

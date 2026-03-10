@@ -13,7 +13,6 @@
 using ift::proto::CLOSURE_ONLY;
 using ift::proto::PATCH;
 
-
 using absl::btree_map;
 using absl::StatusOr;
 using common::FontData;

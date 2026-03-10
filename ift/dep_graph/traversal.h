@@ -12,9 +12,7 @@ namespace ift::dep_graph {
 // A single node in a fonts glyph dependency graph.
 class Traversal {
  public:
-  void SetPendingEdges() {
-    has_pending_edges_ = true;
-  }
+  void SetPendingEdges() { has_pending_edges_ = true; }
 
   void Merge(const Traversal& other) {
     has_pending_edges_ = has_pending_edges_ | other.has_pending_edges_;
@@ -68,7 +66,8 @@ class Traversal {
     }
   }
 
-  void VisitContextual(Node dest, hb_tag_t feature, common::GlyphSet context_glyphs) {
+  void VisitContextual(Node dest, hb_tag_t feature,
+                       common::GlyphSet context_glyphs) {
     VisitGsub(dest, feature);
     context_glyphs_.union_set(context_glyphs);
     if (dest.IsGlyph()) {
@@ -76,9 +75,7 @@ class Traversal {
     }
   }
 
-  bool HasPendingEdges() const {
-    return has_pending_edges_;
-  }
+  bool HasPendingEdges() const { return has_pending_edges_; }
 
   const absl::flat_hash_set<hb_tag_t>& TraversedTables() const {
     return tables_;
@@ -92,28 +89,25 @@ class Traversal {
     return context_feature_tags_;
   }
 
-  const common::GlyphSet& ReachedGlyphs() const {
-    return reached_glyphs_;
-  }
+  const common::GlyphSet& ReachedGlyphs() const { return reached_glyphs_; }
 
-  const common::GlyphSet& ContextGlyphs() const {
-    return context_glyphs_;
-  }
+  const common::GlyphSet& ContextGlyphs() const { return context_glyphs_; }
 
   // Map containing the context glyphs relevant to each reachable glyph.
-  const absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet>& ContextPerGlyph() const {
+  const absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet>&
+  ContextPerGlyph() const {
     return context_per_glyph_;
   }
 
-  const absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>& ContextFeaturesPerGlyph() const {
+  const absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>&
+  ContextFeaturesPerGlyph() const {
     return context_features_per_glyph_;
   }
 
-  // Returns true if at least one traversed edge has some sort of extra conditions attached to it.
-  // This is any contextual, ligature, or UVS type edge.
-  bool HasContextGlyphs() const {
-    return !context_glyphs_.empty();
-  }
+  // Returns true if at least one traversed edge has some sort of extra
+  // conditions attached to it. This is any contextual, ligature, or UVS type
+  // edge.
+  bool HasContextGlyphs() const { return !context_glyphs_.empty(); }
 
  private:
   bool has_pending_edges_ = false;
@@ -121,7 +115,8 @@ class Traversal {
   common::GlyphSet reached_glyphs_;
   common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet> context_per_glyph_;
-  absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>> context_features_per_glyph_;
+  absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>
+      context_features_per_glyph_;
 
   absl::flat_hash_set<hb_tag_t> reached_feature_tags_;
   absl::flat_hash_set<hb_tag_t> context_feature_tags_;

@@ -10,7 +10,6 @@
 
 using ift::proto::PATCH;
 
-
 using absl::StatusOr;
 using common::CodepointSet;
 using common::FontData;

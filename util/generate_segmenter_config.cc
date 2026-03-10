@@ -16,7 +16,6 @@
 
 using ift::proto::SegmenterConfig;
 
-
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Path to the font file to analyze.");
 
@@ -24,7 +23,8 @@ ABSL_FLAG(std::string, primary_script, "Script_latin",
           "The primary script or language frequency data file to use.");
 
 ABSL_FLAG(int, quality, 0,
-          "The quality level to use. A value of 0 means auto pick. Valid values are 1-8.");
+          "The quality level to use. A value of 0 means auto pick. Valid "
+          "values are 1-8.");
 
 using absl::Status;
 using common::hb_face_unique_ptr;
@@ -45,7 +45,8 @@ static Status Main(const std::vector<char*> args) {
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {
-    return absl::InternalError("Failed to format SegmenterConfig as textproto.");
+    return absl::InternalError(
+        "Failed to format SegmenterConfig as textproto.");
   }
 
   std::cout << output;

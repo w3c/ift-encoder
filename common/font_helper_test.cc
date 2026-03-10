@@ -661,12 +661,10 @@ TEST_F(FontHelperTest, TotalGlyphData_Cff2) {
 }
 
 TEST_F(FontHelperTest, GidsToUnicodes) {
-  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {
-    20
-  }), (CodepointSet {0x33}));
-  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {
-    20, 8699
-  }), (CodepointSet {0x33, 0x2F64, 0x7528}));
+  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {20}),
+            (CodepointSet{0x33}));
+  ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {20, 8699}),
+            (CodepointSet{0x33, 0x2F64, 0x7528}));
 }
 
 // TODO test BuildFont...

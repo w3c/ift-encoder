@@ -10,9 +10,8 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
 
-using ift::proto::SegmenterConfig;
 using ift::proto::Features;
-
+using ift::proto::SegmenterConfig;
 
 using absl::btree_map;
 using absl::btree_set;

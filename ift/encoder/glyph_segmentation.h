@@ -38,11 +38,10 @@ class GlyphSegmentation {
 
   bool operator==(const GlyphSegmentation& other) const {
     return init_font_segment_ == other.init_font_segment_ &&
-      init_font_glyph_closure_ == other.init_font_glyph_closure_ &&
-      unmapped_glyphs_ == other.unmapped_glyphs_ &&
-      conditions_ == other.conditions_ &&
-      segments_ == other.segments_ &&
-      patches_ == other.patches_;
+           init_font_glyph_closure_ == other.init_font_glyph_closure_ &&
+           unmapped_glyphs_ == other.unmapped_glyphs_ &&
+           conditions_ == other.conditions_ && segments_ == other.segments_ &&
+           patches_ == other.patches_;
   }
 
   /*
@@ -98,8 +97,8 @@ class GlyphSegmentation {
     return init_font_segment_;
   };
 
-  static void SubsetDefinitionToSegment(const SubsetDefinition& def,
-                                        ift::proto::SegmentProto& segment_proto);
+  static void SubsetDefinitionToSegment(
+      const SubsetDefinition& def, ift::proto::SegmentProto& segment_proto);
 
   ift::proto::SegmentationPlan ToSegmentationPlanProto() const;
 
