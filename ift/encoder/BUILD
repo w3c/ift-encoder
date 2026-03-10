@@ -67,8 +67,6 @@ cc_library(
         "merger.cc",
         "merger.h",
         "patch_size_cache.h",
-        "requested_segmentation_information.cc",
-        "requested_segmentation_information.h",
         "segmentation_context.cc",
         "segmentation_context.h",
     ] + select({
@@ -79,8 +77,6 @@ cc_library(
             "dependency_closure_disabled.cc",
         ],
     }),
-    visibility = [
-    ],
     deps = [
         ":merge_strategy",
         ":segmentation_info",
@@ -109,6 +105,7 @@ cc_library(
         "requested_segmentation_information.h",
         "glyph_closure_cache.cc",
         "glyph_closure_cache.h",
+        "init_subset_defaults.h",
     ],
     visibility = [
         "//ift/dep_graph:__pkg__",
@@ -144,7 +141,6 @@ cc_library(
         "subset_definition.cc",
     ],
     hdrs = [
-        "init_subset_defaults.h",
         "segment.h",
         "subset_definition.h",
         "types.h",

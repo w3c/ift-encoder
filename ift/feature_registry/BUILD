@@ -23,7 +23,7 @@ cc_library(
         "feature_registry.h",
     ],
     visibility = [
-        "//visibility:public",
+        "//ift/encoder:__pkg__",
     ],
     deps = [
         "@abseil-cpp//absl/base:no_destructor",
