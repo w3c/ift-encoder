@@ -32,9 +32,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "generate_table_keyed_config",
+    name = "gen_ift_table_keyed_plan",
     srcs = [
-        "generate_table_keyed_config.cc",
+        "gen_ift_table_keyed_plan.cc",
     ],
     deps = [
         "//ift/config:load_codepoints",
@@ -48,9 +48,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "closure_glyph_keyed_segmenter_util",
+    name = "gen_ift_segmentation_plan",
     srcs = [
-        "closure_glyph_keyed_segmenter_util.cc",
+        "gen_ift_segmentation_plan.cc",
     ],
     data = [
         "@ift_encoder_data//:freq_data",
@@ -102,9 +102,9 @@ cc_library(
 )
 
 cc_binary(
-    name = "generate_segmenter_config",
+    name = "gen_ift_segmenter_config",
     srcs = [
-        "generate_segmenter_config.cc",
+        "gen_ift_segmenter_config.cc",
     ],
     data = [
         "@ift_encoder_data//:freq_data",

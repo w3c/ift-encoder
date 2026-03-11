@@ -1,7 +1,7 @@
 #!/bin/bash
 
 FONT_NAME=$(basename $1)
-./bazel-bin/util/closure_glyph_keyed_segmenter_util \
+./bazel-bin/util/gen_ift_segmentation_plan \
     --input_font="$1" \
     --config=util/fallback_analysis/fallback_count_config.txtpb \
     --noinclude_initial_codepoints_in_config \

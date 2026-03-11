@@ -75,10 +75,10 @@ There are two main options for generating a segmenter config:
     This option is useful when maximum control over segmentation parameters is needed, or custom frequency
     data is being supplied.
 
-2. Auto generate the segmenter config using `util:generate_segmenter_config`.
+2. Auto generate the segmenter config using `util:gen_ift_segmenter_config`.
 
    ```
-   CC=clang bazel run //util:generate_segmenter_config -- \
+   CC=clang bazel run //util:gen_ift_segmenter_config -- \
      --quality=5 \
      --input_font=$HOME/MyFont.ttf > config.txtpb
    ```
@@ -97,31 +97,30 @@ possible to write plans by hand, or develop new utilities to generate plans.
 
 In this repo two options are currently provided:
 
-1. [Recommended] `util/closure_glyph_keyed_segmenter_util`: this utility uses a subsetting closure based approach
+1. [Recommended] `util/gen_ift_segmentation_plan`: this utility uses a subsetting closure based approach
     to generate a glyph keyed segmentation plan (extension segments that augment glyph data). It can optionally
     generate the table keyed portion of the config as well. Example execution:
 
     ```sh
-    bazel run -c opt //util:closure_glyph_keyed_segmenter_util  -- \
+    bazel run -c opt //util:gen_ift_segmentation_plan  -- \
       --input_font=$(pwd)/myfont.ttf \
-      --config=path/to/config.textpb
-      --include_initial_codepoints_in_config \
-      --output_segmentation_plan > glyph_keyed.txtpb
+      --config=path/to/config.textpb > segmentation_plan.txtpb
     ```
 
-    The closure glyph segmenter is configured via an input configuration file using the
+    The gen_ift_segmentation_plan tool is configured via an input configuration file using the
     [segmenter_config.proto](util/segmenter_config.proto) schema, see the comments there for more details.
 
     Note: this utility is under active development and still very experimental. See
     [the status section](docs/experimental/closure_glyph_segmentation.md#status) for more details.
 
-2.  `util/generate_table_keyed_config`: this utility generates the table keyed (extension segments that augment non
-    glyph data in the font) portion of a plan. Example execution:
+2.  `util/gen_ift_table_keyed_plan`: this utility generates the table keyed (extension segments that augment non
+    glyph data in the font) portion of a plan. Useful when not using the optional table keyed plan generation in
+    `util/gen_ift_segmentation_plan`. Example execution:
 
     ```sh
-    bazel run -c opt util:generate_table_keyed_config -- \
+    bazel run -c opt util:gen_ift_table_keyed_plan -- \
       --font=$(pwd)/myfont.ttf \
-      latin.txt cyrillic.txt greek.txt > table_keyed.txtpb
+      latin.txt cyrillic.txt greek.txt > table_keyed_segmentation_plan.txtpb
     ```
 
 If separate glyph keyed and table keyed configs were generated using #1 and #2 they can then be combined into one

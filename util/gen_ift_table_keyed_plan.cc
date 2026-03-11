@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
   absl::SetProgramUsageMessage(
       "Generates a table keyed segmentation plan for a font.\n"
       "\n"
-      "Usage: generate_table_keyed_config --font=\"myfont.ttf\" <initial "
+      "Usage: gen_ift_table_keyed_plan --font=\"myfont.ttf\" <initial "
       "subset fil> <subset 1 file> [... <subset n file>]\n"
       "\n"
       "Where a subset file lists one codepoint per line in hexadecimal format: "
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     sets.push_back(empty);
   } else if (args.size() <= 1) {
     std::cerr << "Usage:" << std::endl
-              << "generate_table_keyed_config <initial font subset file> "
+              << "gen_ift_table_keyed_plan <initial font subset file> "
                  "<table keyed subset 1 file> [... <table keyed subset file n>]"
               << std::endl
               << std::endl
