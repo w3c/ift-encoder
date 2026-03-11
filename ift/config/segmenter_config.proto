@@ -24,9 +24,9 @@ enum ConditionAnalysisMode {
   CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
 }
 
-// This messages provides the configuration details for closure_glyph_keyed_segmenter_util
+// This messages provides the configuration details for util/gen_ift_segmentation_plan.cc
 //
-// The closure_glyph_keyed_segmenter_util is used to turn a series of codepoint/feature based
+// The gen_ift_segmentation_plan tool is used to turn a series of codepoint/feature based
 // segments into a set of glyph based patches and activation conditions which respect a font's
 // glyph substitution rules. This means that no matter what codepoints being rendered as long
 // as the provided activation conditions are followed all needed glyphs will always be present.

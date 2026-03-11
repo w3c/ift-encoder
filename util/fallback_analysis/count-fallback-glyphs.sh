@@ -13,7 +13,7 @@
 TARGET_DIR=$1
 CONCURRENCY=$2
 
-bazel build -c opt util:closure_glyph_keyed_segmenter_util
+bazel build -c opt util:gen_ift_segmentation_plan
 echo "file; num_fallback_glyphs; total_glyphs; fallback_glyphs_compressed_bytes; all_glyphs_compressed_bytes"
 find $TARGET_DIR \( -iname "*.ttf" -or -iname "*.otf" \) -print0 | xargs -0 -n 1 -P $CONCURRENCY \
   ./util/fallback_analysis/count-fallback-glyphs-for-font.sh

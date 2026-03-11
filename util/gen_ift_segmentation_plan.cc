@@ -52,15 +52,16 @@ ABSL_FLAG(
     "segmenter configuration will be automatically generated "
     "based on the input font.");
 
-ABSL_FLAG(bool, output_segmentation_plan, false,
+ABSL_FLAG(bool, output_segmentation_plan, true,
           "If set a segmentation plan representing the determined segmentation "
-          "will be output to stdout.");
+          "will be output to stdout. If not set, then a plain text summary of "
+          "the segmentation will be output to stdout instead.");
 
 ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
           "If set the generated encoder config will include the initial "
           "codepoint set.");
 
-ABSL_FLAG(bool, output_segmentation_analysis, true,
+ABSL_FLAG(bool, output_segmentation_analysis, false,
           "If set an analysis of the segmentation will be output to stderr.");
 
 ABSL_FLAG(
@@ -234,8 +235,8 @@ int main(int argc, char** argv) {
   absl::SetProgramUsageMessage(
       "Generates a segmentation plan for a font.\n"
       "\n"
-      "Usage: closure_glyph_keyed_segmenter_util --input_font=\"myfont.ttf\" "
-      "[--config=\"config.txtpb\"] [--output_segmentation_plan]\n");
+      "Usage: gen_ift_segmentation_plan --input_font=\"myfont.ttf\" "
+      "[--config=\"config.txtpb\"]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);

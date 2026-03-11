@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
   absl::SetProgramUsageMessage(
       "Generates a segmenter config to use with a font.\n"
       "\n"
-      "Usage: generate_segmenter_config --font=\"myfont.ttf\" [--quality=n] "
+      "Usage: gen_ift_segmenter_config --font=\"myfont.ttf\" [--quality=n] "
       "[--primary_script=Script_foo]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));

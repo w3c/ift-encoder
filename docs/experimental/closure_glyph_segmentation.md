@@ -37,10 +37,10 @@ segmentation which is of high importance to the production of performant overall
 segmentations.
 
 The code that implements the procedures in this document can be found in
-[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc)
+[closure_glyph_segmenter.cc](../../ift/encoder/closure_glyph_segmenter.cc)
 
 There is also a command line utility to generate segmentations:
-[util/closure_glyph_keyed_segmenter_util](../util/closure_glyph_keyed_segmenter_util.cc)
+[util/gen_ift_segmentation_plan.cc](../../util/gen_ift_segmentation_plan.cc)
 
 At the end of this document you can find a couple of [examples](#examples) which illustrate how the
 procedures work in practice.
@@ -48,11 +48,11 @@ procedures work in practice.
 ## Status
 
 The current prototype implementation in
-[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) can produce segmentations
+[closure_glyph_segmenter.cc](../../ift/encoder/closure_glyph_segmenter.cc) can produce segmentations
 that satisfy the closure requirement and are performant (via merging).  The approach laid
 out in this document is just one possible approach to solving the problem. This document aims
 primarily to describe how the prototype implementation in
-[closure_glyph_segmenter.cc](../ift/encoder/closure_glyph_segmenter.cc) functions, and is not
+[closure_glyph_segmenter.cc](../../ift/encoder/closure_glyph_segmenter.cc) functions, and is not
 intended to present the final (or only) solution to the problem. There are several unsolved problems
 and remaining areas for development in this particular approach:
 
@@ -60,12 +60,12 @@ and remaining areas for development in this particular approach:
   That's discussed in the separate
   [closure_glyph_segmentation_merging.md](closure_glyph_segmentation_merging.md) document.
   See the implementation status and areas for further development sections for more specifics.
-  
+
 * Running the segmenter currently requires manual configuration to get good results. Configuration
   is needed to select appropriate frequency data and settings for parameters controlling merger
   behaviour. The goal is to get to the point where good results can be produced with zero
   configuration.
-  
+
 * Support for merging segmentations involving multiple overlapping scripts is not yet implemented
   (for example creating a segmentation that supports Chinese and Japanese simultaneously).
 
@@ -73,7 +73,7 @@ and remaining areas for development in this particular approach:
   approximates multi segment analysis by finding superset disjunctive conditions for multi segment
   conditions. See:
   [closure_glyph_segmentation_complex_conditions.md](./closure_glyph_segmentation_complex_conditions.md).
-  
+
 * Input segmentation generation: the glyph segmentation process starts with an existing
   codepoint/feature based segmentation. Good results can be achieved by starting with one input
   segment per codepoint/feature and letting merging join segments as needed. However, there is still
@@ -81,7 +81,7 @@ and remaining areas for development in this particular approach:
   together. This can significantly reduce the amount of work the merger needs to do. Therefore it
   may be useful to develop functionality that creates a first pass input segmentation based on
   codepoint frequency data.
-  
+
 * Incorporating dependency information: whatever produces the input code point segments will likely
   have discovered dependency information related to those code points. That information can be
   reused in this process to narrow selections during patch merging and multi segment
@@ -107,7 +107,7 @@ The segmentation procedure described in this document aims to achieve the follow
   values. The input unicode code point segmentations are used to form the conditions.
 
 * Optimize for minimal data transfer by avoiding duplicating glyphs across patches where possible.
-  
+
 * Support optimization of a generated segmentation via merging to reduce network overhead.
 
 * The chosen glyph segmentation and activation conditions must satisfy the closure requirement:
@@ -115,8 +115,8 @@ The segmentation procedure described in this document aims to achieve the follow
   The set of glyphs contained in patches loaded for a font subset definition (a set of Unicode
   code points and a set of layout feature tags) through the patch map tables must be a superset of
   those in the glyph closure of the font subset definition.
-    
-  
+
+
 ## Subsetter Glyph Closures
 
 Font subsetters run into a similar problem faced here and solve it with an operation called the glyph
@@ -154,13 +154,13 @@ It generates three sets of glyph ids:
 
 1. Exclusive Glyph Set: these glyphs are needed exclusively by this segment. That is they are only
    needed if and only if the $s_i$ is present.
-   
+
 2. Conjunctive Glyph Set: the presence of this input segment is a requirement for these glyphs to be
-   needed, but there may be additional segments required as well. The condition for the 
+   needed, but there may be additional segments required as well. The condition for the
    set of glyphs to be needed is: ($s_i ∧ …$).
-   
+
 3. Disjunctive Glyph Set: these glyphs are needed when the input segment is present, but the input
-   segment is not a requirement for the glyphs to be needed. The condition for the 
+   segment is not a requirement for the glyphs to be needed. The condition for the
    set of glyphs to be needed is: ($s_i ∨ …$)
 
 The process utilizes a subsetter glyph closure computation to group glyphs together based on how
@@ -211,11 +211,11 @@ which is discussed later on.
 Next, we can use the per glyph information to form the glyph groupings:
 
 1. For each unique exclusive segment, $s_i$, collect the associated set of glyphs into a group. This forms
-   an exclusive patch whose activation condition is $s_i$. 
+   an exclusive patch whose activation condition is $s_i$.
 
 2. For each unique conjunctive segment set, $C$, collect the group of glyphs that is marked with that set. This
    group forms a conditional patch whose activation condition is $\bigwedge s_j \in C$.
-   
+
 3. For each unique disjunctive segment set, $C$, collect the group of glyphs that is marked with that set. This
    group forms a conditional patch whose activation condition is $(\bigvee s_j \in C) \vee \text{additional conditions}$. As
    noted above we will need to rule out the additional conditions, the process for this follows.
@@ -223,10 +223,10 @@ Next, we can use the per glyph information to form the glyph groupings:
    Compute the Segment Closure Analysis for a new composite segment $\bigcup s_i \notin C$. Remove any glyphs from the
    group that are found in $I - D$. These glyphs may appear as a result of additional conditions and so
    need to be considered unmapped. If the group has no remaining glyphs don’t make a patch for it.
-   
+
 4. Lastly, collect the set of glyphs that are not part of any patch formed in steps 1 through 3. These form a fallback patch
    whose activation condition is $\bigvee_{1}^{n} s_j$.
-   
+
 ## Fallback Patch
 
 An output of the segmentation process above will include a fallback patch which is activated on the
@@ -292,7 +292,7 @@ needed to reduce the amount of combinations to test. Some suggestions:
 * The performance of a segmentation is likely driven solely by the high frequency code points. So
   divide the font into a high frequency set and low frequency set of code points. Where a more
   extensive multi segment dependency check is done for only the high frequency segments.
-  
+
 As an alternative a simpler approach to the problem is to limit the scope to just finding conditions which are a superset
 of the true condition. This superset condition can be used in place of the true condition without violating the closure
 requirement. This is the approach currently used in the segmenter implementation. This procedure is discussed in more
