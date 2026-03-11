@@ -4,8 +4,8 @@
 #include <memory>
 
 #include "absl/status/statusor.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/patch_size_cache.h"
 
 namespace ift::encoder {
@@ -23,7 +23,8 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
         new EstimatedPatchSizeCache(face, compression_ratio));
   }
 
-  absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override;
+  absl::StatusOr<uint32_t> GetPatchSize(
+      const ift::common::GlyphSet& gids) override;
 
   void LogBrotliCallCount() const override {}
 
@@ -32,16 +33,16 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
  private:
   explicit EstimatedPatchSizeCache(hb_face_t* original_face,
                                    double compression_ratio)
-      : face_(common::make_hb_face(hb_face_reference(original_face))),
+      : face_(ift::common::make_hb_face(hb_face_reference(original_face))),
         compression_ratio_(compression_ratio),
         cache_() {}
 
   static absl::StatusOr<double> EstimateCompressionRatio(
       hb_face_t* original_face);
 
-  common::hb_face_unique_ptr face_;
+  ift::common::hb_face_unique_ptr face_;
   double compression_ratio_;
-  absl::flat_hash_map<common::GlyphSet, uint32_t> cache_;
+  absl::flat_hash_map<ift::common::GlyphSet, uint32_t> cache_;
 };
 
 }  // namespace ift::encoder

@@ -2,9 +2,9 @@
 
 #include <cstdint>
 
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -17,8 +17,9 @@ using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::SegmentSet;
 using ift::encoder::ClosureGlyphSegmenter;
 using ift::encoder::GlyphSegmentation;
 using ift::encoder::MergeStrategy;
@@ -283,8 +284,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
 StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
     hb_face_t* face, const SegmenterConfig& config) {
-  CodepointSet font_codepoints = common::FontHelper::ToCodepointsSet(face);
-  btree_set<hb_tag_t> font_features = common::FontHelper::GetFeatureTags(face);
+  CodepointSet font_codepoints = FontHelper::ToCodepointsSet(face);
+  btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(face);
   SubsetDefinition init_segment =
       SegmentProtoToSubsetDefinition(config.initial_segment());
 

@@ -1,20 +1,20 @@
 #include "brotli/brotli_font_diff.h"
 
 #include "absl/types/span.h"
-#include "common/brotli_binary_patch.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "hb-subset.h"
+#include "ift/common/brotli_binary_patch.h"
+#include "ift/common/int_set.h"
 
 namespace brotli {
 
 using absl::Span;
 using absl::Status;
-using common::BrotliBinaryPatch;
-using common::FontData;
-using common::IntSet;
+using ift::common::BrotliBinaryPatch;
+using ift::common::FontData;
+using ift::common::IntSet;
 
-const std::string kTestDataDir = "common/testdata/";
+const std::string kTestDataDir = "ift/common/testdata/";
 
 /*
   for debugging:

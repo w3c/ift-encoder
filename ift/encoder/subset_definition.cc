@@ -4,19 +4,19 @@
 #include <vector>
 
 #include "absl/container/btree_set.h"
-#include "common/axis_range.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::StatusOr;
-using common::AxisRange;
-using common::FontHelper;
-using common::IntSet;
+using ift::common::AxisRange;
+using ift::common::FontHelper;
+using ift::common::IntSet;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 

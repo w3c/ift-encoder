@@ -4,8 +4,8 @@
 
 #include "absl/container/btree_set.h"
 #include "absl/log/log.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/complex_condition_finder.h"
 #include "ift/encoder/glyph_closure_cache.h"
@@ -21,8 +21,8 @@ using absl::btree_set;
 using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
-using common::GlyphSet;
-using common::SegmentSet;
+using ift::common::GlyphSet;
+using ift::common::SegmentSet;
 
 namespace ift::encoder {
 

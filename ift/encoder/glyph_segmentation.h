@@ -5,7 +5,7 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
@@ -30,8 +30,8 @@ namespace ift::encoder {
 class GlyphSegmentation {
  public:
   GlyphSegmentation(SubsetDefinition init_font_segment,
-                    common::GlyphSet init_font_glyph_closure,
-                    common::GlyphSet unmapped_glyphs)
+                    ift::common::GlyphSet init_font_glyph_closure,
+                    ift::common::GlyphSet unmapped_glyphs)
       : init_font_segment_(init_font_segment),
         init_font_glyph_closure_(init_font_glyph_closure),
         unmapped_glyphs_(unmapped_glyphs) {}
@@ -70,7 +70,8 @@ class GlyphSegmentation {
    * The list of glyphs in each patch. The key in the map is an id used to
    * identify the patch within the activation conditions.
    */
-  const absl::btree_map<patch_id_t, common::GlyphSet>& GidSegments() const {
+  const absl::btree_map<patch_id_t, ift::common::GlyphSet>& GidSegments()
+      const {
     return patches_;
   }
 
@@ -81,12 +82,14 @@ class GlyphSegmentation {
    * TODO(garretrieger): instead of treating them separately generate a catch
    * all patch that contains the unmapped glyphs.
    */
-  const common::GlyphSet& UnmappedGlyphs() const { return unmapped_glyphs_; };
+  const ift::common::GlyphSet& UnmappedGlyphs() const {
+    return unmapped_glyphs_;
+  };
 
   /*
    * These glyphs should be included in the initial font.
    */
-  const common::GlyphSet& InitialFontGlyphClosure() const {
+  const ift::common::GlyphSet& InitialFontGlyphClosure() const {
     return init_font_glyph_closure_;
   };
 
@@ -103,24 +106,24 @@ class GlyphSegmentation {
   ift::config::SegmentationPlan ToSegmentationPlanProto() const;
 
   static absl::Status GroupsToSegmentation(
-      const absl::btree_map<common::SegmentSet, common::GlyphSet>&
+      const absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>&
           and_glyph_groups,
-      const absl::btree_map<common::SegmentSet, common::GlyphSet>&
+      const absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>&
           or_glyph_groups,
-      const absl::btree_map<segment_index_t, common::GlyphSet>&
+      const absl::btree_map<segment_index_t, ift::common::GlyphSet>&
           exclusive_glyph_groups,
-      const common::SegmentSet& fallback_group,
+      const ift::common::SegmentSet& fallback_group,
       GlyphSegmentation& segmentation);
 
   void CopySegments(const std::vector<SubsetDefinition>& segments);
 
  private:
   SubsetDefinition init_font_segment_;
-  common::GlyphSet init_font_glyph_closure_;
-  common::GlyphSet unmapped_glyphs_;
+  ift::common::GlyphSet init_font_glyph_closure_;
+  ift::common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
   std::vector<SubsetDefinition> segments_;
-  absl::btree_map<patch_id_t, common::GlyphSet> patches_;
+  absl::btree_map<patch_id_t, ift::common::GlyphSet> patches_;
 };
 
 }  // namespace ift::encoder

@@ -7,25 +7,25 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/sparse_bit_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/sparse_bit_set.h"
 #include "ift/proto/format_2_patch_map.h"
 #include "ift/proto/patch_encoding.h"
 
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::make_hb_blob;
-using common::make_hb_face;
-using common::SparseBitSet;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
+using ift::common::SparseBitSet;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::TABLE_KEYED_PARTIAL;
 
@@ -59,11 +59,11 @@ class IFTTableTest : public ::testing::Test {
     assert(sc.ok());
 
     hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/Roboto-Regular.ab.ttf"));
+        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ab.ttf"));
     roboto_ab = make_hb_face(hb_face_create(blob.get(), 0));
 
     blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/NotoSansJP-Regular.otf"));
+        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.otf"));
     noto_sans_jp = make_hb_face(hb_face_create(blob.get(), 0));
   }
 

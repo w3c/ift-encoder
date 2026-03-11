@@ -3,8 +3,8 @@
 
 #include <memory>
 
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/common.pb.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
@@ -33,7 +33,7 @@ class RequestedSegmentationInformation {
   // Merge all of the segments in to_merge into base, assigned it
   // a new subset definition "merged_segment".
   uint32_t AssignMergedSegment(segment_index_t base,
-                               const common::SegmentSet& to_merge,
+                               const ift::common::SegmentSet& to_merge,
                                const Segment& merged_segment) {
     auto& base_segment = segments_[base];
     base_segment = merged_segment;
@@ -88,16 +88,16 @@ class RequestedSegmentationInformation {
     return result;
   }
 
-  const common::GlyphSet& InitFontGlyphs() const {
+  const ift::common::GlyphSet& InitFontGlyphs() const {
     return init_font_segment_.gids;
   }
-  common::GlyphSet NonInitFontGlyphs() const {
-    common::GlyphSet out = full_closure_;
+  ift::common::GlyphSet NonInitFontGlyphs() const {
+    ift::common::GlyphSet out = full_closure_;
     out.subtract(InitFontGlyphs());
     return out;
   }
 
-  const common::GlyphSet& FullClosure() const { return full_closure_; }
+  const ift::common::GlyphSet& FullClosure() const { return full_closure_; }
 
   const SubsetDefinition& FullDefinition() const { return full_definition_; }
 
@@ -113,9 +113,9 @@ class RequestedSegmentationInformation {
     return out;
   }
 
-  common::SegmentSet NonEmptySegments() const {
+  ift::common::SegmentSet NonEmptySegments() const {
     // TODO(garretrieger): consider caching this value.
-    common::SegmentSet segments;
+    ift::common::SegmentSet segments;
     segment_index_t index = 0;
     for (const auto& s : Segments()) {
       if (!s.Definition().Empty()) {
@@ -127,7 +127,7 @@ class RequestedSegmentationInformation {
   }
 
   SubsetDefinition CombinedDefinition(
-      const common::SegmentSet& segments) const {
+      const ift::common::SegmentSet& segments) const {
     // TODO(garretrieger): this approach is inefficient vs the subtraction
     // method, add the special case path or remove use of this function in
     // favour of incrementally produced defs.
@@ -147,7 +147,7 @@ class RequestedSegmentationInformation {
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;
   SubsetDefinition full_definition_;
-  common::GlyphSet full_closure_;
+  ift::common::GlyphSet full_closure_;
   bool segments_disjoint_;
   enum ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
 };

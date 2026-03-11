@@ -13,12 +13,12 @@
 #include "absl/log/initialize.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "common/axis_range.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
 #include "hb.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmentation_plan.pb.h"
@@ -72,14 +72,15 @@ using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using common::CodepointSet;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_blob;
-using common::SegmentSet;
+using ift::common::AxisRange;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_blob;
+using ift::common::SegmentSet;
 using ift::config::AutoSegmenterConfig;
 using ift::encoder::ActivationCondition;
 using ift::encoder::Compiler;
@@ -148,8 +149,7 @@ int write_output(const Compiler::Encoding& encoding) {
 StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
   design_space_t result;
   for (const auto& [tag_str, range_proto] : proto.ranges()) {
-    auto range =
-        TRY(common::AxisRange::Range(range_proto.start(), range_proto.end()));
+    auto range = TRY(AxisRange::Range(range_proto.start(), range_proto.end()));
     result[FontHelper::ToTag(tag_str)] = range;
   }
   return result;

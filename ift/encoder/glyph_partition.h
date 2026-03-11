@@ -8,7 +8,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -24,7 +24,7 @@ class GlyphPartition {
   GlyphPartition& operator=(const GlyphPartition& other);
 
   // Merge all of the sets that intersect glyphs into a single set.
-  absl::Status Union(const common::GlyphSet& glyphs);
+  absl::Status Union(const ift::common::GlyphSet& glyphs);
 
   // Merge the sets containing glyph1 and glyph2 together.
   absl::Status Union(glyph_id_t glyph1, glyph_id_t glyph2);
@@ -36,10 +36,12 @@ class GlyphPartition {
   absl::StatusOr<glyph_id_t> Find(glyph_id_t glyph) const;
 
   // Returns all members of the group the glyph belongs too.
-  absl::StatusOr<const common::GlyphSet&> GlyphsFor(glyph_id_t glyph) const;
+  absl::StatusOr<const ift::common::GlyphSet&> GlyphsFor(
+      glyph_id_t glyph) const;
 
   // Returns all groups in this partition that have more than one member.
-  absl::StatusOr<absl::Span<const common::GlyphSet>> NonIdentityGroups() const;
+  absl::StatusOr<absl::Span<const ift::common::GlyphSet>> NonIdentityGroups()
+      const;
 
  private:
   absl::Status RebuildCache() const;
@@ -48,8 +50,8 @@ class GlyphPartition {
   mutable std::vector<uint32_t> parent_;
 
   mutable bool cache_valid_ = false;
-  mutable absl::flat_hash_map<glyph_id_t, common::GlyphSet> rep_to_set_;
-  mutable std::vector<common::GlyphSet> non_identity_groups_;
+  mutable absl::flat_hash_map<glyph_id_t, ift::common::GlyphSet> rep_to_set_;
+  mutable std::vector<ift::common::GlyphSet> non_identity_groups_;
 };
 
 }  // namespace ift::encoder

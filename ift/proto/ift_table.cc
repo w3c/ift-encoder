@@ -11,11 +11,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "common/compat_id.h"
-#include "common/font_helper.h"
-#include "common/sparse_bit_set.h"
-#include "common/try.h"
 #include "hb.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/sparse_bit_set.h"
+#include "ift/common/try.h"
 #include "ift/proto/format_2_patch_map.h"
 
 using absl::flat_hash_map;
@@ -24,10 +24,10 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::SparseBitSet;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::SparseBitSet;
 
 namespace ift::proto {
 
@@ -97,7 +97,7 @@ StatusOr<FontData> IFTTable::AddToFont(
   return new_font_data;
 }
 
-absl::StatusOr<common::FontData> IFTTable::AddToFont(
+absl::StatusOr<FontData> IFTTable::AddToFont(
     hb_face_t* face, const IFTTable& main,
     std::optional<const IFTTable*> extension) {
   auto cff_charstrings_offset = TRY(FontHelper::CffCharStringsOffset(face));

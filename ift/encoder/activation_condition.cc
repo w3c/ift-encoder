@@ -5,7 +5,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/proto/patch_encoding.h"
@@ -20,8 +20,8 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 using ift::freq::ProbabilityCalculator;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;

@@ -38,7 +38,7 @@ cc_test(
         "//conditions:default": [],
     }),
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":dep_graph",

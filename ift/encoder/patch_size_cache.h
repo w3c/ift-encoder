@@ -7,9 +7,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/glyph_keyed_diff.h"
 
 namespace ift::encoder {
@@ -19,7 +19,7 @@ class PatchSizeCache {
  public:
   virtual ~PatchSizeCache() = default;
   virtual absl::StatusOr<uint32_t> GetPatchSize(
-      const common::GlyphSet& gids) = 0;
+      const ift::common::GlyphSet& gids) = 0;
   virtual void LogBrotliCallCount() const = 0;
 };
 
@@ -31,12 +31,13 @@ class PatchSizeCacheImpl : public PatchSizeCache {
       : font_data_(original_face),
         id_(),
         differ_(font_data_, id_,
-                {common::FontHelper::kGlyf, common::FontHelper::kGvar,
-                 common::FontHelper::kCFF, common::FontHelper::kCFF2},
+                {ift::common::FontHelper::kGlyf, ift::common::FontHelper::kGvar,
+                 ift::common::FontHelper::kCFF, ift::common::FontHelper::kCFF2},
                 brotli_quality),
         cache_() {}
 
-  absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override {
+  absl::StatusOr<uint32_t> GetPatchSize(
+      const ift::common::GlyphSet& gids) override {
     auto it = cache_.find(gids);
     if (it != cache_.end()) {
       return it->second;
@@ -54,10 +55,10 @@ class PatchSizeCacheImpl : public PatchSizeCache {
   }
 
  private:
-  common::FontData font_data_;
-  common::CompatId id_;
+  ift::common::FontData font_data_;
+  ift::common::CompatId id_;
   GlyphKeyedDiff differ_;
-  absl::flat_hash_map<common::GlyphSet, uint32_t> cache_;
+  absl::flat_hash_map<ift::common::GlyphSet, uint32_t> cache_;
   uint64_t brotli_call_count_ = 0;
 };
 

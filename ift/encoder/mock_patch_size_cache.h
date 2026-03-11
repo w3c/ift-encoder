@@ -9,7 +9,8 @@ namespace ift::encoder {
 // A mock implementation of `PatchSizeCache` for use in tests.
 class MockPatchSizeCache : public PatchSizeCache {
  public:
-  absl::StatusOr<uint32_t> GetPatchSize(const common::GlyphSet& gids) override {
+  absl::StatusOr<uint32_t> GetPatchSize(
+      const ift::common::GlyphSet& gids) override {
     auto it = patch_sizes_.find(gids);
     if (it != patch_sizes_.end()) {
       VLOG(0) << "GetPatchSize(" << gids.ToString() << ") = " << it->second;
@@ -22,12 +23,12 @@ class MockPatchSizeCache : public PatchSizeCache {
 
   void LogBrotliCallCount() const override {}
 
-  void SetPatchSize(const common::GlyphSet& gids, uint32_t size) {
+  void SetPatchSize(const ift::common::GlyphSet& gids, uint32_t size) {
     patch_sizes_[gids] = size;
   }
 
  private:
-  absl::flat_hash_map<common::GlyphSet, uint32_t> patch_sizes_;
+  absl::flat_hash_map<ift::common::GlyphSet, uint32_t> patch_sizes_;
 };
 
 }  // namespace ift::encoder

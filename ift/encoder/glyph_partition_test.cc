@@ -2,10 +2,10 @@
 
 #include "absl/status/status.h"
 #include "absl/types/span.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/int_set.h"
 
-using common::GlyphSet;
+using ift::common::GlyphSet;
 
 namespace ift::encoder {
 

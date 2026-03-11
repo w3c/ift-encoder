@@ -9,10 +9,10 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/sparse_bit_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/sparse_bit_set.h"
 #include "ift/proto/patch_encoding.h"
 
 using absl::btree_set;
@@ -21,9 +21,9 @@ using absl::flat_hash_set;
 using absl::Span;
 using absl::Status;
 using absl::StrCat;
-using common::FontData;
-using common::FontHelper;
-using common::SparseBitSet;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::SparseBitSet;
 
 namespace ift::proto {
 

@@ -3,8 +3,8 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
 #include "hb.h"
+#include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -16,7 +16,8 @@ namespace ift::config {
 struct SegmentationResult {
   ift::encoder::GlyphSegmentation segmentation;
   SegmentationPlan plan;
-  absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy> merge_groups;
+  absl::btree_map<ift::common::SegmentSet, ift::encoder::MergeStrategy>
+      merge_groups;
 };
 
 class SegmenterConfigUtil {
@@ -31,9 +32,9 @@ class SegmenterConfigUtil {
       const SegmentProto& segment);
 
   absl::StatusOr<
-      absl::btree_map<common::SegmentSet, ift::encoder::MergeStrategy>>
+      absl::btree_map<ift::common::SegmentSet, ift::encoder::MergeStrategy>>
   ConfigToMergeGroups(const SegmenterConfig& config,
-                      const common::CodepointSet& font_codepoints,
+                      const ift::common::CodepointSet& font_codepoints,
                       const absl::btree_set<hb_tag_t>& font_features,
                       std::vector<ift::encoder::SubsetDefinition>& segments);
 
@@ -55,7 +56,7 @@ class SegmenterConfigUtil {
   std::vector<ift::encoder::SubsetDefinition> ConfigToSegments(
       const SegmenterConfig& config,
       const ift::encoder::SubsetDefinition& init_segment,
-      const common::CodepointSet& font_codepoints,
+      const ift::common::CodepointSet& font_codepoints,
       const absl::btree_set<hb_tag_t>& font_features,
       absl::flat_hash_map<SegmentId, uint32_t>& segment_id_to_index);
 
@@ -64,16 +65,17 @@ class SegmenterConfigUtil {
 
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToCostStrategy(
       const CostConfiguration& base, const CostConfiguration& config,
-      common::CodepointSet& covered_codepoints);
+      ift::common::CodepointSet& covered_codepoints);
 
-  absl::StatusOr<std::pair<common::SegmentSet, ift::encoder::MergeStrategy>>
+  absl::StatusOr<
+      std::pair<ift::common::SegmentSet, ift::encoder::MergeStrategy>>
   ProtoToMergeGroup(const std::vector<ift::encoder::SubsetDefinition>& segments,
                     const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
                     const HeuristicConfiguration& base_heuristic,
                     const CostConfiguration& base_cost,
                     const MergeGroup& group);
 
-  static common::SegmentSet MapToIndices(
+  static ift::common::SegmentSet MapToIndices(
       const SegmentsProto& segments,
       const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index);
 

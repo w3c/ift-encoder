@@ -2,9 +2,9 @@
 
 #include <memory>
 
-#include "common/font_data.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -16,10 +16,10 @@
 using ift::config::PATCH;
 
 using absl::flat_hash_map;
-using common::CodepointSet;
-using common::FontData;
-using common::GlyphSet;
-using common::hb_face_unique_ptr;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::GlyphSet;
+using ift::common::hb_face_unique_ptr;
 using ift::encoder::glyph_id_t;
 using ift::encoder::GlyphClosureCache;
 using ift::encoder::RequestedSegmentationInformation;
@@ -32,9 +32,9 @@ namespace ift::dep_graph {
 class DependencyGraphTest : public ::testing::Test {
  protected:
   DependencyGraphTest()
-      : face(from_file("common/testdata/Roboto-Regular.ttf")),
+      : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
         closure_cache(face.get()),
-        noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
+        noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures({}), closure_cache, PATCH)),
         graph(*DependencyGraph::Create(segmentation_info.get(), face.get())) {}

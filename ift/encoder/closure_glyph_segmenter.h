@@ -61,7 +61,8 @@ class ClosureGlyphSegmenter {
   absl::StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups) const;
+      absl::btree_map<ift::common::SegmentSet, MergeStrategy> merge_groups)
+      const;
 
   /*
    * Computes the total cost (expected number of bytes transferred) for a given
@@ -82,7 +83,8 @@ class ClosureGlyphSegmenter {
 
   static void AddTableKeyedSegments(
       ift::config::SegmentationPlan& plan,
-      const absl::btree_map<common::SegmentSet, MergeStrategy>& merge_groups,
+      const absl::btree_map<ift::common::SegmentSet, MergeStrategy>&
+          merge_groups,
       const std::vector<SubsetDefinition>& segments,
       const SubsetDefinition& init_segment);
 

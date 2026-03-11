@@ -1,11 +1,11 @@
 #include "ift/freq/bigram_probability_calculator.h"
 
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
-using common::CodepointSet;
+using ift::common::CodepointSet;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 

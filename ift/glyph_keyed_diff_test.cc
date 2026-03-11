@@ -3,30 +3,30 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "common/brotli_binary_patch.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "hb-subset.h"
 #include "hb.h"
+#include "ift/common/brotli_binary_patch.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/proto/ift_table.h"
 
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::BrotliBinaryPatch;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::hb_font_unique_ptr;
-using common::IntSet;
-using common::make_hb_blob;
-using common::make_hb_face;
-using common::make_hb_font;
+using ift::common::BrotliBinaryPatch;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::hb_font_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
+using ift::common::make_hb_font;
 using ift::proto::IFTTable;
 
 const uint8_t data_stream_u16_short_loca[] = {
@@ -149,10 +149,11 @@ class GlyphKeyedDiffTest : public ::testing::Test {
   GlyphKeyedDiffTest() {
     font = from_file("ift/testdata/NotoSansJP-Regular.ift.ttf");
     original = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
-    roboto = from_file("common/testdata/Roboto-Regular.Awesome.ttf");
-    roboto_vf = from_file("common/testdata/Roboto[wdth,wght].abcd.ttf");
-    noto_sans_jp_cff = from_file("common/testdata/NotoSansJP-Regular.otf");
-    noto_sans_jp_cff2 = from_file("common/testdata/NotoSansJP-VF.subset.otf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.Awesome.ttf");
+    roboto_vf = from_file("ift/common/testdata/Roboto[wdth,wght].abcd.ttf");
+    noto_sans_jp_cff = from_file("ift/common/testdata/NotoSansJP-Regular.otf");
+    noto_sans_jp_cff2 =
+        from_file("ift/common/testdata/NotoSansJP-VF.subset.otf");
   }
 
   FontData from_file(const char* filename) {

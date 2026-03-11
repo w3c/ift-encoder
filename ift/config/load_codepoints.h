@@ -7,16 +7,16 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::config {
 
 template <typename T>
-common::IntSet Values(const T& proto_set) {
-  common::IntSet result;
+ift::common::IntSet Values(const T& proto_set) {
+  ift::common::IntSet result;
   for (uint32_t v : proto_set.values()) {
     result.insert(v);
   }
@@ -27,13 +27,13 @@ template <typename T>
 absl::btree_set<hb_tag_t> TagValues(const T& proto_set) {
   absl::btree_set<hb_tag_t> result;
   for (const auto& tag : proto_set.values()) {
-    result.insert(common::FontHelper::ToTag(tag));
+    result.insert(ift::common::FontHelper::ToTag(tag));
   }
   return result;
 }
 
 // Loads the file at path and returns it's binary contents.
-absl::StatusOr<common::FontData> LoadFile(const char* path);
+absl::StatusOr<ift::common::FontData> LoadFile(const char* path);
 
 // Loads a Riegeli file of CodepointCount protos and returns a
 // UnicodeFrequencies instance.
@@ -53,7 +53,7 @@ absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
 
 // Returns a list of all built-in frequency data sets and the codepoints
 // they cover.
-absl::StatusOr<absl::flat_hash_map<std::string, common::CodepointSet>>
+absl::StatusOr<absl::flat_hash_map<std::string, ift::common::CodepointSet>>
 BuiltInFrequenciesList();
 
 // Given a filepath if it ends with @* this will expand the path into

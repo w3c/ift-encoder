@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <utility>
 
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 
-using common::CodepointSet;
+using ift::common::CodepointSet;
 
 namespace ift::freq {
 

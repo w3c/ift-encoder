@@ -8,8 +8,8 @@
 #include "absl/log/initialize.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmentation_plan.pb.h"
 
@@ -19,10 +19,10 @@ using ift::config::SegmentProto;
 
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::GlyphSet;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::GlyphSet;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 
 ABSL_FLAG(std::string, plan, "",
           "File path to a segmentation plan text proto.");

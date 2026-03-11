@@ -7,10 +7,10 @@
 #include "absl/log/log.h"
 #include "absl/strings/match.h"
 #include "absl/strings/strip.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
 #include "hb.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmenter_config.pb.h"
 
@@ -19,8 +19,8 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontHelper;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
 
 namespace ift::config {
 

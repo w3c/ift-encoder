@@ -2,7 +2,7 @@
 #define IFT_ENCODER_COMPLEX_CONDITION_FINDER_H_
 
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -22,12 +22,12 @@ namespace ift::encoder {
 //
 // For example if a glyph has the true condition (a and b) or (b and c)
 // this could find the condition (a or c).
-absl::StatusOr<absl::btree_map<common::SegmentSet, common::GlyphSet>>
+absl::StatusOr<absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>>
 FindSupersetDisjunctiveConditionsFor(
     const RequestedSegmentationInformation& segmentation_info,
     const GlyphConditionSet& glyph_condition_set,
-    GlyphClosureCache& closure_cache, common::GlyphSet glyphs,
-    common::SegmentSet inscope_segments);
+    GlyphClosureCache& closure_cache, ift::common::GlyphSet glyphs,
+    ift::common::SegmentSet inscope_segments);
 
 }  // namespace ift::encoder
 

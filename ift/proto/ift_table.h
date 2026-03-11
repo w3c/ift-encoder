@@ -4,9 +4,9 @@
 #include <cstdint>
 
 #include "absl/status/statusor.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
 #include "hb.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
 #include "ift/proto/patch_map.h"
 
 namespace ift::proto {
@@ -21,7 +21,7 @@ class IFTTable {
 
   // TODO(garretrieger): add a separate extension id as well (like w/ URL
   // templates).
-  common::CompatId GetId() const;
+  ift::common::CompatId GetId() const;
 
   const PatchMap& GetPatchMap() const { return patch_map_; }
   PatchMap& GetPatchMap() { return patch_map_; }
@@ -34,7 +34,7 @@ class IFTTable {
     url_template_.insert(url_template_.begin(), value.begin(), value.end());
   }
 
-  void SetId(common::CompatId compat_id) { id_ = compat_id; }
+  void SetId(ift::common::CompatId compat_id) { id_ = compat_id; }
 
   bool operator==(const IFTTable& other) const {
     return url_template_ == other.url_template_ && id_ == other.id_ &&
@@ -47,7 +47,7 @@ class IFTTable {
    * already present in the font. If extension entries are present then an
    * extension table (IFTX) will also be added.
    */
-  static absl::StatusOr<common::FontData> AddToFont(
+  static absl::StatusOr<ift::common::FontData> AddToFont(
       hb_face_t* face, const IFTTable& main,
       std::optional<const IFTTable*> extension);
 
@@ -55,7 +55,7 @@ class IFTTable {
   /*
    * Adds an the provided 'IFT ' (and optionally an 'IFTX') tables to by face.
    */
-  static absl::StatusOr<common::FontData> AddToFont(
+  static absl::StatusOr<ift::common::FontData> AddToFont(
       hb_face_t* face, absl::string_view ift_table,
       std::optional<absl::string_view> iftx_table);
 
@@ -67,7 +67,7 @@ class IFTTable {
   absl::StatusOr<std::string> Serialize() const;
 
   std::vector<uint8_t> url_template_;
-  common::CompatId id_;
+  ift::common::CompatId id_;
   PatchMap patch_map_;
 };
 

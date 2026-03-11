@@ -149,7 +149,7 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
-        "//common",
+        "//ift/common",
         "//ift/freq:common",
         "//ift/proto",
         "//ift/config:segmentation_plan_cc_proto",
@@ -182,12 +182,12 @@ cc_test(
         "compiler_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":encoder",
-        "//common",
+        "//ift/common",
         "//ift:test_segments",
         "//ift/client:fontations",
         "@googletest//:gtest_main",
@@ -201,7 +201,7 @@ cc_test(
         "subset_definition_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":encoder",
@@ -217,13 +217,13 @@ cc_test(
         "glyph_segmentation_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":activation_condition",
         ":encoder",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )
@@ -235,13 +235,13 @@ cc_test(
         "complex_condition_finder_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":encoder",
         ":segmentation_context",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )
@@ -253,12 +253,12 @@ cc_test(
         "closure_glyph_segmenter_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":encoder",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )
@@ -270,12 +270,12 @@ cc_test(
         "glyph_closure_cache_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":encoder",
         ":segmentation_info",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )
@@ -284,11 +284,11 @@ cc_test(
     name = "glyph_groupings_test",
     srcs = ["glyph_groupings_test.cc"],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":segmentation_context",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )
@@ -301,11 +301,11 @@ cc_test(
         "mock_patch_size_cache.h",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":encoder",
-        "//common",
+        "//ift/common",
         "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],
@@ -335,7 +335,7 @@ cc_test(
         "//conditions:default": [],
     }),
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":segmentation_context",
@@ -349,7 +349,7 @@ cc_test(
     srcs = ["glyph_partition_test.cc"],
     deps = [
         ":glyph_partition",
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/types:span",
         "@googletest//:gtest_main",
     ],
@@ -359,11 +359,11 @@ cc_test(
     name = "estimated_patch_size_cache_test",
     srcs = ["estimated_patch_size_cache_test.cc"],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":segmentation_context",
-        "//common",
+        "//ift/common",
         "@googletest//:gtest_main",
     ],
 )

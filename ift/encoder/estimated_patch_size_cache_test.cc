@@ -1,16 +1,16 @@
 #include "ift/encoder/estimated_patch_size_cache.h"
 
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 
-using common::FontHelper;
-using common::GlyphSet;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::make_hb_blob;
-using common::make_hb_face;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
 
 namespace ift::encoder {
 
@@ -18,7 +18,7 @@ class EstimatedPatchSizeCacheTest : public ::testing::Test {
  protected:
   EstimatedPatchSizeCacheTest() : roboto(make_hb_face(nullptr)) {
     hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/Roboto-Regular.ttf"));
+        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ttf"));
     roboto = make_hb_face(hb_face_create(blob.get(), 0));
   }
 

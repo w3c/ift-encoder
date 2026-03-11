@@ -1,0 +1,475 @@
+#include "ift/common/int_set.h"
+
+#include <optional>
+
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/hash/hash_testing.h"
+#include "gtest/gtest.h"
+#include "ift/common/hb_set_unique_ptr.h"
+
+namespace ift::common {
+
+class IntSetTest : public ::testing::Test {};
+
+TEST_F(IntSetTest, BasicOperations) {
+  IntSet set;
+  ASSERT_TRUE(set.empty());
+
+  set.insert(5);
+  set.insert(7);
+  set.insert(7);
+  set.insert(8);
+
+  ASSERT_FALSE(set.contains(4));
+  ASSERT_TRUE(set.contains(5));
+  ASSERT_FALSE(set.contains(6));
+  ASSERT_TRUE(set.contains(7));
+  ASSERT_TRUE(set.contains(8));
+
+  ASSERT_EQ(set.size(), 3);
+  ASSERT_FALSE(set.empty());
+
+  set.erase(4);
+  ASSERT_EQ(set.size(), 3);
+  ASSERT_FALSE(set.empty());
+
+  set.erase(7);
+  ASSERT_EQ(set.size(), 2);
+  ASSERT_FALSE(set.empty());
+  ASSERT_FALSE(set.contains(7));
+}
+
+TEST_F(IntSetTest, Equality) {
+  IntSet a{1, 2, 1000};
+  IntSet b{1, 1000, 2};
+  IntSet c{1, 2, 1000, 1001};
+
+  ASSERT_TRUE(a == a);
+  ASSERT_FALSE(a != a);
+
+  ASSERT_TRUE(a == b);
+  ASSERT_FALSE(a != b);
+
+  ASSERT_FALSE(a == c);
+  ASSERT_TRUE(a != c);
+
+  ASSERT_FALSE(b == c);
+  ASSERT_TRUE(b != c);
+}
+
+TEST_F(IntSetTest, LessThan) {
+  // These are in the appropriate sorted order
+  IntSet empty;
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  // Self comparisons
+  ASSERT_FALSE(empty < empty);
+  ASSERT_FALSE(a < a);
+
+  // Ordering
+  ASSERT_TRUE(a < b);
+  ASSERT_TRUE(b < c);
+  ASSERT_TRUE(c < d);
+
+  ASSERT_FALSE(b < a);
+  ASSERT_FALSE(c < b);
+  ASSERT_FALSE(d < c);
+}
+
+TEST_F(IntSetTest, InitList) {
+  IntSet set{10, 1000};
+  ASSERT_TRUE(set.contains(10));
+  ASSERT_FALSE(set.contains(100));
+  ASSERT_TRUE(set.contains(1000));
+}
+
+TEST_F(IntSetTest, Move) {
+  IntSet a{10, 1000};
+
+  IntSet b(std::move(a));
+
+  ASSERT_TRUE(b.contains(10));
+  ASSERT_FALSE(b.contains(100));
+  ASSERT_TRUE(b.contains(1000));
+
+  // We gaurantee moved values remain valid after a move.
+  ASSERT_EQ(a.size(), 0);
+
+  a = std::move(b);
+
+  ASSERT_TRUE(a.contains(10));
+  ASSERT_FALSE(a.contains(100));
+  ASSERT_TRUE(a.contains(1000));
+
+  // We gaurantee moved values remain valid after a move.
+  ASSERT_EQ(b.size(), 0);
+}
+
+TEST_F(IntSetTest, CopyConstructor) {
+  IntSet a{13, 47};
+  IntSet b(a);
+
+  ASSERT_EQ(a, b);
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+}
+
+TEST_F(IntSetTest, CopyHbSet) {
+  hb_set_unique_ptr hb_set = make_hb_set(2, 13, 47);
+
+  IntSet a(hb_set.get());
+  IntSet b(hb_set);
+
+  // Make sure chaing hb_set doesn't cause changes in the IntSet's
+  hb_set_add(hb_set.get(), 49);
+
+  IntSet expected{13, 47};
+
+  ASSERT_EQ(a, expected);
+  ASSERT_EQ(b, expected);
+
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+  ASSERT_FALSE(a.contains(49));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+  ASSERT_FALSE(b.contains(49));
+}
+
+TEST_F(IntSetTest, Assignment) {
+  IntSet a{13, 47};
+  IntSet b{5, 9};
+
+  b = a;
+
+  ASSERT_EQ(a, b);
+  ASSERT_TRUE(a.contains(13));
+  ASSERT_TRUE(a.contains(47));
+
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+}
+
+TEST_F(IntSetTest, EmptySetIteration) {
+  IntSet empty;
+  ASSERT_EQ(empty.begin(), empty.end());
+}
+
+TEST_F(IntSetTest, BasicIteration) {
+  IntSet set{7, 9, 10};
+  auto it = set.begin();
+
+  ASSERT_NE(it, set.end());
+  ASSERT_EQ(*it, 7);
+  ASSERT_EQ(*it++, 7);
+  ASSERT_EQ(*it, 9);
+  ASSERT_EQ(*(++it), 10);
+  ASSERT_EQ(*it, 10);
+  ++it;
+  ASSERT_EQ(it, set.end());
+}
+
+TEST_F(IntSetTest, ReverseIteration) {
+  IntSet empty{};
+  ASSERT_EQ(empty.rbegin(), empty.rend());
+
+  IntSet set{7, 9, 10};
+  auto it = set.rbegin();
+
+  ASSERT_NE(it, set.rend());
+  ASSERT_EQ(*it, 10);
+  ASSERT_EQ(*it++, 10);
+  ASSERT_EQ(*it, 9);
+  ASSERT_EQ(*(++it), 7);
+  ASSERT_EQ(*it, 7);
+  ++it;
+  ASSERT_EQ(it, set.rend());
+}
+
+TEST_F(IntSetTest, ForLoop) {
+  IntSet set{7, 9, 10};
+  int expected[] = {7, 9, 10};
+
+  int index = 0;
+  for (auto v : set) {
+    ASSERT_EQ(v, expected[index++]);
+  }
+}
+
+TEST_F(IntSetTest, UseInBtreeSet) {
+  absl::btree_set<IntSet> sets{{7, 8, 11}, {7, 8}, {7, 8, 12}, {}};
+
+  IntSet empty{};
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  ASSERT_TRUE(sets.contains(a));
+  ASSERT_TRUE(sets.contains(b));
+  ASSERT_TRUE(sets.contains(c));
+  ASSERT_FALSE(sets.contains(d));
+
+  auto it = sets.begin();
+  ASSERT_EQ(*it, empty);
+}
+
+TEST_F(IntSetTest, UseInHashSet) {
+  absl::flat_hash_set<IntSet> sets{{7, 8, 11}, {7, 8}, {7, 8, 12}, {}};
+
+  IntSet empty{};
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+  IntSet c{7, 8, 12};
+  IntSet d{8, 11};
+
+  ASSERT_TRUE(sets.contains(empty));
+  ASSERT_TRUE(sets.contains(a));
+  ASSERT_TRUE(sets.contains(b));
+  ASSERT_TRUE(sets.contains(c));
+  ASSERT_FALSE(sets.contains(d));
+}
+
+TEST_F(IntSetTest, SupportsAbslHash) {
+  EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly({
+      IntSet{},
+      IntSet{7, 8},
+      IntSet{7, 8, 11},
+      IntSet{7, 8, 12},
+      IntSet{8, 11},
+      IntSet{7, 8, 12},
+  }));
+}
+
+TEST_F(IntSetTest, MinMax) {
+  IntSet empty{};
+  IntSet a{8};
+  IntSet b{7, 8, 11};
+
+  ASSERT_EQ(empty.min(), std::nullopt);
+  ASSERT_EQ(empty.max(), std::nullopt);
+
+  ASSERT_EQ(*a.min(), 8);
+  ASSERT_EQ(*a.max(), 8);
+
+  ASSERT_EQ(*b.min(), 7);
+  ASSERT_EQ(*b.max(), 11);
+}
+
+TEST_F(IntSetTest, InsertRange) {
+  IntSet a{7, 8, 11};
+
+  a.insert_range(10, 15);
+  IntSet expected{7, 8, 10, 11, 12, 13, 14, 15};
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, InsertSorted) {
+  IntSet a{7, 8, 11};
+
+  hb_codepoint_t sorted[]{9, 11, 13, 14};
+  a.insert_sorted_array(sorted);
+
+  IntSet expected{7, 8, 9, 11, 13, 14};
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, InsertIterator) {
+  IntSet a{7, 8, 11};
+
+  std::vector b{5, 15, 21};
+
+  a.insert(b.begin(), b.end());
+  IntSet expected{5, 7, 8, 11, 15, 21};
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, ToVector) {
+  IntSet empty{};
+  IntSet a{7, 8, 11};
+
+  ASSERT_EQ(empty.to_vector(), std::vector<uint32_t>());
+  std::vector<uint32_t> expected{7, 8, 11};
+  ASSERT_EQ(a.to_vector(), expected);
+}
+
+TEST_F(IntSetTest, IsSubsetOf) {
+  IntSet empty;
+  IntSet a{7, 8};
+  IntSet b{7, 8, 11};
+
+  ASSERT_TRUE(empty.is_subset_of(a));
+  ASSERT_TRUE(empty.is_subset_of(b));
+
+  ASSERT_FALSE(a.is_subset_of(empty));
+  ASSERT_FALSE(b.is_subset_of(empty));
+
+  ASSERT_TRUE(a.is_subset_of(b));
+  ASSERT_FALSE(b.is_subset_of(a));
+
+  ASSERT_TRUE(a.is_subset_of(a));
+  ASSERT_TRUE(b.is_subset_of(b));
+}
+
+TEST_F(IntSetTest, IsSubsetOf_HbRegression) {
+  // Tests that we have the hb_set_is_subset() bug fix in:
+  // https://github.com/harfbuzz/harfbuzz/pull/5742
+
+  IntSet small;
+  IntSet large{0xFFF};
+
+  small.insert(0x0FF);
+  small.insert(0xFFF);
+  small.erase(0x0FF);  // introduce an empty page
+
+  ASSERT_TRUE(small.is_subset_of(large));
+  ASSERT_TRUE(large.is_subset_of(small));
+}
+
+TEST_F(IntSetTest, Union) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5, 8, 11};
+
+  a.union_set(b);
+
+  ASSERT_EQ(a, expected);
+
+  hb_set_unique_ptr c = make_hb_set(1, 7);
+
+  b.union_into(c.get());
+
+  ASSERT_TRUE(hb_set_has(c.get(), 7));
+  ASSERT_TRUE(hb_set_has(c.get(), 8));
+  ASSERT_TRUE(hb_set_has(c.get(), 11));
+  ASSERT_EQ(hb_set_get_population(c.get()), 3);
+
+  hb_set_unique_ptr d = make_hb_set(2, 12, 20);
+  b.union_from(d.get());
+  ASSERT_EQ(b, (IntSet{8, 11, 12, 20}));
+}
+
+TEST_F(IntSetTest, Intersect) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{8};
+
+  a.intersect(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, Subtract) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5};
+
+  a.subtract(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, SymmetricDifference) {
+  IntSet a{5, 8};
+  IntSet b{8, 11};
+  IntSet expected{5, 11};
+
+  a.symmetric_difference(b);
+
+  ASSERT_EQ(a, expected);
+}
+
+TEST_F(IntSetTest, LowerBound) {
+  IntSet empty;
+  auto empty_it = empty.lower_bound(10);
+  ASSERT_EQ(empty_it, empty.end());
+
+  IntSet a{10, 20, 30};
+  auto it = a.lower_bound(15);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 20);
+
+  it = a.lower_bound(20);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 20);
+  it++;
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 30);
+  it++;
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(5);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 10);
+
+  it = a.lower_bound(35);
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(30);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 30);
+  ++it;
+  ASSERT_EQ(it, a.end());
+
+  it = a.lower_bound(0);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 10);
+
+  IntSet b{0, 20, 30};
+  it = b.lower_bound(0);
+  ASSERT_NE(it, a.end());
+  ASSERT_EQ(*it, 0);
+}
+
+TEST_F(IntSetTest, Intersects) {
+  IntSet set1{1, 2, 3};
+  IntSet set2{3, 4, 5};
+  IntSet set3{4, 5, 6};
+  IntSet empty_set{};
+
+  ASSERT_TRUE(set1.intersects(set1));
+  ASSERT_TRUE(set1.intersects(set2));
+  ASSERT_TRUE(set2.intersects(set1));
+  ASSERT_FALSE(set1.intersects(set3));
+  ASSERT_FALSE(set3.intersects(set1));
+  ASSERT_FALSE(set1.intersects(empty_set));
+  ASSERT_FALSE(empty_set.intersects(set1));
+  ASSERT_FALSE(empty_set.intersects(empty_set));
+
+  IntSet set4{1, 2, 3};
+  ASSERT_TRUE(set1.intersects(set4));
+
+  IntSet set5{1, 2};
+  ASSERT_TRUE(set1.intersects(set5));
+  ASSERT_TRUE(set5.intersects(set1));
+}
+
+TEST_F(IntSetTest, Invert) {
+  IntSet set{2, 9};
+  set.invert();
+
+  ASSERT_FALSE(set.contains(2));
+  ASSERT_FALSE(set.contains(9));
+
+  ASSERT_TRUE(set.contains(1));
+  ASSERT_TRUE(set.contains(3));
+  ASSERT_TRUE(set.contains(8));
+  ASSERT_TRUE(set.contains(10));
+
+  set.erase(20);
+
+  set.invert();
+  ASSERT_EQ(set, (IntSet{2, 9, 20}));
+}
+
+}  // namespace ift::common

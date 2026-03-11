@@ -17,7 +17,7 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
-        "//common",
+        "//ift/common",
         "//ift/proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -57,12 +57,12 @@ cc_test(
         "url_template_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":ift",
-        "//common",
+        "//ift/common",
         "//ift/encoder",
         "//ift/proto",
         "@abseil-cpp//absl/container:btree",
@@ -77,13 +77,13 @@ cc_test(
         "integration_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":ift",
         ":test_segments",
-        "//common",
+        "//ift/common",
         "//ift/client:fontations",
         "//ift/encoder",
         "@abseil-cpp//absl/container:flat_hash_set",
@@ -95,7 +95,7 @@ filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
     visibility = [
-        "//common:__subpackages__",
+        "//ift/common:__subpackages__",
         "//ift:__subpackages__",
     ],
 )

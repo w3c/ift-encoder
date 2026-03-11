@@ -5,15 +5,15 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/encoder/types.h"
 
 using absl::flat_hash_map;
 using absl::Span;
 using absl::Status;
 using absl::StatusOr;
-using common::GlyphSet;
+using ift::common::GlyphSet;
 
 namespace ift::encoder {
 

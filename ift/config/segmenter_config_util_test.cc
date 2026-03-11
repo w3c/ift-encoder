@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "absl/container/btree_map.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/unicode_frequencies.h"
@@ -15,8 +15,8 @@ using ift::config::SegmenterConfig;
 
 using absl::btree_map;
 using absl::btree_set;
-using common::CodepointSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::SegmentSet;
 using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;

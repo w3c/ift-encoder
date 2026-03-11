@@ -10,12 +10,12 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using absl::StatusOr;
-using common::CodepointSet;
+using ift::common::CodepointSet;
 using ift::freq::UnicodeFrequencies;
 
 /*

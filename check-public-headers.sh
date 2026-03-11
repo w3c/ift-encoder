@@ -12,8 +12,8 @@ echo ""
 
 exit_code=0
 
-if grep -q "^common/try\.h$" /tmp/public_hdrs.txt; then
-  echo "Error: common/try.h should not be in the public headers list."
+if grep -q "^ift/common/try\.h$" /tmp/public_hdrs.txt; then
+  echo "Error: ift/common/try.h should not be in the public headers list."
   exit_code=1
 fi
 

@@ -5,7 +5,7 @@
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/invalidation_set.h"
@@ -15,8 +15,8 @@
 using absl::btree_map;
 using absl::Status;
 using absl::StatusOr;
-using common::GlyphSet;
-using common::SegmentSet;
+using ift::common::GlyphSet;
+using ift::common::SegmentSet;
 
 ABSL_FLAG(bool, record_merged_size_reductions, false,
           "When enabled the merger will record the percent size reductions of "
@@ -220,7 +220,7 @@ Status Merger::ReassignInitSubset() {
 }
 
 uint32_t Merger::AssignMergedSegment(segment_index_t base,
-                                     const common::SegmentSet& to_merge,
+                                     const SegmentSet& to_merge,
                                      const Segment& merged_segment,
                                      bool is_inert) {
   candidate_segments_.subtract(to_merge);
@@ -231,7 +231,7 @@ uint32_t Merger::AssignMergedSegment(segment_index_t base,
 
 SegmentSet Merger::ComputeCandidateSegments(
     SegmentationContext& context, const MergeStrategy& strategy,
-    const common::SegmentSet& inscope_segments) {
+    const SegmentSet& inscope_segments) {
   SegmentSet candidate_segments;
 
   if (inscope_segments.size() < context.SegmentationInfo().Segments().size()) {
@@ -700,7 +700,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryMerge(
 }
 
 SegmentSet Merger::CutoffSegments() const {
-  common::SegmentSet result;
+  SegmentSet result;
 
   unsigned num_segments = context_->SegmentationInfo().Segments().size();
   segment_index_t start = optimization_cutoff_segment_;

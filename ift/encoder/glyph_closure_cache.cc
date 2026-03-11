@@ -1,9 +1,9 @@
 #include "ift/encoder/glyph_closure_cache.h"
 
-#include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/hb_set_unique_ptr.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
@@ -12,18 +12,18 @@ using ift::config::Glyphs;
 
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontHelper;
-using common::GlyphSet;
-using common::hb_set_unique_ptr;
-using common::make_hb_set;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::hb_set_unique_ptr;
+using ift::common::make_hb_set;
+using ift::common::SegmentSet;
 
 namespace ift::encoder {
 
-StatusOr<common::GlyphSet> GlyphClosureCache::SegmentClosure(
+StatusOr<GlyphSet> GlyphClosureCache::SegmentClosure(
     const RequestedSegmentationInformation* segmentation_info,
-    const common::SegmentSet& segments) {
+    const SegmentSet& segments) {
   SubsetDefinition closure_def =
       segmentation_info->CombinedDefinition(segments);
   return GlyphClosure(closure_def);
@@ -42,7 +42,7 @@ StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
   return closure_glyphs.intersects(glyphs);
 }
 
-StatusOr<common::GlyphSet> GlyphClosureCache::GlyphClosure(
+StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
     const SubsetDefinition& segment) {
   auto it = glyph_closure_cache_.find(segment);
   if (it != glyph_closure_cache_.end()) {

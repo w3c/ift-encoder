@@ -7,10 +7,10 @@
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
-#include "common/try.h"
 #include "hb.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/estimated_patch_size_cache.h"
@@ -100,7 +100,7 @@ class SegmentationContext {
         patch_size_cache_for_init_font(
             NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(std::move(closure_cache)),
-        original_face(common::make_hb_face(hb_face_reference(face))),
+        original_face(ift::common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(std::move(segmentation_info)),
         dependency_closure_(std::nullopt),
         glyph_condition_set(hb_face_get_glyph_count(face)),
@@ -156,7 +156,9 @@ class SegmentationContext {
             << " were from something other than AnalyzeSegment()" << std::endl;
   }
 
-  const common::SegmentSet& InertSegments() const { return inert_segments_; }
+  const ift::common::SegmentSet& InertSegments() const {
+    return inert_segments_;
+  }
 
   const RequestedSegmentationInformation& SegmentationInfo() const {
     return *segmentation_info_;
@@ -169,7 +171,7 @@ class SegmentationContext {
   // Assign a new merged segment to base and clear all of the segments that
   // were merged into it.
   uint32_t AssignMergedSegment(segment_index_t base,
-                               const common::SegmentSet& to_merge,
+                               const ift::common::SegmentSet& to_merge,
                                const Segment& merged_segment, bool is_inert) {
     unsigned count =
         segmentation_info_->AssignMergedSegment(base, to_merge, merged_segment);
@@ -186,8 +188,9 @@ class SegmentationContext {
    * Removes all condition and grouping information related to all gids in
    * glyphs.
    */
-  absl::Status InvalidateGlyphInformation(const common::GlyphSet& glyphs,
-                                          const common::SegmentSet& segments) {
+  absl::Status InvalidateGlyphInformation(
+      const ift::common::GlyphSet& glyphs,
+      const ift::common::SegmentSet& segments) {
     // TODO(garretrieger): now that invalidation here is only for glyph
     // condition set we should consider changing this so that invalidation is
     // internal to glyph condition set reprocessing (like with GroupGlyphs).
@@ -209,22 +212,22 @@ class SegmentationContext {
 
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
-  absl::Status AnalyzeSegment(const common::SegmentSet& segment_ids,
-                              common::GlyphSet& and_gids,
-                              common::GlyphSet& or_gids,
-                              common::GlyphSet& exclusive_gids);
+  absl::Status AnalyzeSegment(const ift::common::SegmentSet& segment_ids,
+                              ift::common::GlyphSet& and_gids,
+                              ift::common::GlyphSet& or_gids,
+                              ift::common::GlyphSet& exclusive_gids);
 
   // Generates updated glyph conditions and glyph groupings for segment_index
   // which has the provided set of codepoints.
-  absl::StatusOr<common::GlyphSet> ReprocessSegment(
+  absl::StatusOr<ift::common::GlyphSet> ReprocessSegment(
       segment_index_t segment_index);
 
   // Update the glyph groups for 'glyphs'.
   //
   // The glyph condition set must be up to date and fully computed prior to
   // calling this.
-  absl::Status GroupGlyphs(const common::GlyphSet& glyphs,
-                           const common::SegmentSet& modified_segments) {
+  absl::Status GroupGlyphs(const ift::common::GlyphSet& glyphs,
+                           const ift::common::SegmentSet& modified_segments) {
     std::optional<DependencyClosure*> maybe_dep_closure = std::nullopt;
     if (dependency_closure_.has_value()) {
       maybe_dep_closure = (*dependency_closure_).get();
@@ -269,7 +272,7 @@ class SegmentationContext {
   std::unique_ptr<GlyphClosureCache> glyph_closure_cache;
 
   // Init
-  common::hb_face_unique_ptr original_face;
+  ift::common::hb_face_unique_ptr original_face;
 
  private:
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info_;
@@ -285,7 +288,7 @@ class SegmentationContext {
  private:
   // == Merging Segment metadata
   // segments that don't interact with anything
-  common::SegmentSet inert_segments_;
+  ift::common::SegmentSet inert_segments_;
 
   unsigned brotli_quality_;
 

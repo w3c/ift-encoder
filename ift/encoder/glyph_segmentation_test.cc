@@ -2,9 +2,9 @@
 
 #include <google/protobuf/text_format.h>
 
-#include "common/font_data.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/subset_definition.h"
@@ -15,13 +15,13 @@
 using ift::config::CLOSURE_ONLY;
 using ift::config::PATCH;
 
-using common::CodepointSet;
-using common::FontData;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_face;
-using common::SegmentSet;
 using google::protobuf::TextFormat;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_face;
+using ift::common::SegmentSet;
 using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
@@ -33,9 +33,9 @@ class GlyphSegmentationTest : public ::testing::Test {
   GlyphSegmentationTest()
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)) {
-    roboto = from_file("common/testdata/Roboto-Regular.ttf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
-        from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
+        from_file("ift/common/testdata/NotoNastaliqUrdu.subset.ttf");
   }
 
   hb_face_unique_ptr from_file(const char* filename) {

@@ -2,14 +2,16 @@
 
 #include <optional>
 
-#include "common/axis_range.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "ift/common/axis_range.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 using testing::UnorderedElementsAre;
+
+using ift::common::AxisRange;
 
 namespace ift::proto {
 
@@ -319,9 +321,8 @@ TEST_F(Format2PatchMapTest, DesignSpace) {
 
   PatchMap::Coverage coverage{1, 2, 3};
   coverage.design_space[HB_TAG('w', 'g', 'h', 't')] =
-      *common::AxisRange::Range(100.0f, 200.0f);
-  coverage.design_space[HB_TAG('w', 'd', 't', 'h')] =
-      common::AxisRange::Point(0.75f);
+      *AxisRange::Range(100.0f, 200.0f);
+  coverage.design_space[HB_TAG('w', 'd', 't', 'h')] = AxisRange::Point(0.75f);
   auto sc = table.GetPatchMap().AddEntry(coverage, 1, TABLE_KEYED_FULL);
   ASSERT_TRUE(sc.ok()) << sc;
 
