@@ -6,6 +6,7 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/status/status.h"
@@ -25,6 +26,10 @@ ABSL_FLAG(std::string, primary_script, "Script_latin",
 ABSL_FLAG(int, quality, 0,
           "The quality level to use. A value of 0 means auto pick. Valid "
           "values are 1-8.");
+
+ABSL_FLAG(
+    int, verbosity, 0,
+    "Log verbosity level from. 0 is least verbose, higher values are more.");
 
 using absl::Status;
 using ift::common::hb_face_unique_ptr;
@@ -54,7 +59,13 @@ static Status Main(const std::vector<char*> args) {
 }
 
 int main(int argc, char** argv) {
+  absl::SetProgramUsageMessage(
+      "Generates a segmenter config to use with a font.\n"
+      "\n"
+      "Usage: generate_segmenter_config --font=\"myfont.ttf\" [--quality=n] "
+      "[--primary_script=Script_foo]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+  absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
 
