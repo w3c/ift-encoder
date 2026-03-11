@@ -9,9 +9,9 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
-#include "common/axis_range.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/compiler.h"
 
 namespace ift::client {
@@ -32,18 +32,18 @@ absl::Status ToGraph(const ift::encoder::Compiler::Encoding& encoding,
  * if non null, applied_uris will be populated with the set of uris that
  * the client ended up fetching and applying.
  */
-absl::StatusOr<common::FontData> ExtendWithDesignSpace(
+absl::StatusOr<ift::common::FontData> ExtendWithDesignSpace(
     const ift::encoder::Compiler::Encoding& encoding,
-    const common::IntSet& codepoints,
+    const ift::common::IntSet& codepoints,
     const absl::btree_set<hb_tag_t>& feature_tags,
-    const absl::flat_hash_map<hb_tag_t, common::AxisRange>& design_space,
+    const absl::flat_hash_map<hb_tag_t, ift::common::AxisRange>& design_space,
     absl::btree_set<std::string>* applied_uris = nullptr,
     uint32_t max_round_trips = UINT32_MAX, uint32_t max_fetches = UINT32_MAX);
 
-absl::StatusOr<common::FontData> Extend(
+absl::StatusOr<ift::common::FontData> Extend(
     const ift::encoder::Compiler::Encoding& encoding,
-    const common::IntSet& codepoints, uint32_t max_round_trips = UINT32_MAX,
-    uint32_t max_fetches = UINT32_MAX);
+    const ift::common::IntSet& codepoints,
+    uint32_t max_round_trips = UINT32_MAX, uint32_t max_fetches = UINT32_MAX);
 
 }  // namespace ift::client
 

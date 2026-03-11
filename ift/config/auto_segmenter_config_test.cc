@@ -7,10 +7,10 @@
 #include <vector>
 
 #include "absl/strings/match.h"
-#include "common/font_data.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
+#include "ift/common/font_data.h"
 #include "ift/config/load_codepoints.h"
 
 using ift::config::CLOSURE_AND_DEP_GRAPH;
@@ -21,11 +21,11 @@ using ift::config::SegmenterConfig;
 namespace ift::config {
 namespace {
 
-using ::common::hb_blob_unique_ptr;
-using ::common::hb_face_unique_ptr;
-using ::common::make_hb_blob;
-using ::common::make_hb_face;
 using google::protobuf::TextFormat;
+using ::ift::common::hb_blob_unique_ptr;
+using ::ift::common::hb_face_unique_ptr;
+using ::ift::common::make_hb_blob;
+using ::ift::common::make_hb_face;
 using ::testing::Eq;
 using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
@@ -37,11 +37,11 @@ class AutoSegmenterConfigTest : public ::testing::Test {
 
   void SetUp() override {
     hb_blob_unique_ptr roboto_blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/Roboto-Regular.ttf"));
+        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ttf"));
     face_ = make_hb_face(hb_face_create(roboto_blob.get(), 0));
 
     hb_blob_unique_ptr noto_blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/NotoSansJP-Regular.ttf"));
+        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.ttf"));
     if (hb_blob_get_length(noto_blob.get()) > 0) {
       cjk_face_ = make_hb_face(hb_face_create(noto_blob.get(), 0));
     }

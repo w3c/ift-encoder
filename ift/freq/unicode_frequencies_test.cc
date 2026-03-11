@@ -1,9 +1,9 @@
 #include "ift/freq/unicode_frequencies.h"
 
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/int_set.h"
 
-using common::CodepointSet;
+using ift::common::CodepointSet;
 
 namespace ift::freq {
 

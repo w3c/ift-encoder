@@ -1,7 +1,7 @@
 #ifndef IFT_ENCODER_ACTIVATION_CONDITION_H_
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
@@ -28,14 +28,14 @@ class ActivationCondition {
    * Constructs a condition that activates when the input intersects(patch_1)
    * AND ... AND inersects(segment_n).
    */
-  static ActivationCondition and_segments(const common::SegmentSet& ids,
+  static ActivationCondition and_segments(const ift::common::SegmentSet& ids,
                                           patch_id_t activated);
 
   /*
    * Constructs a condition that activates when the input intersects
    * (segment_1) OR ... OR inersects(segment_n).
    */
-  static ActivationCondition or_segments(const common::SegmentSet& ids,
+  static ActivationCondition or_segments(const ift::common::SegmentSet& ids,
                                          patch_id_t activated,
                                          bool is_fallback = false);
 
@@ -44,7 +44,7 @@ class ActivationCondition {
    * (s1 OR ..) AND (si OR ...) AND ...
    */
   static ActivationCondition composite_condition(
-      absl::Span<const common::SegmentSet> groups, patch_id_t activated);
+      absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated);
 
   /*
    * Converts a list of activation conditions into a list of condition entries
@@ -61,7 +61,7 @@ class ActivationCondition {
    * input subset def intersects {...} AND ...
    *     which is effectively: (s_1 OR s_2) AND ...
    */
-  const absl::Span<const common::SegmentSet> conditions() const {
+  const absl::Span<const ift::common::SegmentSet> conditions() const {
     return conditions_;
   }
 
@@ -71,8 +71,8 @@ class ActivationCondition {
    * Populates out with the set of patch ids that are part of this condition
    * (excluding the activated patch)
    */
-  common::SegmentSet TriggeringSegments() const {
-    common::SegmentSet out;
+  ift::common::SegmentSet TriggeringSegments() const {
+    ift::common::SegmentSet out;
     for (auto g : conditions_) {
       for (auto segment_id : g) {
         out.insert(segment_id);
@@ -116,7 +116,8 @@ class ActivationCondition {
   // segment with "merged_probability".
   absl::StatusOr<double> MergedProbability(
       absl::Span<const Segment> segments,
-      const common::SegmentSet& merged_segments, const Segment& merged_segment,
+      const ift::common::SegmentSet& merged_segments,
+      const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
   ift::config::ActivationConditionProto ToConfigProto() const;
@@ -147,7 +148,7 @@ class ActivationCondition {
   bool is_exclusive_ = false;
   // Represents:
   // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...
-  std::vector<common::SegmentSet> conditions_;
+  std::vector<ift::common::SegmentSet> conditions_;
   std::vector<patch_id_t> activated_;
   proto::PatchEncoding encoding_;
 };

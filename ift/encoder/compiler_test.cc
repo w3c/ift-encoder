@@ -11,14 +11,14 @@
 #include "absl/container/btree_set.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "common/axis_range.h"
-#include "common/binary_patch.h"
-#include "common/brotli_binary_patch.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
 #include "ift/client/fontations_client.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/binary_patch.h"
+#include "ift/common/brotli_binary_patch.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -33,16 +33,16 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::AxisRange;
-using common::BinaryPatch;
-using common::BrotliBinaryPatch;
-using common::CodepointSet;
-using common::FontData;
-using common::FontHelper;
-using common::GlyphSet;
-using common::IntSet;
-using common::make_hb_set;
 using ift::client::ToGraph;
+using ift::common::AxisRange;
+using ift::common::BinaryPatch;
+using ift::common::BrotliBinaryPatch;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::IntSet;
+using ift::common::make_hb_set;
 using ift::proto::DEFAULT_ENCODING;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::IFTTable;
@@ -64,10 +64,10 @@ constexpr hb_tag_t kWdth = HB_TAG('w', 'd', 't', 'h');
 class CompilerTest : public ::testing::Test {
  protected:
   CompilerTest() {
-    font = from_file("common/testdata/Roboto-Regular.abcd.ttf");
-    full_font = from_file("common/testdata/Roboto-Regular.ttf");
-    woff2_font = from_file("common/testdata/Roboto-Regular.abcd.woff2");
-    vf_font = from_file("common/testdata/Roboto[wdth,wght].ttf");
+    font = from_file("ift/common/testdata/Roboto-Regular.abcd.ttf");
+    full_font = from_file("ift/common/testdata/Roboto-Regular.ttf");
+    woff2_font = from_file("ift/common/testdata/Roboto-Regular.abcd.woff2");
+    vf_font = from_file("ift/common/testdata/Roboto[wdth,wght].ttf");
     noto_sans_jp = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
 
     auto face = noto_sans_jp.face();

@@ -4,8 +4,8 @@
 #include <cstdint>
 
 #include "absl/container/flat_hash_map.h"
-#include "common/int_set.h"
 #include "hb.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 
 namespace ift::freq {
@@ -42,7 +42,7 @@ class UnicodeFrequencies {
   }
 
   // Returns the set of codepoints that frequency data is available for.
-  common::CodepointSet CoveredCodepoints() const;
+  ift::common::CodepointSet CoveredCodepoints() const;
 
  private:
   absl::flat_hash_map<uint64_t, uint64_t> frequencies_;

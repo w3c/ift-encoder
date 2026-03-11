@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "common/font_data.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
@@ -11,12 +11,12 @@
 using ift::config::PATCH;
 
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontData;
-using common::GlyphSet;
-using common::hb_face_unique_ptr;
-using common::make_hb_face;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::GlyphSet;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_face;
+using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -24,7 +24,7 @@ namespace ift::encoder {
 class GlyphClosureCacheTest : public ::testing::Test {
  protected:
   GlyphClosureCacheTest() : roboto(make_hb_face(nullptr)) {
-    roboto = from_file("common/testdata/Roboto-Regular.ttf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
   }
 
   hb_face_unique_ptr from_file(const char* filename) {

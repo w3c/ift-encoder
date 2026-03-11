@@ -1,15 +1,15 @@
 #include "brotli/brotli_stream.h"
 
 #include "absl/types/span.h"
-#include "common/brotli_binary_patch.h"
 #include "gtest/gtest.h"
+#include "ift/common/brotli_binary_patch.h"
 
 namespace brotli {
 
 using absl::Span;
 using absl::Status;
-using common::BrotliBinaryPatch;
-using common::FontData;
+using ift::common::BrotliBinaryPatch;
+using ift::common::FontData;
 
 class BrotliStreamTest : public ::testing::Test {
  protected:

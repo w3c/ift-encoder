@@ -10,10 +10,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
 #include "codepoint_count.pb.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
-#include "common/try.h"
 #include "hb.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "metadata.pb.h"
 #include "riegeli/bytes/fd_reader.h"
@@ -24,17 +24,17 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::CodepointSet;
-using common::FontData;
-using common::hb_blob_unique_ptr;
-using common::make_hb_blob;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::make_hb_blob;
 using ift::freq::UnicodeFrequencies;
 using ift_encoder_data::CodepointCount;
 using ift_encoder_data::DatasetMetadata;
 
 namespace ift::config {
 
-StatusOr<common::FontData> LoadFile(const char* path) {
+StatusOr<FontData> LoadFile(const char* path) {
   hb_blob_unique_ptr blob =
       make_hb_blob(hb_blob_create_from_file_or_fail(path));
   if (!blob.get()) {
@@ -216,8 +216,7 @@ StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(const char* name) {
   return LoadFrequenciesFromRiegeli(path.c_str());
 }
 
-StatusOr<flat_hash_map<std::string, common::CodepointSet>>
-BuiltInFrequenciesList() {
+StatusOr<flat_hash_map<std::string, CodepointSet>> BuiltInFrequenciesList() {
   std::string path = "../ift_encoder_data+/data/metadata.binpb";
   std::ifstream in(path, std::ios::binary);
   if (!in.is_open()) {
@@ -229,7 +228,7 @@ BuiltInFrequenciesList() {
     return absl::InternalError(StrCat("Failed to parse metadata file ", path));
   }
 
-  flat_hash_map<std::string, common::CodepointSet> result;
+  flat_hash_map<std::string, CodepointSet> result;
   for (const auto& file : metadata.files()) {
     CodepointSet codepoints;
     for (uint32_t cp : file.codepoints()) {

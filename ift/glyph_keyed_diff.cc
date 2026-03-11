@@ -7,12 +7,12 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "common/brotli_binary_diff.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/brotli_binary_diff.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_map.h"
 
@@ -22,15 +22,15 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::BrotliBinaryDiff;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_blob;
-using common::make_hb_face;
+using ift::common::BrotliBinaryDiff;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
 using ift::proto::IFTTable;
 using ift::proto::PatchMap;
 

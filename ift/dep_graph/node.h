@@ -4,8 +4,8 @@
 #include <string>
 
 #include "absl/strings/str_cat.h"
-#include "common/font_helper.h"
 #include "hb.h"
+#include "ift/common/font_helper.h"
 #include "ift/encoder/types.h"
 
 namespace ift::dep_graph {
@@ -49,7 +49,7 @@ class Node {
       case GLYPH:
         return absl::StrCat("g", id_);
       case FEATURE:
-        return absl::StrCat(common::FontHelper::ToString(id_));
+        return absl::StrCat(ift::common::FontHelper::ToString(id_));
       default:
         return absl::StrCat("X", id_);
     }

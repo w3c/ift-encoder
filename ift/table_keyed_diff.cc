@@ -3,17 +3,17 @@
 #include <string>
 
 #include "absl/container/flat_hash_set.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/font_helper_macros.h"
 #include "hb.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/font_helper_macros.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
-using common::FontData;
-using common::FontHelper;
+using ift::common::FontData;
+using ift::common::FontHelper;
 
 namespace ift {
 

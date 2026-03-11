@@ -1,16 +1,16 @@
 #include "ift/encoder/activation_condition.h"
 
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
-using common::CodepointSet;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 using ift::freq::MockProbabilityCalculator;
 using ift::freq::ProbabilityBound;
 using ift::proto::PatchEncoding;

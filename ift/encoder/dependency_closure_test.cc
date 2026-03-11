@@ -3,10 +3,10 @@
 #include <memory>
 #include <vector>
 
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/config/common.pb.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
@@ -19,11 +19,11 @@
 using ift::config::PATCH;
 
 using absl::Status;
-using common::CodepointSet;
-using common::FontData;
-using common::GlyphSet;
-using common::hb_face_unique_ptr;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::GlyphSet;
+using ift::common::hb_face_unique_ptr;
+using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -31,11 +31,11 @@ namespace ift::encoder {
 class DependencyClosureTest : public ::testing::Test {
  protected:
   DependencyClosureTest()
-      : face(from_file("common/testdata/Roboto-Regular.ttf")),
+      : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
         double_nested_face(
-            from_file("common/testdata/double-nested-components.ttf")),
-        noto_sans_jp(from_file("common/testdata/NotoSansJP-Regular.ttf")),
-        roboto_vf(from_file("common/testdata/Roboto[wdth,wght].ttf")),
+            from_file("ift/common/testdata/double-nested-components.ttf")),
+        noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
+        roboto_vf(from_file("ift/common/testdata/Roboto[wdth,wght].ttf")),
         closure_cache(face.get()),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures(), closure_cache, PATCH)),

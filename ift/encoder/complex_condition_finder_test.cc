@@ -1,9 +1,9 @@
 #include "ift/encoder/complex_condition_finder.h"
 
 #include "absl/container/btree_map.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segmentation_context.h"
@@ -15,11 +15,11 @@ using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;
-using common::FontData;
-using common::GlyphSet;
-using common::hb_face_unique_ptr;
-using common::make_hb_face;
-using common::SegmentSet;
+using ift::common::FontData;
+using ift::common::GlyphSet;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_face;
+using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -28,7 +28,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
  protected:
   ComplexConditionFinderTest()
       : roboto(make_hb_face(nullptr)), segmenter(1, 1, PATCH, CLOSURE_ONLY) {
-    roboto = from_file("common/testdata/Roboto-Regular.ttf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
@@ -91,7 +91,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
   // 0xF6C3, 0x54, 0x21A => g782
   // 0xF6C3, 0x6C, 0x13C => g748
   // 0xF6C3, 0x6E, 0x146 => g756
-  btree_map<common::SegmentSet, common::GlyphSet> expected = {
+  btree_map<SegmentSet, GlyphSet> expected = {
       {{6, 1, 3}, {748}},
       {{6, 2, 4}, {756}},
       {{6, 0, 5}, {782}},

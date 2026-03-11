@@ -6,20 +6,20 @@
 #include <sstream>
 
 #include "absl/status/status.h"
-#include "common/axis_range.h"
-#include "common/font_data.h"
-#include "common/int_set.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/compiler.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
-using common::AxisRange;
-using common::FontData;
-using common::IntSet;
-using common::make_hb_blob;
-using common::make_hb_face;
+using ift::common::AxisRange;
+using ift::common::FontData;
+using ift::common::IntSet;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
 using ift::encoder::Compiler;
 
 namespace ift::client {
@@ -208,7 +208,7 @@ StatusOr<FontData> ExtendWithDesignSpace(
 StatusOr<FontData> Extend(const Compiler::Encoding& encoding,
                           const IntSet& codepoints, uint32_t max_round_trips,
                           uint32_t max_fetches) {
-  absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space;
+  absl::flat_hash_map<hb_tag_t, ift::common::AxisRange> design_space;
   return ExtendWithDesignSpace(encoding, codepoints, {}, design_space, nullptr,
                                max_round_trips, max_fetches);
 }

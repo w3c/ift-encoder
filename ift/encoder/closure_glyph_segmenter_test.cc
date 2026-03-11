@@ -2,10 +2,10 @@
 
 #include <optional>
 
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
@@ -20,12 +20,13 @@ using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontData;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_face;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_face;
+using ift::common::SegmentSet;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
 
@@ -55,10 +56,10 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
                                               CLOSURE_ONLY)
 #endif
   {
-    roboto = from_file("common/testdata/Roboto-Regular.ttf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
-        from_file("common/testdata/NotoNastaliqUrdu.subset.ttf");
-    noto_sans_jp = from_file("common/testdata/NotoSansJP-Regular.ttf");
+        from_file("ift/common/testdata/NotoNastaliqUrdu.subset.ttf");
+    noto_sans_jp = from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
@@ -90,7 +91,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      btree_map<common::SegmentSet, MergeStrategy> merge_groups) const {
+      btree_map<SegmentSet, MergeStrategy> merge_groups) const {
     auto segmentation = segmenter.CodepointToGlyphSegments(
         face, initial_segment, subset_definitions, merge_groups);
     auto dep_graph_segmentation = segmenter_dep_graph.CodepointToGlyphSegments(
@@ -123,7 +124,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   StatusOr<GlyphSegmentation> MoveToInitFontCodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
-      absl::btree_map<common::SegmentSet, MergeStrategy> merge_groups) const {
+      absl::btree_map<SegmentSet, MergeStrategy> merge_groups) const {
     auto segmentation = segmenter_move_to_init_font.CodepointToGlyphSegments(
         face, initial_segment, subset_definitions, merge_groups);
     auto dep_graph_segmentation =
@@ -607,7 +608,7 @@ if ((s2 OR s3)) then p5
 }
 
 TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
-  auto codepoints = common::FontHelper::ToCodepointsSet(roboto.get());
+  auto codepoints = FontHelper::ToCodepointsSet(roboto.get());
 
   uint32_t num_segments = 412;
   uint32_t per_group = codepoints.size() / num_segments;

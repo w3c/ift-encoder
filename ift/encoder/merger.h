@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <sstream>
 
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
@@ -22,8 +22,8 @@ class Merger {
  public:
   static absl::StatusOr<Merger> New(
       SegmentationContext& context, MergeStrategy strategy,
-      common::SegmentSet inscope_segments,
-      common::SegmentSet inscope_segments_for_init_move) {
+      ift::common::SegmentSet inscope_segments,
+      ift::common::SegmentSet inscope_segments_for_init_move) {
     Merger merger(context, strategy, inscope_segments,
                   inscope_segments_for_init_move, UINT32_MAX);
     TRYV(merger.InitOptimizationCutoff());
@@ -79,7 +79,7 @@ class Merger {
    * Merges to_merge segments with base. base is set to merged_segment.
    */
   uint32_t AssignMergedSegment(segment_index_t base,
-                               const common::SegmentSet& to_merge,
+                               const ift::common::SegmentSet& to_merge,
                                const Segment& merged_segment, bool is_inert);
 
   uint32_t NumCutoffSegments() const { return CutoffSegments().size(); }
@@ -97,8 +97,8 @@ class Merger {
 
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
-         common::SegmentSet inscope_segments,
-         common::SegmentSet inscope_segments_for_init_move,
+         ift::common::SegmentSet inscope_segments,
+         ift::common::SegmentSet inscope_segments_for_init_move,
          segment_index_t optimization_cutoff_segment)
       : context_(&context),
         strategy_(strategy),
@@ -108,9 +108,9 @@ class Merger {
         inscope_segments_for_init_move_(inscope_segments_for_init_move),
         optimization_cutoff_segment_(optimization_cutoff_segment) {}
 
-  static common::SegmentSet ComputeCandidateSegments(
+  static ift::common::SegmentSet ComputeCandidateSegments(
       SegmentationContext& context, const MergeStrategy& strategy,
-      const common::SegmentSet& inscope_segments);
+      const ift::common::SegmentSet& inscope_segments);
 
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
@@ -129,7 +129,7 @@ class Merger {
   absl::StatusOr<std::optional<InvalidationSet>> MergeSegmentWithHeuristic(
       uint32_t base_segment_index);
 
-  common::SegmentSet CutoffSegments() const;
+  ift::common::SegmentSet CutoffSegments() const;
 
   /*
    * Search for a base segment after base_segment_index which can be merged into
@@ -146,11 +146,11 @@ class Merger {
 
   absl::StatusOr<std::optional<InvalidationSet>> TryMerge(
       segment_index_t base_segment_index,
-      const common::SegmentSet& to_merge_segments_);
+      const ift::common::SegmentSet& to_merge_segments_);
 
   void MarkFinished(segment_index_t s) { candidate_segments_.erase(s); }
 
-  absl::Status ApplyInitFontMove(const common::GlyphSet& glyphs_to_move,
+  absl::Status ApplyInitFontMove(const ift::common::GlyphSet& glyphs_to_move,
                                  double delta);
 
   // For a merge of an inert base patch with any other possible inert segment,
@@ -163,11 +163,11 @@ class Merger {
                                            double base_probability,
                                            double lowest_cost_delta) const;
 
-  common::SegmentSet InitFontApplyProbabilityThreshold() const;
-  common::SegmentSet InitFontSegmentsToCheck(
-      const common::SegmentSet& inscope) const;
-  absl::btree_map<ActivationCondition, common::GlyphSet>
-  InitFontConditionsToCheck(const common::SegmentSet& to_check,
+  ift::common::SegmentSet InitFontApplyProbabilityThreshold() const;
+  ift::common::SegmentSet InitFontSegmentsToCheck(
+      const ift::common::SegmentSet& inscope) const;
+  absl::btree_map<ActivationCondition, ift::common::GlyphSet>
+  InitFontConditionsToCheck(const ift::common::SegmentSet& to_check,
                             bool batch_mode) const;
 
   // Stores the broadeder complete segmentation.
@@ -178,13 +178,13 @@ class Merger {
   const MergeStrategy strategy_;
 
   // The current set of segments under consideration for being merged.
-  const common::SegmentSet inscope_segments_;
-  common::SegmentSet candidate_segments_;
+  const ift::common::SegmentSet inscope_segments_;
+  ift::common::SegmentSet candidate_segments_;
 
   // This is the set of segments under consideration for being merged into the
   // init font. Typically contains segments that were removed from
   // inscope_segments_ for being shared with other groups.
-  const common::SegmentSet inscope_segments_for_init_move_;
+  const ift::common::SegmentSet inscope_segments_for_init_move_;
 
   // Segments greater than this value do not have optimization used when
   // selecting merges. Merging is done via simple selection until minimum group

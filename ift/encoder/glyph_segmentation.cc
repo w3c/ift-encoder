@@ -8,8 +8,8 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -27,10 +27,11 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using common::CodepointSet;
-using common::GlyphSet;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
@@ -144,7 +145,7 @@ template <typename ProtoType>
 ProtoType TagsToSetProto(const btree_set<hb_tag_t>& set) {
   ProtoType values;
   for (uint32_t tag : set) {
-    values.add_values(common::FontHelper::ToString(tag));
+    values.add_values(FontHelper::ToString(tag));
   }
   return values;
 }

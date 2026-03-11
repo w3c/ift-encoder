@@ -3,8 +3,8 @@
 #include <cstdint>
 
 #include "absl/status/status.h"
-#include "common/int_set.h"
-#include "common/try.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -18,9 +18,9 @@ using ift::config::UnmappedGlyphHandling;
 
 using absl::Status;
 using absl::StatusOr;
-using common::GlyphSet;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::GlyphSet;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 
 namespace ift::encoder {
 

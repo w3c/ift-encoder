@@ -22,7 +22,7 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/types:span",
         "@brotli//:brotlienc",
     ],
@@ -50,11 +50,11 @@ cc_test(
         "brotli_stream_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":encoding",
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/types:span",
         "@brotli//:brotlienc",
         "@googletest//:gtest_main",

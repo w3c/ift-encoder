@@ -6,9 +6,9 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmentation_plan.pb.h"
 
@@ -17,12 +17,12 @@ using ift::config::SegmentationPlan;
 
 using absl::StatusOr;
 using absl::StrCat;
-using common::CodepointSet;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::make_hb_blob;
 using google::protobuf::TextFormat;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::make_hb_blob;
 
 ABSL_FLAG(
     std::optional<std::string>, font, std::nullopt,

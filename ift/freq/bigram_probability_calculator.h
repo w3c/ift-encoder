@@ -1,7 +1,7 @@
 #ifndef IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
@@ -29,7 +29,8 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
 
  private:
   ProbabilityBound BigramProbabilityBound(
-      const common::CodepointSet& codepoints, double current_best_lower) const;
+      const ift::common::CodepointSet& codepoints,
+      double current_best_lower) const;
 
   UnicodeFrequencies frequencies_;
 };

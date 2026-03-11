@@ -9,12 +9,12 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
-#include "common/woff2.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
+#include "ift/common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/invalidation_set.h"
@@ -32,14 +32,14 @@ using absl::btree_map;
 using absl::btree_set;
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::GlyphSet;
-using common::SegmentSet;
-using common::Woff2;
 using ift::GlyphKeyedDiff;
+using ift::common::CodepointSet;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::SegmentSet;
+using ift::common::Woff2;
 
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
     Merger& merger, segment_index_t base_segment_index,

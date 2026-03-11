@@ -1,9 +1,9 @@
 #include "ift/encoder/dependency_closure.h"
 
 #include "absl/log/log.h"
-#include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
-#include "common/int_set.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/hb_set_unique_ptr.h"
+#include "ift/common/int_set.h"
 #include "ift/dep_graph/dependency_graph.h"
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
@@ -17,12 +17,12 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontHelper;
-using common::GlyphSet;
-using common::hb_set_unique_ptr;
-using common::IntSet;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::hb_set_unique_ptr;
+using ift::common::IntSet;
+using ift::common::SegmentSet;
 using ift::dep_graph::DependencyGraph;
 using ift::dep_graph::Node;
 using ift::dep_graph::Traversal;
@@ -128,7 +128,7 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change,
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
-    const common::SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
+    const SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) {
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
@@ -434,7 +434,7 @@ Status DependencyClosure::ReachabilitySegmentsAddToCheck(
   return absl::OkStatus();
 }
 
-Status DependencyClosure::UpdateReachabilityIndex(common::SegmentSet segments) {
+Status DependencyClosure::UpdateReachabilityIndex(SegmentSet segments) {
   if (reachability_index_valid_) {
     // If indices have existing data, then we need to ensure prior entries for
     // the segments to be updated are cleared out.

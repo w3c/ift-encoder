@@ -11,14 +11,14 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "common/binary_diff.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
-#include "common/woff2.h"
 #include "hb-subset.h"
+#include "ift/common/binary_diff.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
+#include "ift/common/woff2.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/subset_definition.h"
@@ -36,19 +36,19 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::BinaryDiff;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_blob;
-using common::make_hb_face;
-using common::make_hb_set;
-using common::SegmentSet;
-using common::Woff2;
 using ift::GlyphKeyedDiff;
+using ift::common::BinaryDiff;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
+using ift::common::make_hb_set;
+using ift::common::SegmentSet;
+using ift::common::Woff2;
 using ift::feature_registry::DefaultFeatureTags;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::IFTTable;
@@ -268,8 +268,8 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
     auto tags = FontHelper::GetTags(face.get());
     bool has_glyf =
         tags.contains(FontHelper::kGlyf) || tags.contains(FontHelper::kLoca);
-    result.init_font = TRY(common::Woff2::EncodeWoff2(
-        init_font->str(), IsMixedMode() || !has_glyf));
+    result.init_font =
+        TRY(Woff2::EncodeWoff2(init_font->str(), IsMixedMode() || !has_glyf));
   } else {
     result.init_font.shallow_copy(*init_font);
   }

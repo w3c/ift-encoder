@@ -3,9 +3,9 @@
 #include <memory>
 #include <optional>
 
-#include "common/font_data.h"
-#include "common/int_set.h"
 #include "gtest/gtest.h"
+#include "ift/common/font_data.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/merger.h"
@@ -18,12 +18,12 @@
 using ift::config::CLOSURE_ONLY;
 using ift::config::PATCH;
 
-using common::CodepointSet;
-using common::FontData;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_face;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontData;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_face;
+using ift::common::SegmentSet;
 using ift::freq::MockProbabilityCalculator;
 using ift::freq::ProbabilityBound;
 using ift::freq::UnicodeFrequencies;
@@ -39,7 +39,7 @@ class CandidateMergeTest : public ::testing::Test {
         b(empty_segment),
         c(empty_segment),
         d(empty_segment) {
-    roboto = from_file("common/testdata/Roboto-Regular.ttf");
+    roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
 
     a.base_segment_index_ = 0;
     a.segments_to_merge_ = {1};

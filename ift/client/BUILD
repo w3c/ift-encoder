@@ -14,7 +14,7 @@ cc_library(
         "//ift:__subpackages__",
     ],
     deps = [
-        "//common",
+        "//ift/common",
         "//ift/encoder",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/status",

@@ -9,8 +9,8 @@
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/status/status.h"
-#include "common/font_data.h"
-#include "common/try.h"
+#include "ift/common/font_data.h"
+#include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/load_codepoints.h"
 
@@ -27,7 +27,7 @@ ABSL_FLAG(int, quality, 0,
           "values are 1-8.");
 
 using absl::Status;
-using common::hb_face_unique_ptr;
+using ift::common::hb_face_unique_ptr;
 using ift::config::AutoSegmenterConfig;
 
 static Status Main(const std::vector<char*> args) {

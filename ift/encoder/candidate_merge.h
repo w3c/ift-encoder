@@ -5,7 +5,7 @@
 #include <optional>
 
 #include "absl/status/statusor.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
@@ -24,7 +24,7 @@ struct CandidateMerge {
   segment_index_t base_segment_index_;
 
   // The set of segments to be merged into the base_segment_index.
-  common::SegmentSet segments_to_merge_;
+  ift::common::SegmentSet segments_to_merge_;
 
   // The result of merge the above segments. If it's not present then
   // that implies this merge is only a merge of the base segment patch
@@ -43,7 +43,7 @@ struct CandidateMerge {
 
   // The set of glyphs that would be invalidated (need reprocessing) if this
   // merge is applied.
-  common::GlyphSet invalidated_glyphs_;
+  ift::common::GlyphSet invalidated_glyphs_;
 
   // Inert probability threshold computation cache
   double base_size_ = 0.0;
@@ -71,7 +71,7 @@ struct CandidateMerge {
     return merge;
   }
 
-  const common::SegmentSet& SegmentsToMerge() const {
+  const ift::common::SegmentSet& SegmentsToMerge() const {
     return segments_to_merge_;
   }
 
@@ -115,7 +115,7 @@ struct CandidateMerge {
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessSegmentMerge(
       Merger& context, segment_index_t base_segment_index,
-      const common::SegmentSet& segments_to_merge_,
+      const ift::common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
   // Assess the resutl of merging together exactly two patches:
@@ -128,14 +128,14 @@ struct CandidateMerge {
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessPatchMerge(
       Merger& context, segment_index_t base_segment_index,
-      const common::SegmentSet& segments_to_merge_,
+      const ift::common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
   // Computes the estimated size of the patch for a segment and returns true if
   // it is below the minimum.
   static absl::StatusOr<bool> IsPatchTooSmall(
       Merger& context, segment_index_t base_segment_index,
-      const common::GlyphSet& glyphs);
+      const ift::common::GlyphSet& glyphs);
 
   // Computes the predicted change to the total cost if merged_segments
   // are joined together into a new segment, merged_segment.
@@ -143,7 +143,7 @@ struct CandidateMerge {
   // If new_patch_size is not provided then this computes a "best case" delta
   // where the new patch size is choosen to produce the best achievable delta.
   static absl::StatusOr<double> ComputeCostDelta(
-      Merger& merger, const common::SegmentSet& merged_segments,
+      Merger& merger, const ift::common::SegmentSet& merged_segments,
       const Segment& merged_segment, std::optional<uint32_t> new_patch_size);
 
   // Computes the predicted change to the toal cost if moved_glyphs are
@@ -151,17 +151,17 @@ struct CandidateMerge {
   //
   // Returns the cost delta, and the full set of glyphs that will be moved
   // (including those added by closure).
-  static absl::StatusOr<std::pair<double, common::GlyphSet>>
+  static absl::StatusOr<std::pair<double, ift::common::GlyphSet>>
   ComputeInitFontCostDelta(Merger& merger, uint32_t existing_init_font_size,
                            bool best_case,
-                           const common::GlyphSet& moved_glyphs);
+                           const ift::common::GlyphSet& moved_glyphs);
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
       const Merger& context, segment_index_t base_segment,
-      const common::GlyphSet& base_glyphs,
-      const common::SegmentSet& target_segments,
-      const common::GlyphSet& target_glyphs,
-      const common::GlyphSet& merged_glyphs);
+      const ift::common::GlyphSet& base_glyphs,
+      const ift::common::SegmentSet& target_segments,
+      const ift::common::GlyphSet& target_glyphs,
+      const ift::common::GlyphSet& merged_glyphs);
 
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,

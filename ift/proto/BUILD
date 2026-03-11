@@ -18,7 +18,7 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/status:statusor",
@@ -34,12 +34,12 @@ cc_test(
         "ift_table_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":proto",
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@googletest//:gtest_main",
@@ -54,12 +54,12 @@ cc_test(
         "patch_map_test.cc",
     ],
     data = [
-        "//common:testdata",
+        "//ift/common:testdata",
         "//ift:testdata",
     ],
     deps = [
         ":proto",
-        "//common",
+        "//ift/common",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

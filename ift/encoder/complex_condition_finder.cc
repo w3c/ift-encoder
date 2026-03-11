@@ -4,7 +4,7 @@
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/subset_definition.h"
@@ -13,8 +13,8 @@
 using absl::btree_map;
 using absl::Status;
 using absl::StatusOr;
-using common::GlyphSet;
-using common::SegmentSet;
+using ift::common::GlyphSet;
+using ift::common::SegmentSet;
 
 // For more information on this process see the explanation in:
 // ../../docs/experimental/closure_glyph_segmentation_complex_conditions.md

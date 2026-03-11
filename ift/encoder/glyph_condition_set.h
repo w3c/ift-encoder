@@ -4,7 +4,7 @@
 #include <ostream>
 
 #include "absl/container/flat_hash_map.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
@@ -15,15 +15,15 @@ namespace ift::encoder {
 class GlyphConditions {
  public:
   GlyphConditions() : and_segments(), or_segments() {}
-  common::SegmentSet and_segments;
-  common::SegmentSet or_segments;
+  ift::common::SegmentSet and_segments;
+  ift::common::SegmentSet or_segments;
 
   bool operator==(const GlyphConditions& other) const {
     return other.and_segments == and_segments &&
            other.or_segments == or_segments;
   }
 
-  void RemoveSegments(const common::SegmentSet& segments) {
+  void RemoveSegments(const ift::common::SegmentSet& segments) {
     and_segments.subtract(segments);
     or_segments.subtract(segments);
   }
@@ -54,8 +54,9 @@ class GlyphConditionSet {
   }
 
   // Returns the set of glyphs that have 'segment' in their conditions.
-  const common::GlyphSet& GlyphsWithSegment(segment_index_t segment) const {
-    const static common::GlyphSet empty;
+  const ift::common::GlyphSet& GlyphsWithSegment(
+      segment_index_t segment) const {
+    const static ift::common::GlyphSet empty;
     auto it = segment_to_gid_conditions_.find(segment);
     if (it == segment_to_gid_conditions_.end()) {
       return empty;
@@ -65,8 +66,8 @@ class GlyphConditionSet {
 
   // Clears out any stored information for glyphs and segments in this condition
   // set.
-  void InvalidateGlyphInformation(const common::GlyphSet& glyphs) {
-    common::SegmentSet touched;
+  void InvalidateGlyphInformation(const ift::common::GlyphSet& glyphs) {
+    ift::common::SegmentSet touched;
     for (uint32_t gid : glyphs) {
       auto& condition = gid_conditions_[gid];
       touched.union_set(condition.and_segments);
@@ -80,8 +81,8 @@ class GlyphConditionSet {
     }
   }
 
-  void InvalidateGlyphInformation(const common::SegmentSet& segments) {
-    common::GlyphSet touched;
+  void InvalidateGlyphInformation(const ift::common::SegmentSet& segments) {
+    ift::common::GlyphSet touched;
     for (uint32_t segment_index : segments) {
       auto& entry = segment_to_gid_conditions_[segment_index];
       touched.union_set(entry);
@@ -93,8 +94,8 @@ class GlyphConditionSet {
     }
   }
 
-  void InvalidateGlyphInformation(const common::GlyphSet& glyphs,
-                                  const common::SegmentSet& segments) {
+  void InvalidateGlyphInformation(const ift::common::GlyphSet& glyphs,
+                                  const ift::common::SegmentSet& segments) {
     for (uint32_t gid : glyphs) {
       gid_conditions_[gid].RemoveSegments(segments);
     }
@@ -120,7 +121,8 @@ class GlyphConditionSet {
 
   // Index that tracks for each segment id which set of glyphs include that
   // segment in it's conditions.
-  absl::flat_hash_map<uint32_t, common::GlyphSet> segment_to_gid_conditions_;
+  absl::flat_hash_map<uint32_t, ift::common::GlyphSet>
+      segment_to_gid_conditions_;
 };
 
 }  // namespace ift::encoder

@@ -4,7 +4,7 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 #include "ift/dep_graph/node.h"
 
 namespace ift::dep_graph {
@@ -67,7 +67,7 @@ class Traversal {
   }
 
   void VisitContextual(Node dest, hb_tag_t feature,
-                       common::GlyphSet context_glyphs) {
+                       ift::common::GlyphSet context_glyphs) {
     VisitGsub(dest, feature);
     context_glyphs_.union_set(context_glyphs);
     if (dest.IsGlyph()) {
@@ -89,12 +89,12 @@ class Traversal {
     return context_feature_tags_;
   }
 
-  const common::GlyphSet& ReachedGlyphs() const { return reached_glyphs_; }
+  const ift::common::GlyphSet& ReachedGlyphs() const { return reached_glyphs_; }
 
-  const common::GlyphSet& ContextGlyphs() const { return context_glyphs_; }
+  const ift::common::GlyphSet& ContextGlyphs() const { return context_glyphs_; }
 
   // Map containing the context glyphs relevant to each reachable glyph.
-  const absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet>&
+  const absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>&
   ContextPerGlyph() const {
     return context_per_glyph_;
   }
@@ -112,9 +112,10 @@ class Traversal {
  private:
   bool has_pending_edges_ = false;
 
-  common::GlyphSet reached_glyphs_;
-  common::GlyphSet context_glyphs_;
-  absl::flat_hash_map<encoder::glyph_id_t, common::GlyphSet> context_per_glyph_;
+  ift::common::GlyphSet reached_glyphs_;
+  ift::common::GlyphSet context_glyphs_;
+  absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>
+      context_per_glyph_;
   absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>
       context_features_per_glyph_;
 

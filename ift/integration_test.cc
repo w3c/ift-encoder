@@ -2,16 +2,16 @@
 #include <string>
 
 #include "absl/strings/str_cat.h"
-#include "common/axis_range.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/try.h"
-#include "common/woff2.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
 #include "ift/client/fontations_client.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/try.h"
+#include "ift/common/woff2.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
@@ -23,18 +23,19 @@ using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using common::AxisRange;
-using common::FontData;
-using common::FontHelper;
-using common::GlyphSet;
-using common::hb_blob_unique_ptr;
-using common::hb_face_unique_ptr;
-using common::IntSet;
-using common::make_hb_blob;
-using common::make_hb_face;
-using common::make_hb_set;
 using ift::client::Extend;
 using ift::client::ExtendWithDesignSpace;
+using ift::common::AxisRange;
+using ift::common::FontData;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::IntSet;
+using ift::common::Woff2;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
+using ift::common::make_hb_set;
 using ift::encoder::Compiler;
 using ift::encoder::SubsetDefinition;
 using ift::proto::PatchEncoding;
@@ -72,11 +73,11 @@ class IntegrationTest : public ::testing::Test {
     noto_sans_jp_.set(blob.get());
 
     blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/NotoSansJP-Regular.otf"));
+        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.otf"));
     noto_sans_jp_cff_.set(blob.get());
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/NotoSansJP-VF.subset.otf"));
+    blob = make_hb_blob(hb_blob_create_from_file(
+        "ift/common/testdata/NotoSansJP-VF.subset.otf"));
     noto_sans_jp_cff2_.set(blob.get());
 
     // Noto Sans JP VF
@@ -90,7 +91,7 @@ class IntegrationTest : public ::testing::Test {
     feature_test_.set(blob.get());
 
     blob = make_hb_blob(
-        hb_blob_create_from_file("common/testdata/Roboto[wdth,wght].ttf"));
+        hb_blob_create_from_file("ift/common/testdata/Roboto[wdth,wght].ttf"));
     roboto_vf_.set(blob.get());
   }
 
@@ -412,7 +413,7 @@ TEST_F(IntegrationTest, TableKeyedOnly_Woff2Encoded) {
   auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
-  auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
+  auto woff2_decoded = Woff2::DecodeWoff2(encoding->init_font.str());
   ASSERT_TRUE(woff2_decoded.ok()) << woff2_decoded.status();
   encoding->init_font = std::move(*woff2_decoded);
 
@@ -817,7 +818,7 @@ TEST_F(IntegrationTest, MixedMode_Woff2Encoded) {
   auto encoding = compiler.Compile();
   ASSERT_TRUE(encoding.ok()) << encoding.status();
 
-  auto woff2_decoded = common::Woff2::DecodeWoff2(encoding->init_font.str());
+  auto woff2_decoded = Woff2::DecodeWoff2(encoding->init_font.str());
   ASSERT_TRUE(woff2_decoded.ok()) << woff2_decoded.status();
   encoding->init_font = std::move(*woff2_decoded);
   auto encoded_face = encoding->init_font.face();

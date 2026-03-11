@@ -2,20 +2,20 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "common/brotli_binary_diff.h"
-#include "common/compat_id.h"
-#include "common/font_data.h"
-#include "common/font_helper.h"
 #include "gtest/gtest.h"
 #include "hb.h"
+#include "ift/common/brotli_binary_diff.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 
 using absl::btree_set;
 using absl::StatusOr;
 using absl::string_view;
-using common::BrotliBinaryDiff;
-using common::CompatId;
-using common::FontData;
-using common::FontHelper;
+using ift::common::BrotliBinaryDiff;
+using ift::common::CompatId;
+using ift::common::FontData;
+using ift::common::FontHelper;
 
 namespace ift {
 

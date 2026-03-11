@@ -6,14 +6,14 @@
 #include "brotli/hmtx_differ.h"
 #include "brotli/loca_differ.h"
 #include "brotli/table_range.h"
-#include "common/int_set.h"
+#include "ift/common/int_set.h"
 
 namespace brotli {
 
 using absl::Span;
 using absl::Status;
-using common::FontData;
-using common::IntSet;
+using ift::common::FontData;
+using ift::common::IntSet;
 
 static bool HasTable(hb_face_t* face, hb_tag_t tag) {
   hb_blob_t* table = hb_face_reference_table(face, tag);

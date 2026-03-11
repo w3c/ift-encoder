@@ -5,13 +5,13 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "common/axis_range.h"
-#include "common/compat_id.h"
-#include "common/font_helper.h"
-#include "common/font_helper_macros.h"
-#include "common/int_set.h"
-#include "common/sparse_bit_set.h"
-#include "common/try.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/compat_id.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/font_helper_macros.h"
+#include "ift/common/int_set.h"
+#include "ift/common/sparse_bit_set.h"
+#include "ift/common/try.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -22,11 +22,12 @@ using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
-using common::CompatId;
-using common::FontHelper;
-using common::IntSet;
-using common::make_hb_set;
-using common::SparseBitSet;
+using ift::common::AxisRange;
+using ift::common::CompatId;
+using ift::common::FontHelper;
+using ift::common::IntSet;
+using ift::common::make_hb_set;
+using ift::common::SparseBitSet;
 
 namespace ift::proto {
 
@@ -90,7 +91,7 @@ static uint8_t BiasBytes(const PatchMap::Coverage& coverage);
 // Returns the two bit format used for the given number of bias bytes.
 static uint8_t BiasFormat(uint8_t bias_bytes);
 
-static Status EncodeAxisSegment(hb_tag_t tag, const common::AxisRange& range,
+static Status EncodeAxisSegment(hb_tag_t tag, const AxisRange& range,
                                 std::string& out);
 
 static Status EncodeEntries(Span<const PatchMap::Entry> entries,
@@ -172,14 +173,14 @@ StatusOr<std::string> Format2PatchMap::Serialize(
 }
 
 Status DecodeAxisSegment(absl::string_view data, hb_tag_t& tag,
-                         common::AxisRange& range) {
+                         AxisRange& range) {
   READ_UINT32(tag_v, data, 0);
   tag = tag_v;
 
   READ_FIXED(start, data, 4);
   READ_FIXED(end, data, 8);
 
-  auto r = common::AxisRange::Range(start, end);
+  auto r = AxisRange::Range(start, end);
   if (!r.ok()) {
     return r.status();
   }
@@ -188,7 +189,7 @@ Status DecodeAxisSegment(absl::string_view data, hb_tag_t& tag,
   return absl::OkStatus();
 }
 
-Status EncodeAxisSegment(hb_tag_t tag, const common::AxisRange& range,
+Status EncodeAxisSegment(hb_tag_t tag, const AxisRange& range,
                          std::string& out) {
   FontHelper::WriteUInt32(tag, out);
   WRITE_FIXED(range.start(), out, "range.start() overflowed.");

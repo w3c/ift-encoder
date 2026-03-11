@@ -5,9 +5,9 @@
 #include <utility>
 
 #include "absl/log/log.h"
-#include "common/font_helper.h"
-#include "common/hb_set_unique_ptr.h"
-#include "common/int_set.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/hb_set_unique_ptr.h"
+#include "ift/common/int_set.h"
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -19,13 +19,13 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
-using common::CodepointSet;
-using common::FontHelper;
-using common::GlyphSet;
-using common::hb_set_unique_ptr;
-using common::IntSet;
-using common::make_hb_set;
-using common::SegmentSet;
+using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
+using ift::common::hb_set_unique_ptr;
+using ift::common::IntSet;
+using ift::common::make_hb_set;
+using ift::common::SegmentSet;
 using ift::encoder::glyph_id_t;
 using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;

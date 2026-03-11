@@ -8,15 +8,15 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "common/axis_range.h"
-#include "common/int_set.h"
 #include "hb-subset.h"
+#include "ift/common/axis_range.h"
+#include "ift/common/int_set.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 namespace ift::encoder {
 
-typedef absl::flat_hash_map<hb_tag_t, common::AxisRange> design_space_t;
+typedef absl::flat_hash_map<hb_tag_t, ift::common::AxisRange> design_space_t;
 
 // Describes a subset of a font in terms of the codepoints, feature tags, and
 // design space that the subset will contain data for.
@@ -41,7 +41,8 @@ struct SubsetDefinition {
     }
   }
 
-  static SubsetDefinition Codepoints(const common::CodepointSet& codepoints) {
+  static SubsetDefinition Codepoints(
+      const ift::common::CodepointSet& codepoints) {
     SubsetDefinition def;
     def.codepoints = codepoints;
     return def;
@@ -49,8 +50,8 @@ struct SubsetDefinition {
 
   friend void PrintTo(const SubsetDefinition& point, std::ostream* os);
 
-  common::CodepointSet codepoints;
-  common::GlyphSet gids;
+  ift::common::CodepointSet codepoints;
+  ift::common::GlyphSet gids;
   absl::btree_set<hb_tag_t> feature_tags;
   design_space_t design_space;
 

@@ -6,9 +6,9 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
-#include "common/font_helper.h"
-#include "common/int_set.h"
-#include "common/sparse_bit_set.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
+#include "ift/common/sparse_bit_set.h"
 #include "ift/proto/patch_encoding.h"
 
 using absl::btree_set;
@@ -16,9 +16,9 @@ using absl::flat_hash_set;
 using absl::Span;
 using absl::Status;
 using absl::StatusOr;
-using common::FontHelper;
-using common::IntSet;
-using common::SparseBitSet;
+using ift::common::FontHelper;
+using ift::common::IntSet;
+using ift::common::SparseBitSet;
 
 namespace ift::proto {
 
