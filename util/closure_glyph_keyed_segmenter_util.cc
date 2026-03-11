@@ -9,6 +9,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/status/statusor.h"
@@ -230,6 +231,11 @@ static Status Main(const std::vector<char*> args) {
 }
 
 int main(int argc, char** argv) {
+  absl::SetProgramUsageMessage(
+      "Generates a segmentation plan for a font.\n"
+      "\n"
+      "Usage: closure_glyph_keyed_segmenter_util --input_font=\"myfont.ttf\" "
+      "[--config=\"config.txtpb\"] [--output_segmentation_plan]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);

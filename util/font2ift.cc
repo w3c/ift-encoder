@@ -9,6 +9,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/status/statusor.h"
@@ -314,6 +315,14 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
 }
 
 int main(int argc, char** argv) {
+  absl::SetProgramUsageMessage(
+      "Converts OpenType and TrueType fonts into IFT encoded fonts.\n"
+      "\n"
+      "Usage: font2ift --input_font=\"myfont.ttf\" --output_path=\"ift/\" "
+      "--output_font=\"myfont.itf.ttf\"\n"
+      "\n"
+      "Optional: a segmentation plan can be provided with the --plan flag. If "
+      "one is not given then it will be generated.");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);

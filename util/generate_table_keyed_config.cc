@@ -6,6 +6,9 @@
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/flags/usage.h"
+#include "absl/log/globals.h"
+#include "absl/log/initialize.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
@@ -36,6 +39,10 @@ ABSL_FLAG(std::optional<std::string>, existing_segmentation_plan, std::nullopt,
           "codepoint sets will be added to the existing segmentation plan "
           "instead of a new "
           "one. The combined plan is output to stdout.");
+
+ABSL_FLAG(
+    int, verbosity, 0,
+    "Log verbosity level from. 0 is least verbose, higher values are more.");
 
 template <typename ProtoType>
 ProtoType ToSetProto(const CodepointSet& set) {
@@ -69,20 +76,24 @@ static StatusOr<SegmentationPlan> LoadSegmentationPlan(const char* path) {
  *
  * This config can be appended onto a config which configures the glyph keyed
  * segmentation plan to produce a complete mixed mode configuration.
- *
- * Usage:
- * generate_table_keyed_config <initial font subset fil> <table keyed subset 1
- * file> [... <table keyed subset file n>]
- *
- * Where a subset file lists one codepoint per line in hexadecimal format:
- * 0xXXXX.
- *
- * If you don't want the config to contain an initial codepoint set, pass an
- * empty file as the first argument.
  */
 
 int main(int argc, char** argv) {
+  absl::SetProgramUsageMessage(
+      "Generates a table keyed segmentation plan for a font.\n"
+      "\n"
+      "Usage: generate_table_keyed_config --font=\"myfont.ttf\" <initial "
+      "subset fil> <subset 1 file> [... <subset n file>]\n"
+      "\n"
+      "Where a subset file lists one codepoint per line in hexadecimal format: "
+      "0xXXXX\n"
+      "\n"
+      "If you don't want the config to contain an initial codepoint set, pass "
+      "an empty file as the first argument.\n");
+  absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
+  absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);
+  absl::InitializeLog();
 
   SegmentationPlan config;
   CodepointSet init_codepoints;
