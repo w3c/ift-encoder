@@ -20,17 +20,37 @@ struct SegmentationResult {
       merge_groups;
 };
 
+/*
+ * Assists in loading and running the segmenter from a protobuf segmenter
+ * config.
+ */
 class SegmenterConfigUtil {
  public:
   SegmenterConfigUtil(std::string config_file_path)
       : config_file_path_(config_file_path) {}
 
+  /*
+   * Create a new segmenter, configure it with config, and then run the
+   * segmenter on face.
+   *
+   * Returns the result of the segmenter run.
+   */
   absl::StatusOr<SegmentationResult> RunSegmenter(
       hb_face_t* face, const SegmenterConfig& config);
 
+  /*
+   * Converts SegmentProto to a SubsetDefition.
+   */
   ift::encoder::SubsetDefinition SegmentProtoToSubsetDefinition(
       const SegmentProto& segment);
 
+  /*
+   * Converts the merge groups specified in a segmenter config to the equivalent
+   * merge strategy objects.
+   *
+   * font_codepoints/features gives the full list of codepoint and features in
+   * the font the segmenter config is for.
+   */
   absl::StatusOr<
       absl::btree_map<ift::common::SegmentSet, ift::encoder::MergeStrategy>>
   ConfigToMergeGroups(const SegmenterConfig& config,
