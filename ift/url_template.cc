@@ -5,10 +5,12 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "base32_hex.hpp"
+#include "base64_url.hpp"
 
 using absl::Span;
 using absl::StatusOr;
 using cppcodec::base32_hex;
+using cppcodec::base64_url;
 
 namespace ift {
 
@@ -21,6 +23,21 @@ constexpr uint8_t D4 = 4;
 constexpr uint8_t ID64 = 5;
 constexpr uint8_t OPCODE_COUNT = 6;
 constexpr uint8_t OPCODES_END = OPCODES_START + OPCODE_COUNT - 1;
+
+static std::string Id64Expansion(const uint8_t* bytes, uint32_t length) {
+  std::string base64 = base64_url::encode(bytes, length);
+  std::string base64_escaped;
+  base64_escaped.reserve(base64.size() +
+                         4 /* room for possible padding escapes */);
+  for (int i = 0; i < base64.size(); i++) {
+    if (base64[i] != '=') {
+      base64_escaped.insert(base64_escaped.end(), base64[i]);
+    } else {
+      base64_escaped.append("%3D");
+    }
+  }
+  return base64_escaped;
+}
 
 void PopulateExpansions(uint32_t patch_idx,
                         std::string expansions[OPCODE_COUNT]) {
@@ -35,37 +52,38 @@ void PopulateExpansions(uint32_t patch_idx,
     start++;
   }
 
-  std::string result = base32_hex::encode(bytes + start, 4 - start);
-  result.erase(std::find_if(result.rbegin(), result.rend(),
+  std::string base32 = base32_hex::encode(bytes + start, 4 - start);
+  base32.erase(std::find_if(base32.rbegin(), base32.rend(),
                             [](unsigned char ch) { return ch != '='; })
                    .base(),
-               result.end());
-  expansions[ID32] = result;
-  if (result.size() >= 1) {
-    expansions[D1] = result.substr(result.size() - 1, 1);
+               base32.end());
+
+  expansions[ID32] = base32;
+  if (base32.size() >= 1) {
+    expansions[D1] = base32.substr(base32.size() - 1, 1);
   } else {
     expansions[D1] = "_";
   }
 
-  if (result.size() >= 2) {
-    expansions[D2] = result.substr(result.size() - 2, 1);
+  if (base32.size() >= 2) {
+    expansions[D2] = base32.substr(base32.size() - 2, 1);
   } else {
     expansions[D2] = "_";
   }
 
-  if (result.size() >= 3) {
-    expansions[D3] = result.substr(result.size() - 3, 1);
+  if (base32.size() >= 3) {
+    expansions[D3] = base32.substr(base32.size() - 3, 1);
   } else {
     expansions[D3] = "_";
   }
 
-  if (result.size() >= 4) {
-    expansions[D4] = result.substr(result.size() - 4, 1);
+  if (base32.size() >= 4) {
+    expansions[D4] = base32.substr(base32.size() - 4, 1);
   } else {
     expansions[D4] = "_";
   }
 
-  // TODO(garretrieger): add additional variable id64
+  expansions[ID64] = Id64Expansion(bytes + start, 4 - start);
 }
 
 StatusOr<std::string> URLTemplate::PatchToUrl(Span<const uint8_t> url_template,

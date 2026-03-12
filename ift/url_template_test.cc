@@ -50,4 +50,13 @@ TEST_F(URLTemplateTest, InvalidTemplates) {
       absl::IsInvalidArgument(URLTemplate::PatchToUrl(insert_eof, 0).status()));
 }
 
+TEST_F(URLTemplateTest, PatchToUrl_Base64) {
+  const std::vector<uint8_t> url{10,  '/', '/', 'f', 'o', 'o',
+                                 '.', 'b', 'a', 'r', '/', 133};
+
+  EXPECT_EQ(*URLTemplate::PatchToUrl(url, 14000000), "//foo.bar/1Z-A");
+  EXPECT_EQ(*URLTemplate::PatchToUrl(url, 0), "//foo.bar/AA%3D%3D");
+  EXPECT_EQ(*URLTemplate::PatchToUrl(url, 17000000), "//foo.bar/AQNmQA%3D%3D");
+}
+
 }  // namespace ift
