@@ -621,7 +621,11 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       VLOG(0) << "Last merge group finished. Producing final segmentation.";
       // Nothing was merged so we're done.
       TRYV(ValidateIncrementalGroupings(face, context));
+      VLOG(0) << "Brotli calls during init font processing:";
+      context.patch_size_cache_for_init_font->LogBrotliCallCount();
+      VLOG(0) << "Brotli calls during merging:";
       context.patch_size_cache->LogBrotliCallCount();
+
       for (const auto& merger : mergers) {
         merger.LogMergedSizeHistogram();
       }
