@@ -315,14 +315,12 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
 Status CandidateMerge::ComputeInitFontGlyphDelta(
     Merger& merger, const GlyphSet& moved_glyphs, GlyphSet& new_glyph_closure,
     GlyphSet& glyph_closure_delta) {
-  // TODO XXXXX this should do a full expansion closure to match what's actually
-  // done in reassign init subset.
   SubsetDefinition inital_subset =
       merger.Context().SegmentationInfo().InitFontSegment();
   inital_subset.gids.union_set(moved_glyphs);
 
-  new_glyph_closure =
-      TRY(merger.Context().glyph_closure_cache->GlyphClosure(inital_subset));
+  SubsetDefinition expanded = TRY(merger.Context().glyph_closure_cache->ExpandClosure(inital_subset));
+  new_glyph_closure = std::move(expanded.gids);
 
   glyph_closure_delta = new_glyph_closure;
   glyph_closure_delta.subtract(
