@@ -146,6 +146,11 @@ struct CandidateMerge {
       Merger& merger, const ift::common::SegmentSet& merged_segments,
       const Segment& merged_segment, std::optional<uint32_t> new_patch_size);
 
+  static absl::Status ComputeInitFontGlyphDelta(
+      Merger& merger, const ift::common::GlyphSet& moved_glyphs,
+      ift::common::GlyphSet& new_glyph_closure,
+      ift::common::GlyphSet& glyph_closure_delta);
+
   // Computes the predicted change to the toal cost if moved_glyphs are
   // moved from patches into the initial font.
   //
@@ -153,8 +158,11 @@ struct CandidateMerge {
   // (including those added by closure).
   static absl::StatusOr<std::pair<double, ift::common::GlyphSet>>
   ComputeInitFontCostDelta(Merger& merger, uint32_t existing_init_font_size,
-                           bool best_case,
                            const ift::common::GlyphSet& moved_glyphs);
+
+  static absl::StatusOr<double> ComputeBestCaseInitFontCostDelta(
+      Merger& merger, uint32_t existing_init_font_size,
+      const ift::common::GlyphSet& moved_glyphs);
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
       const Merger& context, segment_index_t base_segment,

@@ -162,15 +162,16 @@ Status Merger::MoveSegmentsToInitFont() {
         InitFontConditionsToCheck(to_check, batch_mode);
 
     for (const auto& [condition, glyphs] : conditions) {
-      auto [best_case_delta, _] = TRY(CandidateMerge::ComputeInitFontCostDelta(
-          *this, init_font_size, true, glyphs));
+      auto best_case_delta =
+          TRY(CandidateMerge::ComputeBestCaseInitFontCostDelta(
+              *this, init_font_size, glyphs));
       if (best_case_delta >= lowest_delta) {
         // Filter by best case first which is much faster to compute.
         continue;
       }
 
       auto [delta, all_glyphs] = TRY(CandidateMerge::ComputeInitFontCostDelta(
-          *this, init_font_size, false, glyphs));
+          *this, init_font_size, glyphs));
       if (delta >= lowest_delta) {
         continue;
       }

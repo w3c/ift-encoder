@@ -312,8 +312,27 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
   return result;
 }
 
+Status CandidateMerge::ComputeInitFontGlyphDelta(
+    Merger& merger, const GlyphSet& moved_glyphs, GlyphSet& new_glyph_closure,
+    GlyphSet& glyph_closure_delta) {
+  // TODO XXXXX this should do a full expansion closure to match what's actually
+  // done in reassign init subset.
+  SubsetDefinition inital_subset =
+      merger.Context().SegmentationInfo().InitFontSegment();
+  inital_subset.gids.union_set(moved_glyphs);
+
+  new_glyph_closure =
+      TRY(merger.Context().glyph_closure_cache->GlyphClosure(inital_subset));
+
+  glyph_closure_delta = new_glyph_closure;
+  glyph_closure_delta.subtract(
+      merger.Context().SegmentationInfo().InitFontGlyphs());
+
+  return absl::OkStatus();
+}
+
 StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
-    Merger& merger, uint32_t existing_init_font_size, bool best_case,
+    Merger& merger, uint32_t existing_init_font_size,
     const GlyphSet& moved_glyphs) {
   VLOG(1) << "cost_delta for move of glyphs " << moved_glyphs.ToString()
           << " to the initial font =";
@@ -336,35 +355,23 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   //    This in turn expands the initial closure pulling in moved_glyphs and
   //    possibly some additional glyphs. As a result there is some increase in
   //    the initial font size.
-  SubsetDefinition inital_subset =
-      merger.Context().SegmentationInfo().InitFontSegment();
 
-  inital_subset.gids.union_set(moved_glyphs);
-
-  GlyphSet new_glyph_closure =
-      TRY(merger.Context().glyph_closure_cache->GlyphClosure(inital_subset));
-
-  GlyphSet glyph_closure_delta = new_glyph_closure;
-  glyph_closure_delta.subtract(
-      merger.Context().SegmentationInfo().InitFontGlyphs());
+  GlyphSet new_glyph_closure, glyph_closure_delta;
+  TRYV(ComputeInitFontGlyphDelta(merger, moved_glyphs, new_glyph_closure,
+                                 glyph_closure_delta));
 
   double total_delta = 0.0;
-  if (best_case) {
-    // In the 'best case' we assume no increase to initial font size.
-    VLOG(1) << "    + " << total_delta << " [best case init font increase]";
-  } else {
-    double before = existing_init_font_size;
-    double after =
-        TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
-            new_glyph_closure));
-    if (after > before) {
-      // case where after is < before happen occasionally as the result of
-      // running with lower brotli compression quality. Ignores these in order
-      // to stay consistent with the 'best case' used above.
-      total_delta = after - before;
-    }
-    VLOG(1) << "    + " << total_delta << " [init font increase]";
+  double before = existing_init_font_size;
+  double after =
+      TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
+          new_glyph_closure));
+  if (after > before) {
+    // case where after is < before happen occasionally as the result of
+    // running with lower brotli compression quality. Ignores these in order
+    // to stay consistent with the 'best case' used above.
+    total_delta = after - before;
   }
+  VLOG(1) << "    + " << total_delta << " [init font increase]";
 
   // 2. All of the glyphs which are newly added to the initial closure are
   // removed
@@ -414,6 +421,79 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   VLOG(1) << "    = " << total_delta;
 
   return std::make_pair(total_delta, glyph_closure_delta);
+}
+
+StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
+    Merger& merger, uint32_t existing_init_font_size,
+    const GlyphSet& moved_glyphs) {
+  GlyphSet new_glyph_closure, glyph_closure_delta;
+  TRYV(ComputeInitFontGlyphDelta(merger, moved_glyphs, new_glyph_closure,
+                                 glyph_closure_delta));
+
+  double cost_delta = 0.0;
+  double best_case_reduction =
+      merger.Strategy().BestCaseSizeReductionFraction();
+  double per_request_overhead = merger.Strategy().NetworkOverheadCost();
+  for (const auto& [condition, glyphs] :
+       PatchesWithGlyphs(merger.Context(), glyph_closure_delta)) {
+    double patch_probability = 1.0;
+    if (!condition.IsFallback()) {
+      patch_probability = TRY(
+          condition.Probability(merger.Context().SegmentationInfo().Segments(),
+                                *merger.Strategy().ProbabilityCalculator()));
+    }
+
+    GlyphSet new_glyphs = glyphs;
+    new_glyphs.subtract(glyph_closure_delta);
+
+    // Looking up unmodified patch size will have a very high cache hit rate so
+    // fine to do for the best case size computation.
+    double patch_size = TRY(
+        merger.Context().patch_size_cache_for_init_font->GetPatchSize(glyphs));
+
+    if (new_glyphs.empty()) {
+      // For full patch removal we can estimate impact on the delta by assuming
+      // that all of the data of the patch is moved to the init font and further
+      // compressed by the best case reduction fraction.
+      cost_delta += best_case_reduction * patch_size -
+                    patch_probability * (patch_size + per_request_overhead);
+      continue;
+    }
+
+    // For a changed patch the change in cost delta is:
+    //
+    // (best_case_reduction - patch_probability) * reduction in patch_size
+    //
+    // Since bytes are moved from the patch to the init font with estimated
+    // reduction of best_case_reduction. The patch isn't being removed there's
+    // no change due to per_request_overhead.
+    //
+    // For a changed patch the amount of bytes removed can vary from [0, patch
+    // size], (Note: we can't compute the actual patch size change because it's
+    // expensive).
+    //
+    // Then to estimate the best case we need to choose a value for reduction in
+    // patch_size that creates the smallest delta. This choice depends on
+    // whether patch_probability is > or <= best_case_reduction
+    if (patch_probability > best_case_reduction) {
+      // since (best_case_reduction - patch_probability) is negative, the
+      // smallest delta arises when patch size reduction is as large as
+      // possible, so equal to patch_size.
+      //
+      // TODO(garretrieger): XXXXX may want to incorporate a minimum patch size
+      // amount since we're saying patch isn't removed.
+      cost_delta += (best_case_reduction - patch_probability) * patch_size;
+    }
+
+    // Otherwise if patch_probability is <= best_case_reduction then the cost
+    // delta will be positive unless patch size reduction is 0, in which chase
+    // the change to total cost delta is also 0.
+  }
+
+  VLOG(1) << "best case cost_delta for move of glyphs "
+          << moved_glyphs.ToString() << " to the initial font = " << cost_delta;
+
+  return cost_delta;
 }
 
 static std::optional<double> ComputeMergedSizeReduction(
