@@ -75,6 +75,7 @@ class IntSetIterator {
  */
 class IntSet {
  public:
+  using value_type = hb_codepoint_t;
   using iterator = IntSetIterator<false>;
   using rev_iterator = IntSetIterator<true>;
   using const_iterator = IntSetIterator<false>;

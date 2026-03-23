@@ -11,6 +11,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/encoder/reachability_index.h"
 #include "ift/encoder/types.h"
 
 #ifdef HB_DEPEND_API
@@ -115,11 +116,10 @@ class DependencyClosure {
 
   std::optional<ift::common::GlyphSet> AccurateReachedGlyphsFor(
       segment_index_t s) const {
-    auto it = accurate_glyphs_that_can_be_reached_.find(s);
-    if (it == accurate_glyphs_that_can_be_reached_.end()) {
+    if (!accurate_reachability_.IsPresent(s)) {
       return std::nullopt;
     }
-    return it->second;
+    return accurate_reachability_.GlyphsForSegment(s);
   }
 
   // Returns true if all segments that can reach gid have accurate reachability
@@ -166,32 +166,17 @@ class DependencyClosure {
   // reachable from glyph and features (and in reverse as well).
   bool reachability_index_valid_ = false;
 
-  absl::flat_hash_map<glyph_id_t, ift::common::SegmentSet>
-      segments_that_can_reach_;
-  absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
-      glyphs_that_can_be_reached_;
+  // Unconstrained reachability, these are the glyphs/features that can be
+  // reached by a segment if context constraints are not enforced.
+  ReachabilityIndex reachability_;
 
-  // This index only includes segments where the traversal is considered
-  // accurate (ie. reproduces glyph closure exactly) it is a subset of
-  // segments_that_can_reach_/glyphs_that_can_be_reached_.
-  absl::flat_hash_map<glyph_id_t, ift::common::SegmentSet>
-      accurate_segments_that_can_reach_;
-  absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
-      accurate_glyphs_that_can_be_reached_;
+  // Constrained reachability, for segments we can perform an accurate traversal
+  // w/ context enforcement the set of glyphs that can be reached
+  ReachabilityIndex accurate_reachability_;
 
-  absl::flat_hash_map<hb_tag_t, ift::common::SegmentSet>
-      segments_that_can_reach_feature_;
-  absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>>
-      features_that_can_be_reached_;
-
-  absl::flat_hash_map<glyph_id_t, ift::common::SegmentSet>
-      segments_that_have_context_glyph_;
-  absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
-      segment_context_glyphs_;
-  absl::flat_hash_map<hb_tag_t, ift::common::SegmentSet>
-      segments_that_have_context_feature_;
-  absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>>
-      segment_context_features_;
+  // Tracks which context glyphs (for contextual gsub substitutions) can be
+  // reached from a segment.
+  ReachabilityIndex context_reachability_;
 #endif
 
   uint64_t accurate_results_ = 0;

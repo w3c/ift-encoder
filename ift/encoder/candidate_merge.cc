@@ -319,7 +319,8 @@ Status CandidateMerge::ComputeInitFontGlyphDelta(
       merger.Context().SegmentationInfo().InitFontSegment();
   inital_subset.gids.union_set(moved_glyphs);
 
-  SubsetDefinition expanded = TRY(merger.Context().glyph_closure_cache->ExpandClosure(inital_subset));
+  SubsetDefinition expanded =
+      TRY(merger.Context().glyph_closure_cache->ExpandClosure(inital_subset));
   new_glyph_closure = std::move(expanded.gids);
 
   glyph_closure_delta = new_glyph_closure;
