@@ -67,6 +67,8 @@ cc_library(
         "merger.cc",
         "merger.h",
         "patch_size_cache.h",
+        "reachability_index.cc",
+        "reachability_index.h",
         "segmentation_context.cc",
         "segmentation_context.h",
     ] + select({
@@ -358,6 +360,19 @@ cc_test(
 cc_test(
     name = "estimated_patch_size_cache_test",
     srcs = ["estimated_patch_size_cache_test.cc"],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":segmentation_context",
+        "//ift/common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "reachability_index_test",
+    srcs = ["reachability_index_test.cc"],
     data = [
         "//ift/common:testdata",
     ],
