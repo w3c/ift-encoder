@@ -116,10 +116,10 @@ class DependencyClosure {
 
   std::optional<ift::common::GlyphSet> AccurateReachedGlyphsFor(
       segment_index_t s) const {
-    if (!accurate_reachability_.IsPresent(s)) {
+    if (!isolated_reachability_.IsPresent(s)) {
       return std::nullopt;
     }
-    return accurate_reachability_.GlyphsForSegment(s);
+    return isolated_reachability_.GlyphsForSegment(s);
   }
 
   // Returns true if all segments that can reach gid have accurate reachability
@@ -168,11 +168,11 @@ class DependencyClosure {
 
   // Unconstrained reachability, these are the glyphs/features that can be
   // reached by a segment if context constraints are not enforced.
-  ReachabilityIndex reachability_;
+  ReachabilityIndex unconstrained_reachability_;
 
   // Constrained reachability, for segments we can perform an accurate traversal
   // w/ context enforcement the set of glyphs that can be reached
-  ReachabilityIndex accurate_reachability_;
+  ReachabilityIndex isolated_reachability_;
 
   // Tracks which context glyphs (for contextual gsub substitutions) can be
   // reached from a segment.
