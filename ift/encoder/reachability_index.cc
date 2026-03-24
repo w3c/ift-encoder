@@ -19,8 +19,6 @@ void ReachabilityIndex::AddFeature(segment_index_t segment, hb_tag_t feature) {
 }
 
 void ReachabilityIndex::ClearSegment(segment_index_t segment) {
-  presence_.erase(segment);
-
   auto glyphs_it = glyphs_by_segment_.find(segment);
   if (glyphs_it != glyphs_by_segment_.end()) {
     for (glyph_id_t gid : glyphs_it->second) {

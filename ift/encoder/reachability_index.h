@@ -45,16 +45,7 @@ class ReachabilityIndex {
   const absl::btree_set<hb_tag_t>& FeaturesForSegment(
       segment_index_t segment) const;
 
-  // Since the accessors above always return something, these two methods
-  // can be used to track which segments are present in the index.
-  void MarkPresent(segment_index_t segment) { presence_.insert(segment); }
-  bool IsPresent(segment_index_t segment) const {
-    return presence_.contains(segment);
-  }
-
  private:
-  ift::common::SegmentSet presence_;
-
   absl::flat_hash_map<glyph_id_t, ift::common::SegmentSet> segments_by_glyph_;
   absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
       glyphs_by_segment_;

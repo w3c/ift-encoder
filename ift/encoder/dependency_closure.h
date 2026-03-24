@@ -114,13 +114,16 @@ class DependencyClosure {
         original_face_(ift::common::make_hb_face(hb_face_reference(face))),
         graph_(std::move(graph)) {}
 
-  std::optional<ift::common::GlyphSet> AccurateReachedGlyphsFor(
-      segment_index_t s) const {
-    if (!isolated_reachability_.IsPresent(s)) {
-      return std::nullopt;
-    }
-    return isolated_reachability_.GlyphsForSegment(s);
-  }
+  struct AnalysisResult {
+    AnalysisAccuracy accuracy;
+    ift::common::GlyphSet reached_glyphs;
+    ift::common::GlyphSet and_gids;
+    ift::common::GlyphSet or_gids;
+    ift::common::GlyphSet exclusive_gids;
+  };
+
+  absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
+      const ift::common::SegmentSet& segments) const;
 
   // Returns true if all segments that can reach gid have accurate reachability
   // in the index. Segments in the excluded set are ignored for this check.
@@ -170,9 +173,17 @@ class DependencyClosure {
   // reached by a segment if context constraints are not enforced.
   ReachabilityIndex unconstrained_reachability_;
 
-  // Constrained reachability, for segments we can perform an accurate traversal
-  // w/ context enforcement the set of glyphs that can be reached
+  // Isolated reachability: the set of glyphs that can be reached from
+  // each segment in isolation. Conjunctive edges where the relevant
+  // context is not present are not traversed.
   ReachabilityIndex isolated_reachability_;
+
+  // Segments for which the isolated graph traversal was ACCURATE.
+  ift::common::SegmentSet isolated_reachability_is_accurate_;
+
+  // For these segments AnalyzeSegment() is able to reach all glyphs
+  // in the unconstrainted reachability.
+  ift::common::SegmentSet fully_explorable_segments_;
 
   // Tracks which context glyphs (for contextual gsub substitutions) can be
   // reached from a segment.
