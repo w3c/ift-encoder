@@ -216,7 +216,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
       return INACCURATE;
     }
 
-    if (reachability_.SegmentsForGlyph(gid).is_subset_of(segments)) {
+    if (unconstrained_reachability_.SegmentsForGlyph(gid).is_subset_of(segments)) {
       exclusive_gids.insert(gid);
     } else {
       or_gids.insert(gid);
@@ -229,7 +229,7 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 
 bool DependencyClosure::GlyphHasFullyAccurateReachability(
     glyph_id_t gid, const SegmentSet& excluded) const {
-  const SegmentSet& segments_ref = reachability_.SegmentsForGlyph(gid);
+  const SegmentSet& segments_ref = unconstrained_reachability_.SegmentsForGlyph(gid);
 
   if (segments_ref.is_subset_of(excluded)) {
     // If the only segments which can possibly reach this gid are in excluded
@@ -239,7 +239,7 @@ bool DependencyClosure::GlyphHasFullyAccurateReachability(
   }
 
   const SegmentSet& accurate_segments_ref =
-      accurate_reachability_.SegmentsForGlyph(gid);
+      isolated_reachability_.SegmentsForGlyph(gid);
   if (accurate_segments_ref.empty()) {
     return false;
   }
@@ -281,7 +281,7 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
 
       // now check if any segments can reach it.
       TRYV(ReachabilitySegmentsAddToCheck(
-          reachability_.SegmentsForGlyph(gid), visited_segments, visited_glyphs,
+          unconstrained_reachability_.SegmentsForGlyph(gid), visited_segments, visited_glyphs,
           visited_features, to_check, features_to_check));
 
     } else if (!features_to_check.empty()) {
@@ -291,7 +291,7 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
 
       // now check if any segments can reach it.
       TRYV(ReachabilitySegmentsAddToCheck(
-          reachability_.SegmentsForFeature(feature), visited_segments,
+          unconstrained_reachability_.SegmentsForFeature(feature), visited_segments,
           visited_glyphs, visited_features, to_check, features_to_check));
     }
   }
@@ -330,22 +330,22 @@ SegmentSet DependencyClosure::ConnectedSegments(segment_index_t s) {
   // use context per glyph instead of the full context glyph sets.
   SegmentSet connected;
 
-  for (glyph_id_t gid : reachability_.GlyphsForSegment(s)) {
+  for (glyph_id_t gid : unconstrained_reachability_.GlyphsForSegment(s)) {
     connected.union_set(context_reachability_.SegmentsForGlyph(gid));
-    connected.union_set(reachability_.SegmentsForGlyph(gid));
+    connected.union_set(unconstrained_reachability_.SegmentsForGlyph(gid));
   }
 
   for (glyph_id_t gid : context_reachability_.GlyphsForSegment(s)) {
-    connected.union_set(reachability_.SegmentsForGlyph(gid));
+    connected.union_set(unconstrained_reachability_.SegmentsForGlyph(gid));
   }
 
-  for (hb_tag_t tag : reachability_.FeaturesForSegment(s)) {
+  for (hb_tag_t tag : unconstrained_reachability_.FeaturesForSegment(s)) {
     connected.union_set(context_reachability_.SegmentsForFeature(tag));
-    connected.union_set(reachability_.SegmentsForFeature(tag));
+    connected.union_set(unconstrained_reachability_.SegmentsForFeature(tag));
   }
 
   for (hb_tag_t tag : context_reachability_.FeaturesForSegment(s)) {
-    connected.union_set(reachability_.SegmentsForFeature(tag));
+    connected.union_set(unconstrained_reachability_.SegmentsForFeature(tag));
   }
 
   return connected;
@@ -356,20 +356,20 @@ SegmentSet DependencyClosure::InitFontConnections() {
 
   for (glyph_id_t gid : init_font_reachable_glyphs_) {
     connected.union_set(context_reachability_.SegmentsForGlyph(gid));
-    connected.union_set(reachability_.SegmentsForGlyph(gid));
+    connected.union_set(unconstrained_reachability_.SegmentsForGlyph(gid));
   }
 
   for (glyph_id_t gid : init_font_context_glyphs_) {
-    connected.union_set(reachability_.SegmentsForGlyph(gid));
+    connected.union_set(unconstrained_reachability_.SegmentsForGlyph(gid));
   }
 
   for (hb_tag_t tag : init_font_features_) {
     connected.union_set(context_reachability_.SegmentsForFeature(tag));
-    connected.union_set(reachability_.SegmentsForFeature(tag));
+    connected.union_set(unconstrained_reachability_.SegmentsForFeature(tag));
   }
 
   for (hb_tag_t tag : init_font_context_features_) {
-    connected.union_set(reachability_.SegmentsForFeature(tag));
+    connected.union_set(unconstrained_reachability_.SegmentsForFeature(tag));
   }
 
   return connected;
@@ -443,20 +443,20 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
   {
     auto context_traversal = TRY(graph_.ClosureTraversal({s}, true));
     if (TraversalAccuracy(context_traversal) == ACCURATE) {
-      accurate_reachability_.MarkPresent(s);
+      isolated_reachability_.MarkPresent(s);
       for (glyph_id_t g : context_traversal.ReachedGlyphs()) {
-        accurate_reachability_.AddGlyph(s, g);
+        isolated_reachability_.AddGlyph(s, g);
       }
     }
   }
 
   auto traversal = TRY(graph_.ClosureTraversal({s}, false));
   for (glyph_id_t g : traversal.ReachedGlyphs()) {
-    reachability_.AddGlyph(s, g);
+    unconstrained_reachability_.AddGlyph(s, g);
   }
 
   for (hb_tag_t f : traversal.ReachedLayoutFeatures()) {
-    reachability_.AddFeature(s, f);
+    unconstrained_reachability_.AddFeature(s, f);
   }
 
   for (glyph_id_t g : traversal.ContextGlyphs()) {
@@ -471,8 +471,8 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
 }
 
 void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
-  reachability_.ClearSegment(segment);
-  accurate_reachability_.ClearSegment(segment);
+  unconstrained_reachability_.ClearSegment(segment);
+  isolated_reachability_.ClearSegment(segment);
   context_reachability_.ClearSegment(segment);
 }
 
