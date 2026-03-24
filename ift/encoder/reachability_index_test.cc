@@ -56,31 +56,14 @@ TEST(ReachabilityIndexTest, ClearSegment) {
   index.AddGlyph(10, 1);
   index.AddGlyph(20, 1);
   index.AddFeature(10, f1);
-  index.MarkPresent(10);
-
-  EXPECT_TRUE(index.IsPresent(10));
-  EXPECT_FALSE(index.IsPresent(20));
 
   index.ClearSegment(10);
-
-  EXPECT_FALSE(index.IsPresent(10));
 
   EXPECT_THAT(index.GlyphsForSegment(10), IsEmpty());
   EXPECT_THAT(index.FeaturesForSegment(10), IsEmpty());
 
   EXPECT_THAT(index.SegmentsForGlyph(1), ElementsAre(20));
   EXPECT_THAT(index.SegmentsForFeature(f1), IsEmpty());
-}
-
-TEST(ReachabilityIndexTest, PresenceTracking) {
-  ReachabilityIndex index;
-
-  EXPECT_FALSE(index.IsPresent(10));
-  index.MarkPresent(10);
-  EXPECT_TRUE(index.IsPresent(10));
-
-  index.ClearSegment(10);
-  EXPECT_FALSE(index.IsPresent(10));
 }
 
 }  // namespace ift::encoder
