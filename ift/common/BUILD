@@ -13,6 +13,7 @@ cc_library(
         "brotli_binary_patch.cc",
         "compat_id.cc",
         "file_font_provider.cc",
+        "font_data.cc",
         "font_helper.cc",
         "hb_set_unique_ptr.cc",
         "indexed_data_reader.h",
