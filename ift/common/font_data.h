@@ -2,6 +2,8 @@
 #define COMMON_FONT_DATA_H_
 
 #include <cstring>
+#include <iomanip>
+#include <iostream>
 #include <memory>
 
 #include "absl/strings/string_view.h"
@@ -43,6 +45,8 @@ class FontData {
   FontData() : buffer_(make_hb_blob()), saved_face_(make_hb_face(nullptr)) {}
 
   // TODO(garretrieger): construct from span
+
+  friend void PrintTo(const FontData& data, std::ostream* os);
 
   explicit FontData(hb_blob_t* blob)
       : buffer_(make_hb_blob()), saved_face_(make_hb_face(nullptr)) {
