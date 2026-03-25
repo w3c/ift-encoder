@@ -9,6 +9,7 @@ cc_library(
             "dependency_graph.h",
             "dependency_graph.cc",
             "node.h",
+            "pending_edge.h",
             "traversal.h",
         ],
         "//conditions:default": [],

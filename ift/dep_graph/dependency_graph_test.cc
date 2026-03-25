@@ -328,6 +328,61 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge_Liga) {
   ASSERT_FALSE(traversal->HasPendingEdges());
 }
 
+TEST_F(DependencyGraphTest, PendingEdgesCollection) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  // Roboto has f + i -> fi in liga.
+  Reconfigure({'f'}, {
+                         {{'i'}, ProbabilityBound::Zero()},
+                         {liga, ProbabilityBound::Zero()},
+                     });
+
+  // Start with only s0 (i). f is in init.
+  // fi is reachable from i IF liga is present.
+  // Since liga (s1) is missing, fi should be in pending edges.
+  auto traversal = graph.ClosureTraversal({
+      Node::Segment(0),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+
+  ASSERT_TRUE(traversal->HasPendingEdges());
+  const auto& pending = traversal->PendingEdges();
+
+  bool found_fi = false;
+  for (const auto& edge : pending) {
+    if (edge.dest == Node::Glyph(444 /* fi */)) {
+      found_fi = true;
+      // It should require liga feature.
+      EXPECT_EQ(edge.required_feature, HB_TAG('l', 'i', 'g', 'a'));
+    }
+  }
+  EXPECT_TRUE(found_fi);
+}
+
+TEST_F(DependencyGraphTest, RequiredGlyphsFor_Liga) {
+  Reconfigure(WithDefaultFeatures({}), {
+                                           {{'f'}, ProbabilityBound::Zero()},
+                                           {{'i'}, ProbabilityBound::Zero()},
+                                       });
+
+  auto traversal = graph.ClosureTraversal({
+      Node::Segment(0),
+  });
+  ASSERT_TRUE(traversal.ok()) << traversal.status();
+  ASSERT_TRUE(traversal->HasPendingEdges());
+  const auto& pending = traversal->PendingEdges();
+
+  bool found_fi = false;
+  for (const auto& edge : pending) {
+    if (edge.dest == Node::Glyph(444 /* fi */)) {
+      EXPECT_EQ(*graph.RequiredGlyphsFor(edge),
+                (GlyphSet{74 /* f */, 77 /* i */}));
+      found_fi = true;
+    }
+  }
+  EXPECT_TRUE(found_fi);
+}
+
 // TODO(garretrieger):
 // - basic math, CFF, and COLR tests.
 
