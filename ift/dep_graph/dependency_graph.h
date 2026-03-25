@@ -69,6 +69,12 @@ class DependencyGraph {
     return InitFeatureSet(segmentation_info_, original_face_.get());
   }
 
+  // Returns the set of all glyphs that could satisfy the requirements of a
+  // pending edge. For contextual substitutions this is the union of all glyphs
+  // in all sub-groups.
+  absl::StatusOr<ift::common::GlyphSet> RequiredGlyphsFor(
+      const PendingEdge& edge) const;
+
  private:
   DependencyGraph(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
@@ -112,8 +118,6 @@ class DependencyGraph {
 
   absl::StatusOr<ift::common::GlyphSet> GetLigaSet(
       hb_codepoint_t liga_set_id) const;
-  absl::StatusOr<ift::common::GlyphSet> GetContextSet(
-      hb_codepoint_t context_set_id) const;
 
   static absl::StatusOr<absl::flat_hash_set<hb_tag_t>> FullFeatureSet(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,

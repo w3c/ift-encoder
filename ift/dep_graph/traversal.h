@@ -6,6 +6,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "ift/common/int_set.h"
 #include "ift/dep_graph/node.h"
+#include "ift/dep_graph/pending_edge.h"
 
 namespace ift::dep_graph {
 
@@ -16,6 +17,10 @@ class Traversal {
 
   void Merge(const Traversal& other) {
     has_pending_edges_ = has_pending_edges_ | other.has_pending_edges_;
+
+    for (const auto& edge : other.pending_edges_) {
+      pending_edges_.insert(edge);
+    }
 
     for (const auto& [glyph, glyphs] : other.context_per_glyph_) {
       context_per_glyph_[glyph].union_set(glyphs);
@@ -75,7 +80,13 @@ class Traversal {
     }
   }
 
-  bool HasPendingEdges() const { return has_pending_edges_; }
+  void AddPending(PendingEdge edge) { pending_edges_.insert(edge); }
+
+  bool HasPendingEdges() const { return !pending_edges_.empty(); }
+
+  const absl::btree_set<PendingEdge>& PendingEdges() const {
+    return pending_edges_;
+  }
 
   const absl::flat_hash_set<hb_tag_t>& TraversedTables() const {
     return tables_;
@@ -111,6 +122,7 @@ class Traversal {
 
  private:
   bool has_pending_edges_ = false;
+  absl::btree_set<PendingEdge> pending_edges_;
 
   ift::common::GlyphSet reached_glyphs_;
   ift::common::GlyphSet context_glyphs_;
