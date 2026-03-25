@@ -8,6 +8,7 @@
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
 
 using ift::config::Features;
@@ -235,6 +236,100 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
       result.exclusive_gids.insert(gid);
     } else {
       result.or_gids.insert(gid);
+    }
+  }
+
+  return result;
+}
+
+StatusOr<DependencyClosure::AnalysisAccuracy>
+DependencyClosure::ConjunctiveConditionDiscovery(
+    // assumes segments has been filtered and bound checked already
+    const SegmentSet& start,
+    flat_hash_map<glyph_id_t, SegmentSet>& conditions_for_glyph) const {
+  flat_hash_map<SegmentSet, GlyphSet> reached_glyphs{{{}, {}}};
+
+  btree_set<std::pair<SegmentSet, SegmentSet>> queue;
+  queue.insert(std::make_pair(SegmentSet{}, start));
+
+  AnalysisAccuracy result = ACCURATE;
+
+  while (!queue.empty()) {
+    auto next = *queue.begin();
+    queue.erase(next);
+
+    SegmentSet source;
+    SegmentSet dest;
+
+    const GlyphSet& source_glyphs = reached_glyphs.at(source);
+
+    if (!reached_glyphs.contains(dest)) {
+      Traversal traversal = TRY(graph_.ClosureTraversal(dest, true));
+      reached_glyphs[dest] = traversal.ReachedGlyphs();
+      SegmentSet edges;
+      if (TRY(ConjunctiveConditionEdges(dest, traversal, edges)) ==
+          INACCURATE) {
+        result = INACCURATE;
+      }
+
+      for (segment_index_t s : edges) {
+        SegmentSet next_dest = dest;
+        next_dest.insert(s);
+        queue.insert(std::make_pair(dest, next_dest));
+      }
+    }
+
+    GlyphSet delta = reached_glyphs.at(dest);
+    delta.subtract(source_glyphs);
+    for (glyph_id_t g : delta) {
+      auto existing = conditions_for_glyph.find(g);
+      if (existing != conditions_for_glyph.end()) {
+        if (existing->second.is_subset_of(dest)) {
+          // current condition is less granular then this one, keep current.
+          continue;
+        } else if (!dest.is_subset_of(existing->second)) {
+          // Conflicting conditions for a glyph, only assigning a compatible
+          // less granular condition is allowed.
+          result = INACCURATE;
+          continue;
+        }
+      }
+      conditions_for_glyph[g] = dest;
+    }
+  }
+
+  return result;
+}
+
+StatusOr<DependencyClosure::AnalysisAccuracy>
+DependencyClosure::ConjunctiveConditionEdges(const SegmentSet& node,
+                                             const Traversal& traversal,
+                                             SegmentSet& edges) const {
+  edges.clear();
+  AnalysisAccuracy result = ACCURATE;
+  for (const auto& pe : traversal.PendingEdges()) {
+    if (pe.required_context_set_index.has_value()) {
+      // Context edges are not supported in this analysis.
+      result = INACCURATE;
+      continue;
+    }
+
+    if (pe.required_codepoints.has_value()) {
+      // TODO XXXX add codepoints to the reachability index to support this
+      // case. Needed to support UVS.
+      result = INACCURATE;
+      continue;
+    }
+
+    if (pe.required_feature.has_value()) {
+      edges.union_set(
+          isolated_reachability_.SegmentsForFeature(*pe.required_feature));
+    }
+
+    if (pe.required_liga_set_index.has_value()) {
+      for (glyph_id_t gid : TRY(graph_.RequiredGlyphsFor(pe))) {
+        edges.union_set(isolated_reachability_.SegmentsForGlyph(gid));
+      }
     }
   }
 
