@@ -11,6 +11,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/dep_graph/traversal.h"
 #include "ift/encoder/reachability_index.h"
 #include "ift/encoder/types.h"
 
@@ -124,6 +125,16 @@ class DependencyClosure {
 
   absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
       const ift::common::SegmentSet& segments) const;
+
+  absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionDiscovery(
+      // assumes segments has been filtered and bound checked already
+      const common::SegmentSet& start,
+      absl::flat_hash_map<glyph_id_t, common::SegmentSet>& conditions_for_glyph)
+      const;
+
+  absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionEdges(
+      const common::SegmentSet& node, const dep_graph::Traversal& traversal,
+      common::SegmentSet& edges) const;
 
   // Returns true if all segments that can reach gid have accurate reachability
   // in the index. Segments in the excluded set are ignored for this check.
