@@ -128,18 +128,13 @@ class DependencyClosure {
 
   absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionDiscovery(
       // assumes segments has been filtered and bound checked already
-      const common::SegmentSet& start,
+      const common::SegmentSet& start, const common::GlyphSet& glyph_filter,
       absl::flat_hash_map<glyph_id_t, common::SegmentSet>& conditions_for_glyph)
       const;
 
   absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionEdges(
       const common::SegmentSet& node, const dep_graph::Traversal& traversal,
       common::SegmentSet& edges) const;
-
-  // Returns true if all segments that can reach gid have accurate reachability
-  // in the index. Segments in the excluded set are ignored for this check.
-  bool GlyphHasFullyAccurateReachability(
-      glyph_id_t gid, const ift::common::SegmentSet& excluded) const;
 
   AnalysisAccuracy TraversalAccuracy(
       const dep_graph::Traversal& traversal) const;
