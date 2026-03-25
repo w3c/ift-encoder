@@ -190,17 +190,12 @@ TEST_F(DependencyClosureTest, Exclusive) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
-TEST_F(DependencyClosureTest, LigaSatisfied) {
-  // As a special case if a segment fully satisifies it's liga requirements,
-  // then we can accurately analyze it.
-
-  // f or i on it's own is rejected, since liga is unsatisfied.
-  Status s = RejectedAnalysis(1);
+TEST_F(DependencyClosureTest, Liga) {
+  // Basic liga case split between should be able to be analyzed
+  Status s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(2);
+  s = CompareAnalysis({2});
   ASSERT_TRUE(s.ok()) << s;
-
-  // when f and i are both in a segment then we can analyze it.
   s = CompareAnalysis({1, 2});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({1, 2, 3});
@@ -213,6 +208,28 @@ TEST_F(DependencyClosureTest, LigaSatisfied) {
                   {{'i'}, ProbabilityBound::Zero()},
               });
   s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  // Should also work when the liga feature is in a segment
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+
+  Reconfigure({}, {
+                      {liga, ProbabilityBound::Zero()},
+                      {{'f'}, ProbabilityBound::Zero()},
+                      {{'i'}, ProbabilityBound::Zero()},
+                  });
+
+  s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({2});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = CompareAnalysis({0, 2});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1, 2});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -289,14 +306,15 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   ASSERT_TRUE(s.ok()) << s;
 
   // c2sc not in init font which A passes through.
-  s = RejectedAnalysis(2);
+  // can still be analyzed.
+  s = CompareAnalysis({2});
   ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(3);
+  s = CompareAnalysis({3});
   ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(4);
+  s = CompareAnalysis({4});
   ASSERT_TRUE(s.ok()) << s;
 
-  // With c2sc in the init font, we can now analyze the single subst's
+  // With c2sc in the init font, we can still analyze the single subst's
   Reconfigure(face.get(), c2sc,
               {
                   /* 0 */ {{'a'}, ProbabilityBound::Zero()},
@@ -350,13 +368,6 @@ TEST_F(DependencyClosureTest, AlreadyInInitFont) {
 TEST_F(DependencyClosureTest, SegmentOutOfBounds) {
   Status s = CompareAnalysis({10});
   ASSERT_TRUE(absl::IsInvalidArgument(s)) << s;
-}
-
-TEST_F(DependencyClosureTest, Rejected) {
-  Status s = RejectedAnalysis(1);
-  ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(2);
-  ASSERT_TRUE(s.ok()) << s;
 }
 
 TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
