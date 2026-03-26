@@ -92,7 +92,7 @@ class IntSet {
   explicit IntSet(const hb_set_t* set) : set_(make_hb_set()) {
     // We always keep exclusive ownership of the internal set, so copy the
     // contents of the input set instead of referencing it.
-    hb_set_union(set_.get(), set);
+    hb_set_set(set_.get(), set);
   }
 
   explicit IntSet(const hb_set_unique_ptr& set) : set_(make_hb_set()) {
@@ -233,16 +233,16 @@ class IntSet {
     return hb_set_is_subset(set_.get(), other.set_.get());
   }
 
+  static bool is_subset_of(const hb_set_t* small, const IntSet& large) {
+    return hb_set_is_subset(small, large.set_.get());
+  }
+
+  bool intersects(const hb_set_t* other) const {
+    return intersects(set_.get(), other);
+  }
+
   bool intersects(const IntSet& other) const {
-    if (this->size() > other.size()) {
-      return other.intersects(*this);
-    }
-    for (const hb_codepoint_t value : *this) {
-      if (other.contains(value)) {
-        return true;
-      }
-    }
-    return false;
+    return intersects(set_.get(), other.set_.get());
   }
 
   std::optional<hb_codepoint_t> min() const {
@@ -323,6 +323,19 @@ class IntSet {
   }
 
  private:
+  static bool intersects(const hb_set_t* a, const hb_set_t* b) {
+    if (hb_set_get_population(a) > hb_set_get_population(b)) {
+      return intersects(b, a);
+    }
+    hb_codepoint_t value = HB_CODEPOINT_INVALID;
+    while (hb_set_next(a, &value)) {
+      if (hb_set_has(b, value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Note: set_ must always point to a valid set object. nullptr is not allowed.
   // Note: we always retain exclusive ownership over set_. Normally hb_set_t*
   // can be

@@ -233,6 +233,25 @@ TEST_F(DependencyClosureTest, Liga) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, OverlappingSegments) {
+  // One half of the liga is in the init font
+  Reconfigure(face.get(), WithDefaultFeatures({}),
+              {
+                  {{'f'}, ProbabilityBound::Zero()},
+                  {{'i'}, ProbabilityBound::Zero()},
+                  {{'f', 'i'}, ProbabilityBound::Zero()},
+              });
+
+  Status s = CompareAnalysis({0});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = CompareAnalysis({1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = RejectedAnalysis(2);
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, UnicodeToGid_ExcludesInitFont) {
   // 0x7528 and 0x2F64 share the same glyph
   Reconfigure(noto_sans_jp.get(), {0x7528},
@@ -306,10 +325,11 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   ASSERT_TRUE(s.ok()) << s;
 
   // c2sc not in init font which A passes through.
-  // can still be analyzed.
+  // can still be analyzed in most cases.
   s = CompareAnalysis({2});
   ASSERT_TRUE(s.ok()) << s;
-  s = CompareAnalysis({3});
+  // rejected due to possible non-disjunctive interactions via c2sc + A
+  s = RejectedAnalysis(3);
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({4});
   ASSERT_TRUE(s.ok()) << s;

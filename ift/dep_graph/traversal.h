@@ -19,7 +19,7 @@ class Traversal {
     has_pending_edges_ = has_pending_edges_ | other.has_pending_edges_;
 
     for (const auto& edge : other.pending_edges_) {
-      pending_edges_.insert(edge);
+      pending_edges_.push_back(edge);
     }
 
     for (const auto& [glyph, glyphs] : other.context_per_glyph_) {
@@ -80,11 +80,11 @@ class Traversal {
     }
   }
 
-  void AddPending(PendingEdge edge) { pending_edges_.insert(edge); }
+  void AddPending(PendingEdge edge) { pending_edges_.push_back(edge); }
 
   bool HasPendingEdges() const { return !pending_edges_.empty(); }
 
-  const absl::btree_set<PendingEdge>& PendingEdges() const {
+  const std::vector<PendingEdge>& PendingEdges() const {
     return pending_edges_;
   }
 
@@ -122,12 +122,13 @@ class Traversal {
 
  private:
   bool has_pending_edges_ = false;
-  absl::btree_set<PendingEdge> pending_edges_;
+  std::vector<PendingEdge> pending_edges_;
 
   ift::common::GlyphSet reached_glyphs_;
   ift::common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>
       context_per_glyph_;
+
   absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>
       context_features_per_glyph_;
 

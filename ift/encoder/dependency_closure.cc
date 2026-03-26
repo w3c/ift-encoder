@@ -6,6 +6,7 @@
 #include "ift/common/int_set.h"
 #include "ift/dep_graph/dependency_graph.h"
 #include "ift/dep_graph/node.h"
+#include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/types.h"
@@ -25,6 +26,7 @@ using ift::common::IntSet;
 using ift::common::SegmentSet;
 using ift::dep_graph::DependencyGraph;
 using ift::dep_graph::Node;
+using ift::dep_graph::PendingEdge;
 using ift::dep_graph::Traversal;
 
 namespace ift::encoder {
@@ -144,6 +146,25 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
   return ACCURATE;
 }
 
+// Filters out invalid and empty segment ids.
+StatusOr<SegmentSet> DependencyClosure::FilterSegments(const SegmentSet& segments) const {
+  SegmentSet out;
+  for (segment_index_t segment_id : segments) {
+    if (segment_id >= segmentation_info_->Segments().size()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Segment index ", segment_id, " is out of bounds."));
+    }
+
+    if (segmentation_info_->Segments().at(segment_id).Definition().Empty()) {
+      // Empty segments are ignored.
+      continue;
+    }
+
+    out.insert(segment_id);
+  }
+  return out;
+}
+
 StatusOr<DependencyClosure::AnalysisResult>
 DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
@@ -161,21 +182,7 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
   AnalysisResult result;
   result.accuracy = ACCURATE;
 
-  SegmentSet start_nodes;
-  // TODO XXXX move to a helper
-  for (segment_index_t segment_id : segments) {
-    if (segment_id >= segmentation_info_->Segments().size()) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Segment index ", segment_id, " is out of bounds."));
-    }
-
-    if (segmentation_info_->Segments().at(segment_id).Definition().Empty()) {
-      // Empty segments are ignored.
-      continue;
-    }
-
-    start_nodes.insert(segment_id);
-  }
+  SegmentSet start_nodes = TRY(FilterSegments(segments));
 
   /* ### Phase 1: Figure out what glyphs we can reach and what segments are
    * needed to reach them. ### */
@@ -230,9 +237,16 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
       // Exclusive glyphs are those that are reachable only from segments in
       // start_nodes here we use isolated reachability since we're only looking
       // for things that can get to g through disjunction only.
-      const SegmentSet& isolated_parent_segments =
+      SegmentSet other_isolated_parent_segments =
           isolated_reachability_.SegmentsForGlyph(g);
-      if (isolated_parent_segments.is_subset_of(start_nodes)) {
+      other_isolated_parent_segments.subtract(start_nodes);
+      if (other_parent_segments != other_isolated_parent_segments) {
+        // Possibly reachable via non-disjunctive pathways
+        result.accuracy = INACCURATE;
+        return result;
+      }
+
+      if (other_isolated_parent_segments.empty()) {
         result.exclusive_gids.insert(g);
       } else {
         result.or_gids.insert(g);
@@ -268,6 +282,19 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
   return result;
 }
 
+btree_set<Node> DependencyClosure::CollectIsolatedReachability(
+  const SegmentSet& dest, const SegmentSet& excluded, GlyphSet& out) const {
+  btree_set<dep_graph::Node> dest_nodes;
+  for (segment_index_t s : dest) {
+    dest_nodes.insert(dep_graph::Node::Segment(s));
+    if (excluded.contains(s)) {
+      continue;
+    }
+    out.union_set(isolated_reachability_.GlyphsForSegment(s));
+  }
+  return dest_nodes;
+}
+
 StatusOr<DependencyClosure::AnalysisAccuracy>
 DependencyClosure::ConjunctiveConditionDiscovery(
     // assumes segments has been filtered and bound checked already
@@ -275,10 +302,9 @@ DependencyClosure::ConjunctiveConditionDiscovery(
     flat_hash_map<glyph_id_t, SegmentSet>& conditions_for_glyph) const {
   flat_hash_map<SegmentSet, GlyphSet> reached_glyphs{{{}, {}}};
 
+  flat_hash_set<PendingEdge> processed_pending_edges;
   btree_set<std::pair<SegmentSet, SegmentSet>> queue;
   queue.insert(std::make_pair(SegmentSet{}, start));
-
-  AnalysisAccuracy result = ACCURATE;
 
   while (!queue.empty()) {
     std::pair<SegmentSet, SegmentSet> next = *queue.begin();
@@ -289,18 +315,21 @@ DependencyClosure::ConjunctiveConditionDiscovery(
     GlyphSet source_glyphs = reached_glyphs.at(source);
 
     if (!reached_glyphs.contains(dest)) {
-      Traversal traversal = TRY(graph_.ClosureTraversal(dest, true));
+      GlyphSet traversal_glyph_filter = glyph_filter;
+      btree_set<dep_graph::Node> dest_nodes = CollectIsolatedReachability(dest, start, traversal_glyph_filter);
+
+      Traversal traversal = TRY(graph_.ClosureTraversal(dest_nodes, &traversal_glyph_filter, nullptr, true));
       reached_glyphs[dest] = traversal.ReachedGlyphs();
       reached_glyphs[dest].intersect(glyph_filter);
-      SegmentSet edges;
-      if (TRY(ConjunctiveConditionEdges(dest, traversal, edges)) ==
-          INACCURATE) {
-        result = INACCURATE;
+      btree_set<SegmentSet> edges;
+      if (TRY(ConjunctiveConditionEdges(
+              dest, traversal, processed_pending_edges, edges)) == INACCURATE) {
+        return INACCURATE;
       }
 
-      for (segment_index_t s : edges) {
+      for (const SegmentSet& segments : edges) {
         SegmentSet next_dest = dest;
-        next_dest.insert(s);
+        next_dest.union_set(segments);
         queue.insert(std::make_pair(dest, next_dest));
       }
     }
@@ -316,24 +345,44 @@ DependencyClosure::ConjunctiveConditionDiscovery(
         } else if (!dest.is_subset_of(existing->second)) {
           // Conflicting conditions for a glyph, only assigning a compatible
           // less granular condition is allowed.
-          result = INACCURATE;
-          continue;
+          return INACCURATE;
         }
       }
       conditions_for_glyph[g] = dest;
     }
   }
 
-  return result;
+  return ACCURATE;
+}
+
+static bool PickOne(const SegmentSet& options, SegmentSet& edges) {
+  // TODO XXXX should we consider cases where more than one unblocking segment
+  // exists as inaccurate (these naturally lead to (a or b) and ... type
+  // conditions)
+  auto min = options.min();
+  if (min.has_value()) {
+    edges.insert(*min);
+    return true;
+  }
+  return false;
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy>
-DependencyClosure::ConjunctiveConditionEdges(const SegmentSet& node,
-                                             const Traversal& traversal,
-                                             SegmentSet& edges) const {
-  edges.clear();
+DependencyClosure::ConjunctiveConditionEdges(
+    const SegmentSet& node, const Traversal& traversal,
+    flat_hash_set<PendingEdge>& excluded_edges,
+    // TODO XXXX edges should be a set of sets
+    btree_set<SegmentSet>& outgoing_edges) const {
+  outgoing_edges.clear();
   AnalysisAccuracy result = ACCURATE;
   for (const auto& pe : traversal.PendingEdges()) {
+    if (excluded_edges.contains(pe)) {
+      continue;
+    }
+
+    SegmentSet segments{};
+    bool is_unblocked = true;
+
     if (pe.required_context_set_index.has_value()) {
       // Context edges are not supported in this analysis.
       result = INACCURATE;
@@ -351,24 +400,37 @@ DependencyClosure::ConjunctiveConditionEdges(const SegmentSet& node,
         !segmentation_info_->InitFontSegment().feature_tags.contains(
             *pe.required_feature) &&
         !traversal.ReachedLayoutFeatures().contains(*pe.required_feature)) {
-      edges.union_set(
-          isolated_reachability_.SegmentsForFeature(*pe.required_feature));
+      is_unblocked =
+          is_unblocked && PickOne(isolated_reachability_.SegmentsForFeature(
+                                      *pe.required_feature),
+                                  segments);
     }
 
     if (pe.required_glyph.has_value() &&
         !segmentation_info_->InitFontGlyphs().contains(*pe.required_glyph) &&
         !traversal.ReachedGlyphs().contains(*pe.required_glyph)) {
-      edges.union_set(
-          isolated_reachability_.SegmentsForGlyph(*pe.required_glyph));
+      is_unblocked =
+          is_unblocked &&
+          PickOne(isolated_reachability_.SegmentsForGlyph(*pe.required_glyph),
+                  segments);
     }
 
     if (pe.required_liga_set_index.has_value()) {
       for (glyph_id_t gid : TRY(graph_.RequiredGlyphsFor(pe))) {
         if (!segmentation_info_->InitFontGlyphs().contains(gid) &&
             !traversal.ReachedGlyphs().contains(gid)) {
-          edges.union_set(isolated_reachability_.SegmentsForGlyph(gid));
+          is_unblocked =
+              is_unblocked &&
+              PickOne(isolated_reachability_.SegmentsForGlyph(gid), segments);
         }
       }
+    }
+
+    if (is_unblocked) {
+      // We were able to find a set of segments that should unblock this edge,
+      // the pending edge can now be excluded from future exploration.
+      excluded_edges.insert(pe);
+      outgoing_edges.insert(segments);
     }
   }
 
@@ -566,7 +628,8 @@ Status DependencyClosure::UpdateReachabilityIndex(SegmentSet segments) {
       break;
     }
     const AnalysisResult result = TRY(AnalyzeSegmentInternal({s}));
-    if (result.reached_glyphs ==
+    if (/* TODO XXXXX we probably want this: result.accuracy == ACCURATE && */
+        result.reached_glyphs ==
         unconstrained_reachability_.GlyphsForSegment(s)) {
       fully_explorable_segments_.insert(s);
     }
