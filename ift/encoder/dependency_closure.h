@@ -11,6 +11,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/reachability_index.h"
 #include "ift/encoder/types.h"
@@ -126,6 +127,13 @@ class DependencyClosure {
   absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
       const ift::common::SegmentSet& segments) const;
 
+  absl::StatusOr<common::SegmentSet> FilterSegments(const common::SegmentSet& segments) const;
+
+  absl::btree_set<dep_graph::Node> CollectIsolatedReachability(
+    const common::SegmentSet& segments,
+    const common::SegmentSet& excluded,
+    common::GlyphSet& out) const;
+
   absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionDiscovery(
       // assumes segments has been filtered and bound checked already
       const common::SegmentSet& start, const common::GlyphSet& glyph_filter,
@@ -134,7 +142,8 @@ class DependencyClosure {
 
   absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionEdges(
       const common::SegmentSet& node, const dep_graph::Traversal& traversal,
-      common::SegmentSet& edges) const;
+      absl::flat_hash_set<dep_graph::PendingEdge>& excluded_pending_edges,
+      absl::btree_set<common::SegmentSet>& outgoing_edges) const;
 
   AnalysisAccuracy TraversalAccuracy(
       const dep_graph::Traversal& traversal) const;

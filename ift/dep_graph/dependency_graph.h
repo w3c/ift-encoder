@@ -8,6 +8,7 @@
 #include "absl/status/statusor.h"
 #include "hb.h"
 #include "ift/common/font_data.h"
+#include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/dep_graph/node.h"
@@ -86,7 +87,8 @@ class DependencyGraph {
         unicode_to_gid_(UnicodeToGid(face)),
         dependency_graph_(depend, &hb_depend_destroy),
         variation_selector_implied_edges_(ComputeUVSEdges()),
-        layout_fature_implied_edges_(ComputeFeatureEdges()) {}
+        layout_feature_implied_edges_(ComputeFeatureEdges())
+  {}
 
   absl::StatusOr<Traversal> TraverseGraph(TraversalContext* context) const;
 
@@ -170,13 +172,16 @@ class DependencyGraph {
 
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
   ComputeUVSEdges() const;
-  absl::flat_hash_map<hb_tag_t, absl::btree_set<LayoutFeatureEdge>>
+  absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
   ComputeFeatureEdges() const;
 
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
       variation_selector_implied_edges_;
-  absl::flat_hash_map<hb_tag_t, absl::btree_set<LayoutFeatureEdge>>
-      layout_fature_implied_edges_;
+
+  absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
+      layout_feature_implied_edges_;
+
+  common::hb_set_unique_ptr scratch_set_ = common::make_hb_set();
 };
 
 }  // namespace ift::dep_graph
