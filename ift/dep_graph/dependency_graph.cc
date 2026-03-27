@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "absl/log/log.h"
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
@@ -25,6 +26,8 @@ using ift::common::GlyphSet;
 using ift::common::hb_set_unique_ptr;
 using ift::common::IntSet;
 using ift::common::make_hb_set;
+using ift::common::make_hb_font;
+using ift::common::hb_font_unique_ptr;
 using ift::common::SegmentSet;
 using ift::encoder::glyph_id_t;
 using ift::encoder::RequestedSegmentationInformation;
@@ -725,14 +728,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
       continue;
     }
 
-    if (table_tag == cmap && layout_tag != HB_CODEPOINT_INVALID) {
-      // cmap edges are tracked in a separate structure and handled in
-      // HandleUnicodeOutgoingEdges.
-      continue;
-    } else {
-      // Just a regular edge
-      context->TraverseEdgeTo(dest, table_tag);
-    }
+    context->TraverseEdgeTo(dest, table_tag);
   }
 
   return absl::OkStatus();
@@ -871,28 +867,26 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
 flat_hash_map<hb_codepoint_t,
               std::vector<DependencyGraph::VariationSelectorEdge>>
 DependencyGraph::ComputeUVSEdges() const {
+
+  hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
+  hb_face_collect_variation_selectors(original_face_.get(), vs_unicodes_hb.get());
+  CodepointSet vs_unicodes(vs_unicodes_hb.get());
+
+  hb_font_unique_ptr font = make_hb_font(hb_font_create(original_face_.get()));
+
   flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> edges;
   for (auto [u, gid] : unicode_to_gid_) {
-    hb_codepoint_t index = 0;
-    hb_tag_t table_tag = HB_CODEPOINT_INVALID;
-    hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
-    hb_codepoint_t variation_selector = HB_CODEPOINT_INVALID;
-    hb_codepoint_t ligature_set = HB_CODEPOINT_INVALID;
-    hb_codepoint_t context_set = HB_CODEPOINT_INVALID;
-    while (hb_depend_get_glyph_entry(dependency_graph_.get(), gid, index++,
-                                     &table_tag, &dep_gid, &variation_selector,
-                                     &ligature_set, &context_set,
-                                     nullptr /* flags */)) {
-      if (table_tag != cmap) {
+    for (auto vs : vs_unicodes) {
+      glyph_id_t dep_gid;
+      if (!hb_font_get_variation_glyph(font.get(), u, vs, &dep_gid)) {
         continue;
       }
 
-      // each UVS edge is two edges in reality, record both:
       edges[u].push_back(VariationSelectorEdge{
-          .unicode = variation_selector,
+          .unicode = vs,
           .gid = dep_gid,
       });
-      edges[variation_selector].push_back(VariationSelectorEdge{
+      edges[vs].push_back(VariationSelectorEdge{
           .unicode = u,
           .gid = dep_gid,
       });
