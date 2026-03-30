@@ -45,12 +45,16 @@ class Traversal {
     }
 
     reached_glyphs_.union_set(other.reached_glyphs_);
+    reached_codepoints_.union_set(other.reached_codepoints_);
     context_glyphs_.union_set(other.context_glyphs_);
   }
 
   void Visit(Node dest) {
     if (dest.IsGlyph()) {
       reached_glyphs_.insert(dest.Id());
+    }
+    if (dest.IsUnicode()) {
+      reached_codepoints_.insert(dest.Id());
     }
     if (dest.IsFeature()) {
       reached_feature_tags_.insert(dest.Id());
@@ -102,6 +106,10 @@ class Traversal {
 
   const ift::common::GlyphSet& ReachedGlyphs() const { return reached_glyphs_; }
 
+  const ift::common::CodepointSet& ReachedCodepoints() const {
+    return reached_codepoints_;
+  }
+
   const ift::common::GlyphSet& ContextGlyphs() const { return context_glyphs_; }
 
   // Map containing the context glyphs relevant to each reachable glyph.
@@ -125,6 +133,7 @@ class Traversal {
   std::vector<PendingEdge> pending_edges_;
 
   ift::common::GlyphSet reached_glyphs_;
+  ift::common::CodepointSet reached_codepoints_;
   ift::common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>
       context_per_glyph_;

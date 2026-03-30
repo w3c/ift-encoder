@@ -18,6 +18,9 @@ class ReachabilityIndex {
   // Record that glyph is reachable from segment.
   void AddGlyph(segment_index_t segment, glyph_id_t glyph);
 
+  // Record that codepoint is reachable from segment.
+  void AddCodepoint(segment_index_t segment, hb_codepoint_t codepoint);
+
   // Record that feature is reachable from segment.
   void AddFeature(segment_index_t segment, hb_tag_t feature);
 
@@ -33,6 +36,18 @@ class ReachabilityIndex {
   //
   // If no information is present for segment then an empty set is returned.
   const ift::common::GlyphSet& GlyphsForSegment(segment_index_t segment) const;
+
+  // Returns the set of segments that can reach codepoint.
+  //
+  // If no information is present for codepoint then an empty set is returned.
+  const ift::common::SegmentSet& SegmentsForCodepoint(
+      hb_codepoint_t codepoint) const;
+
+  // Returns the set of codepoints that can be reached by segment.
+  //
+  // If no information is present for segment then an empty set is returned.
+  const ift::common::CodepointSet& CodepointsForSegment(
+      segment_index_t segment) const;
 
   // Returns the set of segments that can reach feature.
   //
@@ -50,12 +65,18 @@ class ReachabilityIndex {
   absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
       glyphs_by_segment_;
 
+  absl::flat_hash_map<hb_codepoint_t, ift::common::SegmentSet>
+      segments_by_codepoint_;
+  absl::flat_hash_map<segment_index_t, ift::common::CodepointSet>
+      codepoints_by_segment_;
+
   absl::flat_hash_map<hb_tag_t, ift::common::SegmentSet> segments_by_feature_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<hb_tag_t>>
       features_by_segment_;
 
   ift::common::SegmentSet empty_segments_{};
   ift::common::GlyphSet empty_glyphs_{};
+  ift::common::CodepointSet empty_codepoints_{};
   absl::btree_set<hb_tag_t> empty_features_{};
 };
 
