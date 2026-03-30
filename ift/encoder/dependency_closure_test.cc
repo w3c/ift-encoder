@@ -35,6 +35,8 @@ class DependencyClosureTest : public ::testing::Test {
         double_nested_face(
             from_file("ift/common/testdata/double-nested-components.ttf")),
         noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
+        noto_sans_jp_vf(
+            from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
         roboto_vf(from_file("ift/common/testdata/Roboto[wdth,wght].ttf")),
         closure_cache(face.get()),
         segmentation_info(*RequestedSegmentationInformation::Create(
@@ -160,6 +162,7 @@ class DependencyClosureTest : public ::testing::Test {
   hb_face_unique_ptr face;
   hb_face_unique_ptr double_nested_face;
   hb_face_unique_ptr noto_sans_jp;
+  hb_face_unique_ptr noto_sans_jp_vf;
   hb_face_unique_ptr roboto_vf;
   GlyphClosureCache closure_cache;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
@@ -472,6 +475,46 @@ TEST_F(DependencyClosureTest, UVS) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, UvsAndFeatures_ConflictingConjunctiveConditions) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
+                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
+                  /* 6 */ {aalt, ProbabilityBound::Zero()},
+                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+              });
+
+  // Some of these are rejected since there are multiple conflicting
+  // ways of reaching their glyphs (eg. via UVS and layout features)
+  Status s = RejectedAnalysis(0);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(1);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(3);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(4);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(5);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(6);
+  ASSERT_TRUE(s.ok()) << s;
+  s = RejectedAnalysis(7);
+  ASSERT_TRUE(s.ok()) << s;
+
+  // s2 can be analyzed since it doesn't have multiple conjunctive conditions
+  s = CompareAnalysis({2});
+  ASSERT_TRUE(s.ok()) << s;
+}
+
 TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
   Reconfigure(WithDefaultFeatures({}),
               {
@@ -676,6 +719,35 @@ TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
             (SegmentSet{0, 3, 4}));
   ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({4}),
             (SegmentSet{0, 3, 4}));
+}
+
+TEST_F(DependencyClosureTest, DISABLED_SegmentInteractionGroup_LayoutFeatures) {
+  // TODO(garretrieger): Currently failing, will need to be fixed.
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+  Reconfigure(noto_sans_jp_vf.get(), {}, {
+    /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
+    /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
+    /* 2 */ {aalt, ProbabilityBound::Zero()},
+    /* 3 */ {jp78, ProbabilityBound::Zero()},
+  });
+
+  auto s = dependency_closure->SegmentsThatInteractWith({1 /* U+6406 */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{0, 2, 3}));
+
+  s = dependency_closure->SegmentsThatInteractWith({9 /* single sub of U+6406 */});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{0, 2, 3}));
+
+  // The key result here is that for s0, s1 isn't considered to be in the interaction
+  // group despite both interacting with s2 and s3 (likewise for s0).
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}), (SegmentSet{0, 2, 3}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1, 2, 3}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({2}), (SegmentSet{0, 1, 2, 3}));
+  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3}), (SegmentSet{0, 1, 2, 3}));
 }
 
 TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {

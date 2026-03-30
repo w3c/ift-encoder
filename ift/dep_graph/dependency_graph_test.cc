@@ -35,6 +35,8 @@ class DependencyGraphTest : public ::testing::Test {
       : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
         closure_cache(face.get()),
         noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
+        noto_sans_jp_vf(
+            from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures({}), closure_cache, PATCH)),
         graph(*DependencyGraph::Create(segmentation_info.get(), face.get())) {}
@@ -82,6 +84,7 @@ class DependencyGraphTest : public ::testing::Test {
 
  public:
   hb_face_unique_ptr noto_sans_jp;
+  hb_face_unique_ptr noto_sans_jp_vf;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   DependencyGraph graph;
 };
@@ -224,6 +227,49 @@ TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
                                        }));
   // the edge for the UVS sub to U+FA30 never gets traversed since it can't be
   // reached without U+FE00 present.
+  ASSERT_FALSE(traversal.HasPendingEdges());
+}
+
+TEST_F(DependencyGraphTest, IgnoreAlreadyReachedPendingEdge) {
+  Reconfigure(
+      WithDefaultFeatures({}),
+      {
+          {{'f', 0xfb01 /* fi */, 0xfb03 /* ffi */}, ProbabilityBound::Zero()},
+          {{'i'}, ProbabilityBound::Zero()},
+      });
+
+  auto r = graph.ClosureTraversal({
+      Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(),
+            (GlyphSet{
+                74 /* f */, 444 /* fi */, 446 /* ffi */
+            }));
+  // the pending edge of f AND i -> fi isn't included since fi glyph is pulled
+  // in via fb01.
+  ASSERT_FALSE(traversal.HasPendingEdges());
+}
+
+TEST_F(DependencyGraphTest, IgnoreDefaultUVS) {
+  /* <map uv="0x798f" uvs="0xe0100"/> should be ignored  */
+  Reconfigure(noto_sans_jp_vf.get(), WithDefaultFeatures({}),
+              {
+                  {{0x798f}, ProbabilityBound::Zero()},
+                  {{0xe0100}, ProbabilityBound::Zero()},
+              });
+
+  auto r = graph.ClosureTraversal({
+      Node::Segment(0),
+  });
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{5}));
+  // The UVS edge doesn't get considered since it's a default glyph
+  // subsitution (effectively a noop).
   ASSERT_FALSE(traversal.HasPendingEdges());
 }
 

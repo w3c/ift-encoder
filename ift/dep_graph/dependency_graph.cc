@@ -116,6 +116,8 @@ class TraversalContext {
   // Results of the traversal.
   Traversal traversal;
 
+  const flat_hash_set<Node>& Visited() const { return visited_; }
+
  private:
   std::vector<Node> next_{};
   flat_hash_set<Node> visited_{};
@@ -433,8 +435,9 @@ StatusOr<bool> TraversalContext::CheckPending(hb_depend_t* depend_graph) {
   auto it = pending_edges_.begin();
   while (it != pending_edges_.end()) {
     const auto& pending = *it;
-    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_, reached_glyphs_,
-                                 reached_features_))) {
+    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_,
+                                 reached_glyphs_, reached_features_))) {
+      // Edge contstraints are now satisfied, can traverse the edge.
       TRYV(DoTraversal(pending, *this));
       pending_edges_.erase(it);
     } else {
@@ -504,7 +507,10 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(
   }
 
   for (const auto& edge : context->pending_edges()) {
-    context->traversal.AddPending(edge);
+    if (!context->Visited().contains(edge.dest)) {
+      // Only output pending edges where the dest has not been reached
+      context->traversal.AddPending(edge);
+    }
   }
 
   return std::move(context->traversal);
@@ -862,6 +868,11 @@ DependencyGraph::ComputeUVSEdges() const {
     for (auto vs : vs_unicodes) {
       glyph_id_t dep_gid;
       if (!hb_font_get_variation_glyph(font.get(), u, vs, &dep_gid)) {
+        continue;
+      }
+
+      if (dep_gid == gid) {
+        // default mapping, gid isn't changed so we can ignore.
         continue;
       }
 
