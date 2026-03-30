@@ -127,12 +127,12 @@ class DependencyClosure {
   absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
       const ift::common::SegmentSet& segments) const;
 
-  absl::StatusOr<common::SegmentSet> FilterSegments(const common::SegmentSet& segments) const;
+  absl::StatusOr<common::SegmentSet> FilterSegments(
+      const common::SegmentSet& segments) const;
 
   absl::btree_set<dep_graph::Node> CollectIsolatedReachability(
-    const common::SegmentSet& segments,
-    const common::SegmentSet& excluded,
-    common::GlyphSet& out) const;
+      const common::SegmentSet& segments, const common::SegmentSet& excluded,
+      common::GlyphSet& out) const;
 
   absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionDiscovery(
       // assumes segments has been filtered and bound checked already

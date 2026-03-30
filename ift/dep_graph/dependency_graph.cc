@@ -24,11 +24,11 @@ using absl::StatusOr;
 using ift::common::CodepointSet;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
+using ift::common::hb_font_unique_ptr;
 using ift::common::hb_set_unique_ptr;
 using ift::common::IntSet;
-using ift::common::make_hb_set;
 using ift::common::make_hb_font;
-using ift::common::hb_font_unique_ptr;
+using ift::common::make_hb_set;
 using ift::common::SegmentSet;
 using ift::encoder::glyph_id_t;
 using ift::encoder::RequestedSegmentationInformation;
@@ -128,13 +128,12 @@ class TraversalContext {
   GlyphSet reached_glyphs_;
   flat_hash_set<hb_tag_t> reached_features_;
 
-  // To avoid creating and destroying sets every time we pull a liga or context set
-  // from the dep graph api store a scratch set that's reused.
+  // To avoid creating and destroying sets every time we pull a liga or context
+  // set from the dep graph api store a scratch set that's reused.
   hb_set_unique_ptr scratch_set_ = make_hb_set();
   hb_set_unique_ptr scratch_set_aux_ = make_hb_set();
 
  public:
-
   TraversalContext() = default;
 
   TraversalContext(const TraversalContext& other) {
@@ -265,7 +264,8 @@ class TraversalContext {
   Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
                                 hb_tag_t feature,
                                 hb_codepoint_t liga_set_index) {
-    // TODO(garretrieger): can we use glyph filter here instead for more aggressive filtering?
+    // TODO(garretrieger): can we use glyph filter here instead for more
+    // aggressive filtering?
     if (!TRY(LigaSetSatisfied(liga_set_index, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
@@ -349,9 +349,9 @@ class TraversalContext {
   }
 
   StatusOr<bool> ConstraintsSatisfied(
-    const PendingEdge& edge,
-    const CodepointSet& reached_unicodes, const GlyphSet& reached_glyphs,
-    const flat_hash_set<hb_tag_t>& reached_features) {
+      const PendingEdge& edge, const CodepointSet& reached_unicodes,
+      const GlyphSet& reached_glyphs,
+      const flat_hash_set<hb_tag_t>& reached_features) {
     if (edge.required_glyph.has_value() &&
         !reached_glyphs.contains(*edge.required_glyph)) {
       return false;
@@ -369,8 +369,7 @@ class TraversalContext {
     }
 
     if (edge.required_liga_set_index.has_value() &&
-        !TRY(LigaSetSatisfied(*edge.required_liga_set_index,
-                              reached_glyphs))) {
+        !TRY(LigaSetSatisfied(*edge.required_liga_set_index, reached_glyphs))) {
       return false;
     }
 
@@ -434,8 +433,8 @@ StatusOr<bool> TraversalContext::CheckPending(hb_depend_t* depend_graph) {
   auto it = pending_edges_.begin();
   while (it != pending_edges_.end()) {
     const auto& pending = *it;
-    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_,
-                                 reached_glyphs_, reached_features_))) {
+    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_, reached_glyphs_,
+                                 reached_features_))) {
       TRYV(DoTraversal(pending, *this));
       pending_edges_.erase(it);
     } else {
@@ -457,8 +456,8 @@ Status TraversalContext::TraverseEdgeTo(Node dest, PendingEdge edge,
   }
 
   if (enforce_context &&
-      !TRY(ConstraintsSatisfied(edge, reached_unicodes_,
-                                reached_glyphs_, reached_features_))) {
+      !TRY(ConstraintsSatisfied(edge, reached_unicodes_, reached_glyphs_,
+                                reached_features_))) {
     Pending(edge);
   } else {
     TRYV(DoTraversal(edge, *this));
@@ -676,8 +675,8 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
   while (hb_depend_get_glyph_entry(
       dependency_graph_.get(), gid, index++, &table_tag, &dep_gid, &layout_tag,
       &ligature_set, &context_set, nullptr /* flags */)) {
-
-    if (context->glyph_filter != nullptr && !context->glyph_filter->contains(dep_gid)) {
+    if (context->glyph_filter != nullptr &&
+        !context->glyph_filter->contains(dep_gid)) {
       continue;
     }
 
@@ -723,7 +722,8 @@ Status DependencyGraph::HandleFeatureOutgoingEdges(
     return absl::OkStatus();
   }
   for (const auto& edge : edges->second) {
-    if (context->glyph_filter != nullptr && !context->glyph_filter->contains(edge.dest_gid)) {
+    if (context->glyph_filter != nullptr &&
+        !context->glyph_filter->contains(edge.dest_gid)) {
       continue;
     }
 
@@ -850,9 +850,9 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
 flat_hash_map<hb_codepoint_t,
               std::vector<DependencyGraph::VariationSelectorEdge>>
 DependencyGraph::ComputeUVSEdges() const {
-
   hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
-  hb_face_collect_variation_selectors(original_face_.get(), vs_unicodes_hb.get());
+  hb_face_collect_variation_selectors(original_face_.get(),
+                                      vs_unicodes_hb.get());
   CodepointSet vs_unicodes(vs_unicodes_hb.get());
 
   hb_font_unique_ptr font = make_hb_font(hb_font_create(original_face_.get()));

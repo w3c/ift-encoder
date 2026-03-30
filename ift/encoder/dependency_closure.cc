@@ -147,7 +147,8 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 }
 
 // Filters out invalid and empty segment ids.
-StatusOr<SegmentSet> DependencyClosure::FilterSegments(const SegmentSet& segments) const {
+StatusOr<SegmentSet> DependencyClosure::FilterSegments(
+    const SegmentSet& segments) const {
   SegmentSet out;
   for (segment_index_t segment_id : segments) {
     if (segment_id >= segmentation_info_->Segments().size()) {
@@ -283,7 +284,7 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
 }
 
 btree_set<Node> DependencyClosure::CollectIsolatedReachability(
-  const SegmentSet& dest, const SegmentSet& excluded, GlyphSet& out) const {
+    const SegmentSet& dest, const SegmentSet& excluded, GlyphSet& out) const {
   btree_set<dep_graph::Node> dest_nodes;
   for (segment_index_t s : dest) {
     dest_nodes.insert(dep_graph::Node::Segment(s));
@@ -316,9 +317,11 @@ DependencyClosure::ConjunctiveConditionDiscovery(
 
     if (!reached_glyphs.contains(dest)) {
       GlyphSet traversal_glyph_filter = glyph_filter;
-      btree_set<dep_graph::Node> dest_nodes = CollectIsolatedReachability(dest, start, traversal_glyph_filter);
+      btree_set<dep_graph::Node> dest_nodes =
+          CollectIsolatedReachability(dest, start, traversal_glyph_filter);
 
-      Traversal traversal = TRY(graph_.ClosureTraversal(dest_nodes, &traversal_glyph_filter, nullptr, true));
+      Traversal traversal = TRY(graph_.ClosureTraversal(
+          dest_nodes, &traversal_glyph_filter, nullptr, true));
       reached_glyphs[dest] = traversal.ReachedGlyphs();
       reached_glyphs[dest].intersect(glyph_filter);
       btree_set<SegmentSet> edges;
@@ -393,14 +396,14 @@ DependencyClosure::ConjunctiveConditionEdges(
       if (!segmentation_info_->InitFontSegment().codepoints.contains(cp1) &&
           !traversal.ReachedCodepoints().contains(cp1)) {
         is_unblocked =
-            is_unblocked && PickOne(isolated_reachability_.SegmentsForCodepoint(cp1),
-                                    segments);
+            is_unblocked &&
+            PickOne(isolated_reachability_.SegmentsForCodepoint(cp1), segments);
       }
       if (!segmentation_info_->InitFontSegment().codepoints.contains(cp2) &&
           !traversal.ReachedCodepoints().contains(cp2)) {
         is_unblocked =
-            is_unblocked && PickOne(isolated_reachability_.SegmentsForCodepoint(cp2),
-                                    segments);
+            is_unblocked &&
+            PickOne(isolated_reachability_.SegmentsForCodepoint(cp2), segments);
       }
     }
 
