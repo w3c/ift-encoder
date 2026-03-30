@@ -87,8 +87,7 @@ class DependencyGraph {
         unicode_to_gid_(UnicodeToGid(face)),
         dependency_graph_(depend, &hb_depend_destroy),
         variation_selector_implied_edges_(ComputeUVSEdges()),
-        layout_feature_implied_edges_(ComputeFeatureEdges())
-  {}
+        layout_feature_implied_edges_(ComputeFeatureEdges()) {}
 
   absl::StatusOr<Traversal> TraverseGraph(TraversalContext* context) const;
 
