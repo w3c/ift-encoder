@@ -2,7 +2,6 @@
 #define IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 
 #include <memory>
-#include <optional>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -11,13 +10,13 @@
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
-#include "ift/dep_graph/pending_edge.h"
-#include "ift/dep_graph/traversal.h"
 #include "ift/encoder/reachability_index.h"
 #include "ift/encoder/types.h"
 
 #ifdef HB_DEPEND_API
 #include "ift/dep_graph/dependency_graph.h"
+#include "ift/dep_graph/pending_edge.h"
+#include "ift/dep_graph/traversal.h"
 #endif
 
 namespace ift::encoder {

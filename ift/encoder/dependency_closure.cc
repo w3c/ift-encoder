@@ -359,9 +359,6 @@ DependencyClosure::ConjunctiveConditionDiscovery(
 }
 
 static bool PickOne(const SegmentSet& options, SegmentSet& edges) {
-  // TODO XXXX should we consider cases where more than one unblocking segment
-  // exists as inaccurate (these naturally lead to (a or b) and ... type
-  // conditions)
   auto min = options.min();
   if (min.has_value()) {
     edges.insert(*min);
@@ -477,8 +474,13 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
       }
 
       // now check if any segments can reach it.
+      auto segments = unconstrained_reachability_.SegmentsForGlyph(gid);
+      if (segments.empty()) {
+        continue;
+      }
+
       TRYV(ReachabilitySegmentsAddToCheck(
-          unconstrained_reachability_.SegmentsForGlyph(gid), visited_segments,
+          segments, visited_segments,
           visited_glyphs, visited_features, to_check, features_to_check));
 
     } else if (!features_to_check.empty()) {
@@ -487,8 +489,13 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
       visited_features.insert(feature);
 
       // now check if any segments can reach it.
+      auto segments = unconstrained_reachability_.SegmentsForFeature(feature);
+      if (segments.empty()) {
+        continue;
+      }
+
       TRYV(ReachabilitySegmentsAddToCheck(
-          unconstrained_reachability_.SegmentsForFeature(feature),
+          segments,
           visited_segments, visited_glyphs, visited_features, to_check,
           features_to_check));
     }
@@ -597,6 +604,7 @@ Status DependencyClosure::ReachabilitySegmentsAddToCheck(
     }
 
     visited_segments.insert(s);
+    // TODO XXXXX can this utilize the unconstrained/context index?
     auto traversal = TRY(graph_.ClosureTraversal({s}, false));
 
     GlyphSet additional = traversal.ContextGlyphs();
@@ -639,8 +647,7 @@ Status DependencyClosure::UpdateReachabilityIndex(SegmentSet segments) {
       break;
     }
     const AnalysisResult result = TRY(AnalyzeSegmentInternal({s}));
-    if (/* TODO XXXXX we probably want this: result.accuracy == ACCURATE && */
-        result.reached_glyphs ==
+    if (result.reached_glyphs ==
         unconstrained_reachability_.GlyphsForSegment(s)) {
       fully_explorable_segments_.insert(s);
     }
