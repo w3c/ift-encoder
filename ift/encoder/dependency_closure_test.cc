@@ -434,23 +434,19 @@ TEST_F(DependencyClosureTest, Noop_Features) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
-TEST_F(DependencyClosureTest, Rejected_UVS) {
+TEST_F(DependencyClosureTest, UVS) {
   Reconfigure(noto_sans_jp.get(), {},
               {
                   {{0x4fae}, ProbabilityBound::Zero()},
                   {{0xfe00}, ProbabilityBound::Zero()},
               });
 
-  // Unsatisfied UVS constraints aren't supported yet
-  // for accurate analysis.
-  Status s = RejectedAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = RejectedAnalysis(1);
+  s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 
-  // However, if the constraints are satisfied then
-  // analysis is allowed.
   s = CompareAnalysis({0, 1});
   ASSERT_TRUE(s.ok()) << s;
 

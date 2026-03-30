@@ -49,20 +49,42 @@ TEST(ReachabilityIndexTest, FeatureReachability) {
   EXPECT_THAT(index.FeaturesForSegment(20), ElementsAre(f1));
 }
 
+TEST(ReachabilityIndexTest, CodepointReachability) {
+  ReachabilityIndex index;
+
+  EXPECT_THAT(index.SegmentsForCodepoint(1), IsEmpty());
+  EXPECT_THAT(index.CodepointsForSegment(10), IsEmpty());
+
+  index.AddCodepoint(10, 1);
+  index.AddCodepoint(10, 2);
+  index.AddCodepoint(20, 1);
+
+  EXPECT_THAT(index.SegmentsForCodepoint(1), ElementsAre(10, 20));
+  EXPECT_THAT(index.SegmentsForCodepoint(2), ElementsAre(10));
+  EXPECT_THAT(index.SegmentsForCodepoint(3), IsEmpty());
+
+  EXPECT_THAT(index.CodepointsForSegment(10), ElementsAre(1, 2));
+  EXPECT_THAT(index.CodepointsForSegment(20), ElementsAre(1));
+  EXPECT_THAT(index.CodepointsForSegment(30), IsEmpty());
+}
+
 TEST(ReachabilityIndexTest, ClearSegment) {
   ReachabilityIndex index;
   hb_tag_t f1 = HB_TAG('l', 'i', 'g', 'a');
 
   index.AddGlyph(10, 1);
   index.AddGlyph(20, 1);
+  index.AddCodepoint(10, 100);
   index.AddFeature(10, f1);
 
   index.ClearSegment(10);
 
   EXPECT_THAT(index.GlyphsForSegment(10), IsEmpty());
+  EXPECT_THAT(index.CodepointsForSegment(10), IsEmpty());
   EXPECT_THAT(index.FeaturesForSegment(10), IsEmpty());
 
   EXPECT_THAT(index.SegmentsForGlyph(1), ElementsAre(20));
+  EXPECT_THAT(index.SegmentsForCodepoint(100), IsEmpty());
   EXPECT_THAT(index.SegmentsForFeature(f1), IsEmpty());
 }
 

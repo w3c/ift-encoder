@@ -371,7 +371,6 @@ StatusOr<DependencyClosure::AnalysisAccuracy>
 DependencyClosure::ConjunctiveConditionEdges(
     const SegmentSet& node, const Traversal& traversal,
     flat_hash_set<PendingEdge>& excluded_edges,
-    // TODO XXXX edges should be a set of sets
     btree_set<SegmentSet>& outgoing_edges) const {
   outgoing_edges.clear();
   AnalysisAccuracy result = ACCURATE;
@@ -390,10 +389,19 @@ DependencyClosure::ConjunctiveConditionEdges(
     }
 
     if (pe.required_codepoints.has_value()) {
-      // TODO XXXX add codepoints to the reachability index to support this
-      // case. Needed to support UVS.
-      result = INACCURATE;
-      continue;
+      auto [cp1, cp2] = *pe.required_codepoints;
+      if (!segmentation_info_->InitFontSegment().codepoints.contains(cp1) &&
+          !traversal.ReachedCodepoints().contains(cp1)) {
+        is_unblocked =
+            is_unblocked && PickOne(isolated_reachability_.SegmentsForCodepoint(cp1),
+                                    segments);
+      }
+      if (!segmentation_info_->InitFontSegment().codepoints.contains(cp2) &&
+          !traversal.ReachedCodepoints().contains(cp2)) {
+        is_unblocked =
+            is_unblocked && PickOne(isolated_reachability_.SegmentsForCodepoint(cp2),
+                                    segments);
+      }
     }
 
     if (pe.required_feature.has_value() &&
@@ -648,6 +656,9 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
     for (glyph_id_t g : constrained_traversal.ReachedGlyphs()) {
       isolated_reachability_.AddGlyph(s, g);
     }
+    for (hb_codepoint_t cp : constrained_traversal.ReachedCodepoints()) {
+      isolated_reachability_.AddCodepoint(s, cp);
+    }
     for (hb_tag_t f : constrained_traversal.ReachedLayoutFeatures()) {
       isolated_reachability_.AddFeature(s, f);
     }
@@ -656,6 +667,10 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
   auto traversal = TRY(graph_.ClosureTraversal({s}, false));
   for (glyph_id_t g : traversal.ReachedGlyphs()) {
     unconstrained_reachability_.AddGlyph(s, g);
+  }
+
+  for (hb_codepoint_t cp : traversal.ReachedCodepoints()) {
+    unconstrained_reachability_.AddCodepoint(s, cp);
   }
 
   for (hb_tag_t f : traversal.ReachedLayoutFeatures()) {
