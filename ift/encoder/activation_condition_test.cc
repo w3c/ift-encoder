@@ -373,4 +373,62 @@ TEST(ActivationConditionTest, MergedProbability) {
           .status()));
 }
 
+TEST(ActivationConditionTest, And) {
+  auto a = ActivationCondition::or_segments({1, 2}, 10);
+  auto b = ActivationCondition::or_segments({3}, 11);
+
+  auto combined_ab = ActivationCondition::And(a, b);
+  EXPECT_EQ(combined_ab.ToString(), "if ((s1 OR s2) AND s3) then p10");
+  EXPECT_EQ(combined_ab.activated(), 10);
+  EXPECT_FALSE(combined_ab.IsExclusive());
+  EXPECT_FALSE(combined_ab.IsFallback());
+
+  auto combined_ba = ActivationCondition::And(b, a);
+  EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
+  EXPECT_EQ(combined_ba.activated(), 11);
+}
+
+TEST(ActivationConditionTest, And_Simplification) {
+  auto a = ActivationCondition::or_segments({1, 2}, 10);
+  auto b = ActivationCondition::or_segments({1}, 10);
+
+  auto combined_ab = ActivationCondition::And(a, b);
+  EXPECT_EQ(combined_ab.ToString(), "if (s1) then p10");
+
+  // common elements but not subsets, no simplification
+  auto c = ActivationCondition::or_segments({1, 2}, 10);
+  auto d = ActivationCondition::or_segments({1, 3}, 10);
+  auto combined_cd = ActivationCondition::And(c, d);
+  EXPECT_EQ(combined_cd.ToString(), "if ((s1 OR s2) AND (s1 OR s3)) then p10");
+}
+
+TEST(ActivationConditionTest, Or) {
+  auto a = ActivationCondition::and_segments({1, 2}, 10);
+  auto b = ActivationCondition::and_segments({3, 4}, 11);
+
+  auto combined_ab = ActivationCondition::Or(a, b);
+  EXPECT_EQ(combined_ab.ToString(),
+            "if ((s1 OR s3) AND (s1 OR s4) AND (s2 OR s3) AND (s2 OR s4)) "
+            "then p10");
+  EXPECT_EQ(combined_ab.activated(), 10);
+  EXPECT_FALSE(combined_ab.IsExclusive());
+  EXPECT_FALSE(combined_ab.IsFallback());
+
+  auto combined_ba = ActivationCondition::Or(b, a);
+  EXPECT_EQ(combined_ba.activated(), 11);
+  EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
+}
+
+TEST(ActivationConditionTest, Or_Simplification) {
+  auto a = ActivationCondition::and_segments({1, 2}, 10);
+  auto b = ActivationCondition::and_segments({2, 3}, 10);
+
+  auto combined_ab = ActivationCondition::Or(a, b);
+  EXPECT_EQ(combined_ab.ToString(), "if ((s1 OR s3) AND s2) then p10");
+  EXPECT_EQ(combined_ab.activated(), 10);
+
+  auto combined_ba = ActivationCondition::Or(b, a);
+  EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
+}
+
 }  // namespace ift::encoder

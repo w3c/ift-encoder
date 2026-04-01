@@ -1,5 +1,7 @@
 #include "ift/encoder/activation_condition.h"
 
+#include <algorithm>
+
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
@@ -69,6 +71,75 @@ ActivationCondition ActivationCondition::composite_condition(
   }
 
   return conditions;
+}
+
+static void Simplify(std::vector<SegmentSet>& conditions) {
+  if (conditions.size() <= 1) return;
+
+  // Conditions can be simplified by removing duplicate and/or subset sub-conditions.
+  // For example if one sub-condition is a subset of another ((s1) AND (s1 or s2)),
+  // then the larger sub-condition (s1 or s2) is not necessary and can be dropped.
+
+  // Sort by size to ensure that if A is a subset of B, then A comes before B.
+  std::sort(conditions.begin(), conditions.end(),
+            [](const SegmentSet& a, const SegmentSet& b) {
+              return a.size() < b.size();
+            });
+
+  std::vector<uint8_t> redundant(conditions.size(), 0);
+  for (size_t i = 0; i < conditions.size(); ++i) {
+    if (redundant[i]) continue;
+    for (size_t j = i + 1; j < conditions.size(); ++j) {
+      if (redundant[j]) continue;
+      if (conditions[i].is_subset_of(conditions[j])) {
+        redundant[j] = 1;
+      }
+    }
+  }
+
+  size_t write_index = 0;
+  for (size_t i = 0; i < conditions.size(); ++i) {
+    if (redundant[i]) {
+      continue;
+    }
+    if (write_index != i) {
+      conditions[write_index] = std::move(conditions[i]);
+    }
+    write_index++;
+  }
+  conditions.erase(conditions.begin() + write_index, conditions.end());
+
+  // Final sort to normalize the order of conditions.
+  std::sort(conditions.begin(), conditions.end());
+}
+
+ActivationCondition ActivationCondition::And(const ActivationCondition& a,
+                                             const ActivationCondition& b) {
+  ActivationCondition condition = a;
+  condition.conditions_.insert(condition.conditions_.end(),
+                               b.conditions().begin(), b.conditions().end());
+  Simplify(condition.conditions_);
+  condition.is_exclusive_ = false;
+  return condition;
+}
+
+ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
+                                            const ActivationCondition& b) {
+  ActivationCondition condition = a;
+  condition.conditions_.clear();
+  condition.conditions_.reserve(a.conditions().size() * b.conditions().size());
+
+  for (const auto& a_group : a.conditions()) {
+    for (const auto& b_group : b.conditions()) {
+      SegmentSet combined_group = a_group;
+      combined_group.union_set(b_group);
+      condition.conditions_.push_back(std::move(combined_group));
+    }
+  }
+
+  Simplify(condition.conditions_);
+  condition.is_exclusive_ = false;
+  return condition;
 }
 
 std::string ActivationCondition::ToString() const {

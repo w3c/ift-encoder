@@ -51,6 +51,20 @@ class ActivationCondition {
   static ActivationCondition composite_condition(
       absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated);
 
+  // Returns a new activation condition that activates on (a && b)
+  //
+  // The new condition uses the values for the other fields
+  // from condition a (eg. activated, encoding).
+  static ActivationCondition And(const ActivationCondition& a,
+                                 const ActivationCondition& b);
+
+  // Returns a new activation condition that activates on (a || b)
+  //
+  // The new condition uses the values for the other fields
+  // from condition a (eg. activated, encoding).
+  static ActivationCondition Or(const ActivationCondition& a,
+                                const ActivationCondition& b);
+
   /*
    * Converts a list of activation conditions into a list of condition entries
    * which are used by the encoder to specify conditions.
