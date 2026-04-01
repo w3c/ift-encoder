@@ -14,6 +14,11 @@ namespace ift::encoder {
 
 /*
  * The conditions under which a patch should be laoded.
+ *
+ * The condition is encoded as a monotonic CNF (Conjunctive Normal Form) boolean
+ * expression:
+ *
+ * (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...
  */
 class ActivationCondition {
  public:
@@ -99,6 +104,28 @@ class ActivationCondition {
 
   bool IsUnitary() const {
     return conditions().size() == 1 && conditions().at(0).size() == 1;
+  }
+
+  // Returns true if the condition is of the form
+  // a OR b f OR c ... with no conjunction.
+  bool IsPurelyDisjunctive() const {
+    return conditions().size() == 1;
+  }
+
+  // Returns true if the condition is of the form
+  // a AND b AND c ... with no disjunction.
+  bool IsPurelyConjunctive() const {
+    if (conditions().size() == 1) {
+      return false;
+    }
+
+    for (const auto& segments : conditions()) {
+      if (segments.size() > 1) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   // Compute and return the probability that this condition will be activated
