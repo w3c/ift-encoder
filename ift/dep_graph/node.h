@@ -74,6 +74,7 @@ class Node {
   }
 
  private:
+  Node() = delete;
   Node(uint32_t id, NodeType type) : id_(id), type_(type) {}
   uint32_t id_;
   NodeType type_;

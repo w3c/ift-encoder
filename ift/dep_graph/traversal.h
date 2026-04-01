@@ -1,7 +1,6 @@
 #ifndef IFT_DEP_GRAPH_TRAVERSAL_H_
 #define IFT_DEP_GRAPH_TRAVERSAL_H_
 
-#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "ift/common/int_set.h"
@@ -24,12 +23,6 @@ class Traversal {
 
     for (const auto& [glyph, glyphs] : other.context_per_glyph_) {
       context_per_glyph_[glyph].union_set(glyphs);
-    }
-
-    for (const auto& [glyph, features] : other.context_features_per_glyph_) {
-      for (hb_tag_t f : features) {
-        context_features_per_glyph_[glyph].insert(f);
-      }
     }
 
     for (hb_tag_t f : other.reached_feature_tags_) {
@@ -70,9 +63,6 @@ class Traversal {
     Visit(dest);
     tables_.insert(HB_TAG('G', 'S', 'U', 'B'));
     context_feature_tags_.insert(feature);
-    if (dest.IsGlyph()) {
-      context_features_per_glyph_[dest.Id()].insert(feature);
-    }
   }
 
   void VisitContextual(Node dest, hb_tag_t feature,
@@ -100,10 +90,6 @@ class Traversal {
     return reached_feature_tags_;
   }
 
-  const absl::flat_hash_set<hb_tag_t>& ContextLayoutFeatures() const {
-    return context_feature_tags_;
-  }
-
   const ift::common::GlyphSet& ReachedGlyphs() const { return reached_glyphs_; }
 
   const ift::common::CodepointSet& ReachedCodepoints() const {
@@ -116,11 +102,6 @@ class Traversal {
   const absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>&
   ContextPerGlyph() const {
     return context_per_glyph_;
-  }
-
-  const absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>&
-  ContextFeaturesPerGlyph() const {
-    return context_features_per_glyph_;
   }
 
   // Returns true if at least one traversed edge has some sort of extra
@@ -137,9 +118,6 @@ class Traversal {
   ift::common::GlyphSet context_glyphs_;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::GlyphSet>
       context_per_glyph_;
-
-  absl::flat_hash_map<encoder::glyph_id_t, absl::btree_set<hb_tag_t>>
-      context_features_per_glyph_;
 
   absl::flat_hash_set<hb_tag_t> reached_feature_tags_;
   absl::flat_hash_set<hb_tag_t> context_feature_tags_;

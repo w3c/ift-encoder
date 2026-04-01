@@ -9,6 +9,7 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/init_subset_defaults.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
@@ -112,9 +113,14 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   SegmentSet segments_with_changed_defs;
   uint32_t s_index = 0;
   for (auto& s : segmentation_info_->Segments()) {
-    // TODO XXXXX this also needs to handle features?
     if (s.Definition().codepoints.intersects(new_def.codepoints)) {
       segments_with_changed_defs.insert(s_index);
+    }
+    for (hb_tag_t f : s.Definition().feature_tags) {
+      if (new_def.feature_tags.contains(f)) {
+        segments_with_changed_defs.insert(s_index);
+        break;
+      }
     }
     s_index++;
   }
@@ -125,11 +131,12 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
         0, segmentation_info_->Segments().size() - 1);
   }
   if (dependency_closure_.has_value()) {
+    SubsetDefinition new_def_delta = new_def;
+    new_def_delta.Subtract(SegmentationInfo().InitFontSegment());
     // If dep graph is enabled we can use it to narrow the set of segments that
     // need reprocessing.
     segments_to_reprocess =
-        TRY((*dependency_closure_)
-                ->SegmentInteractionGroup(segments_with_changed_defs));
+        TRY((*dependency_closure_)->SegmentsThatInteractWith(new_def_delta));
   }
 
   TRYV(segmentation_info_->ReassignInitSubset(*glyph_closure_cache, new_def));

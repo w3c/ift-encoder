@@ -11,12 +11,14 @@
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/encoder/reachability_index.h"
+#include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
 #ifdef HB_DEPEND_API
 #include "ift/dep_graph/dependency_graph.h"
 #include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
+#include "ift/dep_graph/node.h"
 #endif
 
 namespace ift::encoder {
@@ -90,16 +92,23 @@ class DependencyClosure {
   absl::Status SegmentsChanged(bool init_font_changed,
                                const ift::common::SegmentSet& segments);
 
-  // Finds the complete set of segments that may have some interaction on the
-  // presence of glyphs in the glyph closure.
+  // The collection of SegmentsThatInteractWith(...) methods are used to
+  // locate segments that have interactions with unicodes/features/glyphs.
+  //
+  // Interaction is defined as: given a node n, a segment interacts with
+  // n if the segment can influence the presence in the glyph
+  // closure of n or any things that depend on n (directly or indirectly).
   //
   // Utilizes the dependency graph to make the determination, so it's possible
   // that the result may be overestimated.
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
-      const ift::common::GlyphSet& glyphs);
-
-  absl::StatusOr<ift::common::SegmentSet> SegmentInteractionGroup(
-      const ift::common::SegmentSet& segments);
+      const common::GlyphSet& glyphs) const;
+  absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
+      const SubsetDefinition& def) const;
+#ifdef HB_DEPEND_API
+  absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
+      const absl::flat_hash_set<dep_graph::Node> nodes) const;
+#endif
 
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
@@ -151,20 +160,14 @@ class DependencyClosure {
       hb_face_t* face);
 
   void ReachabilityInitFontAddToCheck(
-      ift::common::GlyphSet& visited_glyphs,
-      absl::btree_set<hb_tag_t>& visited_features,
-      ift::common::GlyphSet& to_check,
-      absl::btree_set<hb_tag_t>& features_to_check) const;
+      const common::GlyphSet& visited_glyphs,
+      absl::btree_set<dep_graph::Node>& to_check) const;
+
   absl::Status ReachabilitySegmentsAddToCheck(
       const ift::common::SegmentSet& segments,
+      const common::GlyphSet& visited_glyphs,
       ift::common::SegmentSet& visited_segments,
-      ift::common::GlyphSet& visited_glyphs,
-      absl::btree_set<hb_tag_t>& visited_features,
-      ift::common::GlyphSet& to_check,
-      absl::btree_set<hb_tag_t>& features_to_check) const;
-
-  ift::common::SegmentSet ConnectedSegments(segment_index_t s);
-  ift::common::SegmentSet InitFontConnections();
+      absl::btree_set<dep_graph::Node>& to_check) const;
 
   absl::Status UpdateReachabilityIndex(ift::common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
@@ -177,7 +180,6 @@ class DependencyClosure {
   ift::common::GlyphSet init_font_reachable_glyphs_;
   ift::common::GlyphSet init_font_context_glyphs_;
   absl::flat_hash_set<hb_tag_t> init_font_features_;
-  absl::flat_hash_set<hb_tag_t> init_font_context_features_;
 
   // Reachability indexes: these indexes are used to quickly locate segments
   // reachable from glyph and features (and in reverse as well).

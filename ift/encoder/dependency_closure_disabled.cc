@@ -25,14 +25,14 @@ StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
-    const GlyphSet& glyphs) {
+    const GlyphSet& glyphs) const {
   return absl::UnimplementedError(
       "Depdency graph functionality was disabled during compilation and is "
       "unvailable");
 }
 
-StatusOr<SegmentSet> DependencyClosure::SegmentInteractionGroup(
-    const SegmentSet& segments) {
+StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
+      const SubsetDefinition& def) const {
   return absl::UnimplementedError(
       "Depdency graph functionality was disabled during compilation and is "
       "unvailable");

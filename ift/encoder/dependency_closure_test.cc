@@ -8,6 +8,7 @@
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/config/common.pb.h"
+#include "ift/dep_graph/node.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/requested_segmentation_information.h"
@@ -23,7 +24,9 @@ using ift::common::CodepointSet;
 using ift::common::FontData;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_font;
 using ift::common::SegmentSet;
+using ift::dep_graph::Node;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -568,6 +571,59 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
+                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
+                  /* 6 */ {aalt, ProbabilityBound::Zero()},
+                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+              });
+
+  auto s =
+      dependency_closure->SegmentsThatInteractWith({Node::Unicode(0x6717)});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{0, 4, 5}));
+
+  s = dependency_closure->SegmentsThatInteractWith(
+      {Node::Glyph(6 /* U+6717 UVS alt */)});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{0, 4, 5}));
+
+  s = dependency_closure->SegmentsThatInteractWith(
+      {Node::Unicode(0x798f), Node::Feature(HB_TAG('j', 'p', '7', '8'))});
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{2, 5, 7}));
+}
+
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_SubsetDef) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
+                  /* 2 */ {aalt, ProbabilityBound::Zero()},
+              });
+
+  SubsetDefinition query_def;
+  query_def.codepoints = {0x6406};
+  query_def.feature_tags = {HB_TAG('a', 'a', 'l', 't')};
+
+  auto s = dependency_closure->SegmentsThatInteractWith(query_def);
+  ASSERT_TRUE(s.ok()) << s.status();
+  ASSERT_EQ(*s, (SegmentSet{0, 2}));
+}
+
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
   Reconfigure(WithDefaultFeatures(), {
                                          {{'a'}, ProbabilityBound::Zero()},
@@ -576,23 +632,23 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
                                          {{'i'}, ProbabilityBound::Zero()},
                                      });
 
-  auto s = dependency_closure->SegmentsThatInteractWith({69 /* a */});
+  auto s = dependency_closure->SegmentsThatInteractWith(GlyphSet{69 /* a */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{0}));
 
-  s = dependency_closure->SegmentsThatInteractWith({70 /* b */});
+  s = dependency_closure->SegmentsThatInteractWith(GlyphSet{70 /* b */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{1}));
 
-  s = dependency_closure->SegmentsThatInteractWith({69, 70});
+  s = dependency_closure->SegmentsThatInteractWith(GlyphSet{69, 70});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{0, 1}));
 
-  s = dependency_closure->SegmentsThatInteractWith({74 /* f */});
+  s = dependency_closure->SegmentsThatInteractWith(GlyphSet{74 /* f */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2}));
 
-  s = dependency_closure->SegmentsThatInteractWith({444});
+  s = dependency_closure->SegmentsThatInteractWith(GlyphSet{444});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
@@ -609,7 +665,8 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
   ASSERT_EQ(segmentation_info->FullClosure(),
             (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
-  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  auto s = dependency_closure->SegmentsThatInteractWith(
+      GlyphSet{609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
@@ -628,7 +685,8 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
   ASSERT_EQ(segmentation_info->FullClosure(),
             (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
-  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  auto s = dependency_closure->SegmentsThatInteractWith(
+      GlyphSet{609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2, 3, 4}));
 }
@@ -644,7 +702,8 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
   ASSERT_EQ(segmentation_info->FullClosure(),
             (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
-  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  auto s = dependency_closure->SegmentsThatInteractWith(
+      GlyphSet{609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2}));
 }
@@ -663,91 +722,38 @@ TEST_F(DependencyClosureTest,
   ASSERT_EQ(segmentation_info->FullClosure(),
             (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
 
-  auto s = dependency_closure->SegmentsThatInteractWith({609 /* dotlessi */});
+  auto s = dependency_closure->SegmentsThatInteractWith(
+      GlyphSet{609 /* dotlessi */});
   ASSERT_TRUE(s.ok()) << s.status();
   ASSERT_EQ(*s, (SegmentSet{2, 3}));
 }
 
-TEST_F(DependencyClosureTest, SegmentInteractionGroup) {
-  SubsetDefinition ccmp;
-  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
-  SubsetDefinition liga;
-  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  Reconfigure(liga,
-              {
-                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'x'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 4 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                  /* 5 */ {{ccmp}, ProbabilityBound::Zero()},
-              });
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1}));
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 2}),
-            (SegmentSet{1, 2}));
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
-            (SegmentSet{0, 3, 4, 5}));
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3, 5}),
-            (SegmentSet{0, 3, 4, 5}));
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1, 3, 5}),
-            (SegmentSet{0, 1, 3, 4, 5}));
-}
-
-TEST_F(DependencyClosureTest, SegmentInteractionGroup_WithInitFont) {
-  SubsetDefinition ccmp;
-  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
-  SubsetDefinition liga{'i'};
-  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  Reconfigure(liga,
-              {
-                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'x'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                  /* 4 */ {{ccmp}, ProbabilityBound::Zero()},
-              });
-
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}),
-            (SegmentSet{0, 3, 4}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3}),
-            (SegmentSet{0, 3, 4}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({4}),
-            (SegmentSet{0, 3, 4}));
-}
-
-TEST_F(DependencyClosureTest, DISABLED_SegmentInteractionGroup_LayoutFeatures) {
-  // TODO(garretrieger): Currently failing, will need to be fixed.
+TEST_F(DependencyClosureTest, SegmentsThatInteractWith_LayoutFeatures) {
   SubsetDefinition aalt;
   aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
   SubsetDefinition jp78;
   jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
-  Reconfigure(noto_sans_jp_vf.get(), {}, {
-    /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
-    /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
-    /* 2 */ {aalt, ProbabilityBound::Zero()},
-    /* 3 */ {jp78, ProbabilityBound::Zero()},
-  });
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
+                  /* 2 */ {aalt, ProbabilityBound::Zero()},
+                  /* 3 */ {jp78, ProbabilityBound::Zero()},
+              });
 
-  auto s = dependency_closure->SegmentsThatInteractWith({1 /* U+6406 */});
+  auto s =
+      dependency_closure->SegmentsThatInteractWith(GlyphSet{1 /* U+6406 */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet{0, 2, 3}));
+  // g1 is only mapped from cmap, so only segment s0 interacts with it.
+  ASSERT_EQ(*s, (SegmentSet{0}));
 
-  s = dependency_closure->SegmentsThatInteractWith({9 /* single sub of U+6406 */});
+  s = dependency_closure->SegmentsThatInteractWith(
+      GlyphSet{9 /* single sub of U+6406 */});
   ASSERT_TRUE(s.ok()) << s.status();
+  // The key result here is that for s1 isn't considered to be in the
+  // interaction group despite both interacting with s2 and s3 (likewise for
+  // s0).
   ASSERT_EQ(*s, (SegmentSet{0, 2, 3}));
-
-  // The key result here is that for s0, s1 isn't considered to be in the interaction
-  // group despite both interacting with s2 and s3 (likewise for s0).
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({0}), (SegmentSet{0, 2, 3}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({1}), (SegmentSet{1, 2, 3}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({2}), (SegmentSet{0, 1, 2, 3}));
-  ASSERT_EQ(*dependency_closure->SegmentInteractionGroup({3}), (SegmentSet{0, 1, 2, 3}));
 }
 
 TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
