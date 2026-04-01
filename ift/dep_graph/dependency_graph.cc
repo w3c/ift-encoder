@@ -435,8 +435,8 @@ StatusOr<bool> TraversalContext::CheckPending(hb_depend_t* depend_graph) {
   auto it = pending_edges_.begin();
   while (it != pending_edges_.end()) {
     const auto& pending = *it;
-    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_,
-                                 reached_glyphs_, reached_features_))) {
+    if (TRY(ConstraintsSatisfied(pending, reached_unicodes_, reached_glyphs_,
+                                 reached_features_))) {
       // Edge contstraints are now satisfied, can traverse the edge.
       TRYV(DoTraversal(pending, *this));
       pending_edges_.erase(it);
