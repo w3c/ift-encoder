@@ -122,9 +122,7 @@ class ActivationCondition {
 
   // Returns true if the condition is of the form
   // a OR b f OR c ... with no conjunction.
-  bool IsPurelyDisjunctive() const {
-    return conditions().size() == 1;
-  }
+  bool IsPurelyDisjunctive() const { return conditions().size() == 1; }
 
   // Returns true if the condition is of the form
   // a AND b AND c ... with no disjunction.

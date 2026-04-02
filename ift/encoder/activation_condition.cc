@@ -76,9 +76,10 @@ ActivationCondition ActivationCondition::composite_condition(
 static void Simplify(std::vector<SegmentSet>& conditions) {
   if (conditions.size() <= 1) return;
 
-  // Conditions can be simplified by removing duplicate and/or subset sub-conditions.
-  // For example if one sub-condition is a subset of another ((s1) AND (s1 or s2)),
-  // then the larger sub-condition (s1 or s2) is not necessary and can be dropped.
+  // Conditions can be simplified by removing duplicate and/or subset
+  // sub-conditions. For example if one sub-condition is a subset of another
+  // ((s1) AND (s1 or s2)), then the larger sub-condition (s1 or s2) is not
+  // necessary and can be dropped.
 
   // Sort by size to ensure that if A is a subset of B, then A comes before B.
   std::sort(conditions.begin(), conditions.end(),

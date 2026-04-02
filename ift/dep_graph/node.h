@@ -68,6 +68,8 @@ class Node {
 
   bool operator!=(const Node& other) const { return !(*this == other); }
 
+  friend void PrintTo(const Node& node, std::ostream* os);
+
   template <typename H>
   friend H AbslHashValue(H h, const Node& n) {
     return H::combine(std::move(h), n.id_, n.type_);

@@ -32,7 +32,7 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
-      const SubsetDefinition& def) const {
+    const SubsetDefinition& def) const {
   return absl::UnimplementedError(
       "Depdency graph functionality was disabled during compilation and is "
       "unvailable");

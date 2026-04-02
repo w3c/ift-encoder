@@ -217,6 +217,17 @@ class FontHelper {
   static std::string ToString(hb_tag_t tag);
   static hb_tag_t ToTag(const std::string& tag);
 
+  static absl::StatusOr<hb_codepoint_t> GetNominalGlyph(
+      hb_face_t* face, hb_codepoint_t codepoint) {
+    hb_font_unique_ptr font = make_hb_font(hb_font_create(face));
+    hb_codepoint_t gid = 0;
+    if (!hb_font_get_nominal_glyph(font.get(), codepoint, &gid)) {
+      return absl::NotFoundError(
+          absl::StrCat("No nominal glyph for codepoint: ", codepoint));
+    }
+    return gid;
+  }
+
  private:
   template <int num_bits, typename int_type_t>
   static void WriteInt(int_type_t value, std::string& out) {
