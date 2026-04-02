@@ -82,6 +82,7 @@ static StatusOr<GlyphSet> GetContextSet(
 }
 
 // Tracks the details of an inprogress traversal.
+template<typename CallbackT>
 class TraversalContext {
  public:
   hb_depend_t* depend = nullptr;
@@ -113,15 +114,10 @@ class TraversalContext {
   // reached).
   bool enforce_context = false;
 
-  // Results of the traversal.
-  Traversal traversal;
-
-  const flat_hash_set<Node>& Visited() const { return visited_; }
+  // Informed of the results of traversal
+  CallbackT callback;
 
  private:
-  std::vector<Node> next_{};
-  flat_hash_set<Node> visited_{};
-
   // These track information about things that are needed to
   // activate context which is not yet seen.
   std::vector<PendingEdge> pending_edges_;
@@ -147,10 +143,8 @@ class TraversalContext {
     feature_filter = other.feature_filter;
     node_type_filter = other.node_type_filter;
     enforce_context = other.enforce_context;
-    traversal = other.traversal;
+    callback = other.callback;
 
-    next_ = other.next_;
-    visited_ = other.visited_;
     pending_edges_ = other.pending_edges_;
     reached_unicodes_ = other.reached_unicodes_;
     reached_glyphs_ = other.reached_glyphs_;
@@ -158,7 +152,7 @@ class TraversalContext {
   }
 
   // Sets the nodes from which traversal starts.
-  void SetStartNodes(const btree_set<Node>& start) {
+  void SetReached(const btree_set<Node>& start) {
     for (Node node : start) {
       Reached(node);
     }
@@ -178,14 +172,7 @@ class TraversalContext {
   }
 
   // Returns the next node to be visited.
-  std::optional<Node> GetNext() {
-    if (next_.empty()) {
-      return std::nullopt;
-    }
-    Node node = next_.back();
-    next_.pop_back();
-    return node;
-  }
+
 
   // This checks all pending edges and if any have their constraints satisfied
   // then they are traversed. Returns true if there are now more nodes in the
@@ -206,17 +193,14 @@ class TraversalContext {
   // other than table tag
   void TraverseEdgeTo(Node dest,
                       std::optional<hb_tag_t> table_tag = std::nullopt) {
-    if (!ShouldFollow(dest, std::nullopt)) {
-      return;
-    }
-    if (table_tag.has_value() && !table_filter.contains(*table_tag)) {
+    if (!ShouldFollow(dest, table_tag, std::nullopt)) {
       return;
     }
 
     if (table_tag.has_value()) {
-      traversal.Visit(dest, *table_tag);
+      callback.Visit(dest, *table_tag);
     } else {
-      traversal.Visit(dest);
+      callback.Visit(dest);
     }
     Reached(dest);
   }
@@ -280,13 +264,6 @@ class TraversalContext {
   }
 
   void Reached(Node node) {
-    auto [_, did_insert] = visited_.insert(node);
-    if (!did_insert) {
-      return;
-    }
-
-    next_.push_back(node);
-
     if (!enforce_context) {
       return;
     }
@@ -386,8 +363,16 @@ class TraversalContext {
 
   void Pending(PendingEdge edge) { pending_edges_.push_back(edge); }
 
-  bool ShouldFollow(Node node, std::optional<hb_tag_t> layout_feature) const {
+  bool ShouldFollow(
+    Node node,
+    std::optional<hb_tag_t> table_tag,
+    std::optional<hb_tag_t> layout_feature) const {
+
     if (!node.Matches(node_type_filter)) {
+      return false;
+    }
+
+    if (table_tag.has_value() && !table_filter.contains(*table_tag)) {
       return false;
     }
 
@@ -412,26 +397,74 @@ class TraversalContext {
   }
 };
 
-static Status DoTraversal(const PendingEdge& edge, TraversalContext& context) {
+void DependencyGraph::ClosureState::Visit(Node dest) {
+  traversal.Visit(dest);
+  Reached(dest);
+}
+
+void DependencyGraph::ClosureState::Visit(Node dest, hb_tag_t table) {
+  traversal.Visit(dest, table);
+  Reached(dest);
+}
+
+void DependencyGraph::ClosureState::VisitGsub(Node dest, hb_tag_t feature) {
+  traversal.VisitGsub(dest, feature);
+  Reached(dest);
+}
+
+void DependencyGraph::ClosureState::VisitContextual(Node dest, hb_tag_t feature, GlyphSet context_glyphs) {
+  traversal.VisitContextual(dest, feature, context_glyphs);
+  Reached(dest);
+}
+
+std::optional<Node> DependencyGraph::ClosureState::GetNext() {
+  if (next.empty()) {
+    return std::nullopt;
+  }
+  Node node = next.back();
+  next.pop_back();
+  return node;
+}
+
+bool DependencyGraph::ClosureState::Reached(Node node) {
+  auto [_, did_insert] = visited.insert(node);
+  if (!did_insert) {
+    return false;
+  }
+
+  next.push_back(node);
+  return true;
+}
+
+void DependencyGraph::ClosureState::SetStartNodes(const absl::btree_set<Node>& start) {
+  for (Node node : start) {
+    Reached(node);
+  }
+}
+
+template<typename CallbackT>
+static Status DoTraversal(const PendingEdge& edge, TraversalContext<CallbackT>& context) {
   if (edge.table_tag == GSUB && edge.required_feature.has_value()) {
     if (edge.required_context_set_index.has_value()) {
       GlyphSet context_glyphs =
           TRY(GetContextSet(context.depend, context.full_closure,
                             *edge.required_context_set_index));
-      context.traversal.VisitContextual(edge.dest, *edge.required_feature,
+      context.callback.VisitContextual(edge.dest, *edge.required_feature,
                                         context_glyphs);
     } else {
-      context.traversal.VisitGsub(edge.dest, *edge.required_feature);
+      context.callback.VisitGsub(edge.dest, *edge.required_feature);
     }
   } else {
-    context.traversal.Visit(edge.dest, edge.table_tag);
+    context.callback.Visit(edge.dest, edge.table_tag);
   }
 
   context.Reached(edge.dest);
   return absl::OkStatus();
 }
 
-StatusOr<bool> TraversalContext::CheckPending(hb_depend_t* depend_graph) {
+template<typename CallbackT>
+StatusOr<bool> TraversalContext<CallbackT>::CheckPending(hb_depend_t* depend_graph) {
+  bool did_work = false;
   auto it = pending_edges_.begin();
   while (it != pending_edges_.end()) {
     const auto& pending = *it;
@@ -440,21 +473,19 @@ StatusOr<bool> TraversalContext::CheckPending(hb_depend_t* depend_graph) {
       // Edge contstraints are now satisfied, can traverse the edge.
       TRYV(DoTraversal(pending, *this));
       pending_edges_.erase(it);
+      did_work = true;
     } else {
       it++;
     }
   }
 
-  return !next_.empty();
+  return did_work;
 }
 
-Status TraversalContext::TraverseEdgeTo(Node dest, PendingEdge edge,
+template<typename CallbackT>
+Status TraversalContext<CallbackT>::TraverseEdgeTo(Node dest, PendingEdge edge,
                                         hb_tag_t table_tag) {
-  if (!table_filter.contains(table_tag)) {
-    return absl::OkStatus();
-  }
-
-  if (!ShouldFollow(dest, edge.required_feature)) {
+  if (!ShouldFollow(dest, table_tag, edge.required_feature)) {
     return absl::OkStatus();
   }
 
@@ -469,14 +500,15 @@ Status TraversalContext::TraverseEdgeTo(Node dest, PendingEdge edge,
   return absl::OkStatus();
 }
 
+
 StatusOr<Traversal> DependencyGraph::TraverseGraph(
-    TraversalContext* context) const {
+    TraversalContext<ClosureState>* context) const {
   VLOG(1) << "DependencyGraph::TraverseGraph(...)";
 
   while (true) {
-    std::optional<Node> next = context->GetNext();
+    std::optional<Node> next = context->callback.GetNext();
     if (!next.has_value()) {
-      if (TRY(context->CheckPending(dependency_graph_.get()))) {
+      if (TRY(context->CheckPending(dependency_graph_.get())) && !context->callback.next.empty()) {
         continue;
       } else {
         // nothing left to traverse.
@@ -507,13 +539,13 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(
   }
 
   for (const auto& edge : context->pending_edges()) {
-    if (!context->Visited().contains(edge.dest)) {
+    if (!context->callback.visited.contains(edge.dest)) {
       // Only output pending edges where the dest has not been reached
-      context->traversal.AddPending(edge);
+      context->callback.traversal.AddPending(edge);
     }
   }
 
-  return std::move(context->traversal);
+  return std::move(context->callback.traversal);
 }
 
 StatusOr<Traversal> DependencyGraph::ClosureTraversal(
@@ -564,7 +596,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   // _populate_gids_to_retain() from
   // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
 
-  TraversalContext base_context;
+  TraversalContext<ClosureState> base_context;
   base_context.depend = dependency_graph_.get();
   base_context.unicode_filter =
       unicode_filter_ptr ? unicode_filter_ptr : &non_init_font_codepoints;
@@ -581,7 +613,8 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   /* ### Phase 1 + 2: Unicode and Unicode to glyph */
   {
     TraversalContext context = base_context;
-    context.SetStartNodes(nodes);
+    context.SetReached(nodes);
+    context.callback.SetStartNodes(nodes);
     context.table_filter = {cmap};
     context.node_type_filter = Node::NodeType::INIT_FONT |
                                Node::NodeType::SEGMENT |
@@ -619,7 +652,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 }
 
 Status DependencyGraph::ClosureSubTraversal(
-    const TraversalContext* base_context, hb_tag_t table,
+    const TraversalContext<ClosureState>* base_context, hb_tag_t table,
     Traversal& traversal_full) const {
   btree_set<Node> start_nodes;
   for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
@@ -634,16 +667,18 @@ Status DependencyGraph::ClosureSubTraversal(
     }
   }
 
-  TraversalContext context = *base_context;
-  context.SetStartNodes(start_nodes);
+  TraversalContext<ClosureState> context = *base_context;
+  context.SetReached(start_nodes);
+  context.callback.SetStartNodes(start_nodes);
   context.table_filter = {table};
   context.node_type_filter = Node::NodeType::GLYPH;
   traversal_full.Merge(TRY(TraverseGraph(&context)));
   return absl::OkStatus();
 }
 
+template<typename CallbackT>
 Status DependencyGraph::HandleUnicodeOutgoingEdges(
-    hb_codepoint_t unicode, TraversalContext* context) const {
+    hb_codepoint_t unicode, TraversalContext<CallbackT>* context) const {
   {
     auto it = unicode_to_gid_.find(unicode);
     if (it != unicode_to_gid_.end()) {
@@ -669,8 +704,9 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
   return absl::OkStatus();
 }
 
+template<typename CallbackT>
 Status DependencyGraph::HandleGlyphOutgoingEdges(
-    glyph_id_t gid, TraversalContext* context) const {
+    glyph_id_t gid, TraversalContext<CallbackT>* context) const {
   hb_codepoint_t index = 0;
   hb_tag_t table_tag = HB_CODEPOINT_INVALID;
   hb_codepoint_t dep_gid = HB_CODEPOINT_INVALID;
@@ -699,10 +735,11 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
   return absl::OkStatus();
 }
 
+template<typename CallbackT>
 Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
     glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t layout_tag,
     hb_codepoint_t ligature_set, hb_codepoint_t context_set,
-    TraversalContext* context) const {
+    TraversalContext<CallbackT>* context) const {
   if (context_set != HB_CODEPOINT_INVALID) {
     return context->TraverseContextualEdgeTo(source_gid, dest_gid, layout_tag,
                                              context_set);
@@ -714,8 +751,9 @@ Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
   }
 }
 
+template<typename CallbackT>
 Status DependencyGraph::HandleFeatureOutgoingEdges(
-    hb_tag_t feature_tag, TraversalContext* context) const {
+    hb_tag_t feature_tag, TraversalContext<CallbackT>* context) const {
   if (!context->table_filter.contains(GSUB)) {
     // All feature edges are GSUB edges so we can skip
     // this if GSUB is being filtered out.
@@ -740,8 +778,9 @@ Status DependencyGraph::HandleFeatureOutgoingEdges(
   return absl::OkStatus();
 }
 
+template<typename CallbackT>
 void DependencyGraph::HandleSegmentOutgoingEdges(
-    segment_index_t id, TraversalContext* context) const {
+    segment_index_t id, TraversalContext<CallbackT>* context) const {
   if (id >= segmentation_info_->Segments().size()) {
     // Unknown segment has no outgoing edges.
     return;
@@ -751,8 +790,9 @@ void DependencyGraph::HandleSegmentOutgoingEdges(
   HandleSubsetDefinitionOutgoingEdges(s.Definition(), context);
 }
 
+template<typename CallbackT>
 void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
-    const SubsetDefinition& subset_def, TraversalContext* context) const {
+    const SubsetDefinition& subset_def, TraversalContext<CallbackT>* context) const {
   for (hb_codepoint_t u : subset_def.codepoints) {
     context->TraverseEdgeTo(Node::Unicode(u));
   }
