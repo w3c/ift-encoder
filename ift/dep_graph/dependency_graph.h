@@ -22,6 +22,7 @@ class RequestedSegmentationInformation;
 
 namespace ift::dep_graph {
 
+template<typename CallbackT>
 class TraversalContext;
 
 /*
@@ -89,33 +90,55 @@ class DependencyGraph {
         variation_selector_implied_edges_(ComputeUVSEdges()),
         layout_feature_implied_edges_(ComputeFeatureEdges()) {}
 
-  absl::StatusOr<Traversal> TraverseGraph(TraversalContext* context) const;
+  struct ClosureState {
+    std::vector<Node> next{};
+    absl::flat_hash_set<Node> visited{};
+    Traversal traversal;
 
-  absl::Status ClosureSubTraversal(const TraversalContext* base_context,
+    void Visit(Node dest);
+    void Visit(Node dest, hb_tag_t table);
+    void VisitGsub(Node dest, hb_tag_t feature);
+    void VisitContextual(Node dest, hb_tag_t feature,
+                       ift::common::GlyphSet context_glyphs);
+
+    std::optional<Node> GetNext();
+    bool Reached(Node node);
+    void SetStartNodes(const absl::btree_set<Node>& start);
+  };
+
+  absl::StatusOr<Traversal> TraverseGraph(TraversalContext<ClosureState>* context) const;
+
+  absl::Status ClosureSubTraversal(const TraversalContext<ClosureState>* base_context,
                                    hb_tag_t table, Traversal& traversal) const;
 
+  template<typename CallbackT>
   absl::Status HandleUnicodeOutgoingEdges(hb_codepoint_t unicode,
-                                          TraversalContext* context) const;
+                                          TraversalContext<CallbackT>* context) const;
 
+  template<typename CallbackT>
   absl::Status HandleGlyphOutgoingEdges(encoder::glyph_id_t gid,
-                                        TraversalContext* context) const;
+                                        TraversalContext<CallbackT>* context) const;
 
+  template<typename CallbackT>
   absl::Status HandleGsubGlyphOutgoingEdges(encoder::glyph_id_t source_gid,
                                             encoder::glyph_id_t dest_gid,
                                             hb_tag_t layout_tag,
                                             hb_codepoint_t ligature_set,
                                             hb_codepoint_t context_set,
-                                            TraversalContext* context) const;
+                                            TraversalContext<CallbackT>* context) const;
 
+  template<typename CallbackT>
   absl::Status HandleFeatureOutgoingEdges(hb_tag_t feature_tag,
-                                          TraversalContext* context) const;
+                                          TraversalContext<CallbackT>* context) const;
 
+  template<typename CallbackT>
   void HandleSegmentOutgoingEdges(encoder::segment_index_t id,
-                                  TraversalContext* context) const;
+                                  TraversalContext<CallbackT>* context) const;
 
+  template<typename CallbackT>
   void HandleSubsetDefinitionOutgoingEdges(
       const encoder::SubsetDefinition& subset_def,
-      TraversalContext* context) const;
+      TraversalContext<CallbackT>* context) const;
 
   absl::StatusOr<ift::common::GlyphSet> GetLigaSet(
       hb_codepoint_t liga_set_id) const;
