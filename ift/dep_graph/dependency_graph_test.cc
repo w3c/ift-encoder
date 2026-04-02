@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
@@ -18,6 +19,7 @@ using ift::config::PATCH;
 using absl::flat_hash_map;
 using ift::common::CodepointSet;
 using ift::common::FontData;
+using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::encoder::glyph_id_t;
@@ -26,6 +28,7 @@ using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::freq::ProbabilityBound;
+using ::testing::UnorderedElementsAre;
 
 namespace ift::dep_graph {
 
@@ -79,6 +82,7 @@ class DependencyGraphTest : public ::testing::Test {
       /* 2 */ {{'i'}, ProbabilityBound::Zero()},
   };
 
+ protected:
   hb_face_unique_ptr face;
   GlyphClosureCache closure_cache;
 
@@ -427,6 +431,105 @@ TEST_F(DependencyGraphTest, RequiredGlyphsFor_Liga) {
     }
   }
   EXPECT_TRUE(found_fi);
+}
+
+static int GetIndex(const std::vector<Node>& topo_order, Node n) {
+  for (int i = 0; i < (int)topo_order.size(); ++i) {
+    if (topo_order[i] == n) return i;
+  }
+  return -1;
+}
+
+TEST_F(DependencyGraphTest, TopologicalSorting) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  Reconfigure({}, {
+                      {{'a'}, ProbabilityBound::Zero()},
+                      {{'f'}, ProbabilityBound::Zero()},
+                      {{'i'}, ProbabilityBound::Zero()},
+                      {liga, ProbabilityBound::Zero()},
+                  });
+
+  auto topo_order_or = graph.TopologicalSorting();
+  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+  const std::vector<Node>& topo_order = *topo_order_or;
+  glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
+  glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
+  glyph_id_t gid_i = *FontHelper::GetNominalGlyph(face.get(), 'i');
+
+  glyph_id_t gid_fi = *FontHelper::GetNominalGlyph(face.get(), 0xfb01);
+  glyph_id_t gid_ffi = *FontHelper::GetNominalGlyph(face.get(), 0xfb03);
+
+  Node liga_node = Node::Feature(HB_TAG('l', 'i', 'g', 'a'));
+
+  ASSERT_THAT(topo_order,
+              UnorderedElementsAre(
+                  Node::Segment(0), Node::Segment(1), Node::Segment(2),
+                  Node::Segment(3), Node::Unicode('a'), Node::Unicode('f'),
+                  Node::Unicode('i'), Node::Glyph(gid_a), Node::Glyph(gid_f),
+                  Node::Glyph(gid_i), Node::Glyph(gid_fi), Node::Glyph(gid_ffi),
+                  liga_node));
+
+  // Now check relative ordering of the elements
+  int s0 = GetIndex(topo_order, Node::Segment(0));
+  int s1 = GetIndex(topo_order, Node::Segment(1));
+  int s2 = GetIndex(topo_order, Node::Segment(2));
+  int s3 = GetIndex(topo_order, Node::Segment(3));
+
+  int ua = GetIndex(topo_order, Node::Unicode('a'));
+  int uf = GetIndex(topo_order, Node::Unicode('f'));
+  int ui = GetIndex(topo_order, Node::Unicode('i'));
+
+  int ga = GetIndex(topo_order, Node::Glyph(gid_a));
+  int gf = GetIndex(topo_order, Node::Glyph(gid_f));
+  int gi = GetIndex(topo_order, Node::Glyph(gid_i));
+  int gfi = GetIndex(topo_order, Node::Glyph(gid_fi));
+  int gffi = GetIndex(topo_order, Node::Glyph(gid_ffi));
+
+  int liga_f = GetIndex(topo_order, liga_node);
+
+  EXPECT_LT(s0, ua);
+  EXPECT_LT(s1, uf);
+  EXPECT_LT(s2, ui);
+  EXPECT_LT(s3, liga_f);
+
+  EXPECT_LT(ua, ga);
+  EXPECT_LT(uf, gf);
+  EXPECT_LT(ui, gi);
+
+  EXPECT_LT(gf, gfi);
+  EXPECT_LT(gf, gffi);
+  EXPECT_LT(gi, gfi);
+  EXPECT_LT(gi, gffi);
+
+  EXPECT_LT(liga_f, gfi);
+  EXPECT_LT(liga_f, gffi);
+}
+
+TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  SubsetDefinition dlig;
+  dlig.feature_tags = {HB_TAG('d', 'l', 'i', 'g')};
+
+  Reconfigure(WithDefaultFeatures({'f', 'i'}),
+              {
+                  {{'a'}, ProbabilityBound::Zero()},
+                  {dlig, ProbabilityBound::Zero()},
+              });
+
+  auto topo_order_or = graph.TopologicalSorting();
+  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+  const std::vector<Node>& topo_order = *topo_order_or;
+
+  glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
+
+  // Init font items should not be present in the ordering.
+  ASSERT_THAT(topo_order,
+              UnorderedElementsAre(Node::Segment(0), Node::Segment(1),
+                                   Node::Unicode('a'), Node::Glyph(gid_a),
+                                   Node::Glyph(443 /* dlig ff */),
+                                   Node::Feature(HB_TAG('d', 'l', 'i', 'g'))));
 }
 
 // TODO(garretrieger):

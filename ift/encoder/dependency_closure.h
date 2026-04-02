@@ -16,9 +16,9 @@
 
 #ifdef HB_DEPEND_API
 #include "ift/dep_graph/dependency_graph.h"
+#include "ift/dep_graph/node.h"
 #include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
-#include "ift/dep_graph/node.h"
 #endif
 
 namespace ift::encoder {

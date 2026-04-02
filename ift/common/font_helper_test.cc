@@ -667,6 +667,25 @@ TEST_F(FontHelperTest, GidsToUnicodes) {
             (CodepointSet{0x33, 0x2F64, 0x7528}));
 }
 
+TEST_F(FontHelperTest, GetNominalGlyph) {
+  auto g_a = FontHelper::GetNominalGlyph(roboto.get(), 'a');
+  ASSERT_TRUE(g_a.ok());
+  EXPECT_EQ(*g_a, 69);
+
+  auto g_b = FontHelper::GetNominalGlyph(roboto.get(), 'b');
+  ASSERT_TRUE(g_b.ok());
+  EXPECT_EQ(*g_b, 70);
+
+  auto g_fi = FontHelper::GetNominalGlyph(roboto.get(), 0xfb01 /* fi */);
+  ASSERT_TRUE(g_fi.ok());
+  EXPECT_EQ(*g_fi, 444);
+
+  auto g_invalid =
+      FontHelper::GetNominalGlyph(roboto.get(), 0xffff /* invalid */);
+  EXPECT_FALSE(g_invalid.ok());
+  EXPECT_TRUE(absl::IsNotFound(g_invalid.status()));
+}
+
 // TODO test BuildFont...
 
 }  // namespace ift::common
