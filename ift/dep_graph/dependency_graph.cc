@@ -833,6 +833,22 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
     context->TraverseEdgeTo(dest, table_tag);
   }
 
+  auto it = context_glyph_implied_edges_.find(gid);
+  if (it == context_glyph_implied_edges_.end()) {
+    return absl::OkStatus();
+  }
+
+  for (const auto& edge : it->second) {
+    if (context->glyph_filter != nullptr &&
+        !context->glyph_filter->contains(edge.dest_gid)) {
+      continue;
+    }
+
+    TRYV(HandleGsubGlyphOutgoingEdges(edge.source_gid, edge.dest_gid,
+                                      edge.layout_tag, edge.ligature_set,
+                                      edge.context_set, context));
+  }
+
   return absl::OkStatus();
 }
 
@@ -995,6 +1011,37 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
   return glyphs;
 }
 
+flat_hash_map<glyph_id_t, std::vector<DependencyGraph::LayoutFeatureEdge>>
+DependencyGraph::ComputeContextGlyphEdges() const {
+  flat_hash_map<glyph_id_t, btree_set<LayoutFeatureEdge>> edges;
+  for (const auto& [tag, feature_edges] : layout_feature_implied_edges_) {
+    for (const auto& edge : feature_edges) {
+      if (edge.context_set == HB_CODEPOINT_INVALID) {
+        continue;
+      }
+
+      StatusOr<GlyphSet> context_glyphs =
+            GetContextSet(dependency_graph_.get(), nullptr, edge.context_set);
+      if (!context_glyphs.ok()) {
+        continue;
+      }
+      for (glyph_id_t gid : *context_glyphs) {
+        edges[gid].insert(edge);
+      }
+    }
+  }
+
+  flat_hash_map<glyph_id_t, std::vector<LayoutFeatureEdge>> out;
+  for (auto& [gid, edge_set] : edges) {
+    auto& edges_out = out[gid];
+    for (const auto& edge : edge_set) {
+      edges_out.push_back(edge);
+    }
+  }
+
+  return out;
+}
+
 flat_hash_map<hb_codepoint_t,
               std::vector<DependencyGraph::VariationSelectorEdge>>
 DependencyGraph::ComputeUVSEdges() const {
@@ -1052,6 +1099,7 @@ DependencyGraph::ComputeFeatureEdges() const {
       }
 
       edges[layout_tag].insert(LayoutFeatureEdge{
+          .layout_tag = layout_tag,
           .source_gid = gid,
           .dest_gid = dest_gid,
           .ligature_set = ligature_set,

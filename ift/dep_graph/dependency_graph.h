@@ -92,7 +92,8 @@ class DependencyGraph {
         unicode_to_gid_(UnicodeToGid(face)),
         dependency_graph_(depend, &hb_depend_destroy),
         variation_selector_implied_edges_(ComputeUVSEdges()),
-        layout_feature_implied_edges_(ComputeFeatureEdges()) {}
+        layout_feature_implied_edges_(ComputeFeatureEdges()),
+        context_glyph_implied_edges_(ComputeContextGlyphEdges()) {}
 
   struct ClosureState {
     std::vector<Node> next{};
@@ -175,18 +176,23 @@ class DependencyGraph {
   };
 
   struct LayoutFeatureEdge {
+    hb_tag_t layout_tag;
     hb_codepoint_t source_gid;
     hb_codepoint_t dest_gid;
     hb_codepoint_t ligature_set;
     hb_codepoint_t context_set;
 
     bool operator==(const LayoutFeatureEdge& other) const {
-      return source_gid == other.dest_gid && dest_gid == other.dest_gid &&
+      return layout_tag == other.layout_tag &&
+             source_gid == other.source_gid && dest_gid == other.dest_gid &&
              ligature_set == other.ligature_set &&
              context_set == other.context_set;
     }
 
     bool operator<(const LayoutFeatureEdge& other) const {
+      if (layout_tag != other.layout_tag) {
+        return layout_tag < other.layout_tag;
+      }
       if (source_gid != other.source_gid) {
         return source_gid < other.source_gid;
       }
@@ -204,12 +210,17 @@ class DependencyGraph {
   ComputeUVSEdges() const;
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
   ComputeFeatureEdges() const;
+  absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
+  ComputeContextGlyphEdges() const;
 
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
       variation_selector_implied_edges_;
 
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
       layout_feature_implied_edges_;
+
+  absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
+      context_glyph_implied_edges_;
 
   common::hb_set_unique_ptr scratch_set_ = common::make_hb_set();
 };

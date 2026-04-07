@@ -180,10 +180,10 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
-  // Gravecomb interacts with 'i' as only a context glyph, so it's
-  // own traversal is just it's self.
-  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{168 /* gravecomb */}));
-  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet{}));
+  // Gravecomb interacts with 'i' as only a context glyph, but now with
+  // implied edges it can reach 'igrave' (609) which in turn reaches 'i' (141).
+  ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{141, 168, 609}));
+  ASSERT_EQ(traversal.ContextGlyphs(), (GlyphSet{168}));
 }
 
 TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
