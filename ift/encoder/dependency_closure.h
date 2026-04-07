@@ -10,6 +10,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/reachability_index.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
@@ -85,6 +86,11 @@ class DependencyClosure {
   absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(
       const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
       ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids);
+
+  // Extracts the full activations conditions (as specified by the dependency graph) for all
+  // glyphs. In some cases may overestimate activation conditions versus real subsetting closure
+  // due to reliance on the dependency graph.
+  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>> ExtractAllGlyphConditions() const;
 
   // This structure caches information derived from the segmentation info
   // segments. This function signals that segmentation info segments have
