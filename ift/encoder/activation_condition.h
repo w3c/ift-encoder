@@ -23,6 +23,11 @@ namespace ift::encoder {
 class ActivationCondition {
  public:
   /*
+   * Constructs a condition that always activates.
+   */
+  static ActivationCondition True(patch_id_t activated);
+
+  /*
    * Constructs a condition that activates when the input intersects(patch_1)
    * AND ... AND inersects(patch_n).
    */
@@ -84,6 +89,8 @@ class ActivationCondition {
     return conditions_;
   }
 
+  bool IsAlwaysTrue() const { return conditions().size() == 0; }
+
   bool IsFallback() const { return is_fallback_; }
 
   /*
@@ -127,7 +134,7 @@ class ActivationCondition {
   // Returns true if the condition is of the form
   // a AND b AND c ... with no disjunction.
   bool IsPurelyConjunctive() const {
-    if (conditions().size() == 1) {
+    if (conditions().size() <= 1) {
       return false;
     }
 

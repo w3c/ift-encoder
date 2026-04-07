@@ -30,6 +30,14 @@ using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
+ActivationCondition ActivationCondition::True(patch_id_t activated) {
+  ActivationCondition condition;
+  condition.activated_ = {activated};
+  condition.conditions_ = {};
+  condition.is_exclusive_ = false;
+  return condition;
+}
+
 ActivationCondition ActivationCondition::exclusive_segment(
     segment_index_t index, patch_id_t activated) {
   ActivationCondition condition;
@@ -170,6 +178,11 @@ std::string ActivationCondition::ToString() const {
       out << ")";
     }
   }
+
+  if (IsAlwaysTrue()) {
+    out << "true";
+  }
+
   out << ") then p" << activated();
   return out.str();
 }
