@@ -1021,7 +1021,7 @@ DependencyGraph::ComputeContextGlyphEdges() const {
       }
 
       StatusOr<GlyphSet> context_glyphs =
-            GetContextSet(dependency_graph_.get(), nullptr, edge.context_set);
+          GetContextSet(dependency_graph_.get(), nullptr, edge.context_set);
       if (!context_glyphs.ok()) {
         continue;
       }

@@ -183,9 +183,8 @@ class DependencyGraph {
     hb_codepoint_t context_set;
 
     bool operator==(const LayoutFeatureEdge& other) const {
-      return layout_tag == other.layout_tag &&
-             source_gid == other.source_gid && dest_gid == other.dest_gid &&
-             ligature_set == other.ligature_set &&
+      return layout_tag == other.layout_tag && source_gid == other.source_gid &&
+             dest_gid == other.dest_gid && ligature_set == other.ligature_set &&
              context_set == other.context_set;
     }
 

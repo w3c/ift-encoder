@@ -373,6 +373,36 @@ TEST(ActivationConditionTest, MergedProbability) {
           .status()));
 }
 
+TEST(ActivationConditionTest, True) {
+  ActivationCondition true_condition = ActivationCondition::True(10);
+  ActivationCondition condition = ActivationCondition::and_segments({1}, 10);
+  MockProbabilityCalculator probability_calculator({});
+
+  ASSERT_EQ(true_condition.ToString(), "if (true) then p10");
+  ASSERT_TRUE(true_condition.IsAlwaysTrue());
+  ASSERT_FALSE(condition.IsAlwaysTrue());
+  ASSERT_FALSE(true_condition.IsPurelyConjunctive());
+  ASSERT_FALSE(true_condition.IsPurelyDisjunctive());
+  ASSERT_EQ(*true_condition.Probability({}, probability_calculator), 1.0);
+}
+
+TEST(ActivationConditionTest, AndOr_True) {
+  auto condition = ActivationCondition::or_segments({1, 2}, 10);
+  auto true_con = ActivationCondition::True(11);
+
+  auto a = ActivationCondition::And(condition, true_con);
+  auto b = ActivationCondition::And(true_con, condition);
+
+  auto c = ActivationCondition::Or(condition, true_con);
+  auto d = ActivationCondition::Or(true_con, condition);
+
+  ASSERT_EQ(a, condition);
+  ASSERT_EQ(b, ActivationCondition::or_segments({1, 2}, 11));
+
+  ASSERT_EQ(c, ActivationCondition::True(10));
+  ASSERT_EQ(d, true_con);
+}
+
 TEST(ActivationConditionTest, And) {
   auto a = ActivationCondition::or_segments({1, 2}, 10);
   auto b = ActivationCondition::or_segments({3}, 11);
