@@ -633,4 +633,22 @@ void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
   fully_explorable_segments_.erase(segment);
 }
 
+StatusOr<flat_hash_map<glyph_id_t, ActivationCondition>> DependencyClosure::ExtractAllGlyphConditions() const {
+
+  auto topological_sort = TRY(graph_.TopologicalSorting());
+
+  // TODO XXXX collect incoming edges per node.
+
+  // TODO XXXX initialize starting conditions
+  // - nodes in the init font are always true.
+  // - segment nodes are exclusive on themselves.
+  // - all other nodes are unset.
+
+  // TODO XXXX process nodes in topological sorting order and construct conditions
+
+  // TODO XXXX convert node conditions to output map.
+
+  return absl::UnimplementedError("TODO");
+}
+
 }  // namespace ift::encoder
