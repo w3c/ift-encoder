@@ -16,6 +16,7 @@
 
 using ift::config::PATCH;
 
+using absl::btree_set;
 using absl::flat_hash_map;
 using ift::common::CodepointSet;
 using ift::common::FontData;
@@ -530,6 +531,73 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
                                    Node::Unicode('a'), Node::Glyph(gid_a),
                                    Node::Glyph(443 /* dlig ff */),
                                    Node::Feature(HB_TAG('d', 'l', 'i', 'g'))));
+}
+
+TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+              });
+
+  auto topo_order_or = graph.TopologicalSorting();
+  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+  const std::vector<Node>& topo_order = *topo_order_or;
+
+  // f
+  int s1 = GetIndex(topo_order, Node::Segment(1));
+  int uf = GetIndex(topo_order, Node::Unicode(102));
+  int gf = GetIndex(topo_order, Node::Glyph(74));
+  int gi = GetIndex(topo_order, Node::Glyph(77));
+  int gffi = GetIndex(topo_order, Node::Glyph(446));
+
+  EXPECT_LT(s1, uf);
+  EXPECT_LT(uf, gf);
+  EXPECT_LT(gf, gffi);
+  EXPECT_LT(gi, gffi);
+}
+
+TEST_F(DependencyGraphTest, CollectIncomingEdges) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 2 */ {liga, ProbabilityBound::Zero()},
+              });
+
+  auto edges_or = graph.CollectIncomingEdges();
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  const auto& edges = *edges_or;
+
+  glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
+  glyph_id_t gid_i = *FontHelper::GetNominalGlyph(face.get(), 'i');
+  glyph_id_t gid_fi = *FontHelper::GetNominalGlyph(face.get(), 0xfb01);
+
+  // 'fi' ligature requires 'f', 'i', and 'liga' feature
+  auto fi_edges_it = edges.find(Node::Glyph(gid_fi));
+  ASSERT_NE(fi_edges_it, edges.end());
+  const auto& fi_edges = fi_edges_it->second;
+
+  EdgeConditonsCnf expected_fi_edge = {
+      {Node::Glyph(gid_f)},
+      {Node::Glyph(gid_i)},
+      {Node::Feature(HB_TAG('l', 'i', 'g', 'a'))}};
+  EXPECT_EQ(fi_edges, (btree_set<EdgeConditonsCnf>{expected_fi_edge}));
+
+  // 'f' requires 'f' (Unicode)
+  auto f_edges_it = edges.find(Node::Glyph(gid_f));
+  ASSERT_NE(f_edges_it, edges.end());
+  const auto& f_edges = f_edges_it->second;
+
+  EdgeConditonsCnf expected_f_edge = {{Node::Unicode('f')}};
+  EXPECT_EQ(f_edges, (btree_set<EdgeConditonsCnf>{expected_f_edge}));
 }
 
 // TODO(garretrieger):
