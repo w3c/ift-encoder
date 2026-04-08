@@ -1,7 +1,6 @@
 #include "ift/dep_graph/dependency_graph.h"
 
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -192,11 +191,14 @@ class TraversalContext {
 
   // Traverse an edge with no special context and/or additional information
   // other than table tag
-  void TraverseEdgeTo(Node dest,
+  void TraverseEdgeTo(Node source, Node dest,
                       std::optional<hb_tag_t> table_tag = std::nullopt) {
     if (!ShouldFollow(dest, table_tag, std::nullopt)) {
       return;
     }
+
+    callback.VisitPending(PendingEdge::Disjunctive(
+        source, dest, table_tag.value_or(HB_TAG(' ', ' ', ' ', ' '))));
 
     if (table_tag.has_value()) {
       callback.Visit(dest, *table_tag);
@@ -332,8 +334,15 @@ class TraversalContext {
       const PendingEdge& edge, const CodepointSet& reached_unicodes,
       const GlyphSet& reached_glyphs,
       const flat_hash_set<hb_tag_t>& reached_features) {
-    if (edge.required_glyph.has_value() &&
-        !reached_glyphs.contains(*edge.required_glyph)) {
+    if (edge.source.IsFeature() &&
+        !reached_features.contains(edge.source.Id())) {
+      return false;
+    }
+    if (edge.source.IsUnicode() &&
+        !reached_unicodes.contains(edge.source.Id())) {
+      return false;
+    }
+    if (edge.source.IsGlyph() && !reached_glyphs.contains(edge.source.Id())) {
       return false;
     }
 
@@ -436,7 +445,7 @@ bool DependencyGraph::ClosureState::Reached(Node node) {
 }
 
 void DependencyGraph::ClosureState::SetStartNodes(
-    const absl::btree_set<Node>& start) {
+    const btree_set<Node>& start) {
   for (Node node : start) {
     Reached(node);
   }
@@ -445,6 +454,8 @@ void DependencyGraph::ClosureState::SetStartNodes(
 template <typename CallbackT>
 static Status DoTraversal(const PendingEdge& edge,
                           TraversalContext<CallbackT>& context) {
+  context.callback.VisitPending(edge);
+
   if (edge.table_tag == GSUB && edge.required_feature.has_value()) {
     if (edge.required_context_set_index.has_value()) {
       GlyphSet context_glyphs =
@@ -514,8 +525,8 @@ absl::Status DependencyGraph::HandleOutgoingEdges(
   } else if (node.IsFeature()) {
     TRYV(HandleFeatureOutgoingEdges(node.Id(), context));
   } else if (node.IsInitFont()) {
-    HandleSubsetDefinitionOutgoingEdges(segmentation_info_->InitFontSegment(),
-                                        context);
+    HandleSubsetDefinitionOutgoingEdges(
+        node, segmentation_info_->InitFontSegment(), context);
   }
   return absl::OkStatus();
 }
@@ -523,12 +534,11 @@ absl::Status DependencyGraph::HandleOutgoingEdges(
 StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting() const {
   struct TopoCallback {
     std::vector<Node> edges;
-    void Visit(Node dest) { edges.push_back(dest); }
-    void Visit(Node dest, hb_tag_t) { edges.push_back(dest); }
-    void VisitGsub(Node dest, hb_tag_t) { edges.push_back(dest); }
-    void VisitContextual(Node dest, hb_tag_t, ift::common::GlyphSet) {
-      edges.push_back(dest);
-    }
+    void Visit(Node dest) {}
+    void Visit(Node dest, hb_tag_t) {}
+    void VisitGsub(Node dest, hb_tag_t) {}
+    void VisitContextual(Node dest, hb_tag_t, ift::common::GlyphSet) {}
+    void VisitPending(const PendingEdge& edge) { edges.push_back(edge.dest); }
   };
 
   CodepointSet non_init_font_codepoints =
@@ -549,7 +559,7 @@ StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting() const {
   context.enforce_context = false;
   context.unicode_filter = &non_init_font_codepoints;
   context.glyph_filter = &non_init_font_glyphs;
-  context.feature_filter = &non_init_font_features;
+  context.feature_filter = &full_feature_set_;
 
   // DFS topological sorting algorithm from:
   // https://en.wikipedia.org/wiki/Topological_sorting
@@ -659,7 +669,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 }
 
 StatusOr<Traversal> DependencyGraph::ClosureTraversal(
-    const absl::btree_set<Node>& nodes, const GlyphSet* glyph_filter_ptr,
+    const btree_set<Node>& nodes, const GlyphSet* glyph_filter_ptr,
     const CodepointSet* unicode_filter_ptr, bool enforce_context) const {
   // TODO(garretrieger): context edges don't have edges for each participating
   // glyph, so for full correctness in matching closure we should introduce
@@ -783,7 +793,7 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
   {
     auto it = unicode_to_gid_.find(unicode);
     if (it != unicode_to_gid_.end()) {
-      context->TraverseEdgeTo(Node::Glyph(it->second));
+      context->TraverseEdgeTo(Node::Unicode(unicode), Node::Glyph(it->second));
     }
   }
 
@@ -799,7 +809,7 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
   auto unicode_funcs = hb_unicode_funcs_get_default();
   hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
   if (mirror != unicode) {
-    context->TraverseEdgeTo(Node::Unicode(mirror));
+    context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(mirror));
   }
 
   return absl::OkStatus();
@@ -830,7 +840,7 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
       continue;
     }
 
-    context->TraverseEdgeTo(dest, table_tag);
+    context->TraverseEdgeTo(Node::Glyph(gid), dest, table_tag);
   }
 
   auto it = context_glyph_implied_edges_.find(gid);
@@ -904,19 +914,20 @@ void DependencyGraph::HandleSegmentOutgoingEdges(
   }
 
   const Segment& s = segmentation_info_->Segments().at(id);
-  HandleSubsetDefinitionOutgoingEdges(s.Definition(), context);
+  HandleSubsetDefinitionOutgoingEdges(Node::Segment(id), s.Definition(),
+                                      context);
 }
 
 template <typename CallbackT>
 void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
-    const SubsetDefinition& subset_def,
+    Node source, const SubsetDefinition& subset_def,
     TraversalContext<CallbackT>* context) const {
   for (hb_codepoint_t u : subset_def.codepoints) {
-    context->TraverseEdgeTo(Node::Unicode(u));
+    context->TraverseEdgeTo(source, Node::Unicode(u));
   }
 
   for (hb_tag_t f : subset_def.feature_tags) {
-    context->TraverseEdgeTo(Node::Feature(f));
+    context->TraverseEdgeTo(source, Node::Feature(f));
   }
 }
 
@@ -984,8 +995,9 @@ StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::InitFeatureSet(
 StatusOr<GlyphSet> DependencyGraph::RequiredGlyphsFor(
     const PendingEdge& edge) const {
   GlyphSet out;
-  if (edge.required_glyph.has_value()) {
-    out.insert(*edge.required_glyph);
+
+  if (edge.source.IsGlyph()) {
+    out.insert(edge.source.Id());
   }
 
   if (edge.required_liga_set_index.has_value()) {
@@ -1009,6 +1021,64 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
   }
   GlyphSet glyphs(scratch_set_.get());
   return glyphs;
+}
+
+StatusOr<EdgeConditonsCnf> DependencyGraph::ExtractRequirements(
+    const PendingEdge& edge) const {
+  EdgeConditonsCnf requirements;
+
+  requirements.insert({edge.source});
+
+  if (edge.required_feature.has_value()) {
+    requirements.insert({Node::Feature(*edge.required_feature)});
+  }
+
+  if (edge.required_codepoints.has_value()) {
+    requirements.insert({Node::Unicode(edge.required_codepoints->first)});
+    requirements.insert({Node::Unicode(edge.required_codepoints->second)});
+  }
+
+  if (edge.required_liga_set_index.has_value()) {
+    GlyphSet gids = TRY(GetLigaSet(*edge.required_liga_set_index));
+    for (glyph_id_t gid : gids) {
+      requirements.insert({Node::Glyph(gid)});
+    }
+  }
+
+  // TODO(garretrieger): take contextual lookup flags into consideration. See
+  // dep graph documentation for more details. They can be used to
+  // decide if the resulting conditions are exact or an over approximation.
+  if (edge.required_context_set_index.has_value()) {
+    // the context set is actually a set of sets.
+    if (!hb_depend_get_set_from_index(dependency_graph_.get(),
+                                      *edge.required_context_set_index,
+                                      scratch_set_.get())) {
+      return absl::InternalError("Context set lookup failed.");
+    }
+
+    hb_codepoint_t set_id = HB_CODEPOINT_INVALID;
+    while (hb_set_next(scratch_set_.get(), &set_id)) {
+      btree_set<Node> req;
+      if (set_id < 0x80000000) {
+        req.insert(Node::Glyph(set_id));
+      } else {
+        hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
+        if (!hb_depend_get_set_from_index(dependency_graph_.get(),
+                                          actual_set_id,
+                                          scratch_set_aux_.get())) {
+          return absl::InternalError("Context sub set lookup failed.");
+        }
+        for (hb_codepoint_t gid : GlyphSet(scratch_set_aux_.get())) {
+          req.insert(Node::Glyph(gid));
+        }
+      }
+      if (!req.empty()) {
+        requirements.insert(std::move(req));
+      }
+    }
+  }
+
+  return requirements;
 }
 
 flat_hash_map<glyph_id_t, std::vector<DependencyGraph::LayoutFeatureEdge>>
@@ -1117,6 +1187,62 @@ DependencyGraph::ComputeFeatureEdges() const {
   }
 
   return out;
+}
+
+StatusOr<flat_hash_map<Node, btree_set<EdgeConditonsCnf>>>
+DependencyGraph::CollectIncomingEdges() const {
+  struct IncomingEdgeCollector {
+    flat_hash_map<Node, btree_set<EdgeConditonsCnf>>* incoming_edges = nullptr;
+    const DependencyGraph* graph = nullptr;
+    Status had_error = absl::OkStatus();
+
+    void Visit(Node dest) {}
+    void Visit(Node dest, hb_tag_t) {}
+    void VisitGsub(Node, hb_tag_t) {}
+    void VisitContextual(Node, hb_tag_t, ift::common::GlyphSet) {}
+    void VisitPending(const PendingEdge& pe) {
+      auto reqs = graph->ExtractRequirements(pe);
+      had_error.Update(reqs.status());
+      if (!reqs.ok()) {
+        return;
+      }
+
+      (*incoming_edges)[pe.dest].insert(std::move(*reqs));
+    }
+  };
+
+  flat_hash_map<Node, btree_set<EdgeConditonsCnf>> incoming_edges;
+  TraversalContext<IncomingEdgeCollector> context;
+  context.depend = dependency_graph_.get();
+  context.full_closure = &segmentation_info_->FullClosure();
+  context.feature_filter = &full_feature_set_;
+  context.glyph_filter = &segmentation_info_->FullClosure();
+  context.unicode_filter = &segmentation_info_->FullDefinition().codepoints;
+  context.enforce_context = false;
+  context.callback.incoming_edges = &incoming_edges;
+  context.callback.graph = this;
+
+  btree_set<Node> all_nodes;
+  all_nodes.insert(Node::InitFont());
+  for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
+    all_nodes.insert(Node::Segment(s));
+  }
+  for (hb_codepoint_t u : segmentation_info_->FullDefinition().codepoints) {
+    all_nodes.insert(Node::Unicode(u));
+  }
+  for (hb_tag_t f : full_feature_set_) {
+    all_nodes.insert(Node::Feature(f));
+  }
+  for (glyph_id_t g : segmentation_info_->FullClosure()) {
+    all_nodes.insert(Node::Glyph(g));
+  }
+
+  for (Node n : all_nodes) {
+    TRYV(HandleOutgoingEdges(n, &context));
+    TRYV(context.callback.had_error);
+  }
+
+  return incoming_edges;
 }
 
 void PrintTo(const Node& node, std::ostream* os) { *os << node.ToString(); }

@@ -87,10 +87,11 @@ class DependencyClosure {
       const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
       ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids);
 
-  // Extracts the full activations conditions (as specified by the dependency graph) for all
-  // glyphs. In some cases may overestimate activation conditions versus real subsetting closure
-  // due to reliance on the dependency graph.
-  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>> ExtractAllGlyphConditions() const;
+  // Extracts the full activations conditions (as specified by the dependency
+  // graph) for all glyphs. In some cases may overestimate activation conditions
+  // versus real subsetting closure due to reliance on the dependency graph.
+  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>>
+  ExtractAllGlyphConditions() const;
 
   // This structure caches information derived from the segmentation info
   // segments. This function signals that segmentation info segments have
@@ -120,6 +121,26 @@ class DependencyClosure {
   uint64_t InaccurateResults() const { return inaccurate_results_; }
 
  private:
+#ifdef HB_DEPEND_API
+
+  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
+  InitializeConditions() const;
+
+  static absl::StatusOr<ActivationCondition>
+  EdgeConditionsToActivationCondition(
+      const dep_graph::EdgeConditonsCnf& edge_conditions,
+      const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
+          node_conditions);
+
+  absl::Status PropagateConditions(
+      const absl::flat_hash_map<dep_graph::Node,
+                                absl::btree_set<dep_graph::EdgeConditonsCnf>>&
+          incoming_edges,
+      const std::vector<dep_graph::Node>& topological_sort,
+      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions)
+      const;
+#endif
+
 #ifndef HB_DEPEND_API
   DependencyClosure() {}
 #else

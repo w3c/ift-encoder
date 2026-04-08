@@ -22,6 +22,10 @@ class RequestedSegmentationInformation;
 
 namespace ift::dep_graph {
 
+// Conditions for an edge in CNF form using node presence as inputs.
+// (node_1 or ...) and (node_i or ...)
+typedef absl::btree_set<absl::btree_set<Node>> EdgeConditonsCnf;
+
 template <typename CallbackT>
 class TraversalContext;
 
@@ -81,6 +85,14 @@ class DependencyGraph {
   // any nodes that are in the init font.
   absl::StatusOr<std::vector<Node>> TopologicalSorting() const;
 
+  // Computes the incoming edges for every node in the dependency graph, taking
+  // into account all context requirements and implicit dependencies.
+  //
+  // The return value is a map from each node to each unique edge requirement.
+  // Edge requirements are represented as a CNF expression over other nodes.
+  absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditonsCnf>>>
+  CollectIncomingEdges() const;
+
  private:
   DependencyGraph(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
@@ -105,6 +117,7 @@ class DependencyGraph {
     void VisitGsub(Node dest, hb_tag_t feature);
     void VisitContextual(Node dest, hb_tag_t feature,
                          ift::common::GlyphSet context_glyphs);
+    void VisitPending(const PendingEdge& edge) {}
 
     std::optional<Node> GetNext();
     bool Reached(Node node);
@@ -146,11 +159,18 @@ class DependencyGraph {
 
   template <typename CallbackT>
   void HandleSubsetDefinitionOutgoingEdges(
-      const encoder::SubsetDefinition& subset_def,
+      Node source, const encoder::SubsetDefinition& subset_def,
       TraversalContext<CallbackT>* context) const;
 
   absl::StatusOr<ift::common::GlyphSet> GetLigaSet(
       hb_codepoint_t liga_set_id) const;
+
+  // Extracts the specific node dependencies required to satisfy a given
+  // PendingEdge.
+  //
+  // Returns a list of requirements as CNF expression on node presence.
+  absl::StatusOr<EdgeConditonsCnf> ExtractRequirements(
+      const PendingEdge& edge) const;
 
   static absl::StatusOr<absl::flat_hash_set<hb_tag_t>> FullFeatureSet(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
@@ -222,6 +242,7 @@ class DependencyGraph {
       context_glyph_implied_edges_;
 
   common::hb_set_unique_ptr scratch_set_ = common::make_hb_set();
+  common::hb_set_unique_ptr scratch_set_aux_ = common::make_hb_set();
 };
 
 }  // namespace ift::dep_graph

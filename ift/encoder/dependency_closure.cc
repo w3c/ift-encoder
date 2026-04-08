@@ -8,6 +8,7 @@
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/types.h"
 
@@ -25,9 +26,11 @@ using ift::common::hb_set_unique_ptr;
 using ift::common::IntSet;
 using ift::common::SegmentSet;
 using ift::dep_graph::DependencyGraph;
+using ift::dep_graph::EdgeConditonsCnf;
 using ift::dep_graph::Node;
 using ift::dep_graph::PendingEdge;
 using ift::dep_graph::Traversal;
+using ift::dep_graph::TraversalContext;
 
 namespace ift::encoder {
 
@@ -399,12 +402,12 @@ DependencyClosure::ConjunctiveConditionEdges(
                                   segments);
     }
 
-    if (pe.required_glyph.has_value() &&
-        !segmentation_info_->InitFontGlyphs().contains(*pe.required_glyph) &&
-        !traversal.ReachedGlyphs().contains(*pe.required_glyph)) {
+    if (pe.source.IsGlyph() &&
+        !segmentation_info_->InitFontGlyphs().contains(pe.source.Id()) &&
+        !traversal.ReachedGlyphs().contains(pe.source.Id())) {
       is_unblocked =
           is_unblocked &&
-          PickOne(isolated_reachability_.SegmentsForGlyph(*pe.required_glyph),
+          PickOne(isolated_reachability_.SegmentsForGlyph(pe.source.Id()),
                   segments);
     }
 
@@ -633,22 +636,162 @@ void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
   fully_explorable_segments_.erase(segment);
 }
 
-StatusOr<flat_hash_map<glyph_id_t, ActivationCondition>> DependencyClosure::ExtractAllGlyphConditions() const {
+flat_hash_map<Node, ActivationCondition>
+DependencyClosure::InitializeConditions() const {
+  flat_hash_map<Node, ActivationCondition> conditions;
 
-  auto topological_sort = TRY(graph_.TopologicalSorting());
+  conditions.insert({Node::InitFont(), ActivationCondition::True(0)});
 
-  // TODO XXXX collect incoming edges per node.
+  for (glyph_id_t g : segmentation_info_->InitFontGlyphs()) {
+    conditions.insert({Node::Glyph(g), ActivationCondition::True(0)});
+  }
 
-  // TODO XXXX initialize starting conditions
-  // - nodes in the init font are always true.
-  // - segment nodes are exclusive on themselves.
-  // - all other nodes are unset.
+  for (hb_codepoint_t u : segmentation_info_->InitFontSegment().codepoints) {
+    conditions.insert({Node::Unicode(u), ActivationCondition::True(0)});
+  }
 
-  // TODO XXXX process nodes in topological sorting order and construct conditions
+  auto init_features = graph_.InitFontFeatureSet();
+  if (init_features.ok()) {
+    for (hb_tag_t f : *init_features) {
+      conditions.insert({Node::Feature(f), ActivationCondition::True(0)});
+    }
+  }
 
-  // TODO XXXX convert node conditions to output map.
+  for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
+    if (segmentation_info_->Segments().at(s).Definition().Empty()) {
+      continue;
+    }
+    conditions.insert(
+        {Node::Segment(s), ActivationCondition::exclusive_segment(s, 0)});
+  }
 
-  return absl::UnimplementedError("TODO");
+  return conditions;
 }
 
+StatusOr<ActivationCondition>
+DependencyClosure::EdgeConditionsToActivationCondition(
+    const dep_graph::EdgeConditonsCnf& edge_conditions,
+    const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
+        node_conditions) {
+  if (edge_conditions.empty()) {
+    return absl::InternalError("edge_conditions cannot be empty.");
+  }
+
+  std::optional<ActivationCondition> out;
+
+  for (const btree_set<Node>& node_group : edge_conditions) {
+    std::optional<ActivationCondition> group_condition;
+    if (node_group.empty()) {
+      return absl::InternalError("Unexpected empty node condition group.");
+    }
+
+    for (Node node : node_group) {
+      auto it = node_conditions.find(node);
+      if (it == node_conditions.end()) {
+        return absl::InternalError(absl::StrCat(
+            "Conditions for node, ", node.ToString(), ", should exist."));
+      }
+
+      if (!group_condition.has_value()) {
+        group_condition = it->second;
+      } else {
+        // edge_conditions is in cnf form, so the inner groups are disjunctive.
+        group_condition = ActivationCondition::Or(*group_condition, it->second);
+      }
+    }
+
+    if (!group_condition.has_value()) {
+      return absl::InternalError("Unexpected missing group condition.");
+    }
+
+    if (!out.has_value()) {
+      out = group_condition;
+    } else {
+      out = ActivationCondition::And(*out, *group_condition);
+    }
+  }
+
+  if (!out.has_value()) {
+    return absl::InternalError(
+        "Unexpected missing final activation condition.");
+  }
+  return *out;
+}
+
+Status DependencyClosure::PropagateConditions(
+    const flat_hash_map<Node, btree_set<EdgeConditonsCnf>>& incoming_edges,
+    const std::vector<Node>& topological_sort,
+    flat_hash_map<Node, ActivationCondition>& node_conditions) const {
+  for (Node n : topological_sort) {
+    auto it = incoming_edges.find(n);
+    if (it == incoming_edges.end()) {
+      // Root node, skip
+      continue;
+    }
+
+    auto node_conditions_it = node_conditions.find(n);
+    if (node_conditions_it != node_conditions.end() &&
+        node_conditions_it->second.IsAlwaysTrue()) {
+      // Init font node, skip
+      continue;
+    }
+
+    std::optional<ActivationCondition> complete_condition;
+
+    for (const EdgeConditonsCnf& edge : it->second) {
+      ActivationCondition condition =
+          TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
+      if (complete_condition.has_value()) {
+        complete_condition =
+            ActivationCondition::Or(*complete_condition, condition);
+      } else {
+        complete_condition = condition;
+      }
+    }
+
+    if (!complete_condition.has_value()) {
+      return absl::InternalError(
+          absl::StrCat("Complete condition was not assigned a value for node: ",
+                       n.ToString()));
+    }
+
+    auto [_, did_insert] = node_conditions.insert({n, *complete_condition});
+    if (!did_insert) {
+      // TODO(garretrieger): when switching to a phased impl we will probably
+      // need to support updates to existing conditions instead of erroring.
+      return absl::InternalError(absl::StrCat(
+          "Unexpected existing condition for node: ", n.ToString()));
+    }
+  }
+
+  return absl::OkStatus();
+}
+
+StatusOr<flat_hash_map<glyph_id_t, ActivationCondition>>
+DependencyClosure::ExtractAllGlyphConditions() const {
+  // TODO(garretrieger): this first pass implementation does not take into
+  // account closure phasing. This will need to be updated to do condition
+  // propagation one phase at a time. The global topological sort can be reused
+  // across phases.
+  auto topological_sort = TRY(graph_.TopologicalSorting());
+
+  auto incoming_edges = TRY(graph_.CollectIncomingEdges());
+
+  auto conditions = InitializeConditions();
+
+  TRYV(PropagateConditions(incoming_edges, topological_sort, conditions));
+
+  flat_hash_map<glyph_id_t, ActivationCondition> result;
+  for (glyph_id_t gid : segmentation_info_->NonInitFontGlyphs()) {
+    auto it = conditions.find(Node::Glyph(gid));
+    if (it != conditions.end()) {
+      result.insert({gid, it->second});
+    } else {
+      return absl::InternalError(
+          "All glyphs should have generated conditions.");
+    }
+  }
+
+  return result;
+}
 }  // namespace ift::encoder

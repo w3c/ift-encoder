@@ -187,6 +187,85 @@ TEST_F(DependencyClosureTest, AddsToSets) {
   ASSERT_EQ(exclusive_gids, (GlyphSet{69, 103}));
 }
 
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  // f (gid 74) is in segment 1
+  ASSERT_EQ(conditions.at(74).ToString(), "if (s1) then p0");
+
+  // i (gid 77) is in segment 2
+  ASSERT_EQ(conditions.at(77).ToString(), "if (s2) then p0");
+
+  // A (gid 37) is in segment 4, but also needed by Aacute in segment 5
+  // so it's s4 OR s5
+  ASSERT_EQ(conditions.at(37).ToString(), "if ((s4 OR s5)) then p0");
+
+  // Aacute (gid 117) is in segment 5
+  ASSERT_EQ(conditions.at(117).ToString(), "if (s5) then p0");
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
+  // Move 'f' to init font
+  Reconfigure(face.get(), WithDefaultFeatures({'f'}),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  // 'f' is in init font, so it's not in the result map
+  ASSERT_FALSE(conditions.contains(74));
+
+  // i (gid 77) is in segment 1
+  ASSERT_EQ(conditions.at(77).ToString(), "if (s1) then p0");
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
+                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
+                  /* 6 */ {aalt, ProbabilityBound::Zero()},
+                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  // g8 is reached via one of two cmap14 entries (U+7891 + U+FE00) or (U+7891 +
+  // U+E0100).
+  ASSERT_EQ(conditions.at(8).ToString(), "if (s1 AND (s4 OR s5)) then p0");
+
+  // g9 is reached via a single subst of U+6406 which is gated on either
+  // aalt or jp78
+  ASSERT_EQ(conditions.at(9).ToString(), "if (s3 AND (s6 OR s7)) then p0");
+}
+
 TEST_F(DependencyClosureTest, Exclusive) {
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;

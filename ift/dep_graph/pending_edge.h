@@ -13,17 +13,23 @@ namespace ift::dep_graph {
 // Tracks an edge who's context requirements are not yet satisfied.
 struct PendingEdge {
  public:
+  static PendingEdge Disjunctive(Node source, Node dest, hb_tag_t table) {
+    PendingEdge edge(source, dest, table);
+    return edge;
+  }
+
   static PendingEdge Uvs(hb_codepoint_t a, hb_codepoint_t b,
                          encoder::glyph_id_t gid) {
-    PendingEdge edge(Node::Glyph(gid), HB_TAG('c', 'm', 'a', 'p'));
+    PendingEdge edge(Node::Unicode(a), Node::Glyph(gid),
+                     HB_TAG('c', 'm', 'a', 'p'));
     edge.required_codepoints = std::make_pair(a, b);
     return edge;
   }
 
   static PendingEdge Gsub(encoder::glyph_id_t source_gid, hb_tag_t feature,
                           encoder::glyph_id_t dest_gid) {
-    PendingEdge edge(Node::Glyph(dest_gid), HB_TAG('G', 'S', 'U', 'B'));
-    edge.required_glyph = source_gid;
+    PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
+                     HB_TAG('G', 'S', 'U', 'B'));
     edge.required_feature = feature;
     return edge;
   }
@@ -31,8 +37,8 @@ struct PendingEdge {
   static PendingEdge Ligature(encoder::glyph_id_t source_gid, hb_tag_t feature,
                               encoder::glyph_id_t dest_gid,
                               hb_codepoint_t liga_set_index) {
-    PendingEdge edge(Node::Glyph(dest_gid), HB_TAG('G', 'S', 'U', 'B'));
-    edge.required_glyph = source_gid;
+    PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
+                     HB_TAG('G', 'S', 'U', 'B'));
     edge.required_feature = feature;
     edge.required_liga_set_index = liga_set_index;
     return edge;
@@ -41,17 +47,17 @@ struct PendingEdge {
   static PendingEdge Context(encoder::glyph_id_t source_gid, hb_tag_t feature,
                              encoder::glyph_id_t dest_gid,
                              hb_codepoint_t context_set_index) {
-    PendingEdge edge(Node::Glyph(dest_gid), HB_TAG('G', 'S', 'U', 'B'));
-    edge.required_glyph = source_gid;
+    PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
+                     HB_TAG('G', 'S', 'U', 'B'));
     edge.required_feature = feature;
     edge.required_context_set_index = context_set_index;
     return edge;
   }
 
+  Node source;
   Node dest;
   hb_tag_t table_tag;
 
-  std::optional<encoder::glyph_id_t> required_glyph = std::nullopt;
   std::optional<hb_tag_t> required_feature = std::nullopt;
   std::optional<uint32_t> required_liga_set_index = std::nullopt;
   std::optional<uint32_t> required_context_set_index = std::nullopt;
@@ -60,7 +66,7 @@ struct PendingEdge {
 
   bool operator==(const PendingEdge& other) const {
     return dest == other.dest && table_tag == other.table_tag &&
-           required_glyph == other.required_glyph &&
+           source == other.source &&
            required_feature == other.required_feature &&
            required_liga_set_index == other.required_liga_set_index &&
            required_context_set_index == other.required_context_set_index &&
@@ -68,14 +74,14 @@ struct PendingEdge {
   }
 
   bool operator<(const PendingEdge& other) const {
+    if (source != other.source) {
+      return source < other.source;
+    }
     if (dest != other.dest) {
       return dest < other.dest;
     }
     if (table_tag != other.table_tag) {
       return table_tag < other.table_tag;
-    }
-    if (required_glyph != other.required_glyph) {
-      return required_glyph < other.required_glyph;
     }
     if (required_feature != other.required_feature) {
       return required_feature < other.required_feature;
@@ -91,14 +97,14 @@ struct PendingEdge {
 
   template <typename H>
   friend H AbslHashValue(H h, const PendingEdge& e) {
-    return H::combine(std::move(h), e.dest, e.table_tag, e.required_glyph,
+    return H::combine(std::move(h), e.source, e.dest, e.table_tag,
                       e.required_feature, e.required_liga_set_index,
                       e.required_context_set_index, e.required_codepoints);
   }
 
  private:
-  PendingEdge(Node dest, hb_tag_t table_tag)
-      : dest(dest), table_tag(table_tag) {}
+  PendingEdge(Node source_, Node dest_, hb_tag_t table_tag_)
+      : source(source_), dest(dest_), table_tag(table_tag_) {}
 };
 
 }  // namespace ift::dep_graph
