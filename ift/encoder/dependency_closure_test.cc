@@ -19,9 +19,12 @@
 
 using ift::config::PATCH;
 
+using absl::btree_set;
+using absl::flat_hash_map;
 using absl::Status;
 using ift::common::CodepointSet;
 using ift::common::FontData;
+using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_font;
@@ -264,6 +267,76 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
   // g9 is reached via a single subst of U+6406 which is gated on either
   // aalt or jp78
   ASSERT_EQ(conditions.at(9).ToString(), "if (s3 AND (s6 OR s7)) then p0");
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseIsolation) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+
+  Reconfigure({},
+              {
+                  /* 0 */ {{0x132 /* IJ */}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0xCD /* Iacute */}, ProbabilityBound::Zero()},
+                  /* 2 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
+                  /* 3 */ {{ccmp}, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  // Iacute is reachable via the graph from IJ -glyf-> I -GSUB-> Iacute,
+  // but IJ shouldn't be in the conditions as the path requires walking glyf
+  // before GSUB edges.
+  EXPECT_EQ(conditions.at(652 /* Iacute */).ToString(), "if (s1) then p0");
+}
+
+TEST_F(DependencyClosureTest, DISABLED_ExtractAllGlyphConditions_FullFont) {
+  // TODO XXXXX currently disabled because we can't yet handle cycles.
+
+  CodepointSet unicodes = FontHelper::ToCodepointsSet(face.get());
+  btree_set<hb_tag_t> features = FontHelper::GetFeatureTags(face.get());
+
+  std::vector<Segment> segments;
+  flat_hash_map<hb_codepoint_t, segment_index_t> cp_to_seg;
+  for (hb_codepoint_t cp : unicodes) {
+    cp_to_seg[cp] = segments.size();
+    segments.push_back({{cp}, ProbabilityBound::Zero()});
+  }
+  for (hb_tag_t feature : features) {
+    SubsetDefinition f;
+    f.feature_tags.insert(feature);
+    segments.push_back({f, ProbabilityBound::Zero()});
+  }
+
+  Reconfigure({}, segments);
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+
+  // TODO XXXX check some cases
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
+  // This is a case where's there's a cycle in the graph unless you
+  // process phase by phase.
+  //
+  // Cycle: AE -GSUB-> AEacute -glyf-> AE
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  Reconfigure({},
+              {
+                  /* 0 */ {{0xc6 /* AE */}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
+                  /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  EXPECT_EQ("if (s0) then p0", conditions.at(129 /* AE */).ToString());
+  EXPECT_EQ("if (s0 AND s1 AND s2) then p0", conditions.at(117 /* acute */).ToString());
 }
 
 TEST_F(DependencyClosureTest, Exclusive) {

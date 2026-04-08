@@ -668,7 +668,7 @@ DependencyClosure::InitializeConditions() const {
   return conditions;
 }
 
-StatusOr<ActivationCondition>
+StatusOr<std::optional<ActivationCondition>>
 DependencyClosure::EdgeConditionsToActivationCondition(
     const dep_graph::EdgeConditonsCnf& edge_conditions,
     const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
@@ -688,8 +688,9 @@ DependencyClosure::EdgeConditionsToActivationCondition(
     for (Node node : node_group) {
       auto it = node_conditions.find(node);
       if (it == node_conditions.end()) {
-        return absl::InternalError(absl::StrCat(
-            "Conditions for node, ", node.ToString(), ", should exist."));
+        // The condition for this node is FALSE. Since it's combined
+        // with OR with other nodes in the group we can just skip
+        continue;
       }
 
       if (!group_condition.has_value()) {
@@ -701,7 +702,10 @@ DependencyClosure::EdgeConditionsToActivationCondition(
     }
 
     if (!group_condition.has_value()) {
-      return absl::InternalError("Unexpected missing group condition.");
+      // If group_condition is empty that means it's FALSE, and since the group
+      // condition combines with AND with other sub-groups, the whole expression is
+      // also false.
+      return std::nullopt;
     }
 
     if (!out.has_value()) {
@@ -711,11 +715,7 @@ DependencyClosure::EdgeConditionsToActivationCondition(
     }
   }
 
-  if (!out.has_value()) {
-    return absl::InternalError(
-        "Unexpected missing final activation condition.");
-  }
-  return *out;
+  return out;
 }
 
 Status DependencyClosure::PropagateConditions(
@@ -725,42 +725,48 @@ Status DependencyClosure::PropagateConditions(
   for (Node n : topological_sort) {
     auto it = incoming_edges.find(n);
     if (it == incoming_edges.end()) {
-      // Root node, skip
+      // we only process nodes that have incoming edges for each phase.
       continue;
     }
 
     auto node_conditions_it = node_conditions.find(n);
     if (node_conditions_it != node_conditions.end() &&
         node_conditions_it->second.IsAlwaysTrue()) {
-      // Init font node, skip
+      // If node is always true, it's condition cannot change further.
       continue;
     }
 
     std::optional<ActivationCondition> complete_condition;
 
     for (const EdgeConditonsCnf& edge : it->second) {
-      ActivationCondition condition =
+      std::optional<ActivationCondition> condition =
           TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
+      if (!condition.has_value()) {
+        // std::nullopt means the condition for this edge is false, since
+        // it combines with OR with other edges, we can just skip it.
+        continue;
+      }
+
       if (complete_condition.has_value()) {
         complete_condition =
-            ActivationCondition::Or(*complete_condition, condition);
+            ActivationCondition::Or(*complete_condition, *condition);
       } else {
         complete_condition = condition;
       }
     }
 
     if (!complete_condition.has_value()) {
-      return absl::InternalError(
-          absl::StrCat("Complete condition was not assigned a value for node: ",
-                       n.ToString()));
+      // If no condition has been found, the condition for this node in this phase
+      // is FALSE so don't add a entry into the node_conditions map.
+      continue;
     }
 
-    auto [_, did_insert] = node_conditions.insert({n, *complete_condition});
-    if (!did_insert) {
-      // TODO(garretrieger): when switching to a phased impl we will probably
-      // need to support updates to existing conditions instead of erroring.
-      return absl::InternalError(absl::StrCat(
-          "Unexpected existing condition for node: ", n.ToString()));
+    auto it_existing = node_conditions.find(n);
+    if (it_existing == node_conditions.end()) {
+      node_conditions.insert({n, *complete_condition});
+    } else {
+      it_existing->second =
+          ActivationCondition::Or(it_existing->second, *complete_condition);
     }
   }
 
@@ -769,17 +775,19 @@ Status DependencyClosure::PropagateConditions(
 
 StatusOr<flat_hash_map<glyph_id_t, ActivationCondition>>
 DependencyClosure::ExtractAllGlyphConditions() const {
-  // TODO(garretrieger): this first pass implementation does not take into
-  // account closure phasing. This will need to be updated to do condition
-  // propagation one phase at a time. The global topological sort can be reused
-  // across phases.
-  auto topological_sort = TRY(graph_.TopologicalSorting());
-
-  auto incoming_edges = TRY(graph_.CollectIncomingEdges());
-
   auto conditions = InitializeConditions();
 
-  TRYV(PropagateConditions(incoming_edges, topological_sort, conditions));
+  flat_hash_set<hb_tag_t> table_tags =
+      ift::common::FontHelper::GetTags(original_face_.get());
+
+  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases; phase++) {
+    hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
+    if (table_tags.contains(table)) {
+      auto topological_sort = TRY(graph_.TopologicalSorting({table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      auto incoming_edges = TRY(graph_.CollectIncomingEdges({table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      TRYV(PropagateConditions(incoming_edges, topological_sort, conditions));
+    }
+  }
 
   flat_hash_map<glyph_id_t, ActivationCondition> result;
   for (glyph_id_t gid : segmentation_info_->NonInitFontGlyphs()) {
