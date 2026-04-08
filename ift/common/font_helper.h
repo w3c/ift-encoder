@@ -51,6 +51,9 @@ class FontHelper {
   constexpr static hb_tag_t kCFF2 = HB_TAG('C', 'F', 'F', '2');
   constexpr static hb_tag_t kGSUB = HB_TAG('G', 'S', 'U', 'B');
   constexpr static hb_tag_t kGPOS = HB_TAG('G', 'P', 'O', 'S');
+  constexpr static hb_tag_t kCmap = HB_TAG('c', 'm', 'a', 'p');
+  constexpr static hb_tag_t kCOLR = HB_TAG('C', 'O', 'L', 'R');
+  constexpr static hb_tag_t kMATH = HB_TAG('M', 'A', 'T', 'H');
 
   template <typename int_type_t>
   static bool WillIntOverflow(int64_t value) {

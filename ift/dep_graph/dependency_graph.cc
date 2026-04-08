@@ -39,14 +39,7 @@ using ift::encoder::SubsetDefinition;
 
 namespace ift::dep_graph {
 
-static constexpr hb_tag_t cmap = HB_TAG('c', 'm', 'a', 'p');
-static constexpr hb_tag_t glyf = HB_TAG('g', 'l', 'y', 'f');
-static constexpr hb_tag_t GSUB = HB_TAG('G', 'S', 'U', 'B');
-static constexpr hb_tag_t COLR = HB_TAG('C', 'O', 'L', 'R');
-static constexpr hb_tag_t MATH = HB_TAG('M', 'A', 'T', 'H');
-static constexpr hb_tag_t CFF = HB_TAG('C', 'F', 'F', ' ');
-
-static StatusOr<GlyphSet> GetContextSet(
+StatusOr<GlyphSet> GetContextSet(
     hb_depend_t* depend, const ift::common::GlyphSet* full_closure,
     hb_codepoint_t context_set_id) {
   // the context set is actually a set of sets.
@@ -89,7 +82,7 @@ class TraversalContext {
   hb_depend_t* depend = nullptr;
 
   // Only edges from these tables will be followed.
-  flat_hash_set<hb_tag_t> table_filter = {cmap, glyf, GSUB, COLR, MATH, CFF};
+  flat_hash_set<hb_tag_t> table_filter = {FontHelper::kCmap, FontHelper::kGlyf, FontHelper::kGSUB, FontHelper::kCOLR, FontHelper::kMATH, FontHelper::kCFF};
 
   // Only edges that originate from and end at glyphs from this filter will be
   // followed.
@@ -226,14 +219,14 @@ class TraversalContext {
 
     PendingEdge edge = PendingEdge::Uvs(a, b, gid);
     Node dest = Node::Glyph(gid);
-    return TraverseEdgeTo(dest, edge, cmap);
+    return TraverseEdgeTo(dest, edge, FontHelper::kCmap);
   }
 
   Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
                             hb_tag_t feature) {
     PendingEdge edge = PendingEdge::Gsub(source_gid, feature, dest_gid);
     Node dest = Node::Glyph(dest_gid);
-    return TraverseEdgeTo(dest, edge, GSUB);
+    return TraverseEdgeTo(dest, edge, FontHelper::kGSUB);
   }
 
   Status TraverseContextualEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
@@ -247,7 +240,7 @@ class TraversalContext {
     PendingEdge edge =
         PendingEdge::Context(source_gid, feature, dest_gid, context_set);
     Node dest = Node::Glyph(dest_gid);
-    return TraverseEdgeTo(dest, edge, GSUB);
+    return TraverseEdgeTo(dest, edge, FontHelper::kGSUB);
   }
 
   Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
@@ -263,7 +256,7 @@ class TraversalContext {
     PendingEdge edge =
         PendingEdge::Ligature(source_gid, feature, dest_gid, liga_set_index);
     Node dest = Node::Glyph(dest_gid);
-    return TraverseEdgeTo(dest, edge, GSUB);
+    return TraverseEdgeTo(dest, edge, FontHelper::kGSUB);
   }
 
   void Reached(Node node) {
@@ -456,7 +449,7 @@ static Status DoTraversal(const PendingEdge& edge,
                           TraversalContext<CallbackT>& context) {
   context.callback.VisitPending(edge);
 
-  if (edge.table_tag == GSUB && edge.required_feature.has_value()) {
+  if (edge.table_tag == FontHelper::kGSUB && edge.required_feature.has_value()) {
     if (edge.required_context_set_index.has_value()) {
       GlyphSet context_glyphs =
           TRY(GetContextSet(context.depend, context.full_closure,
@@ -531,7 +524,10 @@ absl::Status DependencyGraph::HandleOutgoingEdges(
   return absl::OkStatus();
 }
 
-StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting() const {
+StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting(
+  const flat_hash_set<hb_tag_t>& table_filter,
+  uint32_t node_type_filter
+) const {
   struct TopoCallback {
     std::vector<Node> edges;
     void Visit(Node dest) {}
@@ -560,6 +556,8 @@ StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting() const {
   context.unicode_filter = &non_init_font_codepoints;
   context.glyph_filter = &non_init_font_glyphs;
   context.feature_filter = &full_feature_set_;
+  context.table_filter = table_filter;
+  context.node_type_filter = node_type_filter;
 
   // DFS topological sorting algorithm from:
   // https://en.wikipedia.org/wiki/Topological_sorting
@@ -726,53 +724,33 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     TraversalContext context = base_context;
     context.SetReached(nodes);
     context.callback.SetStartNodes(nodes);
-    context.table_filter = {cmap};
-    context.node_type_filter = Node::NodeType::INIT_FONT |
-                               Node::NodeType::SEGMENT |
-                               Node::NodeType::UNICODE | Node::NodeType::GLYPH |
-                               Node::NodeType::FEATURE;
+    context.table_filter = {DependencyGraph::kClosurePhaseTable[0]};
+    context.node_type_filter = DependencyGraph::kClosurePhaseNodeFilter[0];
     traversal_full = TRY(TraverseGraph(&context));
   }
 
-  /* ### Phase 3: GSUB ### */
-  if (table_tags.contains(GSUB)) {
-    TRYV(ClosureSubTraversal(&base_context, GSUB, traversal_full));
-  }
-
-  /* ### Phase 4: MATH ### */
-  if (table_tags.contains(MATH)) {
-    TRYV(ClosureSubTraversal(&base_context, MATH, traversal_full));
-  }
-
-  /* ### Phase 5: COLR ### */
-  if (table_tags.contains(COLR)) {
-    TRYV(ClosureSubTraversal(&base_context, COLR, traversal_full));
-  }
-
-  /* ### Phase 6: glyf ### */
-  if (table_tags.contains(glyf)) {
-    TRYV(ClosureSubTraversal(&base_context, glyf, traversal_full));
-  }
-
-  /* ### Phase 7: CFF ### */
-  if (table_tags.contains(CFF)) {
-    TRYV(ClosureSubTraversal(&base_context, CFF, traversal_full));
+  /* ### Remaining Phases ### */
+  for (unsigned phase = 1; phase < DependencyGraph::kNumberOfClosurePhases; phase++) {
+    if (table_tags.contains(DependencyGraph::kClosurePhaseTable[phase])) {
+      TRYV(ClosureSubTraversal(&base_context, phase, traversal_full));
+    }
   }
 
   return traversal_full;
 }
 
 Status DependencyGraph::ClosureSubTraversal(
-    const TraversalContext<ClosureState>* base_context, hb_tag_t table,
+    const TraversalContext<ClosureState>* base_context, uint32_t phase_index,
     Traversal& traversal_full) const {
   btree_set<Node> start_nodes;
-  for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
-    start_nodes.insert(Node::Glyph(gid));
+
+  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] & Node::NodeType::GLYPH) {
+    for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
+      start_nodes.insert(Node::Glyph(gid));
+    }
   }
 
-  if (table == GSUB) {
-    // For GSUB we also need to consider reached features as starting nodes
-    // since those have outgoing GSUB edges.
+  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] & Node::NodeType::FEATURE) {
     for (hb_tag_t feature : traversal_full.ReachedLayoutFeatures()) {
       start_nodes.insert(Node::Feature(feature));
     }
@@ -781,8 +759,8 @@ Status DependencyGraph::ClosureSubTraversal(
   TraversalContext<ClosureState> context = *base_context;
   context.SetReached(start_nodes);
   context.callback.SetStartNodes(start_nodes);
-  context.table_filter = {table};
-  context.node_type_filter = Node::NodeType::GLYPH;
+  context.table_filter = {DependencyGraph::kClosurePhaseTable[phase_index]};
+  context.node_type_filter = DependencyGraph::kClosurePhaseNodeFilter[phase_index];
   traversal_full.Merge(TRY(TraverseGraph(&context)));
   return absl::OkStatus();
 }
@@ -881,7 +859,7 @@ Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
 template <typename CallbackT>
 Status DependencyGraph::HandleFeatureOutgoingEdges(
     hb_tag_t feature_tag, TraversalContext<CallbackT>* context) const {
-  if (!context->table_filter.contains(GSUB)) {
+  if (!context->table_filter.contains(FontHelper::kGSUB)) {
     // All feature edges are GSUB edges so we can skip
     // this if GSUB is being filtered out.
     return absl::OkStatus();
@@ -1164,7 +1142,7 @@ DependencyGraph::ComputeFeatureEdges() const {
     while (hb_depend_get_glyph_entry(
         dependency_graph_.get(), gid, index++, &table_tag, &dest_gid,
         &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
-      if (table_tag != GSUB || layout_tag == HB_CODEPOINT_INVALID) {
+      if (table_tag != FontHelper::kGSUB || layout_tag == HB_CODEPOINT_INVALID) {
         continue;
       }
 
@@ -1190,7 +1168,9 @@ DependencyGraph::ComputeFeatureEdges() const {
 }
 
 StatusOr<flat_hash_map<Node, btree_set<EdgeConditonsCnf>>>
-DependencyGraph::CollectIncomingEdges() const {
+DependencyGraph::CollectIncomingEdges(
+    const flat_hash_set<hb_tag_t>& table_filter,
+    uint32_t node_type_filter) const {
   struct IncomingEdgeCollector {
     flat_hash_map<Node, btree_set<EdgeConditonsCnf>>* incoming_edges = nullptr;
     const DependencyGraph* graph = nullptr;
@@ -1219,9 +1199,13 @@ DependencyGraph::CollectIncomingEdges() const {
   context.glyph_filter = &segmentation_info_->FullClosure();
   context.unicode_filter = &segmentation_info_->FullDefinition().codepoints;
   context.enforce_context = false;
+  context.table_filter = table_filter;
+  context.node_type_filter = node_type_filter;
   context.callback.incoming_edges = &incoming_edges;
   context.callback.graph = this;
 
+  // TODO(garretrieger): we have a few places iterating all nodes now, consider
+  // adding a function to generate the all nodes set or an all nodes iterator.
   btree_set<Node> all_nodes;
   all_nodes.insert(Node::InitFont());
   for (segment_index_t s : segmentation_info_->NonEmptySegments()) {

@@ -5,6 +5,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/dep_graph/traversal.h"
 #include "ift/encoder/glyph_closure_cache.h"
@@ -29,6 +30,7 @@ using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::freq::ProbabilityBound;
+using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
 
 namespace ift::dep_graph {
@@ -451,7 +453,11 @@ TEST_F(DependencyGraphTest, TopologicalSorting) {
                       {liga, ProbabilityBound::Zero()},
                   });
 
-  auto topo_order_or = graph.TopologicalSorting();
+  auto topo_order_or = graph.TopologicalSorting({
+    FontHelper::kCmap,
+    FontHelper::kGSUB,
+    FontHelper::kGlyf
+  }, 0xFFFFFFFF);
   ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
   const std::vector<Node>& topo_order = *topo_order_or;
   glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
@@ -519,7 +525,11 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
                   {dlig, ProbabilityBound::Zero()},
               });
 
-  auto topo_order_or = graph.TopologicalSorting();
+  auto topo_order_or = graph.TopologicalSorting({
+    FontHelper::kCmap,
+    FontHelper::kGSUB,
+    FontHelper::kGlyf
+  }, 0xFFFFFFFF);
   ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
   const std::vector<Node>& topo_order = *topo_order_or;
 
@@ -544,7 +554,11 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
                   /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
               });
 
-  auto topo_order_or = graph.TopologicalSorting();
+  auto topo_order_or = graph.TopologicalSorting({
+    FontHelper::kCmap,
+    FontHelper::kGSUB,
+    FontHelper::kGlyf
+  }, 0xFFFFFFFF);
   ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
   const std::vector<Node>& topo_order = *topo_order_or;
 
@@ -561,6 +575,82 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
   EXPECT_LT(gi, gffi);
 }
 
+TEST_F(DependencyGraphTest, TopologicalSorting_TableFilteringCycle) {
+  SubsetDefinition ccmp;
+  ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
+  Reconfigure({},
+              {
+                  /* 0 */ {{0xc6 /* AE */}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
+                  /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
+              });
+
+  // With both GSUB and glyf enabled, it should hit a cycle.
+  // Cycle: AE -GSUB-> AEacute -glyf-> AE
+  auto topo_order_or = graph.TopologicalSorting(
+      {FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+  EXPECT_FALSE(topo_order_or.ok());
+  EXPECT_EQ(topo_order_or.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(topo_order_or.status().message(), HasSubstr("Cycle detected"));
+
+  // With only GSUB, it should succeed.
+  topo_order_or = graph.TopologicalSorting({FontHelper::kGSUB}, 0xFFFFFFFF);
+  EXPECT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+
+  // With only glyf, it should succeed.
+  topo_order_or = graph.TopologicalSorting({FontHelper::kGlyf}, 0xFFFFFFFF);
+  EXPECT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+}
+
+TEST_F(DependencyGraphTest, CollectIncomingEdges_TableFiltering) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 2 */ {liga, ProbabilityBound::Zero()},
+              });
+
+  glyph_id_t gid_fi = *FontHelper::GetNominalGlyph(face.get(), 0xfb01);
+
+  // Without GSUB, fi should have no incoming edges.
+  auto edges_or = graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF);
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  EXPECT_EQ(edges_or->find(Node::Glyph(gid_fi)), edges_or->end());
+
+  // With GSUB, fi should have an incoming edge.
+  edges_or = graph.CollectIncomingEdges({FontHelper::kGSUB}, 0xFFFFFFFF);
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  EXPECT_NE(edges_or->find(Node::Glyph(gid_fi)), edges_or->end());
+}
+
+TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeFiltering) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 2 */ {liga, ProbabilityBound::Zero()},
+              });
+
+  glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
+
+  // Filter out Glyph nodes. f (glyph) should have no incoming edges.
+  auto edges_or = graph.CollectIncomingEdges(
+      {FontHelper::kCmap}, 0xFFFFFFFF & ~Node::NodeType::GLYPH);
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  EXPECT_EQ(edges_or->find(Node::Glyph(gid_f)), edges_or->end());
+
+  // Include Glyph nodes. f should have an incoming edge.
+  edges_or = graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF);
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  EXPECT_NE(edges_or->find(Node::Glyph(gid_f)), edges_or->end());
+}
+
 TEST_F(DependencyGraphTest, CollectIncomingEdges) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
@@ -572,7 +662,7 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
                   /* 2 */ {liga, ProbabilityBound::Zero()},
               });
 
-  auto edges_or = graph.CollectIncomingEdges();
+  auto edges_or = graph.CollectIncomingEdges({FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   const auto& edges = *edges_or;
 

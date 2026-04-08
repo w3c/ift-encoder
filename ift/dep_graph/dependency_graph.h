@@ -1,6 +1,7 @@
 #ifndef IFT_DEP_GRAPH_DEPENDENCY_GRAPH_H_
 #define IFT_DEP_GRAPH_DEPENDENCY_GRAPH_H_
 
+#include <cstdint>
 #include <memory>
 
 #include "absl/container/btree_set.h"
@@ -8,6 +9,7 @@
 #include "absl/status/statusor.h"
 #include "hb.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
@@ -36,6 +38,40 @@ class TraversalContext;
  */
 class DependencyGraph {
  public:
+  static constexpr uint32_t kNumberOfClosurePhases = 6;
+
+  // Reference for the phases and ordering:
+  // _populate_gids_to_retain() from
+  // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
+  static constexpr hb_tag_t kClosurePhaseTable[] = {
+    common::FontHelper::kCmap,
+    common::FontHelper::kGSUB,
+    common::FontHelper::kMATH,
+    common::FontHelper::kCOLR,
+    common::FontHelper::kGlyf,
+    common::FontHelper::kCFF,
+  };
+
+  static constexpr hb_tag_t kClosurePhaseNodeFilter[] = {
+    /* cmap */ 0xFFFFFFFF,
+    /* GSUB */ Node::NodeType::GLYPH,
+    /* MATH */ Node::NodeType::GLYPH,
+    /* COLR */ Node::NodeType::GLYPH,
+    /* glyf */ Node::NodeType::GLYPH,
+    /* CFF */ Node::NodeType::GLYPH,
+  };
+
+  static constexpr hb_tag_t kClosurePhaseStartNodes[] = {
+    /* cmap */ Node::NodeType::SEGMENT,
+    // For GSUB we also need to consider reached features as starting nodes
+    // since those have outgoing GSUB edges.
+    /* GSUB */ Node::NodeType::GLYPH | Node::NodeType::FEATURE,
+    /* MATH */ Node::NodeType::GLYPH,
+    /* COLR */ Node::NodeType::GLYPH,
+    /* glyf */ Node::NodeType::GLYPH,
+    /* CFF */ Node::NodeType::GLYPH,
+  };
+
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face) {
@@ -83,7 +119,7 @@ class DependencyGraph {
 
   // Returns a topological sorting of the dependency graph's nodes, excluding
   // any nodes that are in the init font.
-  absl::StatusOr<std::vector<Node>> TopologicalSorting() const;
+  absl::StatusOr<std::vector<Node>> TopologicalSorting(const absl::flat_hash_set<hb_tag_t>& table_filter, uint32_t node_type_filter) const;
 
   // Computes the incoming edges for every node in the dependency graph, taking
   // into account all context requirements and implicit dependencies.
@@ -91,7 +127,7 @@ class DependencyGraph {
   // The return value is a map from each node to each unique edge requirement.
   // Edge requirements are represented as a CNF expression over other nodes.
   absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditonsCnf>>>
-  CollectIncomingEdges() const;
+  CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter, uint32_t node_type_filter) const;
 
  private:
   DependencyGraph(
@@ -128,7 +164,7 @@ class DependencyGraph {
       TraversalContext<ClosureState>* context) const;
 
   absl::Status ClosureSubTraversal(
-      const TraversalContext<ClosureState>* base_context, hb_tag_t table,
+      const TraversalContext<ClosureState>* base_context, uint32_t phase_index,
       Traversal& traversal) const;
 
   template <typename CallbackT>
