@@ -21,6 +21,7 @@
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
+#include "ift/config/config_compiler.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/config/segmenter_config.pb.h"
@@ -32,6 +33,7 @@
 #include "util/auto_config_flags.h"
 
 using ift::config::ActivationConditionProto;
+using ift::config::ConfigCompiler;
 using ift::config::DesignSpace;
 using ift::config::SegmentationPlan;
 
@@ -147,136 +149,6 @@ int write_output(const Compiler::Encoding& encoding) {
   return 0;
 }
 
-StatusOr<design_space_t> to_design_space(const DesignSpace& proto) {
-  design_space_t result;
-  for (const auto& [tag_str, range_proto] : proto.ranges()) {
-    auto range = TRY(AxisRange::Range(range_proto.start(), range_proto.end()));
-    result[FontHelper::ToTag(tag_str)] = range;
-  }
-  return result;
-}
-
-ActivationCondition FromProto(const ActivationConditionProto& condition) {
-  // TODO(garretrieger): once glyph segmentation activation conditions can
-  // support features copy those here.
-  std::vector<SegmentSet> groups;
-  for (const auto& group : condition.required_segments()) {
-    SegmentSet set;
-    set.insert(group.values().begin(), group.values().end());
-    groups.push_back(set);
-  }
-
-  return ActivationCondition::composite_condition(groups,
-                                                  condition.activated_patch());
-}
-
-Status ConfigureCompiler(SegmentationPlan plan, Compiler& compiler) {
-  // First configure the glyph keyed segments, including features deps
-  for (const auto& [id, gids] : plan.glyph_patches()) {
-    TRYV(compiler.AddGlyphDataPatch(id, ift::config::Values(gids)));
-  }
-
-  std::vector<ActivationCondition> activation_conditions;
-  for (const auto& c : plan.glyph_patch_conditions()) {
-    activation_conditions.push_back(FromProto(c));
-  }
-
-  flat_hash_map<uint32_t, SubsetDefinition> segments;
-  for (const auto& [id, set] : plan.segments()) {
-    auto& segment = segments[id];
-    for (hb_codepoint_t cp : set.codepoints().values()) {
-      segment.codepoints.insert(cp);
-    }
-    for (const std::string& tag : set.features().values()) {
-      segment.feature_tags.insert(FontHelper::ToTag(tag));
-    }
-  }
-
-  auto condition_entries =
-      TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
-          activation_conditions, segments));
-  for (const auto& entry : condition_entries) {
-    TRYV(compiler.AddGlyphDataPatchCondition(entry));
-  }
-
-  // Initial subset definition
-  auto init_codepoints = ift::config::Values(plan.initial_codepoints());
-  auto init_glyphs = ift::config::Values(plan.initial_glyphs());
-  auto init_features = ift::config::TagValues(plan.initial_features());
-  auto init_segments = ift::config::Values(plan.initial_segments());
-  auto init_design_space = TRY(to_design_space(plan.initial_design_space()));
-
-  SubsetDefinition init_subset;
-  init_subset.codepoints.insert(init_codepoints.begin(), init_codepoints.end());
-  init_subset.gids.insert(init_glyphs.begin(), init_glyphs.end());
-
-  for (const auto segment_id : init_segments) {
-    auto segment = segments.find(segment_id);
-    if (segment == segments.end()) {
-      return absl::InvalidArgumentError(
-          StrCat("Segment id, ", segment_id, ", not found."));
-    }
-
-    init_subset.codepoints.union_set(segment->second.codepoints);
-    init_subset.feature_tags.insert(segment->second.feature_tags.begin(),
-                                    segment->second.feature_tags.end());
-  }
-
-  init_subset.feature_tags = init_features;
-  init_subset.design_space = init_design_space;
-  TRYV(compiler.SetInitSubsetFromDef(init_subset));
-
-  // Next configure the table keyed segments
-  for (const auto& codepoints : plan.non_glyph_codepoint_segmentation()) {
-    compiler.AddNonGlyphDataSegment(ift::config::Values(codepoints));
-  }
-
-  for (const auto& features : plan.non_glyph_feature_segmentation()) {
-    compiler.AddFeatureGroupSegment(ift::config::TagValues(features));
-  }
-
-  for (const auto& design_space_proto :
-       plan.non_glyph_design_space_segmentation()) {
-    auto design_space = TRY(to_design_space(design_space_proto));
-    compiler.AddDesignSpaceSegment(design_space);
-  }
-
-  for (const auto& segment_ids : plan.non_glyph_segments()) {
-    // Because we're using (codepoints or features) we can union up to the
-    // combined segment.
-    SubsetDefinition combined;
-    for (const auto& segment_id : segment_ids.values()) {
-      auto segment = segments.find(segment_id);
-      if (segment == segments.end()) {
-        return absl::InvalidArgumentError(
-            StrCat("Segment id, ", segment_id, ", not found."));
-      }
-      combined.Union(segment->second);
-    }
-
-    compiler.AddNonGlyphDataSegment(combined);
-  }
-
-  // Lastly graph shape parameters
-  if (plan.jump_ahead() > 1) {
-    compiler.SetJumpAhead(plan.jump_ahead());
-  }
-  compiler.SetUsePrefetchLists(plan.use_prefetch_lists());
-  compiler.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
-
-  // Check for unsupported settings
-  if (plan.include_all_segment_patches()) {
-    return absl::UnimplementedError(
-        "include_all_segment_patches is not yet supported.");
-  }
-
-  if (plan.max_depth() > 0) {
-    return absl::UnimplementedError("max_depth is not yet supported.");
-  }
-
-  return absl::OkStatus();
-}
-
 StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font) {
   SegmentationPlan plan;
   if (absl::GetFlag(FLAGS_plan).empty() ||
@@ -342,8 +214,9 @@ int main(int argc, char** argv) {
 
   Compiler compiler;
   compiler.SetFace(font->get());
+  compiler.SetWoff2Encode(absl::GetFlag(FLAGS_woff2_encode));
 
-  auto sc = ConfigureCompiler(*plan, compiler);
+  auto sc = ConfigCompiler::Configure(*plan, compiler);
   if (!sc.ok()) {
     std::cerr << "Failed to apply configuration to the encoder: " << sc
               << std::endl;

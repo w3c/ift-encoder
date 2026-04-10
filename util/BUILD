@@ -15,6 +15,7 @@ cc_binary(
     deps = [
         ":auto_config_flags",
         "//ift/config:auto_segmenter_config",
+        "//ift/config:config_compiler",
         "//ift/config:load_codepoints",
         "//ift/config:segmentation_plan_cc_proto",
         "//ift/config:segmenter_config_util",
