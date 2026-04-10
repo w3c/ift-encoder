@@ -61,6 +61,29 @@ cc_proto_library(
 )
 
 cc_library(
+    name = "config_compiler",
+    srcs = [
+        "config_compiler.cc",
+    ],
+    hdrs = [
+        "config_compiler.h",
+    ],
+    deps = [
+        ":load_codepoints",
+        ":segmentation_plan_cc_proto",
+        "//ift/common",
+        "//ift/encoder",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@harfbuzz",
+    ],
+    visibility = [
+        "//visibility:public",
+    ]
+)
+
+cc_library(
     name = "auto_segmenter_config",
     srcs = [
         "auto_segmenter_config.cc",
