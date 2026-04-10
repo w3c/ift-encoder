@@ -436,6 +436,17 @@ TEST_F(DependencyGraphTest, RequiredGlyphsFor_Liga) {
   EXPECT_TRUE(found_fi);
 }
 
+static std::vector<Node> FlattenSccs(
+    const std::vector<std::vector<Node>>& sccs) {
+  std::vector<Node> out;
+  for (const auto& scc : sccs) {
+    for (Node n : scc) {
+      out.push_back(n);
+    }
+  }
+  return out;
+}
+
 static int GetIndex(const std::vector<Node>& topo_order, Node n) {
   for (int i = 0; i < (int)topo_order.size(); ++i) {
     if (topo_order[i] == n) return i;
@@ -443,7 +454,9 @@ static int GetIndex(const std::vector<Node>& topo_order, Node n) {
   return -1;
 }
 
-TEST_F(DependencyGraphTest, TopologicalSorting) {
+TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting) {
+  // For dependency graphs that are DAG's strongly connected components is just
+  // a topological sort
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   Reconfigure({}, {
@@ -453,13 +466,10 @@ TEST_F(DependencyGraphTest, TopologicalSorting) {
                       {liga, ProbabilityBound::Zero()},
                   });
 
-  auto topo_order_or = graph.TopologicalSorting({
-    FontHelper::kCmap,
-    FontHelper::kGSUB,
-    FontHelper::kGlyf
-  }, 0xFFFFFFFF);
-  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
-  const std::vector<Node>& topo_order = *topo_order_or;
+  auto sccs_or = graph.StronglyConnectedComponents(
+      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+  ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
+  const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
   glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
   glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
   glyph_id_t gid_i = *FontHelper::GetNominalGlyph(face.get(), 'i');
@@ -513,7 +523,7 @@ TEST_F(DependencyGraphTest, TopologicalSorting) {
   EXPECT_LT(liga_f, gffi);
 }
 
-TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
+TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting_InitFontFilter) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   SubsetDefinition dlig;
@@ -525,13 +535,10 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
                   {dlig, ProbabilityBound::Zero()},
               });
 
-  auto topo_order_or = graph.TopologicalSorting({
-    FontHelper::kCmap,
-    FontHelper::kGSUB,
-    FontHelper::kGlyf
-  }, 0xFFFFFFFF);
-  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
-  const std::vector<Node>& topo_order = *topo_order_or;
+  auto sccs_or = graph.StronglyConnectedComponents(
+      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+  ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
+  const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
   glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
 
@@ -543,7 +550,7 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFilter) {
                                    Node::Feature(HB_TAG('d', 'l', 'i', 'g'))));
 }
 
-TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
+TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting_InitFontFeatures) {
   Reconfigure(WithDefaultFeatures({}),
               {
                   /* 0 */ {{'a'}, ProbabilityBound::Zero()},
@@ -554,13 +561,10 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
                   /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
               });
 
-  auto topo_order_or = graph.TopologicalSorting({
-    FontHelper::kCmap,
-    FontHelper::kGSUB,
-    FontHelper::kGlyf
-  }, 0xFFFFFFFF);
-  ASSERT_TRUE(topo_order_or.ok()) << topo_order_or.status();
-  const std::vector<Node>& topo_order = *topo_order_or;
+  auto sccs_or = graph.StronglyConnectedComponents(
+      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+  ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
+  const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
   // f
   int s1 = GetIndex(topo_order, Node::Segment(1));
@@ -575,7 +579,8 @@ TEST_F(DependencyGraphTest, TopologicalSorting_InitFontFeatures) {
   EXPECT_LT(gi, gffi);
 }
 
-TEST_F(DependencyGraphTest, TopologicalSorting_TableFilteringCycle) {
+TEST_F(DependencyGraphTest,
+       StronglyConnectedComponents_TableFilteringWithCycle) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({},
@@ -585,21 +590,37 @@ TEST_F(DependencyGraphTest, TopologicalSorting_TableFilteringCycle) {
                   /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
               });
 
-  // With both GSUB and glyf enabled, it should hit a cycle.
+  // With both GSUB and glyf enabled, it should find a cycle.
   // Cycle: AE -GSUB-> AEacute -glyf-> AE
-  auto topo_order_or = graph.TopologicalSorting(
+  auto sccs_or = graph.StronglyConnectedComponents(
       {FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
-  EXPECT_FALSE(topo_order_or.ok());
-  EXPECT_EQ(topo_order_or.status().code(), absl::StatusCode::kInvalidArgument);
-  EXPECT_THAT(topo_order_or.status().message(), HasSubstr("Cycle detected"));
+  ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
 
-  // With only GSUB, it should succeed.
-  topo_order_or = graph.TopologicalSorting({FontHelper::kGSUB}, 0xFFFFFFFF);
-  EXPECT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+  uint32_t num_cycles = 0;
+  for (const auto& scc : *sccs_or) {
+    if (scc.size() > 1) {
+      EXPECT_THAT(scc, UnorderedElementsAre(
+        Node::Glyph(129 /* AE */),
+        Node::Glyph(811 /* AEacute */)
+      ));
+      num_cycles++;
+    }
+  }
+  EXPECT_EQ(num_cycles, 1);
 
-  // With only glyf, it should succeed.
-  topo_order_or = graph.TopologicalSorting({FontHelper::kGlyf}, 0xFFFFFFFF);
-  EXPECT_TRUE(topo_order_or.ok()) << topo_order_or.status();
+  // With only GSUB, there should be no cycles
+  sccs_or = graph.StronglyConnectedComponents({FontHelper::kGSUB}, 0xFFFFFFFF);
+  EXPECT_TRUE(sccs_or.ok()) << sccs_or.status();
+  for (const auto& scc : *sccs_or) {
+    EXPECT_EQ(scc.size(), 1);
+  }
+
+  // With only glyf, there should be no cycles
+  sccs_or = graph.StronglyConnectedComponents({FontHelper::kGlyf}, 0xFFFFFFFF);
+  EXPECT_TRUE(sccs_or.ok()) << sccs_or.status();
+  for (const auto& scc : *sccs_or) {
+    EXPECT_EQ(scc.size(), 1);
+  }
 }
 
 TEST_F(DependencyGraphTest, CollectIncomingEdges_TableFiltering) {
@@ -662,7 +683,8 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
                   /* 2 */ {liga, ProbabilityBound::Zero()},
               });
 
-  auto edges_or = graph.CollectIncomingEdges({FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF);
+  auto edges_or = graph.CollectIncomingEdges(
+      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   const auto& edges = *edges_or;
 
