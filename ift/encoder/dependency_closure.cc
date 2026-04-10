@@ -703,8 +703,8 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 
     if (!group_condition.has_value()) {
       // If group_condition is empty that means it's FALSE, and since the group
-      // condition combines with AND with other sub-groups, the whole expression is
-      // also false.
+      // condition combines with AND with other sub-groups, the whole expression
+      // is also false.
       return std::nullopt;
     }
 
@@ -720,53 +720,73 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 
 Status DependencyClosure::PropagateConditions(
     const flat_hash_map<Node, btree_set<EdgeConditonsCnf>>& incoming_edges,
-    const std::vector<Node>& topological_sort,
+    const std::vector<std::vector<Node>>& sccs,
     flat_hash_map<Node, ActivationCondition>& node_conditions) const {
-  for (Node n : topological_sort) {
-    auto it = incoming_edges.find(n);
-    if (it == incoming_edges.end()) {
-      // we only process nodes that have incoming edges for each phase.
-      continue;
-    }
+  for (const std::vector<Node>& scc : sccs) {
+    // strongly connect components have cycles so we need to iteratively
+    // propagate conditions through the cycle until they stop changing.
+    // Since conditions can only grow this is gauranteed to stop eventually.
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (Node n : scc) {
+        auto it = incoming_edges.find(n);
+        if (it == incoming_edges.end()) {
+          // we only process nodes that have incoming edges within each phase.
+          continue;
+        }
 
-    auto node_conditions_it = node_conditions.find(n);
-    if (node_conditions_it != node_conditions.end() &&
-        node_conditions_it->second.IsAlwaysTrue()) {
-      // If node is always true, it's condition cannot change further.
-      continue;
-    }
+        auto node_conditions_it = node_conditions.find(n);
+        if (node_conditions_it != node_conditions.end() &&
+            node_conditions_it->second.IsAlwaysTrue()) {
+          // If node is always true, it's condition cannot change further.
+          continue;
+        }
 
-    std::optional<ActivationCondition> complete_condition;
+        std::optional<ActivationCondition> complete_condition;
 
-    for (const EdgeConditonsCnf& edge : it->second) {
-      std::optional<ActivationCondition> condition =
-          TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
-      if (!condition.has_value()) {
-        // std::nullopt means the condition for this edge is false, since
-        // it combines with OR with other edges, we can just skip it.
-        continue;
+        for (const EdgeConditonsCnf& edge : it->second) {
+          std::optional<ActivationCondition> condition =
+              TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
+          if (!condition.has_value()) {
+            // std::nullopt means the condition for this edge is false, since
+            // it combines with OR with other edges, we can just skip it.
+            continue;
+          }
+
+          if (complete_condition.has_value()) {
+            complete_condition =
+                ActivationCondition::Or(*complete_condition, *condition);
+          } else {
+            complete_condition = condition;
+          }
+        }
+
+        if (!complete_condition.has_value()) {
+          // If no condition has been found, the condition for this node in this
+          // phase is FALSE so don't add a entry into the node_conditions map.
+          continue;
+        }
+
+        auto it_existing = node_conditions.find(n);
+        if (it_existing == node_conditions.end()) {
+          node_conditions.insert({n, *complete_condition});
+          changed = true;
+        } else {
+          ActivationCondition combined =
+              ActivationCondition::Or(it_existing->second, *complete_condition);
+          if (combined != it_existing->second) {
+            it_existing->second = std::move(combined);
+            changed = true;
+          }
+        }
       }
 
-      if (complete_condition.has_value()) {
-        complete_condition =
-            ActivationCondition::Or(*complete_condition, *condition);
-      } else {
-        complete_condition = condition;
+      if (scc.size() == 1) {
+        // If the component has only one node we can assume the condition
+        // is already stabilized and shortcut a second check.
+        break;
       }
-    }
-
-    if (!complete_condition.has_value()) {
-      // If no condition has been found, the condition for this node in this phase
-      // is FALSE so don't add a entry into the node_conditions map.
-      continue;
-    }
-
-    auto it_existing = node_conditions.find(n);
-    if (it_existing == node_conditions.end()) {
-      node_conditions.insert({n, *complete_condition});
-    } else {
-      it_existing->second =
-          ActivationCondition::Or(it_existing->second, *complete_condition);
     }
   }
 
@@ -780,12 +800,15 @@ DependencyClosure::ExtractAllGlyphConditions() const {
   flat_hash_set<hb_tag_t> table_tags =
       ift::common::FontHelper::GetTags(original_face_.get());
 
-  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases; phase++) {
+  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases;
+       phase++) {
     hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
     if (table_tags.contains(table)) {
-      auto topological_sort = TRY(graph_.TopologicalSorting({table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
-      auto incoming_edges = TRY(graph_.CollectIncomingEdges({table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
-      TRYV(PropagateConditions(incoming_edges, topological_sort, conditions));
+      auto sccs = TRY(graph_.StronglyConnectedComponents(
+          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      auto incoming_edges = TRY(graph_.CollectIncomingEdges(
+          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      TRYV(PropagateConditions(incoming_edges, sccs, conditions));
     }
   }
 

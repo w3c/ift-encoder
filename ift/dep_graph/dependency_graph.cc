@@ -39,9 +39,9 @@ using ift::encoder::SubsetDefinition;
 
 namespace ift::dep_graph {
 
-StatusOr<GlyphSet> GetContextSet(
-    hb_depend_t* depend, const ift::common::GlyphSet* full_closure,
-    hb_codepoint_t context_set_id) {
+StatusOr<GlyphSet> GetContextSet(hb_depend_t* depend,
+                                 const ift::common::GlyphSet* full_closure,
+                                 hb_codepoint_t context_set_id) {
   // the context set is actually a set of sets.
   hb_set_unique_ptr context_sets = make_hb_set();
   if (!hb_depend_get_set_from_index(depend, context_set_id,
@@ -82,7 +82,9 @@ class TraversalContext {
   hb_depend_t* depend = nullptr;
 
   // Only edges from these tables will be followed.
-  flat_hash_set<hb_tag_t> table_filter = {FontHelper::kCmap, FontHelper::kGlyf, FontHelper::kGSUB, FontHelper::kCOLR, FontHelper::kMATH, FontHelper::kCFF};
+  flat_hash_set<hb_tag_t> table_filter = {FontHelper::kCmap, FontHelper::kGlyf,
+                                          FontHelper::kGSUB, FontHelper::kCOLR,
+                                          FontHelper::kMATH, FontHelper::kCFF};
 
   // Only edges that originate from and end at glyphs from this filter will be
   // followed.
@@ -449,7 +451,8 @@ static Status DoTraversal(const PendingEdge& edge,
                           TraversalContext<CallbackT>& context) {
   context.callback.VisitPending(edge);
 
-  if (edge.table_tag == FontHelper::kGSUB && edge.required_feature.has_value()) {
+  if (edge.table_tag == FontHelper::kGSUB &&
+      edge.required_feature.has_value()) {
     if (edge.required_context_set_index.has_value()) {
       GlyphSet context_glyphs =
           TRY(GetContextSet(context.depend, context.full_closure,
@@ -524,17 +527,17 @@ absl::Status DependencyGraph::HandleOutgoingEdges(
   return absl::OkStatus();
 }
 
-StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting(
-  const flat_hash_set<hb_tag_t>& table_filter,
-  uint32_t node_type_filter
-) const {
-  struct TopoCallback {
+StatusOr<std::vector<std::vector<Node>>>
+DependencyGraph::StronglyConnectedComponents(
+    const flat_hash_set<hb_tag_t>& table_filter,
+    uint32_t node_type_filter) const {
+  struct Callback {
     std::vector<Node> edges;
-    void Visit(Node dest) {}
-    void Visit(Node dest, hb_tag_t) {}
-    void VisitGsub(Node dest, hb_tag_t) {}
-    void VisitContextual(Node dest, hb_tag_t, ift::common::GlyphSet) {}
-    void VisitPending(const PendingEdge& edge) { edges.push_back(edge.dest); }
+    void Visit(Node) {}
+    void Visit(Node, hb_tag_t) {}
+    void VisitGsub(Node, hb_tag_t) {}
+    void VisitContextual(Node, hb_tag_t, GlyphSet) {}
+    void VisitPending(const PendingEdge& pe) { edges.push_back(pe.dest); }
   };
 
   CodepointSet non_init_font_codepoints =
@@ -549,7 +552,7 @@ StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting(
 
   GlyphSet non_init_font_glyphs = segmentation_info_->NonInitFontGlyphs();
 
-  TraversalContext<TopoCallback> context;
+  TraversalContext<Callback> context;
   context.depend = dependency_graph_.get();
   context.full_closure = &segmentation_info_->FullClosure();
   context.enforce_context = false;
@@ -559,73 +562,124 @@ StatusOr<std::vector<Node>> DependencyGraph::TopologicalSorting(
   context.table_filter = table_filter;
   context.node_type_filter = node_type_filter;
 
-  // DFS topological sorting algorithm from:
-  // https://en.wikipedia.org/wiki/Topological_sorting
-  // Modified to use a stack instead of recursion.
-  flat_hash_set<Node> visited;
-  flat_hash_set<Node> visiting;
-  std::vector<Node> post_order;
-  std::vector<Node> dfs_stack;
-  auto process_node = [&](Node start_node) -> Status {
-    dfs_stack.push_back(start_node);
+  // Implementation based on
+  // https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
+  // Modified to use stack instead of recursion.
+  struct Meta {
+    int64_t index = -1;
+    int64_t lowlink = -1;
+    bool on_stack = false;
+  };
+
+  flat_hash_map<Node, Meta> node_meta;
+  std::vector<Node> stack;
+
+  int64_t index = 0;
+  std::vector<std::vector<Node>> sccs;
+
+  struct DfsState {
+    Node node;
+    std::vector<Node> edges;
+  };
+
+  auto strongconnect = [&](Node start_node) -> Status {
+    std::vector<DfsState> dfs_stack = {{start_node, {}}};
+
     while (!dfs_stack.empty()) {
-      Node node = dfs_stack.back();
-      if (visited.contains(node)) {
-        dfs_stack.pop_back();
-        continue;
-      }
-      if (visiting.contains(node)) {
-        visiting.erase(node);
-        visited.insert(node);
-        post_order.push_back(node);
-        dfs_stack.pop_back();
-        continue;
+      Node v = dfs_stack.back().node;
+
+      std::vector<Node>& edges = dfs_stack.back().edges;
+      {
+        // Scope v_meta to where it's still valid
+        auto& v_meta = node_meta[v];
+        if (v_meta.index == -1) {
+          // first time time visiting this node, set up initial state.
+          v_meta.index = v_meta.lowlink = index++;
+          stack.push_back(v);
+          v_meta.on_stack = true;
+          context.callback.edges.clear();
+          TRYV(HandleOutgoingEdges(v, &context));
+          edges = std::move(context.callback.edges);
+        }
       }
 
-      visiting.insert(node);
-      context.callback.edges.clear();
-      TRYV(HandleOutgoingEdges(node, &context));
+      bool recursing = false;
+      while (!edges.empty()) {
+        Node w = edges.back();
+        edges.pop_back();
 
-      std::vector<Node> current_edges = std::move(context.callback.edges);
-      for (Node dest : current_edges) {
-        if (visiting.contains(dest)) {
-          return absl::InvalidArgumentError(
-              absl::StrCat("Cycle detected during topological sort in "
-                           "dependency graph involving node: ",
-                           dest.ToString()));
+        auto& w_meta = node_meta[w];
+        if (w_meta.index == -1) {
+          // recurse strongconnect()
+          dfs_stack.push_back({w, {}});
+          recursing = true;
+          break;
+        } else if (w_meta.on_stack) {
+          // Successor w is in stack and hence in the current SCC
+          auto& v_meta = node_meta[v];
+          v_meta.lowlink = std::min(v_meta.lowlink, w_meta.index);
         }
-        if (!visited.contains(dest)) {
-          dfs_stack.push_back(dest);
+      }
+
+      if (recursing) continue;
+
+      const auto& v_meta = node_meta.at(v);
+      // If v is a root node, pop the stack and generate an SCC
+      if (v_meta.lowlink == v_meta.index) {
+        std::vector<Node> scc;
+        while (true) {
+          Node node = stack.back();
+          stack.pop_back();
+          node_meta.at(node).on_stack = false;
+          scc.push_back(node);
+          if (node == v) break;
         }
+        sccs.push_back(std::move(scc));
+      }
+
+      dfs_stack.pop_back();
+      if (!dfs_stack.empty()) {
+        Node parent = dfs_stack.back().node;
+        auto& parent_meta = node_meta.at(parent);
+        parent_meta.lowlink = std::min(parent_meta.lowlink, v_meta.lowlink);
       }
     }
     return absl::OkStatus();
   };
 
-  /* ### Run process_node for every possible, non init font node. #### */
+  /* ### Run strongconnect for every possible, non init font node. #### */
   for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
-    TRYV(process_node(Node::Segment(s)));
+    Node n = Node::Segment(s);
+    if (!node_meta.contains(n)) {
+      TRYV(strongconnect(n));
+    }
   }
 
   for (hb_codepoint_t u : non_init_font_codepoints) {
-    TRYV(process_node(Node::Unicode(u)));
+    Node n = Node::Unicode(u);
+    if (!node_meta.contains(n)) {
+      TRYV(strongconnect(n));
+    }
   }
 
   for (hb_tag_t tag : non_init_font_features) {
-    TRYV(process_node(Node::Feature(tag)));
+    Node n = Node::Feature(tag);
+    if (!node_meta.contains(n)) {
+      TRYV(strongconnect(n));
+    }
   }
 
   for (glyph_id_t gid : non_init_font_glyphs) {
-    TRYV(process_node(Node::Glyph(gid)));
+    Node n = Node::Glyph(gid);
+    if (!node_meta.contains(n)) {
+      TRYV(strongconnect(n));
+    }
   }
 
-  std::vector<Node> topo_order;
-  topo_order.reserve(post_order.size());
-  for (auto it = post_order.rbegin(); it != post_order.rend(); ++it) {
-    topo_order.push_back(*it);
-  }
-
-  return topo_order;
+  // Tarjan's returns SCCs in reverse topological order, reverse to get
+  // topological order.
+  std::reverse(sccs.begin(), sccs.end());
+  return sccs;
 }
 
 StatusOr<Traversal> DependencyGraph::TraverseGraph(
@@ -730,7 +784,8 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   }
 
   /* ### Remaining Phases ### */
-  for (unsigned phase = 1; phase < DependencyGraph::kNumberOfClosurePhases; phase++) {
+  for (unsigned phase = 1; phase < DependencyGraph::kNumberOfClosurePhases;
+       phase++) {
     if (table_tags.contains(DependencyGraph::kClosurePhaseTable[phase])) {
       TRYV(ClosureSubTraversal(&base_context, phase, traversal_full));
     }
@@ -744,13 +799,15 @@ Status DependencyGraph::ClosureSubTraversal(
     Traversal& traversal_full) const {
   btree_set<Node> start_nodes;
 
-  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] & Node::NodeType::GLYPH) {
+  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
+      Node::NodeType::GLYPH) {
     for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
       start_nodes.insert(Node::Glyph(gid));
     }
   }
 
-  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] & Node::NodeType::FEATURE) {
+  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
+      Node::NodeType::FEATURE) {
     for (hb_tag_t feature : traversal_full.ReachedLayoutFeatures()) {
       start_nodes.insert(Node::Feature(feature));
     }
@@ -760,7 +817,8 @@ Status DependencyGraph::ClosureSubTraversal(
   context.SetReached(start_nodes);
   context.callback.SetStartNodes(start_nodes);
   context.table_filter = {DependencyGraph::kClosurePhaseTable[phase_index]};
-  context.node_type_filter = DependencyGraph::kClosurePhaseNodeFilter[phase_index];
+  context.node_type_filter =
+      DependencyGraph::kClosurePhaseNodeFilter[phase_index];
   traversal_full.Merge(TRY(TraverseGraph(&context)));
   return absl::OkStatus();
 }
@@ -1142,7 +1200,8 @@ DependencyGraph::ComputeFeatureEdges() const {
     while (hb_depend_get_glyph_entry(
         dependency_graph_.get(), gid, index++, &table_tag, &dest_gid,
         &layout_tag, &ligature_set, &context_set, nullptr /* flags */)) {
-      if (table_tag != FontHelper::kGSUB || layout_tag == HB_CODEPOINT_INVALID) {
+      if (table_tag != FontHelper::kGSUB ||
+          layout_tag == HB_CODEPOINT_INVALID) {
         continue;
       }
 
@@ -1179,7 +1238,7 @@ DependencyGraph::CollectIncomingEdges(
     void Visit(Node dest) {}
     void Visit(Node dest, hb_tag_t) {}
     void VisitGsub(Node, hb_tag_t) {}
-    void VisitContextual(Node, hb_tag_t, ift::common::GlyphSet) {}
+    void VisitContextual(Node, hb_tag_t, GlyphSet) {}
     void VisitPending(const PendingEdge& pe) {
       auto reqs = graph->ExtractRequirements(pe);
       had_error.Update(reqs.status());

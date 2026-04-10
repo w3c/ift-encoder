@@ -44,32 +44,29 @@ class DependencyGraph {
   // _populate_gids_to_retain() from
   // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
   static constexpr hb_tag_t kClosurePhaseTable[] = {
-    common::FontHelper::kCmap,
-    common::FontHelper::kGSUB,
-    common::FontHelper::kMATH,
-    common::FontHelper::kCOLR,
-    common::FontHelper::kGlyf,
-    common::FontHelper::kCFF,
+      common::FontHelper::kCmap, common::FontHelper::kGSUB,
+      common::FontHelper::kMATH, common::FontHelper::kCOLR,
+      common::FontHelper::kGlyf, common::FontHelper::kCFF,
   };
 
   static constexpr hb_tag_t kClosurePhaseNodeFilter[] = {
-    /* cmap */ 0xFFFFFFFF,
-    /* GSUB */ Node::NodeType::GLYPH,
-    /* MATH */ Node::NodeType::GLYPH,
-    /* COLR */ Node::NodeType::GLYPH,
-    /* glyf */ Node::NodeType::GLYPH,
-    /* CFF */ Node::NodeType::GLYPH,
+      /* cmap */ 0xFFFFFFFF,
+      /* GSUB */ Node::NodeType::GLYPH,
+      /* MATH */ Node::NodeType::GLYPH,
+      /* COLR */ Node::NodeType::GLYPH,
+      /* glyf */ Node::NodeType::GLYPH,
+      /* CFF */ Node::NodeType::GLYPH,
   };
 
   static constexpr hb_tag_t kClosurePhaseStartNodes[] = {
-    /* cmap */ Node::NodeType::SEGMENT,
-    // For GSUB we also need to consider reached features as starting nodes
-    // since those have outgoing GSUB edges.
-    /* GSUB */ Node::NodeType::GLYPH | Node::NodeType::FEATURE,
-    /* MATH */ Node::NodeType::GLYPH,
-    /* COLR */ Node::NodeType::GLYPH,
-    /* glyf */ Node::NodeType::GLYPH,
-    /* CFF */ Node::NodeType::GLYPH,
+      /* cmap */ Node::NodeType::SEGMENT,
+      // For GSUB we also need to consider reached features as starting nodes
+      // since those have outgoing GSUB edges.
+      /* GSUB */ Node::NodeType::GLYPH | Node::NodeType::FEATURE,
+      /* MATH */ Node::NodeType::GLYPH,
+      /* COLR */ Node::NodeType::GLYPH,
+      /* glyf */ Node::NodeType::GLYPH,
+      /* CFF */ Node::NodeType::GLYPH,
   };
 
   static absl::StatusOr<DependencyGraph> Create(
@@ -117,9 +114,12 @@ class DependencyGraph {
   absl::StatusOr<ift::common::GlyphSet> RequiredGlyphsFor(
       const PendingEdge& edge) const;
 
-  // Returns a topological sorting of the dependency graph's nodes, excluding
-  // any nodes that are in the init font.
-  absl::StatusOr<std::vector<Node>> TopologicalSorting(const absl::flat_hash_set<hb_tag_t>& table_filter, uint32_t node_type_filter) const;
+  // Returns the strongly connected components of the dependency graph's nodes,
+  // excluding any nodes that are in the init font. The components are returned
+  // in topological order.
+  absl::StatusOr<std::vector<std::vector<Node>>> StronglyConnectedComponents(
+      const absl::flat_hash_set<hb_tag_t>& table_filter,
+      uint32_t node_type_filter) const;
 
   // Computes the incoming edges for every node in the dependency graph, taking
   // into account all context requirements and implicit dependencies.
@@ -127,7 +127,8 @@ class DependencyGraph {
   // The return value is a map from each node to each unique edge requirement.
   // Edge requirements are represented as a CNF expression over other nodes.
   absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditonsCnf>>>
-  CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter, uint32_t node_type_filter) const;
+  CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter,
+                       uint32_t node_type_filter) const;
 
  private:
   DependencyGraph(

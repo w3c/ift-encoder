@@ -291,19 +291,19 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseIsolation) {
   EXPECT_EQ(conditions.at(652 /* Iacute */).ToString(), "if (s1) then p0");
 }
 
-TEST_F(DependencyClosureTest, DISABLED_ExtractAllGlyphConditions_FullFont) {
-  // TODO XXXXX currently disabled because we can't yet handle cycles.
-
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face.get());
   btree_set<hb_tag_t> features = FontHelper::GetFeatureTags(face.get());
 
   std::vector<Segment> segments;
   flat_hash_map<hb_codepoint_t, segment_index_t> cp_to_seg;
+  flat_hash_map<hb_tag_t, segment_index_t> layout_to_seg;
   for (hb_codepoint_t cp : unicodes) {
     cp_to_seg[cp] = segments.size();
     segments.push_back({{cp}, ProbabilityBound::Zero()});
   }
   for (hb_tag_t feature : features) {
+    layout_to_seg[feature] = segments.size();
     SubsetDefinition f;
     f.feature_tags.insert(feature);
     segments.push_back({f, ProbabilityBound::Zero()});
@@ -311,10 +311,30 @@ TEST_F(DependencyClosureTest, DISABLED_ExtractAllGlyphConditions_FullFont) {
 
   Reconfigure({}, segments);
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
+  auto conditions = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(conditions.ok()) << conditions.status();
 
-  // TODO XXXX check some cases
+  uint32_t parenleft = cp_to_seg.at('(');
+  uint32_t parenright = cp_to_seg.at(')');
+
+  EXPECT_EQ(conditions->at(12 /* parenleft */).ToString(),
+    // '(' is accesible from either '(' or ')' due to unicode mirroring.
+    absl::StrCat("if ((s", parenleft, " OR s", parenright,")) then p0"));
+
+  // small caps AE is accesible via numerous pathways and forms a complex
+  // composite condition (smcp, c2sc, and glyph component substitutions)
+  uint32_t AE = cp_to_seg.at(0xC6);
+  uint32_t ae = cp_to_seg.at(0xE6);
+  uint32_t AEacute = cp_to_seg.at(0x1FC);
+  uint32_t aeacute = cp_to_seg.at(0x1FD);
+  uint32_t smcp = layout_to_seg.at(HB_TAG('s', 'm', 'c', 'p'));
+  uint32_t c2sc = layout_to_seg.at(HB_TAG('c', '2', 's', 'c'));
+  EXPECT_EQ(conditions->at(627 /* small caps AE */).ToString(),
+  absl::StrCat(
+    "if ((s", AE, " OR s", ae," OR s", AEacute, " OR s", aeacute, ") ",
+    "AND (s", AE, " OR s", AEacute, " OR s", smcp, ") ",
+    "AND (s", ae," OR s", aeacute," OR s", c2sc,") ",
+    "AND (s", c2sc," OR s", smcp, ")) then p0"));
 }
 
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
@@ -336,7 +356,25 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
   const auto& conditions = *r;
 
   EXPECT_EQ("if (s0) then p0", conditions.at(129 /* AE */).ToString());
-  EXPECT_EQ("if (s0 AND s1 AND s2) then p0", conditions.at(117 /* acute */).ToString());
+  EXPECT_EQ("if (s0 AND s1 AND s2) then p0",
+            conditions.at(117 /* acute */).ToString());
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_BidiCycle) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{0x0029 /* ) */}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x0028 /* ( */}, ProbabilityBound::Zero()},
+              });
+
+  auto r = dependency_closure->ExtractAllGlyphConditions();
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& conditions = *r;
+
+  // GID 11 is '(', GID 12 is ')' in Roboto
+  // Both should be reached if either segment is present due to the cycle.
+  EXPECT_EQ(conditions.at(12).ToString(), "if ((s0 OR s1)) then p0");
+  EXPECT_EQ(conditions.at(13).ToString(), "if ((s0 OR s1)) then p0");
 }
 
 TEST_F(DependencyClosureTest, Exclusive) {

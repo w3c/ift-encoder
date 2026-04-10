@@ -136,7 +136,7 @@ class DependencyClosure {
       const absl::flat_hash_map<dep_graph::Node,
                                 absl::btree_set<dep_graph::EdgeConditonsCnf>>&
           incoming_edges,
-      const std::vector<dep_graph::Node>& topological_sort,
+      const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions)
       const;
 #endif
