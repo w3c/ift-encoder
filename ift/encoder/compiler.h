@@ -255,9 +255,8 @@ class Compiler {
     }
 
     // All other ids are for glyph keyed.
-    AppendLiteralToTemplate(absl::StrCat(patch_set_id, "_"), out);
     out.push_back(insert_id_op_code);
-    AppendLiteralToTemplate(".ift_gk", out);
+    AppendLiteralToTemplate(absl::StrCat(".", patch_set_id, ".ift_gk"), out);
     return out;
   }
 
