@@ -201,9 +201,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions) {
                   /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   // f (gid 74) is in segment 1
   ASSERT_EQ(conditions.at(74).ToString(), "if (s1) then p0");
@@ -227,9 +225,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
                   /* 1 */ {{'i'}, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   // 'f' is in init font, so it's not in the result map
   ASSERT_FALSE(conditions.contains(74));
@@ -256,9 +252,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
                   /* 7 */ {jp78, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   // g8 is reached via one of two cmap14 entries (U+7891 + U+FE00) or (U+7891 +
   // U+E0100).
@@ -281,9 +275,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseIsolation) {
                   /* 3 */ {{ccmp}, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   // Iacute is reachable via the graph from IJ -glyf-> I -GSUB-> Iacute,
   // but IJ shouldn't be in the conditions as the path requires walking glyf
@@ -311,14 +303,13 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
 
   Reconfigure({}, segments);
 
-  auto conditions = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(conditions.ok()) << conditions.status();
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   uint32_t parenleft = cp_to_seg.at('(');
   uint32_t parenright = cp_to_seg.at(')');
 
   EXPECT_EQ(
-      conditions->at(12 /* parenleft */).ToString(),
+      conditions.at(12 /* parenleft */).ToString(),
       // '(' is accesible from either '(' or ')' due to unicode mirroring.
       absl::StrCat("if ((s", parenleft, " OR s", parenright, ")) then p0"));
 
@@ -331,7 +322,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
   uint32_t smcp = layout_to_seg.at(HB_TAG('s', 'm', 'c', 'p'));
   uint32_t c2sc = layout_to_seg.at(HB_TAG('c', '2', 's', 'c'));
   EXPECT_EQ(
-      conditions->at(627 /* small caps AE */).ToString(),
+      conditions.at(627 /* small caps AE */).ToString(),
       absl::StrCat("if ((s", AE, " OR s", ae, " OR s", AEacute, " OR s",
                    aeacute, ") ", "AND (s", AE, " OR s", AEacute, " OR s", smcp,
                    ") ", "AND (s", ae, " OR s", aeacute, " OR s", c2sc, ") ",
@@ -352,9 +343,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
                   /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   EXPECT_EQ("if (s0) then p0", conditions.at(129 /* AE */).ToString());
   EXPECT_EQ("if (s0 AND s1 AND s2) then p0",
@@ -368,9 +357,7 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_BidiCycle) {
                   /* 1 */ {{0x0028 /* ( */}, ProbabilityBound::Zero()},
               });
 
-  auto r = dependency_closure->ExtractAllGlyphConditions();
-  ASSERT_TRUE(r.ok()) << r.status();
-  const auto& conditions = *r;
+  auto conditions = dependency_closure->AllGlyphConditions();
 
   // GID 11 is '(', GID 12 is ')' in Roboto
   // Both should be reached if either segment is present due to the cycle.
@@ -753,13 +740,63 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   s = segmentation_info->ReassignInitSubset(closure_cache, {'a'});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = dependency_closure->SegmentsChanged(true, SegmentSet::all());
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, SegmentsMerged_GlyphConditionsUpdate) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  auto conditions = dependency_closure->AllGlyphConditions();
+  ASSERT_EQ(conditions.at(69 /* a */).ToString(), "if (s0) then p0");
+  ASSERT_EQ(conditions.at(74 /* f */).ToString(), "if (s1) then p0");
+  ASSERT_EQ(conditions.at(77 /* i */).ToString(), "if (s2) then p0");
+  ASSERT_EQ(conditions.at(444 /* fi */).ToString(), "if (s1 AND s2) then p0");
+
+  Status s = dependency_closure->SegmentsMerged(2, {1, 2});
+  ASSERT_TRUE(s.ok()) << s;
+
+  conditions = dependency_closure->AllGlyphConditions();
+
+  EXPECT_EQ(conditions.at(69).ToString(), "if (s0) then p0");
+  EXPECT_EQ(conditions.at(74).ToString(), "if (s2) then p0");
+  EXPECT_EQ(conditions.at(77).ToString(), "if (s2) then p0");
+  EXPECT_EQ(conditions.at(444).ToString(), "if (s2) then p0");
+}
+
+TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  auto conditions = dependency_closure->AllGlyphConditions();
+  ASSERT_TRUE(conditions.contains(74 /* f */));
+
+  Status s =
+      segmentation_info->ReassignInitSubset(closure_cache, WithDefaultFeatures({'f'}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  conditions = dependency_closure->AllGlyphConditions();
+  // 'f' should no longer be in conditions
+  EXPECT_FALSE(conditions.contains(74 /* f */));
+  // 'fi' should now only depend on 'i' (s2)
+  EXPECT_EQ(conditions.at(444 /* fi */).ToString(), "if (s2) then p0");
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {

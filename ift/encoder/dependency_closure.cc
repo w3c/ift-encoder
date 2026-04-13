@@ -66,21 +66,15 @@ DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(
   return AnalysisAccuracy::ACCURATE;
 }
 
-Status DependencyClosure::SegmentsChanged(bool init_font_change,
-                                          const SegmentSet& segments) {
-  VLOG(1) << "DependencyClosure::SegmentsChanged()";
+Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
+  VLOG(1) << "DependencyClosure::InitFontChanged()";
 
-  if (!init_font_change && segmentation_info_->SegmentsAreDisjoint()) {
-    // If the init font is not changed and all segments are disjoint then there
-    // won't be any changes to incoming edge counts as segment modifications
-    // will just shift outgoing edges around between segments.
-    TRYV(UpdateReachabilityIndex(segments));
-    return absl::OkStatus();
-  }
+  // TODO(garretrieger): for now to keep this simple we do a full recalculation
+  // of per glyph conditions. However, it's likely possible to do a more incremental
+  // update based on changed segments. Re-visit this if this ends up showing up
+  // in profiles.
+  glyph_condition_cache_ = TRY(ExtractAllGlyphConditions());;
 
-  // TODO(garretrieger): can we do an incremental update of
-  // incoming_edge_counts_, and context? not high priority as this does not
-  // currently show up as problematic in profiles.
   SegmentSet start_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
     if (segmentation_info_->Segments().at(s).Definition().Empty()) {
@@ -114,6 +108,28 @@ Status DependencyClosure::SegmentsChanged(bool init_font_change,
   // sets are populated. since it utilizes those to assess traversal accuracy.
   TRYV(UpdateReachabilityIndex(segments));
 
+  return absl::OkStatus();
+}
+
+Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
+                                         const SegmentSet& segments) {
+  if (!segmentation_info_->SegmentsAreDisjoint()) {
+    // Non-disjoint segments requires more extensive invalidation provided
+    // by init font changed.
+    return InitFontChanged(segments);
+  }
+
+  // Manually update the glyph condition cache.
+  for (auto& [gid, condition] : glyph_condition_cache_) {
+    // TODO(garretrieger): avoid looking at the full condition set by using
+    // a reachability index to locate just the glyphs that are affected.
+    if (condition.Intersects(segments)) {
+      condition = condition.ReplaceSegments(base_segment, segments);
+    }
+  }
+
+  VLOG(1) << "DependencyClosure::SegmentsMerged()";
+  TRYV(UpdateReachabilityIndex(segments));
   return absl::OkStatus();
 }
 

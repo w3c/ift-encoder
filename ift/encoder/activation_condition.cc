@@ -151,6 +151,28 @@ ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
   return condition;
 }
 
+bool ActivationCondition::Intersects(const common::SegmentSet& segments) const {
+  for (const auto& condition_group : conditions_) {
+    if (condition_group.intersects(segments)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ActivationCondition ActivationCondition::ReplaceSegments(
+    segment_index_t base_segment, const common::SegmentSet& segments) const {
+  ActivationCondition new_condition = *this;
+  for (auto& condition_group : new_condition.conditions_) {
+    if (condition_group.intersects(segments)) {
+      condition_group.subtract(segments);
+      condition_group.insert(base_segment);
+    }
+  }
+  Simplify(new_condition.conditions_);
+  return new_condition;
+}
+
 std::string ActivationCondition::ToString() const {
   std::stringstream out;
   out << "if (";
