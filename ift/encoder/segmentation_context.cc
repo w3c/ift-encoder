@@ -142,7 +142,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   TRYV(segmentation_info_->ReassignInitSubset(*glyph_closure_cache, new_def));
 
   if (dependency_closure_.has_value()) {
-    TRYV((*dependency_closure_)->SegmentsChanged(true, segments_to_reprocess));
+    TRYV((*dependency_closure_)->InitFontChanged(segments_to_reprocess));
   }
 
   // All segments depend on the init subset def, so we must reprocess

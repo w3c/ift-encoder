@@ -188,9 +188,11 @@ class SegmentationContext {
    * Removes all condition and grouping information related to all gids in
    * glyphs.
    */
-  absl::Status InvalidateGlyphInformation(
+  absl::Status InvalidateGlyphInformationForMerge(
       const ift::common::GlyphSet& glyphs,
-      const ift::common::SegmentSet& segments) {
+      const ift::common::SegmentSet& segments,
+      segment_index_t base_segment
+    ) {
     // TODO(garretrieger): now that invalidation here is only for glyph
     // condition set we should consider changing this so that invalidation is
     // internal to glyph condition set reprocessing (like with GroupGlyphs).
@@ -200,7 +202,7 @@ class SegmentationContext {
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
 
     if (dependency_closure_.has_value()) {
-      return (*dependency_closure_)->SegmentsChanged(false, segments);
+      return (*dependency_closure_)->SegmentsMerged(base_segment, segments);
     }
     return absl::OkStatus();
   }

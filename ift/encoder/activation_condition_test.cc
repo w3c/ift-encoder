@@ -461,4 +461,42 @@ TEST(ActivationConditionTest, Or_Simplification) {
   EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
 }
 
+TEST(ActivationConditionTest, ReplaceSegments) {
+  // (s1 OR s2) AND (s3 OR s4) AND s5
+  auto a = ActivationCondition::composite_condition({{1, 2}, {3, 4}, {5}}, 10);
+
+  auto replaced = a.ReplaceSegments(100, {1, 2});
+  EXPECT_EQ(replaced.ToString(), "if ((s3 OR s4) AND s5 AND s100) then p10");
+
+  replaced = a.ReplaceSegments(200, {3, 5});
+  // (s4 OR s200) AND s200 simplifies to just s200
+  EXPECT_EQ(replaced.ToString(), "if ((s1 OR s2) AND s200) then p10");
+
+  replaced = a.ReplaceSegments(300, {1, 3});
+  EXPECT_EQ(replaced.ToString(), "if ((s2 OR s300) AND (s4 OR s300) AND s5) then p10");
+}
+
+TEST(ActivationConditionTest, ReplaceSegments_True) {
+  auto a = ActivationCondition::True(10);
+  // Replace segments is a noop on a True condition.
+  ASSERT_EQ(a.ReplaceSegments(1, {2, 3}), a);
+}
+
+TEST(ActivationConditionTest, Intersects) {
+  // (s1 OR s2) AND (s3 OR s4) AND s5
+  auto a = ActivationCondition::composite_condition({{1, 2}, {3, 4}, {5}}, 10);
+
+  EXPECT_TRUE(a.Intersects({1}));
+  EXPECT_TRUE(a.Intersects({2}));
+  EXPECT_TRUE(a.Intersects({5}));
+  EXPECT_TRUE(a.Intersects({1, 6}));
+
+  EXPECT_FALSE(a.Intersects({6}));
+  EXPECT_FALSE(a.Intersects({0, 6, 7}));
+  EXPECT_FALSE(a.Intersects({}));
+
+  auto b = ActivationCondition::True(10);
+  EXPECT_FALSE(b.Intersects({1}));
+}
+
 }  // namespace ift::encoder

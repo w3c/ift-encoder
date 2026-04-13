@@ -44,7 +44,8 @@ class DependencyClosure {
         TRY(dep_graph::DependencyGraph::Create(segmentation_info, face));
     auto result = std::unique_ptr<DependencyClosure>(
         new DependencyClosure(std::move(graph), segmentation_info, face));
-    TRYV(result->SegmentsChanged(true, ift::common::SegmentSet::all()));
+    TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
+
     return result;
 #endif
   }
@@ -90,14 +91,17 @@ class DependencyClosure {
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
   // versus real subsetting closure due to reliance on the dependency graph.
-  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>>
-  ExtractAllGlyphConditions() const;
+  const absl::flat_hash_map<glyph_id_t, ActivationCondition>&
+  AllGlyphConditions() const {
+    return glyph_condition_cache_;
+  }
 
   // This structure caches information derived from the segmentation info
-  // segments. This function signals that segmentation info segments have
+  // segments. These two function signals that segmentation info segments have
   // changed and recomputes the internal cached information.
-  absl::Status SegmentsChanged(bool init_font_changed,
-                               const ift::common::SegmentSet& segments);
+  absl::Status InitFontChanged(const ift::common::SegmentSet& segments);
+  absl::Status SegmentsMerged(segment_index_t base_segment,
+                              const ift::common::SegmentSet& segments);
 
   // The collection of SegmentsThatInteractWith(...) methods are used to
   // locate segments that have interactions with unicodes/features/glyphs.
@@ -122,6 +126,12 @@ class DependencyClosure {
 
  private:
 #ifdef HB_DEPEND_API
+
+  // Extracts the full activations conditions (as specified by the dependency
+  // graph) for all glyphs. In some cases may overestimate activation conditions
+  // versus real subsetting closure due to reliance on the dependency graph.
+  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>>
+  ExtractAllGlyphConditions() const;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
   InitializeConditions() const;
@@ -203,10 +213,13 @@ class DependencyClosure {
   const RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
+
   ift::common::GlyphSet context_glyphs_;
   ift::common::GlyphSet init_font_reachable_glyphs_;
   ift::common::GlyphSet init_font_context_glyphs_;
   absl::flat_hash_set<hb_tag_t> init_font_features_;
+
+  absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
 
   // Reachability indexes: these indexes are used to quickly locate segments
   // reachable from glyph and features (and in reverse as well).

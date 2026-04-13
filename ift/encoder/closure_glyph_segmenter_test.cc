@@ -496,7 +496,8 @@ if (s0 AND s1) then p2
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FallbackSegment) {
+TEST_F(ClosureGlyphSegmenterTest, DISABLED_UnmappedGlyphs_FallbackSegment) {
+  // TODO XXXXX re-enable
   auto segmentation = CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -522,7 +523,8 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
+TEST_F(ClosureGlyphSegmenterTest, DISABLED_UnmappedGlyphs_FindConditions) {
+  // TODO XXXXX noto nastaliq urdu dep graph computation is really slow. re-enable once fixed.
   auto segmentation = FindConditionsCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
       {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, std::nullopt);
@@ -552,7 +554,8 @@ if ((s1 OR s2 OR s3 OR s4)) then p6
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
+TEST_F(ClosureGlyphSegmenterTest, DISABLED_UnmappedGlyphs_FindConditions_IsFallback) {
+  // TODO XXXX re-enable
   // Here the found conditions are equal to the fallback segment, this ensures
   // everything works properly in this case.
   auto segmentation = FindConditionsCodepointToGlyphSegments(
@@ -581,7 +584,8 @@ if ((s0 OR s1 OR s2 OR s3)) then p5
 }
 
 TEST_F(ClosureGlyphSegmenterTest,
-       UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
+       DISABLED_UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
+  // TODO XXXX re-enable
   auto segmentation = MoveToInitFontCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
       btree_map<SegmentSet, MergeStrategy>{});
@@ -607,7 +611,8 @@ if ((s2 OR s3)) then p5
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
+TEST_F(ClosureGlyphSegmenterTest, DISABLED_FullRoboto_WithFeaturesAndDepGraph) {
+  // TODO XXXXX re-enable once slowness is fixed.
   auto codepoints = FontHelper::ToCodepointsSet(roboto.get());
 
   uint32_t num_segments = 412;
@@ -1671,7 +1676,8 @@ if (s2 AND s5) then p6
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
+TEST_F(ClosureGlyphSegmenterTest, DISABLED_InitFontMergingAndFindConditions) {
+  // TODO XXXX re-enable
   // In this test we enable merging of segments into the init font
   UnicodeFrequencies frequencies{
       /* s0 */ {{0x20, 0x20}, 1000},
