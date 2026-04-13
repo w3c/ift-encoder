@@ -58,6 +58,14 @@ class Compiler {
 
   void SetWoff2Encode(bool value) { this->woff2_encode_ = value; }
 
+  void SetOverrideUrlTemplatePrefix(const std::vector<uint8_t>& prefix) {
+    override_url_template_prefix_ = prefix;
+  }
+
+  const std::vector<uint8_t>& override_url_template_prefix() const {
+    return override_url_template_prefix_;
+  }
+
   /*
    * Adds a segmentation of glyph data.
    *
@@ -247,15 +255,19 @@ class Compiler {
     constexpr uint8_t insert_id_op_code = 128;
 
     std::vector<uint8_t> out;
+    if (!override_url_template_prefix_.empty()) {
+      out = override_url_template_prefix_;
+    } else {
+      out.push_back(insert_id_op_code);
+    }
+
     if (patch_set_id == 0) {
       // patch_set_id 0 is always used for table keyed patches
-      out.push_back(insert_id_op_code);
       AppendLiteralToTemplate(".ift_tk", out);
       return out;
     }
 
     // All other ids are for glyph keyed.
-    out.push_back(insert_id_op_code);
     AppendLiteralToTemplate(absl::StrCat(".", patch_set_id, ".ift_gk"), out);
     return out;
   }
@@ -363,6 +375,7 @@ class Compiler {
   uint32_t next_id_ = 0;
   bool use_prefetch_lists_ = false;
   bool woff2_encode_ = false;
+  std::vector<uint8_t> override_url_template_prefix_;
 
   struct ProcessingContext {
     ProcessingContext(uint32_t next_id)

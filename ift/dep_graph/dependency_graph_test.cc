@@ -523,7 +523,8 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting) {
   EXPECT_LT(liga_f, gffi);
 }
 
-TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting_InitFontFilter) {
+TEST_F(DependencyGraphTest,
+       StronglyConnectedComponents_TopologicalSorting_InitFontFilter) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   SubsetDefinition dlig;
@@ -550,7 +551,8 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting_InitF
                                    Node::Feature(HB_TAG('d', 'l', 'i', 'g'))));
 }
 
-TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting_InitFontFeatures) {
+TEST_F(DependencyGraphTest,
+       StronglyConnectedComponents_TopologicalSorting_InitFontFeatures) {
   Reconfigure(WithDefaultFeatures({}),
               {
                   /* 0 */ {{'a'}, ProbabilityBound::Zero()},
@@ -599,10 +601,8 @@ TEST_F(DependencyGraphTest,
   uint32_t num_cycles = 0;
   for (const auto& scc : *sccs_or) {
     if (scc.size() > 1) {
-      EXPECT_THAT(scc, UnorderedElementsAre(
-        Node::Glyph(129 /* AE */),
-        Node::Glyph(811 /* AEacute */)
-      ));
+      EXPECT_THAT(scc, UnorderedElementsAre(Node::Glyph(129 /* AE */),
+                                            Node::Glyph(811 /* AEacute */)));
       num_cycles++;
     }
   }

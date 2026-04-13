@@ -1000,4 +1000,34 @@ TEST_F(CompilerTest, RoundTripWoff2_Fails) {
   ASSERT_TRUE(absl::IsInternal(ttf.status())) << ttf.status();
 }
 
+TEST_F(CompilerTest, UrlTemplateOverride) {
+  Compiler compiler;
+  hb_face_t* face = font.reference_face();
+  compiler.SetFace(face);
+
+  auto s = compiler.SetInitSubset(IntSet{'a', 'd'});
+  ASSERT_TRUE(s.ok()) << s;
+  compiler.AddNonGlyphDataSegment(IntSet{'b', 'c'});
+
+  // 3 (length) + 'p' + 'r' + 'e' + 128 (id opcode)
+  std::vector<uint8_t> prefix = {3, 'p', 'r', 'e', 133};
+  compiler.SetOverrideUrlTemplatePrefix(prefix);
+
+  auto encoding = compiler.Compile();
+  hb_face_destroy(face);
+
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+
+  auto ift_table = FontHelper::TableData(encoded_face.get(), FontHelper::kIFT);
+  if (ift_table.empty()) {
+    ift_table = FontHelper::TableData(encoded_face.get(), FontHelper::kIFTX);
+  }
+  ASSERT_FALSE(ift_table.empty());
+
+  std::string expected_template = {3,   'p', 'r', 'e', (char)133, 7,  '.',
+                                   'i', 'f', 't', '_', 't',       'k'};
+  ASSERT_TRUE(ift_table.str().find(expected_template) != std::string::npos);
+}
+
 }  // namespace ift::encoder

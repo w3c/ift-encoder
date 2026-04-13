@@ -152,7 +152,27 @@ message SegmentationPlan {
   // for in a single jump.
   repeated DesignSpace non_glyph_design_space_segmentation = 15;
 
-  // next = 17
+  // These settings are for advanced usage and typically shouldn't need to be configured.
+  AdvancedSettings advanced_settings = 17;
+
+  // next = 18
+}
+
+message AdvancedSettings {
+  // In the output font the URL template byte string is replaced with these bytes.
+  //
+  // The template bytes should not include the patch file extension (.ift_tk, .ift_gk),
+  // as that will be added automatically during compilation based on the type of patch.
+  //
+  // If unset the compiler uses the byte string [128] as the URL template based which sets the
+  // patch file name to the id32 value for each patch.
+  //
+  // URL template specification: https://w3c.github.io/IFT/Overview.html#url-templates
+  // It's up to the caller to ensure the provided byte string is a valid URL template.
+  //
+  // Note: patches will be output to directory specified by the provided template.
+  // it's up to the caller to ensure the location exists.
+  bytes override_url_template_prefix = 1;
 }
 
 // Activated when at least one set in every group is matched and all required_features match.

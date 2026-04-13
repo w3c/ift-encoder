@@ -1800,4 +1800,55 @@ TEST_F(IntegrationTest, MixedMode_Cff2) {
             FontHelper::Cff2Data(desubroutinized_face.get(), 35).span());
 }
 
+TEST_F(IntegrationTest, UrlTemplateOverride) {
+  Compiler compiler;
+  auto init_gids = InitEncoderForMixedMode(compiler);
+  ASSERT_TRUE(init_gids.ok()) << init_gids.status();
+
+  auto face = noto_sans_jp_.face();
+  auto segment_0 = FontHelper::GidsToUnicodes(face.get(), *init_gids);
+  auto segment_1 = FontHelper::GidsToUnicodes(face.get(), TestSegment1());
+
+  auto sc = compiler.SetInitSubset(segment_0);
+  compiler.AddNonGlyphDataSegment(segment_1);
+  sc.Update(compiler.AddGlyphDataPatchCondition(
+      PatchMap::Entry(segment_1, 1, PatchEncoding::GLYPH_KEYED)));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // 4 (length) + 'p' + 'a' + 't' + 'h' + 128 (id opcode)
+  std::vector<uint8_t> prefix = {4, 'p', 'a', 't', 'h', 128};
+  compiler.SetOverrideUrlTemplatePrefix(prefix);
+
+  auto encoding = compiler.Compile();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  // Verify the keys in the patches map.
+  for (const auto& [uri, data] : encoding->patches) {
+    EXPECT_THAT(uri, testing::StartsWith("path"));
+  }
+
+  // Request codepoint extension
+  btree_set<std::string> fetched_uris;
+  auto extended = ExtendWithDesignSpace(*encoding, {chunk1_cp}, {}, {},
+                                        &fetched_uris, 1, 2);
+  ASSERT_TRUE(extended.ok()) << extended.status();
+
+  // Should have fetched one table keyed and one glyph keyed patch.
+  // Table keyed: path<id>.ift_tk
+  // Glyph keyed: path<id>.ift_gk
+  ASSERT_EQ(fetched_uris.size(), 2);
+  bool found_tk = false;
+  bool found_gk = false;
+  for (const std::string& uri : fetched_uris) {
+    EXPECT_THAT(uri, testing::StartsWith("path"));
+    if (uri.find(".ift_tk") != std::string::npos) {
+      found_tk = true;
+    } else if (uri.find(".ift_gk") != std::string::npos) {
+      found_gk = true;
+    }
+  }
+  EXPECT_TRUE(found_tk);
+  EXPECT_TRUE(found_gk);
+}
+
 }  // namespace ift

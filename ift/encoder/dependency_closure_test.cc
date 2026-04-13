@@ -317,9 +317,10 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
   uint32_t parenleft = cp_to_seg.at('(');
   uint32_t parenright = cp_to_seg.at(')');
 
-  EXPECT_EQ(conditions->at(12 /* parenleft */).ToString(),
-    // '(' is accesible from either '(' or ')' due to unicode mirroring.
-    absl::StrCat("if ((s", parenleft, " OR s", parenright,")) then p0"));
+  EXPECT_EQ(
+      conditions->at(12 /* parenleft */).ToString(),
+      // '(' is accesible from either '(' or ')' due to unicode mirroring.
+      absl::StrCat("if ((s", parenleft, " OR s", parenright, ")) then p0"));
 
   // small caps AE is accesible via numerous pathways and forms a complex
   // composite condition (smcp, c2sc, and glyph component substitutions)
@@ -329,12 +330,12 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
   uint32_t aeacute = cp_to_seg.at(0x1FD);
   uint32_t smcp = layout_to_seg.at(HB_TAG('s', 'm', 'c', 'p'));
   uint32_t c2sc = layout_to_seg.at(HB_TAG('c', '2', 's', 'c'));
-  EXPECT_EQ(conditions->at(627 /* small caps AE */).ToString(),
-  absl::StrCat(
-    "if ((s", AE, " OR s", ae," OR s", AEacute, " OR s", aeacute, ") ",
-    "AND (s", AE, " OR s", AEacute, " OR s", smcp, ") ",
-    "AND (s", ae," OR s", aeacute," OR s", c2sc,") ",
-    "AND (s", c2sc," OR s", smcp, ")) then p0"));
+  EXPECT_EQ(
+      conditions->at(627 /* small caps AE */).ToString(),
+      absl::StrCat("if ((s", AE, " OR s", ae, " OR s", AEacute, " OR s",
+                   aeacute, ") ", "AND (s", AE, " OR s", AEacute, " OR s", smcp,
+                   ") ", "AND (s", ae, " OR s", aeacute, " OR s", c2sc, ") ",
+                   "AND (s", c2sc, " OR s", smcp, ")) then p0"));
 }
 
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
