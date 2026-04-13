@@ -206,6 +206,9 @@ class DependencyClosure {
       ift::common::SegmentSet& visited_segments,
       absl::btree_set<dep_graph::Node>& to_check) const;
 
+  absl::Status InitGlyphConditionsCache();
+  void UpdateGlyphConditionsCache(segment_index_t base_segment, const common::SegmentSet& segments);
+
   absl::Status UpdateReachabilityIndex(ift::common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
   void ClearReachabilityIndex(segment_index_t segment);
@@ -220,6 +223,7 @@ class DependencyClosure {
   absl::flat_hash_set<hb_tag_t> init_font_features_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet> glyph_conditions_with_segment_;
 
   // Reachability indexes: these indexes are used to quickly locate segments
   // reachable from glyph and features (and in reverse as well).
