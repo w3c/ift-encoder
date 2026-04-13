@@ -26,7 +26,7 @@ using ift::common::hb_set_unique_ptr;
 using ift::common::IntSet;
 using ift::common::SegmentSet;
 using ift::dep_graph::DependencyGraph;
-using ift::dep_graph::EdgeConditonsCnf;
+using ift::dep_graph::EdgeConditionsCnf;
 using ift::dep_graph::Node;
 using ift::dep_graph::PendingEdge;
 using ift::dep_graph::Traversal;
@@ -686,7 +686,7 @@ DependencyClosure::InitializeConditions() const {
 
 StatusOr<std::optional<ActivationCondition>>
 DependencyClosure::EdgeConditionsToActivationCondition(
-    const dep_graph::EdgeConditonsCnf& edge_conditions,
+    const dep_graph::EdgeConditionsCnf& edge_conditions,
     const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
         node_conditions) {
   if (edge_conditions.empty()) {
@@ -695,7 +695,7 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 
   std::optional<ActivationCondition> out;
 
-  for (const btree_set<Node>& node_group : edge_conditions) {
+  for (const std::vector<Node>& node_group : edge_conditions) {
     std::optional<ActivationCondition> group_condition;
     if (node_group.empty()) {
       return absl::InternalError("Unexpected empty node condition group.");
@@ -735,7 +735,7 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 }
 
 Status DependencyClosure::PropagateConditions(
-    const flat_hash_map<Node, btree_set<EdgeConditonsCnf>>& incoming_edges,
+    const flat_hash_map<Node, btree_set<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
     flat_hash_map<Node, ActivationCondition>& node_conditions) const {
   for (const std::vector<Node>& scc : sccs) {
@@ -761,7 +761,7 @@ Status DependencyClosure::PropagateConditions(
 
         std::optional<ActivationCondition> complete_condition;
 
-        for (const EdgeConditonsCnf& edge : it->second) {
+        for (const EdgeConditionsCnf& edge : it->second) {
           std::optional<ActivationCondition> condition =
               TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
           if (!condition.has_value()) {

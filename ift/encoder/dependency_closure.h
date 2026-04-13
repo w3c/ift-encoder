@@ -138,13 +138,13 @@ class DependencyClosure {
 
   static absl::StatusOr<std::optional<ActivationCondition>>
   EdgeConditionsToActivationCondition(
-      const dep_graph::EdgeConditonsCnf& edge_conditions,
+      const dep_graph::EdgeConditionsCnf& edge_conditions,
       const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
           node_conditions);
 
   absl::Status PropagateConditions(
       const absl::flat_hash_map<dep_graph::Node,
-                                absl::btree_set<dep_graph::EdgeConditonsCnf>>&
+                                absl::btree_set<dep_graph::EdgeConditionsCnf>>&
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions)

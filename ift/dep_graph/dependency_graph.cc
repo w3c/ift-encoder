@@ -1,5 +1,6 @@
 #include "ift/dep_graph/dependency_graph.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -1059,25 +1060,30 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
   return glyphs;
 }
 
-StatusOr<EdgeConditonsCnf> DependencyGraph::ExtractRequirements(
+StatusOr<EdgeConditionsCnf> DependencyGraph::ExtractRequirements(
     const PendingEdge& edge) const {
-  EdgeConditonsCnf requirements;
 
-  requirements.insert({edge.source});
+  // Note: the final returned cnf form should be sorted and de-dup'd,
+  // so throughout this method we ensure the sub-groups are created
+  // sorted (most are just single node's). Then the overall condition
+  // is sorted and de-duped at the end.
+  EdgeConditionsCnf requirements;
+
+  requirements.push_back({edge.source});
 
   if (edge.required_feature.has_value()) {
-    requirements.insert({Node::Feature(*edge.required_feature)});
+    requirements.push_back({Node::Feature(*edge.required_feature)});
   }
 
   if (edge.required_codepoints.has_value()) {
-    requirements.insert({Node::Unicode(edge.required_codepoints->first)});
-    requirements.insert({Node::Unicode(edge.required_codepoints->second)});
+    requirements.push_back({Node::Unicode(edge.required_codepoints->first)});
+    requirements.push_back({Node::Unicode(edge.required_codepoints->second)});
   }
 
   if (edge.required_liga_set_index.has_value()) {
     GlyphSet gids = TRY(GetLigaSet(*edge.required_liga_set_index));
     for (glyph_id_t gid : gids) {
-      requirements.insert({Node::Glyph(gid)});
+      requirements.push_back({Node::Glyph(gid)});
     }
   }
 
@@ -1094,9 +1100,9 @@ StatusOr<EdgeConditonsCnf> DependencyGraph::ExtractRequirements(
 
     hb_codepoint_t set_id = HB_CODEPOINT_INVALID;
     while (hb_set_next(scratch_set_.get(), &set_id)) {
-      btree_set<Node> req;
+      std::vector<Node> req;
       if (set_id < 0x80000000) {
-        req.insert(Node::Glyph(set_id));
+        req.push_back(Node::Glyph(set_id));
       } else {
         hb_codepoint_t actual_set_id = set_id & 0x7FFFFFFF;
         if (!hb_depend_get_set_from_index(dependency_graph_.get(),
@@ -1104,15 +1110,23 @@ StatusOr<EdgeConditonsCnf> DependencyGraph::ExtractRequirements(
                                           scratch_set_aux_.get())) {
           return absl::InternalError("Context sub set lookup failed.");
         }
-        for (hb_codepoint_t gid : GlyphSet(scratch_set_aux_.get())) {
-          req.insert(Node::Glyph(gid));
+
+        // Creating the sub group from a hb set ensure's it's created
+        // sorted.
+        hb_codepoint_t gid = HB_CODEPOINT_INVALID;
+        while (hb_set_next(scratch_set_aux_.get(), &gid)) {
+          req.push_back(Node::Glyph(gid));
         }
       }
       if (!req.empty()) {
-        requirements.insert(std::move(req));
+        requirements.push_back(std::move(req));
       }
     }
   }
+
+  // Sort and remove duplicate entries
+  std::sort(requirements.begin(), requirements.end());
+  requirements.erase(std::unique(requirements.begin(), requirements.end()), requirements.end());
 
   return requirements;
 }
@@ -1226,12 +1240,12 @@ DependencyGraph::ComputeFeatureEdges() const {
   return out;
 }
 
-StatusOr<flat_hash_map<Node, btree_set<EdgeConditonsCnf>>>
+StatusOr<flat_hash_map<Node, btree_set<EdgeConditionsCnf>>>
 DependencyGraph::CollectIncomingEdges(
     const flat_hash_set<hb_tag_t>& table_filter,
     uint32_t node_type_filter) const {
   struct IncomingEdgeCollector {
-    flat_hash_map<Node, btree_set<EdgeConditonsCnf>>* incoming_edges = nullptr;
+    flat_hash_map<Node, btree_set<EdgeConditionsCnf>>* incoming_edges = nullptr;
     const DependencyGraph* graph = nullptr;
     Status had_error = absl::OkStatus();
 
@@ -1250,7 +1264,7 @@ DependencyGraph::CollectIncomingEdges(
     }
   };
 
-  flat_hash_map<Node, btree_set<EdgeConditonsCnf>> incoming_edges;
+  flat_hash_map<Node, btree_set<EdgeConditionsCnf>> incoming_edges;
   TraversalContext<IncomingEdgeCollector> context;
   context.depend = dependency_graph_.get();
   context.full_closure = &segmentation_info_->FullClosure();
