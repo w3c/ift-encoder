@@ -432,7 +432,7 @@ TEST_F(DependencyClosureTest, OverlappingSegments) {
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
 
-  s = RejectedAnalysis(2);
+  s = CompareAnalysis({2});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -512,8 +512,7 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   // can still be analyzed in most cases.
   s = CompareAnalysis({2});
   ASSERT_TRUE(s.ok()) << s;
-  // rejected due to possible non-disjunctive interactions via c2sc + A
-  s = RejectedAnalysis(3);
+  s = CompareAnalysis({3});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({4});
   ASSERT_TRUE(s.ok()) << s;
@@ -580,7 +579,7 @@ TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
                                            {{0x485}, ProbabilityBound::Zero()},
                                        });
 
-  Status s = RejectedAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   // glyph for 0x485 is part of a lookahead on a chain context sub
@@ -674,25 +673,21 @@ TEST_F(DependencyClosureTest, UvsAndFeatures_ConflictingConjunctiveConditions) {
                   /* 7 */ {jp78, ProbabilityBound::Zero()},
               });
 
-  // Some of these are rejected since there are multiple conflicting
-  // ways of reaching their glyphs (eg. via UVS and layout features)
-  Status s = RejectedAnalysis(0);
+  Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(1);
+  s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(3);
-  ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(4);
-  ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(5);
-  ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(6);
-  ASSERT_TRUE(s.ok()) << s;
-  s = RejectedAnalysis(7);
-  ASSERT_TRUE(s.ok()) << s;
-
-  // s2 can be analyzed since it doesn't have multiple conjunctive conditions
   s = CompareAnalysis({2});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({3});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({4});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({5});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({6});
+  ASSERT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({7});
   ASSERT_TRUE(s.ok()) << s;
 }
 
@@ -785,8 +780,8 @@ TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
   auto conditions = dependency_closure->AllGlyphConditions();
   ASSERT_TRUE(conditions.contains(74 /* f */));
 
-  Status s =
-      segmentation_info->ReassignInitSubset(closure_cache, WithDefaultFeatures({'f'}));
+  Status s = segmentation_info->ReassignInitSubset(closure_cache,
+                                                   WithDefaultFeatures({'f'}));
   ASSERT_TRUE(s.ok()) << s;
 
   s = dependency_closure->InitFontChanged(SegmentSet::all());

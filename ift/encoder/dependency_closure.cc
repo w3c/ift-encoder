@@ -34,45 +34,13 @@ using ift::dep_graph::TraversalContext;
 
 namespace ift::encoder {
 
-DependencyClosure::AnalysisAccuracy DependencyClosure::TraversalAccuracy(
-    const Traversal& traversal) const {
-  // TODO(garretrieger): there's several types of dependencies that we do not
-  // handle yet and as a result consider inaccurate. Adding support for these
-  // will allow the dep graph to be used more widely:
-  // - UVS edges: more complex case is generating conjunctive conditions from
-  // them.
-  // - Ligatures: at least in simple non-nested cases we should be able to
-  // generate the corresponding conditions.
-  // - Features: features create conjunctive conditions, we should be able to
-  // handle these.
-
-  if (traversal.HasPendingEdges()) {
-    // pending edges means there is conjunction.
-    return AnalysisAccuracy::INACCURATE;
-  }
-
-  if (traversal.HasContextGlyphs()) {
-    // avoid all contextual edges for accurate analysis, these have complex
-    // interactions.
-    return AnalysisAccuracy::INACCURATE;
-  }
-
-  if (traversal.ReachedGlyphs().intersects(context_glyphs_)) {
-    // A glyph which appears in a context may have complicated interactions with
-    // other segments that aren't captured by the direct traversal.
-    return AnalysisAccuracy::INACCURATE;
-  }
-
-  return AnalysisAccuracy::ACCURATE;
-}
-
 Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   VLOG(1) << "DependencyClosure::InitFontChanged()";
 
   // TODO(garretrieger): for now to keep this simple we do a full recalculation
-  // of per glyph conditions. However, it's likely possible to do a more incremental
-  // update based on changed segments. Re-visit this if this ends up showing up
-  // in profiles.
+  // of per glyph conditions. However, it's likely possible to do a more
+  // incremental update based on changed segments. Re-visit this if this ends up
+  // showing up in profiles.
   TRYV(InitGlyphConditionsCache());
 
   SegmentSet start_segments;
@@ -138,14 +106,9 @@ Status DependencyClosure::InitGlyphConditionsCache() {
   return absl::OkStatus();
 }
 
-void DependencyClosure::UpdateGlyphConditionsCache(segment_index_t base_segment, const common::SegmentSet& segments) {
-  GlyphSet effected_glyphs;
-  for (segment_index_t s : segments) {
-    auto it = glyph_conditions_with_segment_.find(s);
-    if (it != glyph_conditions_with_segment_.end()) {
-      effected_glyphs.union_set(it->second);
-    }
-  }
+void DependencyClosure::UpdateGlyphConditionsCache(
+    segment_index_t base_segment, const common::SegmentSet& segments) {
+  GlyphSet effected_glyphs = SegmentsToEffectedGlyphConditions(segments);
 
   for (glyph_id_t gid : effected_glyphs) {
     auto it = glyph_condition_cache_.find(gid);
@@ -165,6 +128,18 @@ void DependencyClosure::UpdateGlyphConditionsCache(segment_index_t base_segment,
       glyph_conditions_with_segment_[s].insert(gid);
     }
   }
+}
+
+GlyphSet DependencyClosure::SegmentsToEffectedGlyphConditions(
+    const SegmentSet& segments) const {
+  GlyphSet glyphs;
+  for (segment_index_t s : segments) {
+    auto it = glyph_conditions_with_segment_.find(s);
+    if (it != glyph_conditions_with_segment_.end()) {
+      glyphs.union_set(it->second);
+    }
+  }
+  return glyphs;
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
@@ -205,7 +180,8 @@ StatusOr<SegmentSet> DependencyClosure::FilterSegments(
 }
 
 StatusOr<DependencyClosure::AnalysisResult>
-DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
+DependencyClosure::AnalyzeSegmentInternal(
+    const SegmentSet& segments_input) const {
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
   // This aims to have identical output to GlyphClosureCache::AnalyzeSegment()
@@ -217,269 +193,88 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
   // returned when something in the dep graph is encountered which may cause
   // results to diverge from the closure approach.
 
-  // TODO XXXXX rewrite to use the extracted glyph conditions
-  // TODO XXXXX add a reachability index for glyph conditions.
-
-  flat_hash_map<glyph_id_t, SegmentSet> conditions_for_glyph;
   AnalysisResult result;
   result.accuracy = ACCURATE;
 
-  SegmentSet start_nodes = TRY(FilterSegments(segments));
-
-  /* ### Phase 1: Figure out what glyphs we can reach and what segments are
-   * needed to reach them. ### */
-  if (start_nodes.size() == 1 &&
-      isolated_reachability_is_accurate_.contains(*start_nodes.begin())) {
-    // Special case, there's only one segment and it doesn't contain any
-    // conjunction, we can skip a more complicated analysis and get everything
-    // we need from the isolated reachability index.
-    segment_index_t segment_id = *start_nodes.begin();
-    result.reached_glyphs = isolated_reachability_.GlyphsForSegment(segment_id);
-    for (glyph_id_t g : result.reached_glyphs) {
-      conditions_for_glyph[g] = {segment_id};
-    }
-  } else {
-    Traversal traversal = TRY(graph_.ClosureTraversal(start_nodes, false));
-
-    result.accuracy = TRY(ConjunctiveConditionDiscovery(
-        start_nodes, traversal.ReachedGlyphs(), conditions_for_glyph));
-    for (const auto& [g, _] : conditions_for_glyph) {
-      result.reached_glyphs.insert(g);
-    }
-
-    if (TraversalAccuracy(traversal) == INACCURATE ||
-        traversal.ReachedGlyphs() != result.reached_glyphs) {
-      result.accuracy = INACCURATE;
-    }
-  }
-
-  if (result.accuracy == INACCURATE) {
+  SegmentSet segments = TRY(FilterSegments(segments_input));
+  if (segments.empty()) {
     return result;
   }
 
-  /* ### Phase 2: classify glyphs into exc, or, or and ### */
+  GlyphSet inscope_glyphs = SegmentsToEffectedGlyphConditions(segments);
+  result.reached_glyphs = inscope_glyphs;
 
-  for (const auto& [g, segments] : conditions_for_glyph) {
-    if (segments == start_nodes) {
-      // Disjunctive case, may be either exclusive or "OR"
-      // First we need to see if we can make an accurate assessment. This is
-      // only possible if this glyph is only reachable from segments that are
-      // fully explorable
-      const SegmentSet& parent_segments =
-          unconstrained_reachability_.SegmentsForGlyph(g);
-      SegmentSet other_parent_segments = parent_segments;
-      other_parent_segments.subtract(start_nodes);
-      // We can exclude start nodes from this check since we verified above that
-      // the combination of start nodes is fully explorable.
-      if (!other_parent_segments.is_subset_of(fully_explorable_segments_)) {
-        result.accuracy = INACCURATE;
-        return result;
-      }
-
-      // Exclusive glyphs are those that are reachable only from segments in
-      // start_nodes here we use isolated reachability since we're only looking
-      // for things that can get to g through disjunction only.
-      SegmentSet other_isolated_parent_segments =
-          isolated_reachability_.SegmentsForGlyph(g);
-      other_isolated_parent_segments.subtract(start_nodes);
-      if (other_parent_segments != other_isolated_parent_segments) {
-        // Possibly reachable via non-disjunctive pathways
-        result.accuracy = INACCURATE;
-        return result;
-      }
-
-      if (other_isolated_parent_segments.empty()) {
-        result.exclusive_gids.insert(g);
-      } else {
-        result.or_gids.insert(g);
-      }
-      continue;
-    }
-
-    // Conjunctive case: three possibilities:
-    // 1. Another segment can disjunctively reach this glyph (tested with
-    // isolated reachability).
-    //    In this case the conjunctive condition found here is superseded, so we
-    //    don't classify the glyph.
-    SegmentSet isolated_parent_segments =
-        isolated_reachability_.SegmentsForGlyph(g);
-    if (!isolated_parent_segments.empty()) {
-      continue;
-    }
-
-    // 2. There is possible reachability to this glyph involving segments other
-    // than those in
-    //    the condition we found. Here we can't make an accurate assessment.
-    SegmentSet parent_segments =
-        unconstrained_reachability_.SegmentsForGlyph(g);
-    if (!parent_segments.is_subset_of(segments)) {
-      result.accuracy = INACCURATE;
-      return result;
-    }
-
-    // 3. Otherwise this glyph can be safely marked as conjunctive.
-    result.and_gids.insert(g);
+  if (inscope_glyphs.intersects(context_glyphs_) ||
+      inscope_glyphs.intersects(init_font_context_glyphs_)) {
+    // For now don't return results for anything that involves contextual lookup
+    // glyphs.
+    result.accuracy = INACCURATE;
+    return result;
   }
 
-  return result;
-}
-
-btree_set<Node> DependencyClosure::CollectIsolatedReachability(
-    const SegmentSet& dest, const SegmentSet& excluded, GlyphSet& out) const {
-  btree_set<dep_graph::Node> dest_nodes;
-  for (segment_index_t s : dest) {
-    dest_nodes.insert(dep_graph::Node::Segment(s));
-    if (excluded.contains(s)) {
+  // Classify each glyph based on it's conditions
+  for (glyph_id_t gid : inscope_glyphs) {
+    auto it = glyph_condition_cache_.find(gid);
+    if (it == glyph_condition_cache_.end()) {
       continue;
     }
-    out.union_set(isolated_reachability_.GlyphsForSegment(s));
-  }
-  return dest_nodes;
-}
-
-StatusOr<DependencyClosure::AnalysisAccuracy>
-DependencyClosure::ConjunctiveConditionDiscovery(
-    // assumes segments has been filtered and bound checked already
-    const SegmentSet& start, const common::GlyphSet& glyph_filter,
-    flat_hash_map<glyph_id_t, SegmentSet>& conditions_for_glyph) const {
-  flat_hash_map<SegmentSet, GlyphSet> reached_glyphs{{{}, {}}};
-
-  flat_hash_set<PendingEdge> processed_pending_edges;
-  btree_set<std::pair<SegmentSet, SegmentSet>> queue;
-  queue.insert(std::make_pair(SegmentSet{}, start));
-
-  while (!queue.empty()) {
-    std::pair<SegmentSet, SegmentSet> next = *queue.begin();
-    const SegmentSet& source = next.first;
-    const SegmentSet& dest = next.second;
-    queue.erase(next);
-
-    GlyphSet source_glyphs = reached_glyphs.at(source);
-
-    if (!reached_glyphs.contains(dest)) {
-      GlyphSet traversal_glyph_filter = glyph_filter;
-      btree_set<dep_graph::Node> dest_nodes =
-          CollectIsolatedReachability(dest, start, traversal_glyph_filter);
-
-      Traversal traversal = TRY(graph_.ClosureTraversal(
-          dest_nodes, &traversal_glyph_filter, nullptr, true));
-      reached_glyphs[dest] = traversal.ReachedGlyphs();
-      reached_glyphs[dest].intersect(glyph_filter);
-      btree_set<SegmentSet> edges;
-      if (TRY(ConjunctiveConditionEdges(
-              dest, traversal, processed_pending_edges, edges)) == INACCURATE) {
-        return INACCURATE;
-      }
-
-      for (const SegmentSet& segments : edges) {
-        SegmentSet next_dest = dest;
-        next_dest.union_set(segments);
-        queue.insert(std::make_pair(dest, next_dest));
-      }
+    ActivationCondition condition = it->second;
+    segment_index_t segment = *segments.min();
+    if (segments.size() > 1) {
+      // Pretend the input segments are merged into one for this analysis.
+      condition = condition.ReplaceSegments(segment, segments);
     }
 
-    GlyphSet delta = reached_glyphs.at(dest);
-    delta.subtract(source_glyphs);
-    for (glyph_id_t g : delta) {
-      auto existing = conditions_for_glyph.find(g);
-      if (existing != conditions_for_glyph.end()) {
-        if (existing->second.is_subset_of(dest)) {
-          // current condition is less granular then this one, keep current.
+    if (!condition.TriggeringSegments().contains(segment)) {
+      // Shouldn't happen, something is wrong with the glyph condition cache.
+      return absl::InternalError(absl::StrCat("condition in cache for g", gid,
+                                              " does not include s", segment));
+    }
+
+    // Possible cases:
+    // 1. condition is unitary (only one segment), then glyph is exclusive to
+    // the input.
+    if (condition.IsUnitary()) {
+      result.exclusive_gids.insert(gid);
+      continue;
+    }
+
+    // 2. condition is purely disjunctive, glyph is disjunctive to the input.
+    if (condition.IsPurelyDisjunctive()) {
+      result.or_gids.insert(gid);
+    }
+
+    if (condition.conditions().size() > 1) {
+      bool in_all = true;
+      bool mixed = false;
+      for (const auto& disjunctive_group : condition.conditions()) {
+        if (!disjunctive_group.contains(segment)) {
+          in_all = false;
           continue;
-        } else if (!dest.is_subset_of(existing->second)) {
-          // Conflicting conditions for a glyph, only assigning a compatible
-          // less granular condition is allowed.
-          return INACCURATE;
+        }
+
+        if (disjunctive_group.size() > 1) {
+          // input segment is involved in a mix of conjunction and disjunction.
+          mixed = true;
         }
       }
-      conditions_for_glyph[g] = dest;
-    }
-  }
 
-  return ACCURATE;
-}
-
-static bool PickOne(const SegmentSet& options, SegmentSet& edges) {
-  auto min = options.min();
-  if (min.has_value()) {
-    edges.insert(*min);
-    return true;
-  }
-  return false;
-}
-
-StatusOr<DependencyClosure::AnalysisAccuracy>
-DependencyClosure::ConjunctiveConditionEdges(
-    const SegmentSet& node, const Traversal& traversal,
-    flat_hash_set<PendingEdge>& excluded_edges,
-    btree_set<SegmentSet>& outgoing_edges) const {
-  outgoing_edges.clear();
-  AnalysisAccuracy result = ACCURATE;
-  for (const auto& pe : traversal.PendingEdges()) {
-    if (excluded_edges.contains(pe)) {
-      continue;
-    }
-
-    SegmentSet segments{};
-    bool is_unblocked = true;
-
-    if (pe.required_context_set_index.has_value()) {
-      // Context edges are not supported in this analysis.
-      result = INACCURATE;
-      continue;
-    }
-
-    if (pe.required_codepoints.has_value()) {
-      auto [cp1, cp2] = *pe.required_codepoints;
-      if (!segmentation_info_->InitFontSegment().codepoints.contains(cp1) &&
-          !traversal.ReachedCodepoints().contains(cp1)) {
-        is_unblocked =
-            is_unblocked &&
-            PickOne(isolated_reachability_.SegmentsForCodepoint(cp1), segments);
+      // 2. condition has conjunction (two or more sub-groups), and input
+      // segment appears in every disjunctive sub group, glyph is disjunctive to
+      // the input.
+      if (in_all) {
+        result.or_gids.insert(gid);
       }
-      if (!segmentation_info_->InitFontSegment().codepoints.contains(cp2) &&
-          !traversal.ReachedCodepoints().contains(cp2)) {
-        is_unblocked =
-            is_unblocked &&
-            PickOne(isolated_reachability_.SegmentsForCodepoint(cp2), segments);
+
+      // 3. condition has conjunction (two or more sub-groups), and the
+      // sub-group that contains the input segment(s) equals the input
+      // segment(s), then glyph is conjunctive to the input.
+      if (!mixed) {
+        result.and_gids.insert(gid);
       }
-    }
 
-    if (pe.required_feature.has_value() &&
-        !segmentation_info_->InitFontSegment().feature_tags.contains(
-            *pe.required_feature) &&
-        !traversal.ReachedLayoutFeatures().contains(*pe.required_feature)) {
-      is_unblocked =
-          is_unblocked && PickOne(isolated_reachability_.SegmentsForFeature(
-                                      *pe.required_feature),
-                                  segments);
-    }
-
-    if (pe.source.IsGlyph() &&
-        !segmentation_info_->InitFontGlyphs().contains(pe.source.Id()) &&
-        !traversal.ReachedGlyphs().contains(pe.source.Id())) {
-      is_unblocked =
-          is_unblocked &&
-          PickOne(isolated_reachability_.SegmentsForGlyph(pe.source.Id()),
-                  segments);
-    }
-
-    if (pe.required_liga_set_index.has_value()) {
-      for (glyph_id_t gid : TRY(graph_.RequiredGlyphsFor(pe))) {
-        if (!segmentation_info_->InitFontGlyphs().contains(gid) &&
-            !traversal.ReachedGlyphs().contains(gid)) {
-          is_unblocked =
-              is_unblocked &&
-              PickOne(isolated_reachability_.SegmentsForGlyph(gid), segments);
-        }
-      }
-    }
-
-    if (is_unblocked) {
-      // We were able to find a set of segments that should unblock this edge,
-      // the pending edge can now be excluded from future exploration.
-      excluded_edges.insert(pe);
-      outgoing_edges.insert(segments);
+      // 4. otherwise gid does not appear in the analysis results due to more
+      // complicated conditions.
     }
   }
 
@@ -629,38 +424,11 @@ Status DependencyClosure::UpdateReachabilityIndex(SegmentSet segments) {
     TRYV(UpdateReachabilityIndex(s));
   }
 
-  for (segment_index_t s : segments) {
-    if (s >= segmentation_info_->Segments().size()) {
-      break;
-    }
-    const AnalysisResult result = TRY(AnalyzeSegmentInternal({s}));
-    if (result.reached_glyphs ==
-        unconstrained_reachability_.GlyphsForSegment(s)) {
-      fully_explorable_segments_.insert(s);
-    }
-  }
-
   reachability_index_valid_ = true;
   return absl::OkStatus();
 }
 
 Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
-  {
-    auto constrained_traversal = TRY(graph_.ClosureTraversal({s}, true));
-    if (TraversalAccuracy(constrained_traversal) == ACCURATE) {
-      isolated_reachability_is_accurate_.insert(s);
-    }
-    for (glyph_id_t g : constrained_traversal.ReachedGlyphs()) {
-      isolated_reachability_.AddGlyph(s, g);
-    }
-    for (hb_codepoint_t cp : constrained_traversal.ReachedCodepoints()) {
-      isolated_reachability_.AddCodepoint(s, cp);
-    }
-    for (hb_tag_t f : constrained_traversal.ReachedLayoutFeatures()) {
-      isolated_reachability_.AddFeature(s, f);
-    }
-  }
-
   auto traversal = TRY(graph_.ClosureTraversal({s}, false));
   for (glyph_id_t g : traversal.ReachedGlyphs()) {
     unconstrained_reachability_.AddGlyph(s, g);
@@ -683,10 +451,7 @@ Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
 
 void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
   unconstrained_reachability_.ClearSegment(segment);
-  isolated_reachability_.ClearSegment(segment);
   context_reachability_.ClearSegment(segment);
-  isolated_reachability_is_accurate_.erase(segment);
-  fully_explorable_segments_.erase(segment);
 }
 
 flat_hash_map<Node, ActivationCondition>

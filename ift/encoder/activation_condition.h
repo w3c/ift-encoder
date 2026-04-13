@@ -110,10 +110,11 @@ class ActivationCondition {
   // Returns true if any of the condition groups intersects with 'segments'.
   bool Intersects(const common::SegmentSet& segments) const;
 
-  // Generate a new condition which is a copy of this one but will all occurences of
-  // 'segments' replaced with base_segment. New condition will be simplified to removed
-  // any resulting redundancy.
-  ActivationCondition ReplaceSegments(segment_index_t base_segment, const common::SegmentSet& segments) const;
+  // Generate a new condition which is a copy of this one but will all
+  // occurences of 'segments' replaced with base_segment. New condition will be
+  // simplified to removed any resulting redundancy.
+  ActivationCondition ReplaceSegments(segment_index_t base_segment,
+                                      const common::SegmentSet& segments) const;
 
   /*
    * Returns a human readable string representation of this condition.

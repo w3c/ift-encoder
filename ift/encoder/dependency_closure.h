@@ -18,8 +18,6 @@
 #ifdef HB_DEPEND_API
 #include "ift/dep_graph/dependency_graph.h"
 #include "ift/dep_graph/node.h"
-#include "ift/dep_graph/pending_edge.h"
-#include "ift/dep_graph/traversal.h"
 #endif
 
 namespace ift::encoder {
@@ -88,6 +86,7 @@ class DependencyClosure {
       const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
       ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids);
 
+#ifdef HB_DEPEND_API
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
   // versus real subsetting closure due to reliance on the dependency graph.
@@ -95,6 +94,7 @@ class DependencyClosure {
   AllGlyphConditions() const {
     return glyph_condition_cache_;
   }
+#endif
 
   // This structure caches information derived from the segmentation info
   // segments. These two function signals that segmentation info segments have
@@ -175,27 +175,6 @@ class DependencyClosure {
   absl::StatusOr<common::SegmentSet> FilterSegments(
       const common::SegmentSet& segments) const;
 
-  absl::btree_set<dep_graph::Node> CollectIsolatedReachability(
-      const common::SegmentSet& segments, const common::SegmentSet& excluded,
-      common::GlyphSet& out) const;
-
-  absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionDiscovery(
-      // assumes segments has been filtered and bound checked already
-      const common::SegmentSet& start, const common::GlyphSet& glyph_filter,
-      absl::flat_hash_map<glyph_id_t, common::SegmentSet>& conditions_for_glyph)
-      const;
-
-  absl::StatusOr<AnalysisAccuracy> ConjunctiveConditionEdges(
-      const common::SegmentSet& node, const dep_graph::Traversal& traversal,
-      absl::flat_hash_set<dep_graph::PendingEdge>& excluded_pending_edges,
-      absl::btree_set<common::SegmentSet>& outgoing_edges) const;
-
-  AnalysisAccuracy TraversalAccuracy(
-      const dep_graph::Traversal& traversal) const;
-
-  static absl::flat_hash_map<hb_codepoint_t, glyph_id_t> UnicodeToGid(
-      hb_face_t* face);
-
   void ReachabilityInitFontAddToCheck(
       const common::GlyphSet& visited_glyphs,
       absl::btree_set<dep_graph::Node>& to_check) const;
@@ -207,7 +186,10 @@ class DependencyClosure {
       absl::btree_set<dep_graph::Node>& to_check) const;
 
   absl::Status InitGlyphConditionsCache();
-  void UpdateGlyphConditionsCache(segment_index_t base_segment, const common::SegmentSet& segments);
+  void UpdateGlyphConditionsCache(segment_index_t base_segment,
+                                  const common::SegmentSet& segments);
+  common::GlyphSet SegmentsToEffectedGlyphConditions(
+      const common::SegmentSet& segments) const;
 
   absl::Status UpdateReachabilityIndex(ift::common::SegmentSet segments);
   absl::Status UpdateReachabilityIndex(segment_index_t segment);
@@ -223,7 +205,8 @@ class DependencyClosure {
   absl::flat_hash_set<hb_tag_t> init_font_features_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
-  absl::flat_hash_map<segment_index_t, common::GlyphSet> glyph_conditions_with_segment_;
+  absl::flat_hash_map<segment_index_t, common::GlyphSet>
+      glyph_conditions_with_segment_;
 
   // Reachability indexes: these indexes are used to quickly locate segments
   // reachable from glyph and features (and in reverse as well).
@@ -232,18 +215,6 @@ class DependencyClosure {
   // Unconstrained reachability, these are the glyphs/features that can be
   // reached by a segment if context constraints are not enforced.
   ReachabilityIndex unconstrained_reachability_;
-
-  // Isolated reachability: the set of glyphs that can be reached from
-  // each segment in isolation. Conjunctive edges where the relevant
-  // context is not present are not traversed.
-  ReachabilityIndex isolated_reachability_;
-
-  // Segments for which the isolated graph traversal was ACCURATE.
-  ift::common::SegmentSet isolated_reachability_is_accurate_;
-
-  // For these segments AnalyzeSegment() is able to reach all glyphs
-  // in the unconstrainted reachability.
-  ift::common::SegmentSet fully_explorable_segments_;
 
   // Tracks which context glyphs (for contextual gsub substitutions) can be
   // reached from a segment.

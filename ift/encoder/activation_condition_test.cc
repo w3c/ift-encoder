@@ -473,7 +473,8 @@ TEST(ActivationConditionTest, ReplaceSegments) {
   EXPECT_EQ(replaced.ToString(), "if ((s1 OR s2) AND s200) then p10");
 
   replaced = a.ReplaceSegments(300, {1, 3});
-  EXPECT_EQ(replaced.ToString(), "if ((s2 OR s300) AND (s4 OR s300) AND s5) then p10");
+  EXPECT_EQ(replaced.ToString(),
+            "if ((s2 OR s300) AND (s4 OR s300) AND s5) then p10");
 }
 
 TEST(ActivationConditionTest, ReplaceSegments_True) {

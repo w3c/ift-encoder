@@ -190,9 +190,7 @@ class SegmentationContext {
    */
   absl::Status InvalidateGlyphInformationForMerge(
       const ift::common::GlyphSet& glyphs,
-      const ift::common::SegmentSet& segments,
-      segment_index_t base_segment
-    ) {
+      const ift::common::SegmentSet& segments, segment_index_t base_segment) {
     // TODO(garretrieger): now that invalidation here is only for glyph
     // condition set we should consider changing this so that invalidation is
     // internal to glyph condition set reprocessing (like with GroupGlyphs).
