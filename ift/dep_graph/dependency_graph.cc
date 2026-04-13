@@ -1062,7 +1062,6 @@ StatusOr<GlyphSet> DependencyGraph::GetLigaSet(
 
 StatusOr<EdgeConditionsCnf> DependencyGraph::ExtractRequirements(
     const PendingEdge& edge) const {
-
   // Note: the final returned cnf form should be sorted and de-dup'd,
   // so throughout this method we ensure the sub-groups are created
   // sorted (most are just single node's). Then the overall condition
@@ -1126,7 +1125,8 @@ StatusOr<EdgeConditionsCnf> DependencyGraph::ExtractRequirements(
 
   // Sort and remove duplicate entries
   std::sort(requirements.begin(), requirements.end());
-  requirements.erase(std::unique(requirements.begin(), requirements.end()), requirements.end());
+  requirements.erase(std::unique(requirements.begin(), requirements.end()),
+                     requirements.end());
 
   return requirements;
 }

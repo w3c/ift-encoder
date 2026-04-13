@@ -9,10 +9,16 @@ using ift::common::SegmentSet;
 
 namespace ift::encoder {
 
-Status DependencyClosure::SegmentsChanged(bool init_font_change,
-                                          const SegmentSet& segments) {
+Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   return absl::UnimplementedError(
-      "Depdency graph functionality was disabled during compilation and is "
+      "Dependency graph functionality was disabled during compilation and is "
+      "unvailable");
+}
+
+Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
+                                         const SegmentSet& segments) {
+  return absl::UnimplementedError(
+      "Dependency graph functionality was disabled during compilation and is "
       "unvailable");
 }
 
