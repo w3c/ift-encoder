@@ -73,7 +73,7 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   // of per glyph conditions. However, it's likely possible to do a more incremental
   // update based on changed segments. Re-visit this if this ends up showing up
   // in profiles.
-  glyph_condition_cache_ = TRY(ExtractAllGlyphConditions());;
+  TRYV(InitGlyphConditionsCache());
 
   SegmentSet start_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
@@ -120,17 +120,51 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
   }
 
   // Manually update the glyph condition cache.
-  for (auto& [gid, condition] : glyph_condition_cache_) {
-    // TODO(garretrieger): avoid looking at the full condition set by using
-    // a reachability index to locate just the glyphs that are affected.
-    if (condition.Intersects(segments)) {
-      condition = condition.ReplaceSegments(base_segment, segments);
-    }
-  }
+  UpdateGlyphConditionsCache(base_segment, segments);
 
   VLOG(1) << "DependencyClosure::SegmentsMerged()";
   TRYV(UpdateReachabilityIndex(segments));
   return absl::OkStatus();
+}
+
+Status DependencyClosure::InitGlyphConditionsCache() {
+  glyph_conditions_with_segment_.clear();
+  glyph_condition_cache_ = TRY(ExtractAllGlyphConditions());
+  for (const auto& [g, condition] : glyph_condition_cache_) {
+    for (segment_index_t s : condition.TriggeringSegments()) {
+      glyph_conditions_with_segment_[s].insert(g);
+    }
+  }
+  return absl::OkStatus();
+}
+
+void DependencyClosure::UpdateGlyphConditionsCache(segment_index_t base_segment, const common::SegmentSet& segments) {
+  GlyphSet effected_glyphs;
+  for (segment_index_t s : segments) {
+    auto it = glyph_conditions_with_segment_.find(s);
+    if (it != glyph_conditions_with_segment_.end()) {
+      effected_glyphs.union_set(it->second);
+    }
+  }
+
+  for (glyph_id_t gid : effected_glyphs) {
+    auto it = glyph_condition_cache_.find(gid);
+    if (it == glyph_condition_cache_.end()) {
+      continue;
+    }
+
+    for (segment_index_t s : it->second.TriggeringSegments()) {
+      auto it = glyph_conditions_with_segment_.find(s);
+      if (it != glyph_conditions_with_segment_.end()) {
+        it->second.erase(gid);
+      }
+    }
+
+    it->second = it->second.ReplaceSegments(base_segment, segments);
+    for (segment_index_t s : it->second.TriggeringSegments()) {
+      glyph_conditions_with_segment_[s].insert(gid);
+    }
+  }
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
@@ -182,6 +216,9 @@ DependencyClosure::AnalyzeSegmentInternal(const SegmentSet& segments) const {
   // indication of the accuracy of the analysis. AnalysisAccuracy::INACCURATE is
   // returned when something in the dep graph is encountered which may cause
   // results to diverge from the closure approach.
+
+  // TODO XXXXX rewrite to use the extracted glyph conditions
+  // TODO XXXXX add a reachability index for glyph conditions.
 
   flat_hash_map<glyph_id_t, SegmentSet> conditions_for_glyph;
   AnalysisResult result;
