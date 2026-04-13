@@ -42,7 +42,8 @@ static StatusOr<design_space_t> ToDesignSpace(const DesignSpace& proto) {
   return result;
 }
 
-static ActivationCondition FromProto(const ActivationConditionProto& condition) {
+static ActivationCondition FromProto(
+    const ActivationConditionProto& condition) {
   // TODO(garretrieger): once glyph segmentation activation conditions can
   // support features copy those here.
   std::vector<SegmentSet> groups;
@@ -149,6 +150,16 @@ Status ConfigCompiler::Configure(const SegmentationPlan& plan,
     compiler.SetJumpAhead(plan.jump_ahead());
   }
   compiler.SetUsePrefetchLists(plan.use_prefetch_lists());
+
+  if (plan.has_advanced_settings()) {
+    const auto& advanced = plan.advanced_settings();
+    if (!advanced.override_url_template_prefix().empty()) {
+      std::vector<uint8_t> prefix(
+          advanced.override_url_template_prefix().begin(),
+          advanced.override_url_template_prefix().end());
+      compiler.SetOverrideUrlTemplatePrefix(prefix);
+    }
+  }
 
   // Check for unsupported settings
   if (plan.include_all_segment_patches()) {

@@ -150,6 +150,18 @@ cc_library(
 )
 
 cc_test(
+    name = "config_compiler_test",
+    size = "small",
+    srcs = [
+        "config_compiler_test.cc",
+    ],
+    deps = [
+        ":config_compiler",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "auto_segmenter_config_test",
     size = "small",
     srcs = [
