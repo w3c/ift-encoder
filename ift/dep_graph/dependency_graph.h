@@ -26,7 +26,7 @@ namespace ift::dep_graph {
 
 // Conditions for an edge in CNF form using node presence as inputs.
 // (node_1 or ...) and (node_i or ...)
-typedef absl::btree_set<absl::btree_set<Node>> EdgeConditonsCnf;
+typedef std::vector<std::vector<Node>> EdgeConditionsCnf;
 
 template <typename CallbackT>
 class TraversalContext;
@@ -126,7 +126,7 @@ class DependencyGraph {
   //
   // The return value is a map from each node to each unique edge requirement.
   // Edge requirements are represented as a CNF expression over other nodes.
-  absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditonsCnf>>>
+  absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditionsCnf>>>
   CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter,
                        uint32_t node_type_filter) const;
 
@@ -206,7 +206,7 @@ class DependencyGraph {
   // PendingEdge.
   //
   // Returns a list of requirements as CNF expression on node presence.
-  absl::StatusOr<EdgeConditonsCnf> ExtractRequirements(
+  absl::StatusOr<EdgeConditionsCnf> ExtractRequirements(
       const PendingEdge& edge) const;
 
   static absl::StatusOr<absl::flat_hash_set<hb_tag_t>> FullFeatureSet(
