@@ -41,7 +41,7 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   // of per glyph conditions. However, it's likely possible to do a more
   // incremental update based on changed segments. Re-visit this if this ends up
   // showing up in profiles.
-  TRYV(InitGlyphConditionsCache());
+  TRYV(InitNodeConditionsCache());
 
   SegmentSet start_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
@@ -88,58 +88,72 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
   }
 
   // Manually update the glyph condition cache.
-  UpdateGlyphConditionsCache(base_segment, segments);
+  UpdateNodeConditionsCache(base_segment, segments);
 
   VLOG(1) << "DependencyClosure::SegmentsMerged()";
   TRYV(UpdateReachabilityIndex(segments));
   return absl::OkStatus();
 }
 
-Status DependencyClosure::InitGlyphConditionsCache() {
-  glyph_conditions_with_segment_.clear();
-  glyph_condition_cache_ = TRY(ExtractAllGlyphConditions());
-  for (const auto& [g, condition] : glyph_condition_cache_) {
+Status DependencyClosure::InitNodeConditionsCache() {
+  node_conditions_with_segment_.clear();
+  glyph_condition_cache_.clear();
+  node_condition_cache_ = TRY(ExtractAllGlyphConditions());
+  for (const auto& [n, condition] : node_condition_cache_) {
     for (segment_index_t s : condition.TriggeringSegments()) {
-      glyph_conditions_with_segment_[s].insert(g);
+      node_conditions_with_segment_[s].insert(n);
+    }
+    if (n.IsGlyph() &&
+        segmentation_info_->NonInitFontGlyphs().contains(n.Id())) {
+      glyph_condition_cache_.insert({n.Id(), condition});
     }
   }
+
   return absl::OkStatus();
 }
 
-void DependencyClosure::UpdateGlyphConditionsCache(
+void DependencyClosure::UpdateNodeConditionsCache(
     segment_index_t base_segment, const common::SegmentSet& segments) {
-  GlyphSet effected_glyphs = SegmentsToEffectedGlyphConditions(segments);
+  auto affected_nodes = SegmentsToAffectedNodeConditions(segments);
 
-  for (glyph_id_t gid : effected_glyphs) {
-    auto it = glyph_condition_cache_.find(gid);
-    if (it == glyph_condition_cache_.end()) {
+  for (Node node : affected_nodes) {
+    auto it = node_condition_cache_.find(node);
+    if (it == node_condition_cache_.end()) {
       continue;
     }
 
     for (segment_index_t s : it->second.TriggeringSegments()) {
-      auto it = glyph_conditions_with_segment_.find(s);
-      if (it != glyph_conditions_with_segment_.end()) {
-        it->second.erase(gid);
+      auto it = node_conditions_with_segment_.find(s);
+      if (it != node_conditions_with_segment_.end()) {
+        it->second.erase(node);
       }
     }
 
-    it->second = it->second.ReplaceSegments(base_segment, segments);
+    ActivationCondition new_condition =
+        it->second.ReplaceSegments(base_segment, segments);
+    it->second = new_condition;
+    if (node.IsGlyph() &&
+        segmentation_info_->NonInitFontGlyphs().contains(node.Id())) {
+      glyph_condition_cache_.erase(node.Id());
+      glyph_condition_cache_.insert({node.Id(), new_condition});
+    }
+
     for (segment_index_t s : it->second.TriggeringSegments()) {
-      glyph_conditions_with_segment_[s].insert(gid);
+      node_conditions_with_segment_[s].insert(node);
     }
   }
 }
 
-GlyphSet DependencyClosure::SegmentsToEffectedGlyphConditions(
+flat_hash_set<Node> DependencyClosure::SegmentsToAffectedNodeConditions(
     const SegmentSet& segments) const {
-  GlyphSet glyphs;
+  flat_hash_set<Node> nodes;
   for (segment_index_t s : segments) {
-    auto it = glyph_conditions_with_segment_.find(s);
-    if (it != glyph_conditions_with_segment_.end()) {
-      glyphs.union_set(it->second);
+    auto it = node_conditions_with_segment_.find(s);
+    if (it != node_conditions_with_segment_.end()) {
+      nodes.insert(it->second.begin(), it->second.end());
     }
   }
-  return glyphs;
+  return nodes;
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
@@ -201,7 +215,13 @@ DependencyClosure::AnalyzeSegmentInternal(
     return result;
   }
 
-  GlyphSet inscope_glyphs = SegmentsToEffectedGlyphConditions(segments);
+  auto inscope_nodes = SegmentsToAffectedNodeConditions(segments);
+  GlyphSet inscope_glyphs;
+  for (Node node : inscope_nodes) {
+    if (node.IsGlyph() && segmentation_info_->NonInitFontGlyphs().contains(node.Id())) {
+      inscope_glyphs.insert(node.Id());
+    }
+  }
   result.reached_glyphs = inscope_glyphs;
 
   if (inscope_glyphs.intersects(context_glyphs_) ||
@@ -611,7 +631,7 @@ Status DependencyClosure::PropagateConditions(
   return absl::OkStatus();
 }
 
-StatusOr<flat_hash_map<glyph_id_t, ActivationCondition>>
+StatusOr<flat_hash_map<Node, ActivationCondition>>
 DependencyClosure::ExtractAllGlyphConditions() const {
   auto conditions = InitializeConditions();
 
@@ -630,17 +650,6 @@ DependencyClosure::ExtractAllGlyphConditions() const {
     }
   }
 
-  flat_hash_map<glyph_id_t, ActivationCondition> result;
-  for (glyph_id_t gid : segmentation_info_->NonInitFontGlyphs()) {
-    auto it = conditions.find(Node::Glyph(gid));
-    if (it != conditions.end()) {
-      result.insert({gid, it->second});
-    } else {
-      return absl::InternalError(
-          "All glyphs should have generated conditions.");
-    }
-  }
-
-  return result;
+  return conditions;
 }
 }  // namespace ift::encoder
