@@ -96,7 +96,7 @@ class DependencyClosure {
 #endif
 
   // This structure caches information derived from the segmentation info
-  // segments. These two function signals that segmentation info segments have
+  // segments. These two function signal that segmentation info segments have
   // changed and recomputes the internal cached information.
   absl::Status InitFontChanged(const ift::common::SegmentSet& segments);
   absl::Status SegmentsMerged(segment_index_t base_segment,
@@ -111,8 +111,6 @@ class DependencyClosure {
   //
   // Utilizes the dependency graph to make the determination, so it's possible
   // that the result may be overestimated.
-  //
-  // TODO XXXX can drop StatusOr<> from these.
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
       const common::GlyphSet& glyphs) const;
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
@@ -129,10 +127,10 @@ class DependencyClosure {
 #ifdef HB_DEPEND_API
 
   // Extracts the full activations conditions (as specified by the dependency
-  // graph) for all glyphs. In some cases may overestimate activation conditions
+  // graph) for all graph nodes. In some cases may overestimate activation conditions
   // versus real subsetting closure due to reliance on the dependency graph.
   absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
-  ExtractAllGlyphConditions() const;
+  ExtractAllNodeConditions() const;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
   InitializeConditions() const;
