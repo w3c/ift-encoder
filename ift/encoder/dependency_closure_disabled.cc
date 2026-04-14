@@ -19,29 +19,29 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
                                          const SegmentSet& segments) {
   return absl::UnimplementedError(
       "Dependency graph functionality was disabled during compilation and is "
-      "unvailable");
+      "unavailable");
 }
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
     GlyphSet& exclusive_gids) {
   return absl::UnimplementedError(
-      "Depdency graph functionality was disabled during compilation and is "
-      "unvailable");
+      "Dependency graph functionality was disabled during compilation and is "
+      "unavailable");
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     const GlyphSet& glyphs) const {
   return absl::UnimplementedError(
-      "Depdency graph functionality was disabled during compilation and is "
-      "unvailable");
+      "Dependency graph functionality was disabled during compilation and is "
+      "unavailable");
 }
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     const SubsetDefinition& def) const {
   return absl::UnimplementedError(
-      "Depdency graph functionality was disabled during compilation and is "
-      "unvailable");
+      "Dependency graph functionality was disabled during compilation and is "
+      "unavailable");
 }
 
 }  // namespace ift::encoder

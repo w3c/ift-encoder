@@ -89,7 +89,7 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
 Status DependencyClosure::InitNodeConditionsCache() {
   node_conditions_with_segment_.clear();
   glyph_condition_cache_.clear();
-  node_condition_cache_ = TRY(ExtractAllGlyphConditions());
+  node_condition_cache_ = TRY(ExtractAllNodeConditions());
   for (const auto& [n, condition] : node_condition_cache_) {
     for (segment_index_t s : condition.TriggeringSegments()) {
       node_conditions_with_segment_[s].insert(n);
@@ -504,7 +504,7 @@ Status DependencyClosure::PropagateConditions(
 }
 
 StatusOr<flat_hash_map<Node, ActivationCondition>>
-DependencyClosure::ExtractAllGlyphConditions() const {
+DependencyClosure::ExtractAllNodeConditions() const {
   auto conditions = InitializeConditions();
 
   flat_hash_set<hb_tag_t> table_tags =
