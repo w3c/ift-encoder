@@ -58,7 +58,6 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   // closure, we need to record the context glyphs from these as they are
   // potential interaction points.
   init_font_context_glyphs_.clear();
-  init_font_features_ = TRY(graph_.InitFontFeatureSet());
   Traversal init_font_traversal = TRY(graph_.ClosureTraversal(
       {Node::InitFont()}, &segmentation_info_->FullClosure(),
       &segmentation_info_->FullDefinition().codepoints, false));
@@ -68,13 +67,6 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
       init_font_context_glyphs_.union_set(context);
     }
   }
-
-  init_font_reachable_glyphs_ = init_font_traversal.ReachedGlyphs();
-  init_font_reachable_glyphs_.subtract(segmentation_info_->InitFontGlyphs());
-
-  // Note: reachability index must be updated after context_glyphs_, init_font_*
-  // sets are populated. since it utilizes those to assess traversal accuracy.
-  TRYV(UpdateReachabilityIndex(segments));
 
   return absl::OkStatus();
 }
@@ -87,11 +79,10 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
     return InitFontChanged(segments);
   }
 
+  VLOG(1) << "DependencyClosure::SegmentsMerged()";
+
   // Manually update the glyph condition cache.
   UpdateNodeConditionsCache(base_segment, segments);
-
-  VLOG(1) << "DependencyClosure::SegmentsMerged()";
-  TRYV(UpdateReachabilityIndex(segments));
   return absl::OkStatus();
 }
 
@@ -327,13 +318,6 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
 
 StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     const absl::flat_hash_set<dep_graph::Node> nodes) const {
-  // TODO(garretrieger): we can narrow the set by considering context glyphs per
-  // activated glyph instead of just the whole set of context glyphs.
-
-  flat_hash_set<Node> visited;
-  SegmentSet visited_segments;
-  GlyphSet visited_glyphs;
-
   btree_set<Node> to_check;
   to_check.insert(nodes.begin(), nodes.end());
 
@@ -351,127 +335,15 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     to_check.insert(Node::Feature(f));
   }
 
-  bool init_font_context_added = false;
-
-  while (!to_check.empty()) {
-    Node next = *to_check.begin();
-    to_check.erase(next);
-    visited.insert(next);
-    if (next.IsGlyph()) {
-      visited_glyphs.insert(next.Id());
-    }
-
-    // node may be reachable from the init font.
-    if (!init_font_context_added && next.IsGlyph() &&
-        init_font_reachable_glyphs_.contains(next.Id())) {
-      ReachabilityInitFontAddToCheck(visited_glyphs, to_check);
-      init_font_context_added = true;
-    }
-
-    // now check if any segments can reach it.
-    SegmentSet segments;
-    if (next.IsGlyph()) {
-      segments = unconstrained_reachability_.SegmentsForGlyph(next.Id());
-    } else if (next.IsUnicode()) {
-      segments = unconstrained_reachability_.SegmentsForCodepoint(next.Id());
-    } else if (next.IsFeature()) {
-      segments = unconstrained_reachability_.SegmentsForFeature(next.Id());
-    } else {
-      // ignored node type.
+  SegmentSet out;
+  for (Node node : to_check) {
+    auto it = node_condition_cache_.find(node);
+    if (it == node_condition_cache_.end()) {
       continue;
     }
-
-    if (segments.empty()) {
-      continue;
-    }
-
-    TRYV(ReachabilitySegmentsAddToCheck(segments, visited_glyphs,
-                                        visited_segments, to_check));
+    out.union_set(it->second.TriggeringSegments());
   }
-
-  return visited_segments;
-}
-
-void DependencyClosure::ReachabilityInitFontAddToCheck(
-    const GlyphSet& visited_glyphs, btree_set<Node>& to_check) const {
-  GlyphSet additional = init_font_context_glyphs_;
-  additional.subtract(visited_glyphs);
-  for (glyph_id_t gid : additional) {
-    to_check.insert(Node::Glyph(gid));
-  }
-}
-
-Status DependencyClosure::ReachabilitySegmentsAddToCheck(
-    const SegmentSet& segments, const GlyphSet& visited_glyphs,
-    SegmentSet& visited_segments, btree_set<Node>& to_check) const {
-  for (segment_index_t s : segments) {
-    if (visited_segments.contains(s)) {
-      continue;
-    }
-
-    visited_segments.insert(s);
-
-    GlyphSet additional = context_reachability_.GlyphsForSegment(s);
-
-    additional.subtract(visited_glyphs);
-
-    for (glyph_id_t gid : additional) {
-      to_check.insert(Node::Glyph(gid));
-    }
-  }
-  return absl::OkStatus();
-}
-
-Status DependencyClosure::UpdateReachabilityIndex(SegmentSet segments) {
-  if (reachability_index_valid_) {
-    // If indices have existing data, then we need to ensure prior entries for
-    // the segments to be updated are cleared out.
-    for (segment_index_t s : segments) {
-      if (s >= segmentation_info_->Segments().size()) {
-        break;
-      }
-      ClearReachabilityIndex(s);
-    }
-  } else {
-    // If the index isn't built yet then all segments need to be updated.
-    segments = SegmentSet::all();
-  }
-
-  for (segment_index_t s : segments) {
-    if (s >= segmentation_info_->Segments().size()) {
-      break;
-    }
-    TRYV(UpdateReachabilityIndex(s));
-  }
-
-  reachability_index_valid_ = true;
-  return absl::OkStatus();
-}
-
-Status DependencyClosure::UpdateReachabilityIndex(segment_index_t s) {
-  auto traversal = TRY(graph_.ClosureTraversal({s}, false));
-  for (glyph_id_t g : traversal.ReachedGlyphs()) {
-    unconstrained_reachability_.AddGlyph(s, g);
-  }
-
-  for (hb_codepoint_t cp : traversal.ReachedCodepoints()) {
-    unconstrained_reachability_.AddCodepoint(s, cp);
-  }
-
-  for (hb_tag_t f : traversal.ReachedLayoutFeatures()) {
-    unconstrained_reachability_.AddFeature(s, f);
-  }
-
-  for (glyph_id_t g : traversal.ContextGlyphs()) {
-    context_reachability_.AddGlyph(s, g);
-  }
-
-  return absl::OkStatus();
-}
-
-void DependencyClosure::ClearReachabilityIndex(segment_index_t segment) {
-  unconstrained_reachability_.ClearSegment(segment);
-  context_reachability_.ClearSegment(segment);
+  return out;
 }
 
 flat_hash_map<Node, ActivationCondition>

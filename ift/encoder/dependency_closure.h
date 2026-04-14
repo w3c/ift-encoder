@@ -11,7 +11,6 @@
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
-#include "ift/encoder/reachability_index.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
@@ -112,6 +111,8 @@ class DependencyClosure {
   //
   // Utilizes the dependency graph to make the determination, so it's possible
   // that the result may be overestimated.
+  //
+  // TODO XXXX can drop StatusOr<> from these.
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
       const common::GlyphSet& glyphs) const;
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
@@ -175,34 +176,18 @@ class DependencyClosure {
   absl::StatusOr<common::SegmentSet> FilterSegments(
       const common::SegmentSet& segments) const;
 
-  void ReachabilityInitFontAddToCheck(
-      const common::GlyphSet& visited_glyphs,
-      absl::btree_set<dep_graph::Node>& to_check) const;
-
-  absl::Status ReachabilitySegmentsAddToCheck(
-      const ift::common::SegmentSet& segments,
-      const common::GlyphSet& visited_glyphs,
-      ift::common::SegmentSet& visited_segments,
-      absl::btree_set<dep_graph::Node>& to_check) const;
-
   absl::Status InitNodeConditionsCache();
   void UpdateNodeConditionsCache(segment_index_t base_segment,
                                  const common::SegmentSet& segments);
   absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
       const common::SegmentSet& segments) const;
 
-  absl::Status UpdateReachabilityIndex(ift::common::SegmentSet segments);
-  absl::Status UpdateReachabilityIndex(segment_index_t segment);
-  void ClearReachabilityIndex(segment_index_t segment);
-
   const RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
 
   ift::common::GlyphSet context_glyphs_;
-  ift::common::GlyphSet init_font_reachable_glyphs_;
   ift::common::GlyphSet init_font_context_glyphs_;
-  absl::flat_hash_set<hb_tag_t> init_font_features_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
@@ -210,17 +195,6 @@ class DependencyClosure {
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
       node_conditions_with_segment_;
 
-  // Reachability indexes: these indexes are used to quickly locate segments
-  // reachable from glyph and features (and in reverse as well).
-  bool reachability_index_valid_ = false;
-
-  // Unconstrained reachability, these are the glyphs/features that can be
-  // reached by a segment if context constraints are not enforced.
-  ReachabilityIndex unconstrained_reachability_;
-
-  // Tracks which context glyphs (for contextual gsub substitutions) can be
-  // reached from a segment.
-  ReachabilityIndex context_reachability_;
 #endif
 
   uint64_t accurate_results_ = 0;
