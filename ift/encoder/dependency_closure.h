@@ -130,7 +130,7 @@ class DependencyClosure {
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
   // versus real subsetting closure due to reliance on the dependency graph.
-  absl::StatusOr<absl::flat_hash_map<glyph_id_t, ActivationCondition>>
+  absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
   ExtractAllGlyphConditions() const;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
@@ -185,10 +185,10 @@ class DependencyClosure {
       ift::common::SegmentSet& visited_segments,
       absl::btree_set<dep_graph::Node>& to_check) const;
 
-  absl::Status InitGlyphConditionsCache();
-  void UpdateGlyphConditionsCache(segment_index_t base_segment,
-                                  const common::SegmentSet& segments);
-  common::GlyphSet SegmentsToEffectedGlyphConditions(
+  absl::Status InitNodeConditionsCache();
+  void UpdateNodeConditionsCache(segment_index_t base_segment,
+                                 const common::SegmentSet& segments);
+  absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
       const common::SegmentSet& segments) const;
 
   absl::Status UpdateReachabilityIndex(ift::common::SegmentSet segments);
@@ -205,8 +205,10 @@ class DependencyClosure {
   absl::flat_hash_set<hb_tag_t> init_font_features_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
-  absl::flat_hash_map<segment_index_t, common::GlyphSet>
-      glyph_conditions_with_segment_;
+  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
+      node_condition_cache_;
+  absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
+      node_conditions_with_segment_;
 
   // Reachability indexes: these indexes are used to quickly locate segments
   // reachable from glyph and features (and in reverse as well).
