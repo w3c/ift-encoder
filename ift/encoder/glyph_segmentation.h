@@ -105,15 +105,9 @@ class GlyphSegmentation {
 
   ift::config::SegmentationPlan ToSegmentationPlanProto() const;
 
-  static absl::Status GroupsToSegmentation(
-      const absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>&
-          and_glyph_groups,
-      const absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>&
-          or_glyph_groups,
-      const absl::btree_map<segment_index_t, ift::common::GlyphSet>&
-          exclusive_glyph_groups,
-      const ift::common::SegmentSet& fallback_group,
-      GlyphSegmentation& segmentation);
+  static absl::Status ConditionsToSegmentation(const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions,
+    const common::SegmentSet& fallback_group,
+    GlyphSegmentation& segmentation);
 
   void CopySegments(const std::vector<SubsetDefinition>& segments);
 

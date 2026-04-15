@@ -10,6 +10,7 @@
 #include "absl/status/statusor.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -37,50 +38,32 @@ using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
-Status GlyphSegmentation::GroupsToSegmentation(
-    const btree_map<SegmentSet, GlyphSet>& and_glyph_groups,
-    const btree_map<SegmentSet, GlyphSet>& or_glyph_groups,
-    const btree_map<segment_index_t, GlyphSet>& exclusive_glyph_groups,
-    const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
+Status GlyphSegmentation::ConditionsToSegmentation(const btree_map<ActivationCondition, GlyphSet>& conditions,
+    const SegmentSet& fallback_group,
+    GlyphSegmentation& segmentation) {
+
   patch_id_t next_id = 0;
   segmentation.patches_.clear();
   segmentation.conditions_.clear();
 
-  // Map segments into patch ids
-  for (const auto& [segment, glyphs] : exclusive_glyph_groups) {
-    segmentation.patches_.insert(std::pair(next_id, glyphs));
-    segmentation.conditions_.insert(
-        ActivationCondition::exclusive_segment(segment, next_id++));
-  }
+  for (const auto& [condition, glyphs] : conditions) {
 
-  for (const auto& [and_segments, glyphs] : and_glyph_groups) {
-    segmentation.patches_.insert(std::pair(next_id, glyphs));
-    segmentation.conditions_.insert(
-        ActivationCondition::and_segments(and_segments, next_id));
-
-    next_id++;
-  }
-
-  for (const auto& [or_segments, glyphs] : or_glyph_groups) {
     if (glyphs.empty()) {
-      // Some or_segments have all of their glyphs removed by the additional
+      // Some conditions have all of their glyphs removed by the additional
       // conditions check, don't create a patch for these.
       continue;
     }
 
-    if (or_segments.size() == 1) {
-      return absl::InternalError(
-          StrCat("Unexpected or_segment with only one segment: s",
-                 *or_segments.begin()));
-    }
-
-    bool is_fallback =
-        !fallback_group.empty() && (or_segments == fallback_group);
     segmentation.patches_.insert(std::pair(next_id, glyphs));
-    segmentation.conditions_.insert(
-        ActivationCondition::or_segments(or_segments, next_id, is_fallback));
 
-    next_id++;
+    if (condition.IsExclusive()) {
+      segmentation.conditions_.insert(
+        ActivationCondition::exclusive_segment(*condition.TriggeringSegments().begin(), next_id++));
+    } else {
+      bool is_fallback =
+        !fallback_group.empty() && condition.IsPurelyConjunctive() && (condition.TriggeringSegments() == fallback_group);
+      segmentation.conditions_.insert(ActivationCondition::composite_condition(condition.conditions(), next_id++, is_fallback));
+    }
   }
 
   return absl::OkStatus();

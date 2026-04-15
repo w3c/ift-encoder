@@ -325,14 +325,14 @@ glyph_patches {
 glyph_patches {
   key: 2
   value {
-    values: 444
-    values: 446
+    values: 117
   }
 }
 glyph_patches {
   key: 3
   value {
-    values: 117
+    values: 444
+    values: 446
   }
 }
 glyph_patch_conditions {
@@ -352,7 +352,7 @@ glyph_patch_conditions {
     values: 0
     values: 1
   }
-  activated_patch: 3
+  activated_patch: 2
 }
 glyph_patch_conditions {
   required_segments {
@@ -361,7 +361,7 @@ glyph_patch_conditions {
   required_segments {
     values: 1
   }
-  activated_patch: 2
+  activated_patch: 3
 }
 initial_codepoints {
   values: 97

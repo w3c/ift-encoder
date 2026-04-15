@@ -5,6 +5,7 @@
 #include "absl/status/status.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/dependency_closure.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -15,6 +16,7 @@
 using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
 using ift::config::CLOSURE_ONLY;
 using ift::config::ConditionAnalysisMode;
+using ift::config::DEP_GRAPH_ONLY;
 using ift::config::UnmappedGlyphHandling;
 
 using absl::Status;
@@ -54,29 +56,59 @@ Status SegmentationContext::ValidateSegmentation(
         missing.ToString());
   }
 
+  for (const auto& condition : segmentation.Conditions()) {
+    auto it = segmentation.GidSegments().find(condition.activated());
+    if (it == segmentation.GidSegments().end()) {
+      return absl::FailedPreconditionError(absl::StrCat("Patch ", condition.activated(), " does not have glyphs specified"));
+    }
+
+    const auto& glyphs = it->second;
+    for (const auto& sub_group : condition.conditions()) {
+      if (TRY(glyph_closure_cache->HasAdditionalConditions(&SegmentationInfo(), sub_group, glyphs))) {
+        return absl::FailedPreconditionError(
+          absl::StrCat("Found a condition which does not satisfy the glyph closure requirement: ",
+          condition.ToString(), " ", glyphs.ToString(), ", sub group ", sub_group.ToString(), " failed the check."
+          ));
+      }
+    }
+  }
+
   return absl::OkStatus();
 }
 
 Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
   segment_index_t last_merged_segment_index = modified.base_segment;
-  GlyphSet analysis_modified_gids;
-  if (!InertSegments().contains(last_merged_segment_index)) {
-    VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
-            << " due to merge.";
-    analysis_modified_gids =
-        TRY(ReprocessSegment(last_merged_segment_index));
-  }
 
-  modified.glyphs.union_set(analysis_modified_gids);
+  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+    if (!InertSegments().contains(last_merged_segment_index)) {
+      VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
+              << " due to merge.";
+      GlyphSet analysis_modified_gids =
+          TRY(ReprocessSegment(last_merged_segment_index));
+      modified.glyphs.union_set(analysis_modified_gids);
+    }
+  } else {
+    modified.glyphs.union_set(
+        (*dependency_closure_)
+            ->SegmentsToAffectedGlyphs({modified.base_segment}));
+    TransferDependencyGraphGlyphConditions(modified.glyphs);
+  }
 
   return GroupGlyphs(modified.glyphs, modified.segments);
 }
 
 Status SegmentationContext::ReprocessAll() {
-  for (segment_index_t segment_index = 0;
-       segment_index < SegmentationInfo().Segments().size();
-       segment_index++) {
-    TRY(ReprocessSegment(segment_index));
+  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+    for (segment_index_t segment_index = 0;
+         segment_index < SegmentationInfo().Segments().size();
+         segment_index++) {
+      TRY(ReprocessSegment(segment_index));
+    }
+  } else {
+    // Pull conditions directly out of the dep graph instead of running closure
+    // processing.
+    TransferDependencyGraphGlyphConditions(
+        segmentation_info_->NonInitFontGlyphs());
   }
 
   return GroupGlyphs(SegmentationInfo().NonInitFontGlyphs(), {});
@@ -179,8 +211,16 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   inert_segments_.subtract(segments_to_reprocess);
 
   // Then reprocess segments:
-  for (segment_index_t segment_index : segments_to_reprocess) {
-    TRY(ReprocessSegment(segment_index));
+  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+    for (segment_index_t segment_index : segments_to_reprocess) {
+      TRY(ReprocessSegment(segment_index));
+    }
+  } else {
+    GlyphSet gids;
+    for (segment_index_t s : segments_to_reprocess) {
+      gids.union_set((*dependency_closure_)->SegmentsToAffectedGlyphs({s}));
+    }
+    TransferDependencyGraphGlyphConditions(gids);
   }
 
   // the groupings can be incrementally recomputed by looking at what conditions
@@ -297,6 +337,19 @@ SegmentationContext::InitializeSegmentationContext(
   TRYV(context.ReprocessAll());
 
   return context;
+}
+
+void SegmentationContext::TransferDependencyGraphGlyphConditions(
+    const GlyphSet& gids) {
+  const auto& conditions = (*dependency_closure_)->AllGlyphConditions();
+  for (glyph_id_t g : gids) {
+    ActivationCondition condition = conditions.at(g);
+    if (condition.IsUnitary()) {
+      condition = ActivationCondition::exclusive_segment(
+          *condition.TriggeringSegments().begin(), 0);
+    }
+    glyph_condition_set.SetCondition(g, condition);
+  }
 }
 
 }  // namespace ift::encoder

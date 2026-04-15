@@ -54,7 +54,7 @@ class ActivationCondition {
    * (s1 OR ..) AND (si OR ...) AND ...
    */
   static ActivationCondition composite_condition(
-      absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated);
+      absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated, bool is_fallback = false);
 
   // Returns a new activation condition that activates on (a && b)
   //

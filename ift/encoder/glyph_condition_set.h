@@ -89,6 +89,14 @@ class GlyphConditionSet {
     segment_to_gid_conditions_[segment].insert(gid);
   }
 
+  void SetCondition(glyph_id_t gid, ActivationCondition condition) {
+    common::SegmentSet segments = condition.TriggeringSegments();
+    gid_conditions_[gid].condition_ = std::move(condition);
+    for (segment_index_t s : segments) {
+      segment_to_gid_conditions_[s].insert(gid);
+    }
+  }
+
   // Returns the set of glyphs that have 'segment' in their conditions.
   const ift::common::GlyphSet& GlyphsWithSegment(
       segment_index_t segment) const {

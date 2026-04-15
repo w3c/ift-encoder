@@ -144,14 +144,24 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
   // The fallback patch isn't stored in ConditionAndGlyphs() so add it in
   // manually.
   SegmentSet fallback_segments;
+  auto conditions_with_fallback = ConditionsAndGlyphs();
   if (!unmapped_glyphs_.empty()) {
     fallback_segments = segmentation_info.NonEmptySegments();
-    or_glyph_groups[fallback_segments].union_set(unmapped_glyphs_);
+
+    ActivationCondition non_fallback_cond = ActivationCondition::or_segments(fallback_segments, 0, false);
+    ActivationCondition fallback_cond = ActivationCondition::or_segments(fallback_segments, 0, true);
+
+    if (conditions_with_fallback.contains(non_fallback_cond)) {
+      // If an equivalent non-fallback condition exists merge it with the fallback one.
+      conditions_with_fallback[fallback_cond].union_set(conditions_with_fallback[non_fallback_cond]);
+      conditions_with_fallback.erase(non_fallback_cond);
+    }
+
+    conditions_with_fallback[fallback_cond].union_set(unmapped_glyphs_);
   }
 
-  TRYV(GlyphSegmentation::GroupsToSegmentation(
-      and_glyph_groups, or_glyph_groups, exclusive_glyph_groups,
-      fallback_segments, segmentation));
+  TRYV(GlyphSegmentation::ConditionsToSegmentation(
+      conditions_with_fallback, fallback_segments, segmentation));
 
   return segmentation;
 }
@@ -161,7 +171,7 @@ Status GlyphGroupings::GroupGlyphs(
     const GlyphConditionSet& glyph_condition_set,
     GlyphClosureCache& closure_cache,
     std::optional<DependencyClosure*> dependency_closure, GlyphSet glyphs,
-    const SegmentSet& modified_segments) {
+    const SegmentSet& modified_segments, bool additional_conditions_check) {
   const auto& initial_closure = segmentation_info.InitFontGlyphs();
   SegmentSet inscope_fallback_segments;
 
@@ -241,6 +251,13 @@ Status GlyphGroupings::GroupGlyphs(
   // used.
   for (const auto& or_group : modified_or_groups) {
     auto& glyphs = or_glyph_groups_[or_group];
+    ActivationCondition condition =
+        ActivationCondition::or_segments(or_group, 0);
+
+    if (!additional_conditions_check) {
+      TRYV(AddConditionAndGlyphs(condition, glyphs));
+      continue;
+    }
 
     SegmentSet all_other_segment_ids;
     if (!segmentation_info.Segments().empty()) {
@@ -262,8 +279,6 @@ Status GlyphGroupings::GroupGlyphs(
       }
     }
 
-    ActivationCondition condition =
-        ActivationCondition::or_segments(or_group, 0);
     if (glyphs.empty()) {
       // Group has been emptied out, so it's no longer needed.
       or_glyph_groups_.erase(or_group);

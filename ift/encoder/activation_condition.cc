@@ -71,13 +71,14 @@ ActivationCondition ActivationCondition::or_segments(const SegmentSet& segments,
 }
 
 ActivationCondition ActivationCondition::composite_condition(
-    absl::Span<const SegmentSet> groups, patch_id_t activated) {
+    absl::Span<const SegmentSet> groups, patch_id_t activated, bool is_fallback) {
   ActivationCondition conditions;
   conditions.activated_ = {activated};
   for (const auto& group : groups) {
     conditions.conditions_.push_back(group);
   }
 
+  conditions.is_fallback_ = is_fallback;
   return conditions;
 }
 

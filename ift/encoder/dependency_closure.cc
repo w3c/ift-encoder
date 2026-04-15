@@ -135,6 +135,19 @@ void DependencyClosure::UpdateNodeConditionsCache(
   }
 }
 
+// TODO XXXXX add unit test.
+GlyphSet DependencyClosure::SegmentsToAffectedGlyphs(
+    const SegmentSet& segments) const {
+  auto nodes = SegmentsToAffectedNodeConditions(segments);
+  GlyphSet out;
+  for (auto node : nodes) {
+    if (node.IsGlyph()) {
+      out.insert(node.Id());
+    }
+  }
+  return out;
+}
+
 flat_hash_set<Node> DependencyClosure::SegmentsToAffectedNodeConditions(
     const SegmentSet& segments) const {
   flat_hash_set<Node> nodes;
