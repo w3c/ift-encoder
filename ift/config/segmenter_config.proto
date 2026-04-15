@@ -22,6 +22,15 @@ enum ConditionAnalysisMode {
   // Useful primarily for testing the accuracy of the dependency
   // graph approach.
   CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
+
+  // Analyze glyph conditions using dep graph only. Closure is
+  // only used at the very end to validate that founds conditions
+  // meet the glyph closure requirement.
+  //
+  // This is the fastest method and generally generates high quality
+  // conditions, but may on occassion overestimate the conditions
+  // for a glyph.
+  DEP_GRAPH_ONLY = 3;
 }
 
 // This messages provides the configuration details for util/gen_ift_segmentation_plan.cc

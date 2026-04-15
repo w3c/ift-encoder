@@ -69,7 +69,8 @@ class SegmentationContext {
 
     if ((condition_analysis_mode == ift::config::CLOSURE_AND_DEP_GRAPH) ||
         (condition_analysis_mode ==
-         ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH)) {
+         ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH) ||
+        (condition_analysis_mode == ift::config::DEP_GRAPH_ONLY)) {
       context.dependency_closure_ = TRY(DependencyClosure::Create(
           context.segmentation_info_.get(), context.original_face.get()));
     }
@@ -239,10 +240,13 @@ class SegmentationContext {
     if (dependency_closure_.has_value()) {
       maybe_dep_closure = (*dependency_closure_).get();
     }
-    return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
-                                       *glyph_closure_cache, maybe_dep_closure,
-                                       glyphs, modified_segments);
+    return glyph_groupings.GroupGlyphs(
+        *segmentation_info_, glyph_condition_set, *glyph_closure_cache,
+        maybe_dep_closure, glyphs, modified_segments,
+        condition_analysis_mode_ != config::DEP_GRAPH_ONLY);
   }
+
+  void TransferDependencyGraphGlyphConditions(const common::GlyphSet& gids);
 
   // Generates updated glyph conditions and glyph groupings for segment_index
   // which has the provided set of codepoints.

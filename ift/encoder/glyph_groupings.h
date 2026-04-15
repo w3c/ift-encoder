@@ -134,7 +134,8 @@ class GlyphGroupings {
       GlyphClosureCache& closure_cache,
       std::optional<DependencyClosure*> dependency_closure,
       ift::common::GlyphSet glyphs,
-      const ift::common::SegmentSet& modified_segments);
+      const ift::common::SegmentSet& modified_segments,
+      bool additional_conditions_check = true);
 
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(

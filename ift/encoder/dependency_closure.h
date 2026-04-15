@@ -93,6 +93,9 @@ class DependencyClosure {
   AllGlyphConditions() const {
     return glyph_condition_cache_;
   }
+
+  common::GlyphSet SegmentsToAffectedGlyphs(
+      const common::SegmentSet& segments) const;
 #endif
 
   // This structure caches information derived from the segmentation info
