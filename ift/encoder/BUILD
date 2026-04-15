@@ -63,6 +63,7 @@ cc_library(
         "glyph_condition_set.cc",
         "glyph_groupings.cc",
         "glyph_groupings.h",
+        "condition_to_glyphs_index.h",
         "invalidation_set.h",
         "merger.cc",
         "merger.h",

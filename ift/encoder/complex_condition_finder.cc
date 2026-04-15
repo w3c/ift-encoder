@@ -259,10 +259,12 @@ static btree_map<SegmentSet, GlyphSet> ExistingConditions(
     btree_map<glyph_id_t, SegmentSet>& glyph_to_conditions) {
   btree_map<SegmentSet, GlyphSet> existing_conditions;
   for (glyph_id_t gid : glyphs) {
-    SegmentSet or_segments = glyph_condition_set.ConditionsFor(gid).or_segments;
-    if (or_segments.empty()) {
+    const auto& condition = glyph_condition_set.ConditionsFor(gid).activation();
+    if (condition.IsExclusive() || !condition.IsPurelyDisjunctive()) {
       continue;
     }
+
+    SegmentSet or_segments = condition.TriggeringSegments();
     existing_conditions[or_segments].insert(gid);
     glyph_to_conditions[gid].union_set(or_segments);
   }
