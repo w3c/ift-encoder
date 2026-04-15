@@ -124,11 +124,14 @@ static void Simplify(std::vector<SegmentSet>& conditions) {
 
 ActivationCondition ActivationCondition::And(const ActivationCondition& a,
                                              const ActivationCondition& b) {
+  bool a_exclusive = a.IsExclusive() || a.IsAlwaysTrue();
+  bool b_exclusive = b.IsExclusive() || b.IsAlwaysTrue();
+
   ActivationCondition condition = a;
   condition.conditions_.insert(condition.conditions_.end(),
                                b.conditions().begin(), b.conditions().end());
   Simplify(condition.conditions_);
-  condition.is_exclusive_ = false;
+  condition.is_exclusive_ = a_exclusive && b_exclusive && condition.IsUnitary();
   return condition;
 }
 
@@ -247,8 +250,7 @@ bool ActivationCondition::operator<(const ActivationCondition& other) const {
     return !is_fallback_;
   }
 
-  // These two are equal
-  return false;
+  return encoding_ < other.encoding_;
 }
 
 template <typename ProtoType>

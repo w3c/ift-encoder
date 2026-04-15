@@ -127,8 +127,9 @@ class DependencyClosure {
 #ifdef HB_DEPEND_API
 
   // Extracts the full activations conditions (as specified by the dependency
-  // graph) for all graph nodes. In some cases may overestimate activation conditions
-  // versus real subsetting closure due to reliance on the dependency graph.
+  // graph) for all graph nodes. In some cases may overestimate activation
+  // conditions versus real subsetting closure due to reliance on the dependency
+  // graph.
   absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
   ExtractAllNodeConditions() const;
 

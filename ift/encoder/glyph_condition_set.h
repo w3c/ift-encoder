@@ -5,28 +5,52 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "ift/common/int_set.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/types.h"
 
 namespace ift::encoder {
+
+class GlyphConditionSet;
 
 /*
  * A set of conditions which activate a specific single glyph.
  */
 class GlyphConditions {
+  friend GlyphConditionSet;
+
  public:
-  GlyphConditions() : and_segments(), or_segments() {}
-  ift::common::SegmentSet and_segments;
-  ift::common::SegmentSet or_segments;
+  GlyphConditions() : condition_(ActivationCondition::True(0)) {}
+
+  const ActivationCondition& activation() const { return condition_; }
 
   bool operator==(const GlyphConditions& other) const {
-    return other.and_segments == and_segments &&
-           other.or_segments == or_segments;
+    return condition_ == other.condition_;
   }
 
-  void RemoveSegments(const ift::common::SegmentSet& segments) {
-    and_segments.subtract(segments);
-    or_segments.subtract(segments);
+  void RemoveSegments(const common::SegmentSet& segments) {
+    bool is_exclusive = condition_.IsExclusive();
+    std::vector<common::SegmentSet> new_conditions;
+    for (const auto& sub_group : condition_.conditions()) {
+      common::SegmentSet modified = sub_group;
+      modified.subtract(segments);
+      if (!modified.empty()) {
+        new_conditions.push_back(modified);
+      }
+    }
+
+    if (new_conditions.empty()) {
+      condition_ = ActivationCondition::True(0);
+    } else if (is_exclusive && new_conditions.size() == 1 &&
+               new_conditions.begin()->size() == 1) {
+      condition_ = ActivationCondition::exclusive_segment(
+          *new_conditions.begin()->min(), 0);
+    } else {
+      condition_ = ActivationCondition::composite_condition(new_conditions, 0);
+    }
   }
+
+ private:
+  ActivationCondition condition_;
 };
 
 /*
@@ -44,12 +68,24 @@ class GlyphConditionSet {
   }
 
   void AddAndCondition(glyph_id_t gid, segment_index_t segment) {
-    gid_conditions_[gid].and_segments.insert(segment);
+    auto& condition = gid_conditions_[gid].condition_;
+    if (condition.IsAlwaysTrue()) {
+      condition = ActivationCondition::exclusive_segment(segment, 0);
+    } else {
+      condition = ActivationCondition::And(
+          condition, ActivationCondition::exclusive_segment(segment, 0));
+    }
     segment_to_gid_conditions_[segment].insert(gid);
   }
 
   void AddOrCondition(glyph_id_t gid, segment_index_t segment) {
-    gid_conditions_[gid].or_segments.insert(segment);
+    auto& condition = gid_conditions_[gid].condition_;
+    if (condition.IsAlwaysTrue()) {
+      condition = ActivationCondition::or_segments({segment}, 0);
+    } else {
+      condition = ActivationCondition::Or(
+          condition, ActivationCondition::or_segments({segment}, 0));
+    }
     segment_to_gid_conditions_[segment].insert(gid);
   }
 
@@ -69,11 +105,9 @@ class GlyphConditionSet {
   void InvalidateGlyphInformation(const ift::common::GlyphSet& glyphs) {
     ift::common::SegmentSet touched;
     for (uint32_t gid : glyphs) {
-      auto& condition = gid_conditions_[gid];
-      touched.union_set(condition.and_segments);
-      touched.union_set(condition.or_segments);
-      condition.and_segments.clear();
-      condition.or_segments.clear();
+      auto& condition = gid_conditions_[gid].condition_;
+      touched.union_set(condition.TriggeringSegments());
+      condition = ActivationCondition::True(0);
     }
 
     for (uint32_t segment_index : touched) {

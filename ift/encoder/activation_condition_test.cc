@@ -418,6 +418,26 @@ TEST(ActivationConditionTest, And) {
   EXPECT_EQ(combined_ba.activated(), 11);
 }
 
+TEST(ActivationConditionTest, And_Exclusiveness) {
+  auto tru = ActivationCondition::True(0);
+  auto exc_a = ActivationCondition::exclusive_segment(10, 0);
+  auto exc_b = ActivationCondition::exclusive_segment(20, 0);
+  auto non_exc_b = ActivationCondition::and_segments({20}, 0);
+
+  // For and And combination to be exclusive the result must
+  // be unitary and both inputs are exclusive (or one of the inputs
+  // is always true).
+
+  ASSERT_TRUE(ActivationCondition::And(tru, exc_a).IsExclusive());
+  ASSERT_TRUE(ActivationCondition::And(exc_a, tru).IsExclusive());
+
+  ASSERT_FALSE(ActivationCondition::And(exc_a, exc_b).IsExclusive());
+  ASSERT_FALSE(ActivationCondition::And(exc_b, exc_a).IsExclusive());
+  ASSERT_TRUE(ActivationCondition::And(exc_a, exc_a).IsExclusive());
+
+  ASSERT_FALSE(ActivationCondition::And(exc_b, non_exc_b).IsExclusive());
+}
+
 TEST(ActivationConditionTest, And_Simplification) {
   auto a = ActivationCondition::or_segments({1, 2}, 10);
   auto b = ActivationCondition::or_segments({1}, 10);

@@ -177,12 +177,18 @@ class ActivationCondition {
 
   ift::config::ActivationConditionProto ToConfigProto() const;
 
+  template <typename H>
+  friend H AbslHashValue(H h, const ActivationCondition& c) {
+    return H::combine(std::move(h), c.conditions_, c.activated_, c.is_fallback_,
+                      c.is_exclusive_, c.encoding_);
+  }
+
   bool operator<(const ActivationCondition& other) const;
 
   bool operator==(const ActivationCondition& other) const {
     return conditions_ == other.conditions_ && activated_ == other.activated_ &&
            is_fallback_ == other.is_fallback_ &&
-           is_exclusive_ == other.is_exclusive_;
+           is_exclusive_ == other.is_exclusive_ && encoding_ == other.encoding_;
   }
 
   bool operator!=(const ActivationCondition& other) const {

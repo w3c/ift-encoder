@@ -209,7 +209,8 @@ DependencyClosure::AnalyzeSegmentInternal(
   auto inscope_nodes = SegmentsToAffectedNodeConditions(segments);
   GlyphSet inscope_glyphs;
   for (Node node : inscope_nodes) {
-    if (node.IsGlyph() && segmentation_info_->NonInitFontGlyphs().contains(node.Id())) {
+    if (node.IsGlyph() &&
+        segmentation_info_->NonInitFontGlyphs().contains(node.Id())) {
       inscope_glyphs.insert(node.Id());
     }
   }

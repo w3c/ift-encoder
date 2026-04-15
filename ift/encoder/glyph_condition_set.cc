@@ -9,11 +9,8 @@ void PrintTo(const GlyphConditionSet& set, std::ostream* os) {
   *os << "Glyph Condition Set {" << std::endl;
   glyph_id_t gid = 0;
   for (const auto& c : set.gid_conditions_) {
-    if (!c.and_segments.empty() || !c.or_segments.empty()) {
-      *os << "  g" << gid << ": ";
-      *os << "OR " << c.or_segments.ToString();
-      *os << ", AND " << c.and_segments.ToString();
-      *os << std::endl;
+    if (!c.activation().IsAlwaysTrue()) {
+      *os << "  g" << gid << ": " << c.activation().ToString() << std::endl;
     }
     gid++;
   }
@@ -22,9 +19,8 @@ void PrintTo(const GlyphConditionSet& set, std::ostream* os) {
 
 static void PrintCondition(glyph_id_t gid, const GlyphConditions& condition,
                            bool added) {
-  VLOG(0) << (added ? "++ " : "-- ") << "g" << gid << ": OR "
-          << condition.or_segments.ToString() << ", "
-          << ": AND " << condition.or_segments.ToString();
+  VLOG(0) << (added ? "++ " : "-- ") << "g" << gid << ": "
+          << condition.activation().ToString();
 }
 
 void GlyphConditionSet::PrintDiff(const GlyphConditionSet& a,

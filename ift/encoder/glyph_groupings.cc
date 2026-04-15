@@ -30,21 +30,15 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   unmapped_glyphs_.erase(gid);
   found_condition_glyphs_.erase(gid);
 
-  auto it = glyph_to_condition_.find(gid);
-  if (it == glyph_to_condition_.end()) {
+  conditions_and_glyphs_.Invalidate(gid);
+  std::optional<ActivationCondition> pre_combination_condition_or =
+      conditions_and_glyphs_pre_combination_.Invalidate(gid);
+
+  if (!pre_combination_condition_or.has_value()) {
     return;
   }
 
-  ActivationCondition condition = it->second;
-
-  auto& glyphs = conditions_and_glyphs_.at(condition);
-  glyphs.erase(gid);
-  glyph_to_condition_.erase(gid);
-  glyph_to_condition_pre_combination_.erase(gid);
-
-  if (glyphs.empty()) {
-    RemoveConditionAndGlyphs(condition);
-  }
+  ActivationCondition condition = *pre_combination_condition_or;
 
   if (condition.IsExclusive()) {
     segment_index_t s = *condition.TriggeringSegments().begin();
@@ -60,19 +54,19 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
     return;
   }
 
-  btree_map<SegmentSet, GlyphSet>* groups = condition.conditions().size() == 1
-                                                ? &or_glyph_groups_
-                                                : &and_glyph_groups_;
+  if (!condition.IsPurelyDisjunctive()) {
+    return;
+  }
 
   const SegmentSet& s = condition.TriggeringSegments();
-  auto entry = groups->find(s);
-  if (entry == groups->end()) {
+  auto entry = or_glyph_groups_.find(s);
+  if (entry == or_glyph_groups_.end()) {
     return;
   }
 
   entry->second.erase(gid);
   if (entry->second.empty()) {
-    groups->erase(entry);
+    or_glyph_groups_.erase(entry);
   }
 }
 
@@ -111,21 +105,9 @@ Status GlyphGroupings::AddGlyphsToExclusiveGroup(
 
   ActivationCondition condition =
       ActivationCondition::exclusive_segment(exclusive_segment, 0);
-  conditions_and_glyphs_[condition].union_set(glyphs);
 
-  // Update indices to reflect the change.
-  triggering_segment_to_conditions_[exclusive_segment].insert(condition);
-  for (glyph_id_t gid : glyphs) {
-    bool did_insert =
-        glyph_to_condition_.insert(std::pair(gid, condition)).second;
-    did_insert |=
-        glyph_to_condition_pre_combination_.insert(std::pair(gid, condition))
-            .second;
-    if (!did_insert) {
-      return absl::InternalError(
-          "Attempting to add conflicting glyph to condition mapping.");
-    }
-  }
+  TRYV(conditions_and_glyphs_.Union(condition, glyphs));
+  TRYV(conditions_and_glyphs_pre_combination_.Union(condition, glyphs));
 
   // When merging this way we have to check if any of the involved glyphs
   // are involved with the combined patches mechanism. If at least one is
@@ -204,43 +186,53 @@ Status GlyphGroupings::GroupGlyphs(
   }
   glyphs.union_set(additional_glyphs);
 
-  SegmentSet modified_exclusive_segments;
-  btree_set<SegmentSet> modified_and_groups;
   btree_set<SegmentSet> modified_or_groups;
-  for (glyph_id_t gid : glyphs) {
-    const auto& condition = glyph_condition_set.ConditionsFor(gid);
+  btree_set<ActivationCondition> all_other_modified_conditions;
+  flat_hash_map<ActivationCondition, GlyphSet> new_groupings;
 
-    if (!condition.and_segments.empty()) {
-      if (condition.and_segments.size() == 1) {
-        segment_index_t s = *condition.and_segments.begin();
-        exclusive_glyph_groups_[s].insert(gid);
-        modified_exclusive_segments.insert(s);
-      } else {
-        and_glyph_groups_[condition.and_segments].insert(gid);
-        modified_and_groups.insert(condition.and_segments);
+  for (glyph_id_t gid : glyphs) {
+    const auto& condition = glyph_condition_set.ConditionsFor(gid).activation();
+
+    if (condition.IsAlwaysTrue()) {
+      if (!initial_closure.contains(gid) &&
+          segmentation_info.FullClosure().contains(gid)) {
+        // no condition so this is an unmapped glyph
+        unmapped_glyphs_.insert(gid);
+      }
+      continue;
+    }
+
+    if (!new_groupings.contains(condition)) {
+      // Since we may be doing a partial update, pull in any existing glyphs for
+      // this particular condition
+      auto it =
+          conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().find(
+              condition);
+      if (it !=
+          conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().end()) {
+        new_groupings[condition] = it->second;
       }
     }
+    new_groupings[condition].insert(gid);
 
-    if (!condition.or_segments.empty()) {
-      or_glyph_groups_[condition.or_segments].insert(gid);
-      modified_or_groups.insert(condition.or_segments);
-    }
-
-    if (condition.and_segments.empty() && condition.or_segments.empty() &&
-        !initial_closure.contains(gid) &&
-        segmentation_info.FullClosure().contains(gid)) {
-      unmapped_glyphs_.insert(gid);
+    if (condition.IsExclusive()) {
+      segment_index_t s = *condition.TriggeringSegments().begin();
+      exclusive_glyph_groups_[s].insert(gid);
+      all_other_modified_conditions.insert(condition);
+    } else if (condition.IsPurelyDisjunctive()) {
+      SegmentSet or_segments = condition.TriggeringSegments();
+      or_glyph_groups_[or_segments].insert(gid);
+      modified_or_groups.insert(or_segments);
+    } else {
+      // conjunctive or mixed condition
+      all_other_modified_conditions.insert(condition);
     }
   }
 
-  for (segment_index_t s : modified_exclusive_segments) {
-    auto condition = ActivationCondition::exclusive_segment(s, 0);
-    TRYV(AddConditionAndGlyphs(condition, exclusive_glyph_groups_[s]));
-  }
-
-  for (const auto& and_group : modified_and_groups) {
-    auto condition = ActivationCondition::and_segments(and_group, 0);
-    TRYV(AddConditionAndGlyphs(condition, and_glyph_groups_[and_group]));
+  // Add conditions for everything except for purely disjunctive conditions whic
+  // need additional processing.
+  for (const auto& c : all_other_modified_conditions) {
+    TRYV(AddConditionAndGlyphs(c, new_groupings.at(c)));
   }
 
   // Any of the or_set conditions we've generated may have some additional
@@ -301,8 +293,8 @@ Status GlyphGroupings::GroupGlyphs(
 }
 
 void GlyphGroupings::CollectSegments(glyph_id_t gid, SegmentSet& segments) {
-  auto it = glyph_to_condition_.find(gid);
-  if (it == glyph_to_condition_.end()) {
+  auto it = conditions_and_glyphs_.GlyphToCondition().find(gid);
+  if (it == conditions_and_glyphs_.GlyphToCondition().end()) {
     return;
   }
   segments.union_set(it->second.TriggeringSegments());
@@ -313,7 +305,7 @@ GlyphSet GlyphGroupings::ModifiedGlyphs(const SegmentSet& segments) const {
   for (segment_index_t s : segments) {
     const auto& conditions = TriggeringSegmentToConditions(s);
     for (const auto& c : conditions) {
-      glyphs.union_set(conditions_and_glyphs_.at(c));
+      glyphs.union_set(ConditionsAndGlyphs().at(c));
     }
   }
   return glyphs;
@@ -375,6 +367,14 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
 }
 
 Status GlyphGroupings::RecomputeCombinedConditions() {
+  // TODO XXXXX now that we can arbitrarily combine activation conditions,
+  // we should be able to support patch merging on arbitrary conditions
+  // including conjunctive and/or mixed ones. Rework this to not be limited just
+  // to exclusive and purely disjunctive cases.
+  //
+  // Will also need to update the merger/candidate_merge code that selects patch
+  // merges to consider all cases.
+
   // To minimize the amount of work we need to do we first detect which segments
   // are potentially affected by the patch combination mechanism and then limit
   // processing just to those.
@@ -411,7 +411,8 @@ Status GlyphGroupings::ConditionsAffectedByCombination(
     btree_set<SegmentSet>& or_conditions) const {
   for (const GlyphSet& gids : TRY(combined_patches_.NonIdentityGroups())) {
     for (glyph_id_t gid : gids) {
-      const auto& cond = glyph_to_condition_pre_combination_.at(gid);
+      const auto& cond =
+          conditions_and_glyphs_pre_combination_.GlyphToCondition().at(gid);
       if (cond.IsExclusive()) {
         exclusive_segments.insert(*cond.TriggeringSegments().begin());
       } else if (cond.conditions().size() == 1) {

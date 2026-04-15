@@ -800,4 +800,24 @@ TEST_F(GlyphGroupingsTest,
   ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
+TEST_F(GlyphGroupingsTest, IncrementalExclusiveConflict) {
+  // Initial grouping for both
+  auto sc = glyph_groupings_.GroupGlyphs(
+      *requested_segmentation_info_, *glyph_conditions_, *closure_cache_,
+      std::nullopt, {ToGlyph('a'), ToGlyph('b')}, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Incremental grouping for ONLY one of them
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, {ToGlyph('a')}, {});
+  EXPECT_TRUE(sc.ok()) << sc;
+
+  ActivationCondition expected = ActivationCondition::exclusive_segment(0, 0);
+
+  ASSERT_EQ(glyph_groupings_.ConditionsAndGlyphs(),
+            (btree_map<ActivationCondition, GlyphSet>{
+                {expected, {ToGlyph('a'), ToGlyph('b')}}}));
+}
+
 }  // namespace ift::encoder
