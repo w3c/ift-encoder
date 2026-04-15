@@ -200,20 +200,13 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.
-  for (segment_index_t segment_index = 0;
-       segment_index < context.SegmentationInfo().Segments().size();
-       segment_index++) {
-    TRY(non_incremental_context.ReprocessSegment(segment_index));
-  }
 
   // Transfer over information on combined patches
   for (const GlyphSet& group :
        TRY(context.glyph_groupings.CombinedPatches().NonIdentityGroups())) {
     TRYV(non_incremental_context.glyph_groupings.CombinePatches(group, {}));
   }
-
-  TRYV(non_incremental_context.GroupGlyphs(
-      context.SegmentationInfo().FullClosure(), {}));
+  TRYV(non_incremental_context.ReprocessAll());
 
   bool glyph_groupings_diffs_allowed = false;
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
@@ -633,20 +626,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       return ToFinalSegmentation(context, unmapped_glyph_handling_);
     }
 
-    InvalidationSet modified = std::move(*maybe_modified);
-    last_merged_segment_index = modified.base_segment;
-
-    GlyphSet analysis_modified_gids;
-    if (!context.InertSegments().contains(last_merged_segment_index)) {
-      VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
-              << " due to merge.";
-      analysis_modified_gids =
-          TRY(context.ReprocessSegment(last_merged_segment_index));
-    }
-
-    modified.glyphs.union_set(analysis_modified_gids);
-
-    TRYV(context.GroupGlyphs(modified.glyphs, modified.segments));
+    TRYV(context.ReprocessChanged(std::move(*maybe_modified)));
   }
 
   return absl::InternalError("unreachable");

@@ -57,6 +57,31 @@ Status SegmentationContext::ValidateSegmentation(
   return absl::OkStatus();
 }
 
+Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
+  segment_index_t last_merged_segment_index = modified.base_segment;
+  GlyphSet analysis_modified_gids;
+  if (!InertSegments().contains(last_merged_segment_index)) {
+    VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
+            << " due to merge.";
+    analysis_modified_gids =
+        TRY(ReprocessSegment(last_merged_segment_index));
+  }
+
+  modified.glyphs.union_set(analysis_modified_gids);
+
+  return GroupGlyphs(modified.glyphs, modified.segments);
+}
+
+Status SegmentationContext::ReprocessAll() {
+  for (segment_index_t segment_index = 0;
+       segment_index < SegmentationInfo().Segments().size();
+       segment_index++) {
+    TRY(ReprocessSegment(segment_index));
+  }
+
+  return GroupGlyphs(SegmentationInfo().NonInitFontGlyphs(), {});
+}
+
 StatusOr<GlyphSet> SegmentationContext::ReprocessSegment(
     segment_index_t segment_index) {
   if (segmentation_info_->Segments()[segment_index].Definition().Empty()) {
@@ -269,13 +294,7 @@ SegmentationContext::InitializeSegmentationContext(
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###
   VLOG(0) << "Forming initial segmentation plan.";
-  for (segment_index_t segment_index = 0;
-       segment_index < context.SegmentationInfo().Segments().size();
-       segment_index++) {
-    TRY(context.ReprocessSegment(segment_index));
-  }
-
-  TRYV(context.GroupGlyphs(context.SegmentationInfo().NonInitFontGlyphs(), {}));
+  TRYV(context.ReprocessAll());
 
   return context;
 }

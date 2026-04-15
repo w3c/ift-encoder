@@ -18,6 +18,7 @@
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
@@ -210,6 +211,16 @@ class SegmentationContext {
    */
   absl::Status ReassignInitSubset(SubsetDefinition new_def);
 
+  // Regenerates glyphs conditions and groupings for the set of things specified
+  // in invalidation.
+  //
+  // Note: InvalidateGlyphInformationForMerge must be called first to clear out
+  // any old information.
+  absl::Status ReprocessChanged(InvalidationSet modified);
+
+  // Regenerates glyphs conditions and groupings for all segments.
+  absl::Status ReprocessAll();
+
   // Performs a closure analysis on codepoints and returns the associated
   // and, or, and exclusive glyph sets.
   absl::Status AnalyzeSegment(const ift::common::SegmentSet& segment_ids,
@@ -217,11 +228,7 @@ class SegmentationContext {
                               ift::common::GlyphSet& or_gids,
                               ift::common::GlyphSet& exclusive_gids);
 
-  // Generates updated glyph conditions and glyph groupings for segment_index
-  // which has the provided set of codepoints.
-  absl::StatusOr<ift::common::GlyphSet> ReprocessSegment(
-      segment_index_t segment_index);
-
+ private:
   // Update the glyph groups for 'glyphs'.
   //
   // The glyph condition set must be up to date and fully computed prior to
@@ -237,7 +244,11 @@ class SegmentationContext {
                                        glyphs, modified_segments);
   }
 
- private:
+  // Generates updated glyph conditions and glyph groupings for segment_index
+  // which has the provided set of codepoints.
+  absl::StatusOr<ift::common::GlyphSet> ReprocessSegment(
+      segment_index_t segment_index);
+
   /*
    * Ensures that the produce segmentation is:
    * - Disjoint (no duplicated glyphs) and doesn't overlap what's in the initial
