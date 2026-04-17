@@ -59,16 +59,19 @@ Status SegmentationContext::ValidateSegmentation(
   for (const auto& condition : segmentation.Conditions()) {
     auto it = segmentation.GidSegments().find(condition.activated());
     if (it == segmentation.GidSegments().end()) {
-      return absl::FailedPreconditionError(absl::StrCat("Patch ", condition.activated(), " does not have glyphs specified"));
+      return absl::FailedPreconditionError(absl::StrCat(
+          "Patch ", condition.activated(), " does not have glyphs specified"));
     }
 
     const auto& glyphs = it->second;
     for (const auto& sub_group : condition.conditions()) {
-      if (TRY(glyph_closure_cache->HasAdditionalConditions(&SegmentationInfo(), sub_group, glyphs))) {
-        return absl::FailedPreconditionError(
-          absl::StrCat("Found a condition which does not satisfy the glyph closure requirement: ",
-          condition.ToString(), " ", glyphs.ToString(), ", sub group ", sub_group.ToString(), " failed the check."
-          ));
+      if (TRY(glyph_closure_cache->HasAdditionalConditions(
+              &SegmentationInfo(), sub_group, glyphs))) {
+        return absl::FailedPreconditionError(absl::StrCat(
+            "Found a condition which does not satisfy the glyph closure "
+            "requirement: ",
+            condition.ToString(), " ", glyphs.ToString(), ", sub group ",
+            sub_group.ToString(), " failed the check."));
       }
     }
   }

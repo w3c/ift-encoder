@@ -293,11 +293,10 @@ TEST(ActivationConditionTest, ActivationConditionProbabilities) {
                 segments, probability_calculator),
             0.77);
 
-  ASSERT_EQ(
-      *ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
-          .Probability(segments, probability_calculator),
-          // {1, 2} 0.66 * {0, 1} 0.77
-          0.66 * 0.77);
+  ASSERT_EQ(*ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
+                 .Probability(segments, probability_calculator),
+            // {1, 2} 0.66 * {0, 1} 0.77
+            0.66 * 0.77);
 }
 
 TEST(ActivationConditionTest, Probability_RejectsEmptySegmentSet) {
@@ -400,11 +399,10 @@ TEST(ActivationConditionTest, MergedProbability) {
               0.75 * 0.85 * 0.85, 1e-9);
 
   // Composite condition
-  EXPECT_NEAR(
-      *ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
-           .MergedProbability(segments, {1, 2}, merged_segment,
-                              probability_calculator),
-      0.90 * 0.85, 1e-9);
+  EXPECT_NEAR(*ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
+                   .MergedProbability(segments, {1, 2}, merged_segment,
+                                      probability_calculator),
+              0.90 * 0.85, 1e-9);
 }
 
 TEST(ActivationConditionTest, True) {

@@ -21,7 +21,8 @@ class GlyphClosureCache {
       : preprocessed_face_(
             ift::common::make_hb_face(hb_subset_preprocess(face))),
         original_face_(ift::common::make_hb_face(hb_face_reference(face))),
-        gid_to_unicode_(common::FontHelper::GidToUnicodeMap(preprocessed_face_.get())) {}
+        gid_to_unicode_(
+            common::FontHelper::GidToUnicodeMap(preprocessed_face_.get())) {}
 
   absl::StatusOr<ift::common::GlyphSet> GlyphClosure(
       const SubsetDefinition& segment);

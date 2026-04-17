@@ -38,16 +38,14 @@ using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
-Status GlyphSegmentation::ConditionsToSegmentation(const btree_map<ActivationCondition, GlyphSet>& conditions,
-    const SegmentSet& fallback_group,
-    GlyphSegmentation& segmentation) {
-
+Status GlyphSegmentation::ConditionsToSegmentation(
+    const btree_map<ActivationCondition, GlyphSet>& conditions,
+    const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
   segmentation.patches_.clear();
   segmentation.conditions_.clear();
 
   for (const auto& [condition, glyphs] : conditions) {
-
     if (glyphs.empty()) {
       // Some conditions have all of their glyphs removed by the additional
       // conditions check, don't create a patch for these.
@@ -57,12 +55,14 @@ Status GlyphSegmentation::ConditionsToSegmentation(const btree_map<ActivationCon
     segmentation.patches_.insert(std::pair(next_id, glyphs));
 
     if (condition.IsExclusive()) {
-      segmentation.conditions_.insert(
-        ActivationCondition::exclusive_segment(*condition.TriggeringSegments().begin(), next_id++));
+      segmentation.conditions_.insert(ActivationCondition::exclusive_segment(
+          *condition.TriggeringSegments().begin(), next_id++));
     } else {
-      bool is_fallback =
-        !fallback_group.empty() && condition.IsPurelyConjunctive() && (condition.TriggeringSegments() == fallback_group);
-      segmentation.conditions_.insert(ActivationCondition::composite_condition(condition.conditions(), next_id++, is_fallback));
+      bool is_fallback = !fallback_group.empty() &&
+                         condition.IsPurelyConjunctive() &&
+                         (condition.TriggeringSegments() == fallback_group);
+      segmentation.conditions_.insert(ActivationCondition::composite_condition(
+          condition.conditions(), next_id++, is_fallback));
     }
   }
 
