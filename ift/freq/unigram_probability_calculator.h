@@ -21,7 +21,7 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
       const std::vector<const ift::encoder::Segment*>& segments) const override;
 
   ProbabilityBound ComputeConjunctiveProbability(
-      const std::vector<const ift::encoder::Segment*>& segments) const override;
+      const std::vector<ProbabilityBound>& bounds) const override;
 
  private:
   UnicodeFrequencies frequencies_;

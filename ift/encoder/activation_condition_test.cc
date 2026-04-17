@@ -293,11 +293,44 @@ TEST(ActivationConditionTest, ActivationConditionProbabilities) {
                 segments, probability_calculator),
             0.77);
 
-  // Composite conditions aren't currently supported.
-  ASSERT_TRUE(absl::IsUnimplemented(
-      ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
-          .Probability(segments, probability_calculator)
-          .status()));
+  ASSERT_EQ(
+      *ActivationCondition::composite_condition({{1, 2}, {0, 1}}, 1)
+          .Probability(segments, probability_calculator),
+          // {1, 2} 0.66 * {0, 1} 0.77
+          0.66 * 0.77);
+}
+
+TEST(ActivationConditionTest, Probability_RejectsEmptySegmentSet) {
+  ActivationCondition invalid_condition =
+      ActivationCondition::composite_condition({{}, {1}}, 10);
+  MockProbabilityCalculator probability_calculator({});
+  std::vector<Segment> segments = {
+      Segment({'a'}, ProbabilityBound{0.75, 0.75}),
+      Segment({'b'}, ProbabilityBound{0.5, 0.5}),
+  };
+
+  EXPECT_FALSE(
+      invalid_condition.Probability(segments, probability_calculator).ok());
+
+  Segment merged_segment({'a'}, ProbabilityBound{0.5, 0.5});
+  EXPECT_FALSE(invalid_condition
+                   .MergedProbability(segments, {}, merged_segment,
+                                      probability_calculator)
+                   .ok());
+}
+
+TEST(ActivationConditionTest, Probability_EmptyCondition) {
+  ActivationCondition empty_condition = ActivationCondition::True(10);
+  MockProbabilityCalculator probability_calculator({});
+  std::vector<Segment> segments;
+
+  EXPECT_EQ(*empty_condition.Probability(segments, probability_calculator),
+            1.0);
+
+  Segment merged_segment({'a'}, ProbabilityBound{0.5, 0.5});
+  EXPECT_EQ(*empty_condition.MergedProbability(segments, {}, merged_segment,
+                                               probability_calculator),
+            1.0);
 }
 
 TEST(ActivationConditionTest, MergedProbability) {
@@ -366,11 +399,12 @@ TEST(ActivationConditionTest, MergedProbability) {
                                       probability_calculator),
               0.75 * 0.85 * 0.85, 1e-9);
 
-  EXPECT_TRUE(absl::IsUnimplemented(
-      ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
-          .MergedProbability(segments, {1, 2}, merged_segment,
-                             probability_calculator)
-          .status()));
+  // Composite condition
+  EXPECT_NEAR(
+      *ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
+           .MergedProbability(segments, {1, 2}, merged_segment,
+                              probability_calculator),
+      0.90 * 0.85, 1e-9);
 }
 
 TEST(ActivationConditionTest, True) {

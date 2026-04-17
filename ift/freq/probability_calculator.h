@@ -30,7 +30,7 @@ class ProbabilityCalculator {
   // May use previously computed probability information in the segments
   // to speed up the computation.
   virtual ProbabilityBound ComputeConjunctiveProbability(
-      const std::vector<const ift::encoder::Segment*>& segments) const = 0;
+      const std::vector<ProbabilityBound>& bounds) const = 0;
 };
 
 }  // namespace ift::freq

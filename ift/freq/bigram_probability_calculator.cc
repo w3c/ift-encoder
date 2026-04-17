@@ -144,7 +144,7 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(
-    const std::vector<const Segment*>& segments) const {
+    const std::vector<ProbabilityBound>& bounds) const {
   // Here we don't have access to pair probabilities between the segments so we
   // use a bound that relies only on the individual probabilities:
   //
@@ -154,14 +154,13 @@ ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(
   // min for the lower bound calc and the segment max for the upper bound calc.
   double sum = 0.0;
   double min_of_maxes = 1.0;
-  for (const Segment* s : segments) {
-    const auto& bound = s->ProbabilityBound();
+  for (const auto& bound : bounds) {
     sum += bound.Min();
     if (bound.Max() < min_of_maxes) {
       min_of_maxes = bound.Max();
     }
   }
-  double min_prob = sum - (double)segments.size() + 1.0;
+  double min_prob = sum - (double)bounds.size() + 1.0;
   return ProbabilityBound(std::max(0.0, min_prob), min_of_maxes);
 }
 

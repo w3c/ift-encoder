@@ -446,110 +446,81 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
 StatusOr<double> ActivationCondition::Probability(
     Span<const Segment> segments,
     const ProbabilityCalculator& calculator) const {
-  // This calculation makes the assumption that segments are all disjoint.
-  // Disjointess of the segment list is enforced in the initialization
-  // of segmentation context.
-
-  std::vector<const Segment*> conjunctive_segments;
-  bool is_conjunctive = conditions_.size() > 1;
-  for (const auto& segment_set : conditions_) {
-    if (is_conjunctive && segment_set.size() != 1) {
-      // Composite conditions (eg. (a or b) and (c or d)) may have repeated
-      // segments in each conjunctive group (eg. (a or b) and (a or d)) which
-      // requires special analysis to correctly determine probability. For our
-      // current use cases we don't need to support this.
-      return absl::UnimplementedError(
-          "Calculating probability of composite conditions is not "
-          "supported.");
-    }
-
-    if (is_conjunctive) {
-      conjunctive_segments.push_back(&segments[*segment_set.min()]);
-      continue;
-    }
-
-    if (segment_set.size() == 1) {
-      // If we're here the condition is disjunctive, which means that there is
-      // at most one condition group (which we are currently on) and since there
-      // is only one segment in the condition group we already know it's
-      // probability, just return it.
-      return segments[*segment_set.min()].Probability();
-    }
-
-    // For a group (s1 OR s2 OR ...), compute the union of their definitions.
-    std::vector<const Segment*> union_segments;
-    for (unsigned s_index : segment_set) {
-      const auto& s = segments[s_index];
-      union_segments.push_back(&s);
-    }
-
-    // TODO(garretrieger): The full probability bound should be utilized here.
-    return calculator.ComputeMergedProbability(union_segments).Average();
+  if (conditions_.empty()) {
+    return 1.0;
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments)
-      .Average();
+  std::vector<freq::ProbabilityBound> bounds;
+  bool is_conjunctive = conditions_.size() > 1;
+  for (const auto& segment_set : conditions_) {
+    freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
+    if (segment_set.empty()) {
+      return absl::InternalError("Unexpected empty disjunctive group.");
+    } else if (segment_set.size() > 1) {
+      // For a group (s1 OR s2 OR ...), compute the union of their definitions.
+      std::vector<const Segment*> union_segments;
+      for (unsigned s_index : segment_set) {
+        union_segments.push_back(&segments[s_index]);
+      }
+      set_bound = calculator.ComputeMergedProbability(union_segments);
+    } else {
+      set_bound = segments[*segment_set.min()].ProbabilityBound();
+    }
+
+    if (!is_conjunctive) {
+      return set_bound.Average();
+    }
+    bounds.push_back(set_bound);
+  }
+
+  return calculator.ComputeConjunctiveProbability(bounds).Average();
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
     Span<const Segment> segments, const SegmentSet& merged_segments,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
-  std::vector<const Segment*> conjunctive_segments;
-
-  bool is_conjunctive = conditions_.size() > 1;
-  for (const auto& segment_set : conditions_) {
-    if (is_conjunctive && segment_set.size() != 1) {
-      // Composite conditions (eg. (a or b) and (c or d)) may have repeated
-      // segments in each conjunctive group (eg. (a or b) and (a or d)) which
-      // requires special analysis to correctly determine probability. For our
-      // current use cases we don't need to support this.
-      return absl::UnimplementedError(
-          "Calculating probability of composite conditions is not "
-          "supported.");
-    }
-
-    if (is_conjunctive) {
-      segment_index_t s_index = *segment_set.min();
-      if (!merged_segments.contains(s_index)) {
-        conjunctive_segments.push_back(&segments[s_index]);
-      } else {
-        conjunctive_segments.push_back(&merged_segment);
-      }
-      continue;
-    }
-
-    if (segment_set.is_subset_of(merged_segments)) {
-      // Post merge the segment will be equal to merged_segment, so we can just
-      // use it's probability directly.
-      return merged_segment.Probability();
-    }
-
-    if (segment_set.size() == 1) {
-      return segments[*segment_set.min()].Probability();
-    }
-
-    // For a group (s1 OR s2 OR ...), compute the union of their definitions.
-    bool has_merged = false;
-    std::vector<const Segment*> union_segments;
-    for (unsigned s_index : segment_set) {
-      if (!has_merged && merged_segments.contains(s_index)) {
-        has_merged = true;
-      }
-      union_segments.push_back(&segments[s_index]);
-    }
-
-    if (has_merged) {
-      // the condition group intersects with the merged set so need to union
-      // in all of the merged segments to get the probability.
-      union_segments.push_back(&merged_segment);
-    }
-
-    return calculator.ComputeMergedProbability(union_segments).Average();
+  if (conditions_.empty()) {
+    return 1.0;
   }
 
-  return calculator.ComputeConjunctiveProbability(conjunctive_segments)
-      .Average();
+  std::vector<freq::ProbabilityBound> bounds;
+  bool is_conjunctive = conditions_.size() > 1;
+  for (const auto& segment_set : conditions_) {
+    freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
+
+    if (segment_set.empty()) {
+      return absl::InternalError("Unexpected empty disjunctive group.");
+    }
+
+    std::vector<const Segment*> union_segments;
+    if (segment_set.intersects(merged_segments)) {
+      // replace all segments in 'merged_segments' with 'merged_segment'.
+      union_segments.push_back(&merged_segment);
+      for (unsigned s : segment_set) {
+        if (!merged_segments.contains(s)) {
+          union_segments.push_back(&segments[s]);
+        }
+      }
+    } else {
+      for (unsigned s : segment_set) {
+        union_segments.push_back(&segments[s]);
+      }
+    }
+
+    if (union_segments.size() > 1) {
+      set_bound = calculator.ComputeMergedProbability(union_segments);
+    } else {
+      set_bound = union_segments[0]->ProbabilityBound();
+    }
+
+    if (!is_conjunctive) {
+      return set_bound.Average();
+    }
+    bounds.push_back(set_bound);
+  }
+
+  return calculator.ComputeConjunctiveProbability(bounds).Average();
 }
 
 }  // namespace ift::encoder

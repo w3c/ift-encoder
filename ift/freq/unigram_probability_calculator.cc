@@ -40,10 +40,10 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
 }
 
 ProbabilityBound UnigramProbabilityCalculator::ComputeConjunctiveProbability(
-    const std::vector<const Segment*>& segments) const {
+    const std::vector<ProbabilityBound>& bounds) const {
   double probability = 1.0;
-  for (const auto* segment : segments) {
-    probability *= segment->Probability();
+  for (const auto& bound : bounds) {
+    probability *= bound.Average();
   }
   return {probability, probability};
 }

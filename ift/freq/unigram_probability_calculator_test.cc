@@ -72,23 +72,23 @@ TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
 
   UnigramProbabilityCalculator calculator(std::move(frequencies));
 
-  std::vector<const Segment *> segments{&s2};
-  ProbabilityBound bound = calculator.ComputeConjunctiveProbability(segments);
+  std::vector<ProbabilityBound> bounds{s2.ProbabilityBound()};
+  ProbabilityBound bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.2);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.2);
 
-  segments = {&s1, &s3};
-  bound = calculator.ComputeConjunctiveProbability(segments);
+  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound()};
+  bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7);
 
-  segments = {&s1, &s3, &s2};
-  bound = calculator.ComputeConjunctiveProbability(segments);
+  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound(), s2.ProbabilityBound()};
+  bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7 * 0.2);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7 * 0.2);
 
-  segments = {};
-  bound = calculator.ComputeConjunctiveProbability(segments);
+  bounds = {};
+  bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 1.0);
   EXPECT_DOUBLE_EQ(bound.Max(), 1.0);
 }
