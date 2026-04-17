@@ -10,8 +10,8 @@ enum ConditionAnalysisMode {
   CLOSURE_ONLY = 0;
 
   // Attempts to analyze glyph conditions using a dependency
-  // graph where possible. When not possible it falls back
-  // to closure analysis. This is for many cases much faster
+  // graph where possible. When dep graph is expected not to be accurate
+  // it falls back to closure analysis. This is for many cases much faster
   // then pure closure based analysis. However, the dependency
   // graph approach is still experimental and may (rarely) produce
   // different results than the pure closure analysis approach.
@@ -30,6 +30,8 @@ enum ConditionAnalysisMode {
   // This is the fastest method and generally generates high quality
   // conditions, but may on occassion overestimate the conditions
   // for a glyph.
+  //
+  // This is currently the recommended analysis mode.
   DEP_GRAPH_ONLY = 3;
 }
 

@@ -91,7 +91,7 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
 
   std::string config_string;
   TextFormat::PrintToString(*config_or, &config_string);
-  ASSERT_EQ(config_string, R"(unmapped_glyph_handling: FIND_CONDITIONS
+  ASSERT_EQ(config_string, R"(unmapped_glyph_handling: MOVE_TO_INIT_FONT
 generate_table_keyed_segments: true
 brotli_quality: 11
 brotli_quality_for_initial_font_merging: 11
@@ -146,7 +146,7 @@ base_segmentation_plan {
   use_prefetch_lists: true
 }
 generate_feature_segments: true
-condition_analysis_mode: CLOSURE_AND_DEP_GRAPH
+condition_analysis_mode: DEP_GRAPH_ONLY
 )");
 }
 
@@ -290,7 +290,7 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
       AutoSegmenterConfig::GenerateConfig(face_.get(), std::nullopt, 8);
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
-  EXPECT_EQ(config_or_8->unmapped_glyph_handling(), FIND_CONDITIONS);
+  EXPECT_EQ(config_or_8->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
   EXPECT_EQ(config_or_8->base_cost_config().use_bigrams(), true);
   EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
   EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(),

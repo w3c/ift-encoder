@@ -4,6 +4,7 @@
 #include "absl/status/status.h"
 #include "hb-subset.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
 
@@ -19,7 +20,8 @@ class GlyphClosureCache {
   GlyphClosureCache(hb_face_t* face)
       : preprocessed_face_(
             ift::common::make_hb_face(hb_subset_preprocess(face))),
-        original_face_(ift::common::make_hb_face(hb_face_reference(face))) {}
+        original_face_(ift::common::make_hb_face(hb_face_reference(face))),
+        gid_to_unicode_(common::FontHelper::GidToUnicodeMap(preprocessed_face_.get())) {}
 
   absl::StatusOr<ift::common::GlyphSet> GlyphClosure(
       const SubsetDefinition& segment);
@@ -63,6 +65,7 @@ class GlyphClosureCache {
       glyph_closure_cache_;
   uint64_t glyph_closure_cache_hit_ = 0;
   uint64_t glyph_closure_cache_miss_ = 0;
+  absl::flat_hash_map<uint32_t, common::CodepointSet> gid_to_unicode_;
 };
 
 }  // namespace ift::encoder
