@@ -135,16 +135,16 @@ TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
   UnicodeFrequencies freqs;
   BigramProbabilityCalculator calculator(std::move(freqs));
 
-  Segment s1(SubsetDefinition({1}), ProbabilityBound(0.8, 0.9));
-  Segment s2(SubsetDefinition({2}), ProbabilityBound(0.7, 0.8));
+  ProbabilityBound b1(0.8, 0.9);
+  ProbabilityBound b2(0.7, 0.8);
 
-  std::vector<const Segment*> segments = {&s1, &s2};
+  std::vector<ProbabilityBound> bounds = {b1, b2};
 
   // sum(min) = 0.8 + 0.7 = 1.5
   // n = 2
   // min = 1.5 - 2 + 1 = 0.5
   // max = min(0.9, 0.8) = 0.8
-  ProbabilityBound result = calculator.ComputeConjunctiveProbability(segments);
+  ProbabilityBound result = calculator.ComputeConjunctiveProbability(bounds);
   ASSERT_DOUBLE_EQ(result.Min(), 0.5);
   ASSERT_DOUBLE_EQ(result.Max(), 0.8);
 }
@@ -153,17 +153,17 @@ TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbability_Clamped) {
   UnicodeFrequencies freqs;
   BigramProbabilityCalculator calculator(std::move(freqs));
 
-  Segment s1(SubsetDefinition({1}), ProbabilityBound(0.1, 0.2));
-  Segment s2(SubsetDefinition({2}), ProbabilityBound(0.3, 0.4));
-  Segment s3(SubsetDefinition({3}), ProbabilityBound(0.5, 0.6));
+  ProbabilityBound b1(0.1, 0.2);
+  ProbabilityBound b2(0.3, 0.4);
+  ProbabilityBound b3(0.5, 0.6);
 
-  std::vector<const Segment*> segments = {&s1, &s2, &s3};
+  std::vector<ProbabilityBound> bounds = {b1, b2, b3};
 
   // sum(min) = 0.1 + 0.3 + 0.5 = 0.9
   // n = 3
   // min = max(0.0, 0.9 - 3 + 1) = 0.0
   // max = min(0.2, 0.4, 0.6) = 0.2
-  ProbabilityBound result = calculator.ComputeConjunctiveProbability(segments);
+  ProbabilityBound result = calculator.ComputeConjunctiveProbability(bounds);
   ASSERT_DOUBLE_EQ(result.Min(), 0.0);
   ASSERT_DOUBLE_EQ(result.Max(), 0.2);
 }
@@ -173,15 +173,15 @@ TEST(BigramProbabilityCalculatorTest,
   UnicodeFrequencies freqs;
   BigramProbabilityCalculator calculator(std::move(freqs));
 
-  Segment s1(SubsetDefinition({1}), ProbabilityBound(0.1, 0.2));
+  ProbabilityBound b1(0.1, 0.2);
 
-  std::vector<const Segment*> segments = {&s1};
+  std::vector<ProbabilityBound> bounds = {b1};
 
   // sum(min) = 0.1
   // n = 1
   // min = 0.1 - 1 + 1 = 0.1
   // max = 0.2
-  ProbabilityBound result = calculator.ComputeConjunctiveProbability(segments);
+  ProbabilityBound result = calculator.ComputeConjunctiveProbability(bounds);
   ASSERT_DOUBLE_EQ(result.Min(), 0.1);
   ASSERT_DOUBLE_EQ(result.Max(), 0.2);
 }
@@ -190,13 +190,13 @@ TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbabilityNoSegments) {
   UnicodeFrequencies freqs;
   BigramProbabilityCalculator calculator(std::move(freqs));
 
-  std::vector<const Segment*> segments;
+  std::vector<ProbabilityBound> bounds;
 
   // sum(min) = 0
   // n = 0
   // min = 0 - 0 + 1 = 1.0
   // max = 1.0
-  ProbabilityBound result = calculator.ComputeConjunctiveProbability(segments);
+  ProbabilityBound result = calculator.ComputeConjunctiveProbability(bounds);
   ASSERT_DOUBLE_EQ(result.Min(), 1.0);
   ASSERT_DOUBLE_EQ(result.Max(), 1.0);
 }

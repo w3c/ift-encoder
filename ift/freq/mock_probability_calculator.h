@@ -35,11 +35,10 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
   }
 
   ProbabilityBound ComputeConjunctiveProbability(
-      const std::vector<const ift::encoder::Segment*>& segments)
-      const override {
+      const std::vector<ProbabilityBound>& bounds) const override {
     double probability = 1.0;
-    for (const auto* segment : segments) {
-      probability *= segment->Probability();
+    for (const auto& bound : bounds) {
+      probability *= bound.Average();
     }
     return {probability, probability};
   }
