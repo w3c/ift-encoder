@@ -26,6 +26,7 @@ namespace ift::config {
 
 static constexpr uint32_t kMinimumGroupSize = 4;
 
+// clang-format off
 // Quality Table:
 // Quality | bigrams | init font merging | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging | preprocess threshold
 // 1       | No      | No                | 0           | 0               | na                        | 5%          | Yes                | 5%
@@ -36,6 +37,7 @@ static constexpr uint32_t kMinimumGroupSize = 4;
 // 6       | Yes     | Yes               | 9           | 11              | 30%                       | 0.5%        | Yes                | 0.5%
 // 7       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | Yes                | 0.05%
 // 8       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | No                 | na
+// clang-format on
 enum Quality {
   MIN = 1,  // Alias for ONE
   ONE = 1,

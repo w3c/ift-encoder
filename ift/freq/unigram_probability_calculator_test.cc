@@ -82,7 +82,8 @@ TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7);
 
-  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound(), s2.ProbabilityBound()};
+  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound(),
+            s2.ProbabilityBound()};
   bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7 * 0.2);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7 * 0.2);

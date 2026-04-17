@@ -148,12 +148,16 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
   if (!unmapped_glyphs_.empty()) {
     fallback_segments = segmentation_info.NonEmptySegments();
 
-    ActivationCondition non_fallback_cond = ActivationCondition::or_segments(fallback_segments, 0, false);
-    ActivationCondition fallback_cond = ActivationCondition::or_segments(fallback_segments, 0, true);
+    ActivationCondition non_fallback_cond =
+        ActivationCondition::or_segments(fallback_segments, 0, false);
+    ActivationCondition fallback_cond =
+        ActivationCondition::or_segments(fallback_segments, 0, true);
 
     if (conditions_with_fallback.contains(non_fallback_cond)) {
-      // If an equivalent non-fallback condition exists merge it with the fallback one.
-      conditions_with_fallback[fallback_cond].union_set(conditions_with_fallback[non_fallback_cond]);
+      // If an equivalent non-fallback condition exists merge it with the
+      // fallback one.
+      conditions_with_fallback[fallback_cond].union_set(
+          conditions_with_fallback[non_fallback_cond]);
       conditions_with_fallback.erase(non_fallback_cond);
     }
 
