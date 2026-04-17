@@ -27,20 +27,15 @@ namespace ift::config {
 static constexpr uint32_t kMinimumGroupSize = 4;
 
 // Quality Table:
-// Quality | bigrams | find conditions | init brotli | non init brotli | init
-// font merge threshold | opt cut off | preprocess merging | preprocess
-// threshold 1       | No      | No              | 0           | 0 | 60% | 5% |
-// Yes                | 5% 2       | Yes     | No              | 0           | 0
-// | 55%                       | 4%          | Yes                | 4% 3       |
-// Yes     | Yes             | 0           | 0               | 50% | 3% | Yes |
-// 3% 4       | Yes     | Yes             | 0           | 9               | 45%
-// | 2%          | Yes                | 2% 5       | Yes     | Yes             |
-// 9           | 9               | 40%                       | 1%          | Yes
-// | 1% 6       | Yes     | Yes             | 9           | 11              |
-// 30%                       | 0.5%        | Yes                | 0.5% 7       |
-// Yes     | Yes             | 11          | 11              | 25% | 0.5% | Yes
-// | 0.05% 8       | Yes     | Yes             | 11          | 11              |
-// 25%                       | 0.5%        | No                 | na
+// Quality | bigrams | init font merging | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging | preprocess threshold
+// 1       | No      | No                | 0           | 0               | na                        | 5%          | Yes                | 5%
+// 2       | Yes     | No                | 0           | 0               | na                        | 4%          | Yes                | 4%
+// 3       | Yes     | Yes               | 0           | 0               | 60%                       | 3%          | Yes                | 3%
+// 4       | Yes     | Yes               | 0           | 9               | 50%                       | 2%          | Yes                | 2%
+// 5       | Yes     | Yes               | 9           | 9               | 40%                       | 1%          | Yes                | 1%
+// 6       | Yes     | Yes               | 9           | 11              | 30%                       | 0.5%        | Yes                | 0.5%
+// 7       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | Yes                | 0.05%
+// 8       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | No                 | na
 enum Quality {
   MIN = 1,  // Alias for ONE
   ONE = 1,
@@ -535,6 +530,10 @@ static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
 
 static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
   if (merge_group.has_cost_config()) {
+    if (quality == ONE || quality == TWO) {
+      merge_group.mutable_cost_config()->clear_initial_font_merge_threshold();
+    }
+
     if (quality >= ONE && quality <= SEVEN) {
       merge_group.set_preprocess_merging_group_size(kMinimumGroupSize);
     } else {
@@ -571,21 +570,13 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
 
     if (merge_group.mutable_cost_config()->has_initial_font_merge_threshold()) {
       switch (quality) {
-        case ONE:
+        case THREE:
           merge_group.mutable_cost_config()
               ->set_initial_font_merge_probability_threshold(0.60);
           break;
-        case TWO:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.55);
-          break;
-        case THREE:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.50);
-          break;
         case FOUR:
           merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.45);
+              ->set_initial_font_merge_probability_threshold(0.50);
           break;
         case FIVE:
           merge_group.mutable_cost_config()
@@ -609,11 +600,7 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
 static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize);
 
-  if (quality == ONE || quality == TWO) {
-    config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
-  } else {
-    config.set_unmapped_glyph_handling(FIND_CONDITIONS);
-  }
+  config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
 
   switch (quality) {
     case ONE:
@@ -665,7 +652,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
   config.set_generate_feature_segments(true);
-  config.set_condition_analysis_mode(CLOSURE_AND_DEP_GRAPH);
+  config.set_condition_analysis_mode(DEP_GRAPH_ONLY);
 
   auto* base_plan = config.mutable_base_segmentation_plan();
   base_plan->set_jump_ahead(2);
@@ -683,7 +670,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   if (cp_count <= 1000) {
     quality = MAX;
   } else if (cp_count <= 3000) {
-    quality_level = SIX;
+    quality = SIX;
   }
 
   if (quality_level.has_value() && quality_level.value() >= MIN &&

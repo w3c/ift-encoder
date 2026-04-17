@@ -190,8 +190,13 @@ StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(
   while (changed) {
     GlyphSet closure_gids = TRY(GlyphClosure(expanded));
 
-    CodepointSet closure_unicodes =
-        FontHelper::GidsToUnicodes(Face(), closure_gids);
+    CodepointSet closure_unicodes;
+    for (glyph_id_t gid : closure_gids) {
+      auto unicode = gid_to_unicode_.find(gid);
+      if (unicode != gid_to_unicode_.end()) {
+        closure_unicodes.union_set(unicode->second);
+      }
+    }
 
     changed = false;
     if (!closure_gids.is_subset_of(expanded.gids)) {
