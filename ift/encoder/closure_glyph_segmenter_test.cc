@@ -54,6 +54,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
                                               CLOSURE_AND_VALIDATE_DEP_GRAPH)
 #else
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY),
+        segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY),
         segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS,
                                             CLOSURE_ONLY),
         segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
@@ -350,6 +351,8 @@ if ((s1 OR s2)) then p1
 if ((s0 OR s1 OR s2)) then p2
 )");
   ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
+
+#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid74 }
@@ -359,6 +362,7 @@ if ((s0 OR s2)) then p0
 if ((s1 OR s2)) then p1
 if ((s0 OR s2) AND (s1 OR s2)) then p2
 )");
+#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
@@ -581,6 +585,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p6
 )");
   ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
 
+#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid3, gid9, gid155 }
@@ -602,6 +607,7 @@ if ((s0 OR s1 OR s2 OR s3)) then p6
 if ((s0 OR s1) AND s2) then p7
 if ((s0 OR s1) AND (s2 OR s3)) then p8
 )");
+#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
@@ -634,6 +640,7 @@ if ((s1 OR s2 OR s3 OR s4)) then p7
 )");
 }
 
+#ifdef HB_DEPEND_API
 TEST_F(ClosureGlyphSegmenterTest, DepGraphOnly_FindConditions) {
   auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
@@ -667,6 +674,7 @@ if ((s1 OR s2) AND s3) then p8
 if ((s1 OR s2) AND (s3 OR s4)) then p9
 )");
 }
+#endif
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
   // Here the found conditions are equal to the fallback segment, this ensures
@@ -1678,8 +1686,6 @@ TEST_F(ClosureGlyphSegmenterTest, ConjunctiveAdditionalConditions) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   smcp.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
-  // XXXX
-
   auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {0xE4},
                                                          {
                                                              {0xD6},  // Ö
@@ -1732,6 +1738,7 @@ if (s1) then p1
 if (s2) then p2
 )");
 
+#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69, gid106, gid670 }
 p0: { gid51, gid660 }
@@ -1743,6 +1750,7 @@ if (s1) then p1
 if (s2) then p2
 if ((s0 OR s1) AND s2) then p3
 )");
+#endif
 
   // Rerun segmentation with merging of Ö and ö allowed, should now get
   // the true condition.
