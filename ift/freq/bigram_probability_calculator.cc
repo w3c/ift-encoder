@@ -17,40 +17,48 @@ BigramProbabilityCalculator::BigramProbabilityCalculator(
 
 ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
     const CodepointSet& codepoints, double best_lower) const {
+  unsigned n = codepoints.size();
+  std::vector<unsigned> cps;
+  std::vector<double> P;
+  std::vector<double> partial_totals;
+  cps.reserve(n);
+  P.reserve(n);
+  partial_totals.resize(n, 0.0);
+
   double unigram_total = 0.0;
-  double bigram_total = 0.0;
-  double max_partial_bigram_total = 0.0;
   double max_single_bound = 0.0;
+  for (unsigned cp : codepoints) {
+    double P_cp = frequencies_.ProbabilityFor(cp);
+    cps.push_back(cp);
+    P.push_back(P_cp);
+    unigram_total += P_cp;
+    max_single_bound = std::max(P_cp, max_single_bound);
+  }
+
+  if (max_single_bound >= 1.0) {
+    // Bounds can't be lower than [1, 1] stop checking.
+    return ProbabilityBound(1.0, 1.0);
+  }
+
+  double bigram_total = 0.0;
   double max_pair_bound = 0.0;
+  for (unsigned i = 0; i < n; i++) {
+    for (unsigned j = i + 1; j < n; j++) {
+      double Pij = frequencies_.ProbabilityFor(cps[i], cps[j], P[i], P[j]);
+      bigram_total += Pij;
+      partial_totals[i] += Pij;
+      partial_totals[j] += Pij;
 
-  for (auto it1 = codepoints.begin(); it1 != codepoints.end(); it1++) {
-    if (max_single_bound >= 1.0) {
-      // Bounds can't be lower than [1, 1] stop checking.
-      return ProbabilityBound(1.0, 1.0);
-    }
-
-    double partial_total = 0.0;
-    unsigned cp1 = *it1;
-    double P1 = frequencies_.ProbabilityFor(cp1);
-    unigram_total += P1;
-    max_single_bound = std::max(P1, max_single_bound);
-    for (auto it2 = codepoints.begin(); it2 != codepoints.end(); it2++) {
-      unsigned cp2 = *it2;
-      if (cp1 == cp2) {
-        continue;
-      }
-      double P12 = frequencies_.ProbabilityFor(cp1, cp2);
-      partial_total += P12;
-      if (cp1 < cp2) {
-        max_pair_bound = std::max(P1 + frequencies_.ProbabilityFor(cp2) - P12,
-                                  max_pair_bound);
-        if (max_pair_bound >= 1.0) {
-          // Bounds can't be lower than [1, 1] stop checking.
-          return ProbabilityBound(1.0, 1.0);
-        }
-        bigram_total += P12;
+      max_pair_bound = std::max(P[i] + P[j] - Pij, max_pair_bound);
+      if (max_pair_bound >= 1.0) {
+        // Bounds can't be lower than [1, 1] stop checking.
+        return ProbabilityBound(1.0, 1.0);
       }
     }
+  }
+
+  double max_partial_bigram_total = 0.0;
+  for (double partial_total : partial_totals) {
     max_partial_bigram_total =
         std::max(partial_total, max_partial_bigram_total);
   }
