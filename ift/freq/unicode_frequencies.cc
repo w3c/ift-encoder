@@ -41,25 +41,38 @@ void UnicodeFrequencies::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
 }
 
 double UnicodeFrequencies::ProbabilityFor(uint32_t cp) const {
-  return ProbabilityFor(cp, cp);
-}
-
-double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2) const {
   if (max_count_ == 0) {
     return 0.0;
   }
+  auto it = probabilities_.find(ToKey(cp, cp));
+  if (it != probabilities_.end()) {
+    return it->second;
+  }
+  return unknown_probability;
+}
+
+double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2) const {
+  return ProbabilityFor(cp1, cp2, ProbabilityFor(cp1), ProbabilityFor(cp2));
+}
+
+double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2, double p1,
+                                          double p2) const {
+  if (max_count_ == 0) {
+    return 0.0;
+  }
+
+  if (cp1 == cp2) {
+    return p1;
+  }
+
   auto it = probabilities_.find(ToKey(cp1, cp2));
   if (it != probabilities_.end()) {
     return it->second;
   }
 
-  if (cp1 == cp2) {
-    return unknown_probability;
-  }
-
   // Since we don't have data  on P(cp1 n cp2), just assume the probabilities
   // for P(cp1) and P(cp2) are independent:
-  return ProbabilityFor(cp1, cp1) * ProbabilityFor(cp2, cp2);
+  return p1 * p2;
 }
 
 CodepointSet UnicodeFrequencies::CoveredCodepoints() const {
