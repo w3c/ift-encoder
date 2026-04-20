@@ -96,6 +96,9 @@ class DependencyClosure {
 
   common::GlyphSet SegmentsToAffectedGlyphs(
       const common::SegmentSet& segments) const;
+
+  absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
+      const common::SegmentSet& segments) const;
 #endif
 
   // This structure caches information derived from the segmentation info
@@ -181,8 +184,6 @@ class DependencyClosure {
   absl::Status InitNodeConditionsCache();
   void UpdateNodeConditionsCache(segment_index_t base_segment,
                                  const common::SegmentSet& segments);
-  absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
-      const common::SegmentSet& segments) const;
 
   const RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;

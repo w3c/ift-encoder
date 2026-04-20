@@ -135,7 +135,6 @@ void DependencyClosure::UpdateNodeConditionsCache(
   }
 }
 
-// TODO XXXXX add unit test.
 GlyphSet DependencyClosure::SegmentsToAffectedGlyphs(
     const SegmentSet& segments) const {
   auto nodes = SegmentsToAffectedNodeConditions(segments);
