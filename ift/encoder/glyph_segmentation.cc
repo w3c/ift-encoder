@@ -59,7 +59,7 @@ Status GlyphSegmentation::ConditionsToSegmentation(
           *condition.TriggeringSegments().begin(), next_id++));
     } else {
       bool is_fallback = !fallback_group.empty() &&
-                         condition.IsPurelyConjunctive() &&
+                         condition.IsPurelyDisjunctive() &&
                          (condition.TriggeringSegments() == fallback_group);
       segmentation.conditions_.insert(ActivationCondition::composite_condition(
           condition.conditions(), next_id++, is_fallback));

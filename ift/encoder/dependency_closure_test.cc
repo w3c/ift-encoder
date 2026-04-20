@@ -21,6 +21,7 @@ using ift::config::PATCH;
 
 using absl::btree_set;
 using absl::flat_hash_map;
+using absl::flat_hash_set;
 using absl::Status;
 using ift::common::CodepointSet;
 using ift::common::FontData;
@@ -1002,6 +1003,39 @@ TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
 
   s = CompareAnalysis({0, 1});
   ASSERT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, SegmentsToAffected) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
+                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+              });
+
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({0}), (GlyphSet{69 /* a */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({1}),
+            (GlyphSet{74 /* f */, 444 /* fi */, 446 /* ffi */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({2}),
+            (GlyphSet{77 /* i */, 444 /* fi */, 446 /* ffi */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({4}), (GlyphSet{37 /* A */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({5}),
+            (GlyphSet{37 /* A */, 117 /* acute */, 640 /* Aacute */}));
+
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({1, 2}),
+            (GlyphSet{74, 77, 444, 446}));
+
+  auto nodes = dependency_closure->SegmentsToAffectedNodeConditions({1});
+  EXPECT_EQ(nodes, (flat_hash_set<Node>{
+    Node::Segment(1),
+    Node::Unicode('f'),
+    Node::Glyph(74),
+    Node::Glyph(444),
+    Node::Glyph(446)
+  }));
 }
 
 }  // namespace ift::encoder
