@@ -213,4 +213,48 @@ TEST(EntryGraphTest, TopologicalSort_SharedChildren) {
   EXPECT_LT(n3, n4);
 }
 
+TEST(EntryGraphTest, SplitLargeNode) {
+  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments;
+  ift::common::SegmentSet segment_ids;
+  for (int i = 1; i <= 130; ++i) {
+    segments[i].codepoints = {static_cast<hb_codepoint_t>(i)};
+    segment_ids.insert(i);
+  }
+
+  std::vector<ActivationCondition> activation_conditions = {
+      ActivationCondition::or_segments(segment_ids, 10),
+  };
+
+  auto graph = EntryGraph::Create(activation_conditions, segments);
+  ASSERT_TRUE(graph.ok()) << graph.status();
+
+  auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+
+  // Expected 130 codepoint nodes, 1 root node, and 1 intermediate split node.
+  EXPECT_EQ(entries->size(), 132);
+
+  size_t root_id = -1;
+  size_t split_node_id = -1;
+
+  for (size_t i = 0; i < entries->size(); i++) {
+    const auto& entry = (*entries)[i];
+    if (!entry.ignored && !entry.patch_indices.empty() && entry.patch_indices[0] == 10) {
+      root_id = i;
+    } else if (entry.ignored && entry.coverage.codepoints.empty() && !entry.coverage.child_indices.empty()) {
+      split_node_id = i;
+    }
+  }
+
+  ASSERT_NE(root_id, -1);
+  ASSERT_NE(split_node_id, -1);
+
+  // The root node gets the first 126 children + the split node (total 127).
+  EXPECT_EQ((*entries)[root_id].coverage.child_indices.size(), 127);
+  EXPECT_TRUE((*entries)[root_id].coverage.child_indices.contains(split_node_id));
+
+  // The split node gets the remaining 4 children.
+  EXPECT_EQ((*entries)[split_node_id].coverage.child_indices.size(), 4);
+}
+
 }  // namespace ift::encoder
