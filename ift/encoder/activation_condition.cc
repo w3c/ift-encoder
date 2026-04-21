@@ -8,6 +8,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "ift/common/int_set.h"
+#include "ift/common/try.h"
+#include "ift/encoder/entry_graph.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 #include "ift/proto/patch_encoding.h"
@@ -29,6 +31,8 @@ using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
 
 namespace ift::encoder {
+
+static void Simplify(std::vector<SegmentSet>& conditions);
 
 ActivationCondition ActivationCondition::True(patch_id_t activated) {
   ActivationCondition condition;
@@ -78,6 +82,8 @@ ActivationCondition ActivationCondition::composite_condition(
   for (const auto& group : groups) {
     conditions.conditions_.push_back(group);
   }
+
+  Simplify(conditions.conditions_);
 
   conditions.is_fallback_ = is_fallback;
   return conditions;
@@ -275,24 +281,6 @@ ActivationConditionProto ActivationCondition::ToConfigProto() const {
   return proto;
 }
 
-void MakeIgnored(PatchMap::Entry& entry, patch_id_t& last_patch_id) {
-  entry.ignored = true;
-  // patch id for ignored entries doesn't matter, use last + 1 to minimize
-  // encoding size.
-  entry.patch_indices.clear();
-  entry.patch_indices.push_back(++last_patch_id);
-}
-
-patch_id_t MapTo(PatchMap::Entry& entry, patch_id_t new_patch_id,
-                 Span<const patch_id_t> prefetches) {
-  entry.ignored = false;
-  entry.patch_indices.clear();
-  entry.patch_indices.push_back(new_patch_id);
-  entry.patch_indices.insert(entry.patch_indices.end(), prefetches.begin(),
-                             prefetches.end());
-  return entry.patch_indices.back();
-}
-
 StatusOr<std::vector<PatchMap::Entry>>
 ActivationCondition::ActivationConditionsToPatchMapEntries(
     Span<const ActivationCondition> conditions,
@@ -302,146 +290,9 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
     return entries;
   }
 
-  // The conditions list describes what the patch map should do, here
-  // we need to convert that into an equivalent list of encoder condition
-  // entries.
-  //
-  // To minimize encoded size we can reuse set definitions in later entries
-  // via the copy indices mechanism. The conditions are evaluated in three
-  // phases to successively build up a set of common entries which can be reused
-  // by later ones.
-  //
-  // Tracks the list of conditions which have not yet been placed in a map
-  // entry.
-  btree_set<ActivationCondition> remaining_conditions;
-  remaining_conditions.insert(conditions.begin(), conditions.end());
-
-  // Phase 1 generate the base entries, there should be one for each
-  // unique glyph segment that is referenced in at least one condition.
-  // the conditions will refer back to these base entries via copy indices
-  //
-  // Each base entry can be used to map one condition as well.
-  flat_hash_map<uint32_t, uint32_t> segment_id_to_entry_index;
-  uint32_t next_entry_index = 0;
-  patch_id_t last_patch_id = 0;
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end();) {
-    bool remove = false;
-    for (const auto& group : condition->conditions()) {
-      for (uint32_t segment_id : group) {
-        if (segment_id_to_entry_index.contains(segment_id)) {
-          continue;
-        }
-
-        auto original = segments.find(segment_id);
-        if (original == segments.end()) {
-          return absl::InvalidArgumentError(
-              StrCat("Codepoint segment ", segment_id, " not found."));
-        }
-        const auto& original_def = original->second;
-
-        std::vector<PatchMap::Entry> sub_entries =
-            // Activated patch ID will be assigned after this step, so just use
-            // empty array as a place holder
-            original_def.ToEntries(condition->encoding_, last_patch_id,
-                                   entries.size(), {});
-        auto& sub_entry = sub_entries.back();
-
-        last_patch_id = sub_entry.patch_indices.back();
-        if (condition->IsUnitary()) {
-          // this condition can use this entry to map itself. Update the entries
-          // mapped patch id.
-          last_patch_id =
-              MapTo(sub_entry, condition->activated(), condition->prefetches());
-          remove = true;
-        }
-
-        entries.insert(entries.end(), sub_entries.begin(), sub_entries.end());
-        next_entry_index = entries.size();
-        segment_id_to_entry_index[segment_id] = next_entry_index - 1;
-      }
-    }
-
-    if (remove) {
-      condition = remaining_conditions.erase(condition);
-    } else {
-      ++condition;
-    }
-  }
-
-  // Phase 2 generate entries for all groups of patches reusing the base entries
-  // written in phase one. When writing an entry if the triggering group is the
-  // only one in the condition then that condition can utilize the entry (just
-  // like in Phase 1).
-  flat_hash_map<IntSet, uint32_t> segment_group_to_entry_index;
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end();) {
-    bool remove = false;
-
-    for (const auto& group : condition->conditions()) {
-      if (group.size() <= 1 || segment_group_to_entry_index.contains(group)) {
-        // don't handle groups of size one, those will just reference the base
-        // entry directly.
-        continue;
-      }
-
-      PatchMap::Entry entry;
-      entry.encoding = condition->encoding_;
-      entry.coverage.conjunctive = false;  // ... OR ...
-
-      for (uint32_t segment_id : group) {
-        auto entry_index = segment_id_to_entry_index.find(segment_id);
-        if (entry_index == segment_id_to_entry_index.end()) {
-          return absl::InternalError(
-              StrCat("entry for segment_id = ", segment_id,
-                     " was not previously created."));
-        }
-        entry.coverage.child_indices.insert(entry_index->second);
-      }
-
-      if (condition->conditions().size() == 1) {
-        last_patch_id =
-            MapTo(entry, condition->activated(), condition->prefetches());
-        remove = true;
-      } else {
-        MakeIgnored(entry, last_patch_id);
-      }
-
-      entries.push_back(entry);
-      segment_group_to_entry_index[group] = next_entry_index++;
-    }
-
-    if (remove) {
-      condition = remaining_conditions.erase(condition);
-    } else {
-      ++condition;
-    }
-  }
-
-  // Phase 3 for any remaining conditions create the actual entries utilizing
-  // the groups (phase 2) and base entries (phase 1) as needed
-  for (auto condition = remaining_conditions.begin();
-       condition != remaining_conditions.end(); condition++) {
-    PatchMap::Entry entry;
-    entry.encoding = condition->encoding_;
-    entry.coverage.conjunctive = true;  // ... AND ...
-
-    for (const auto& group : condition->conditions()) {
-      if (group.size() == 1) {
-        entry.coverage.child_indices.insert(
-            segment_id_to_entry_index[*group.begin()]);
-        continue;
-      }
-
-      entry.coverage.child_indices.insert(segment_group_to_entry_index[group]);
-    }
-
-    last_patch_id =
-        MapTo(entry, condition->activated(), condition->prefetches());
-    entries.push_back(entry);
-  }
-
-  return entries;
+  EntryGraph graph = TRY(EntryGraph::Create(conditions, segments));
+  return graph.ToPatchMapEntries(
+      PatchEncoding::GLYPH_KEYED);  // TODO XXXXX choose an appropriate default.
 }
 
 StatusOr<double> ActivationCondition::Probability(

@@ -122,6 +122,8 @@ cc_library(
     srcs = [
         "activation_condition.cc",
         "glyph_segmentation.cc",
+        "entry_graph.h",
+        "entry_graph.cc",
     ],
     hdrs = [
         "activation_condition.h",
@@ -365,6 +367,21 @@ cc_test(
     deps = [
         ":segmentation_context",
         "//ift/common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "entry_graph_test",
+    size = "small",
+    srcs = [
+        "entry_graph_test.cc",
+    ],
+    deps = [
+        ":common",
+        ":activation_condition",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@googletest//:gtest_main",
     ],
 )

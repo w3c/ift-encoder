@@ -35,42 +35,42 @@ TEST(ActivationConditionTest, ActivationConditionsToEncoderConditions) {
 
   std::vector<PatchMap::Entry> expected;
 
-  // entry[0] {{2}} -> 2,
+  // entry[0] {{4}} ignored
+  {
+    PatchMap::Entry condition({'g'}, 1, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[1] {{2}} -> 2,
   expected.push_back(
       PatchMap::Entry({'c'}, 2, proto::PatchEncoding::GLYPH_KEYED));
 
-  // entry[1] {{3}} -> 4
+  // entry[2] {{1}} ignored
+  {
+    PatchMap::Entry condition({'a', 'b'}, 3, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[3] {{3}} -> 4
   expected.push_back(
       PatchMap::Entry({'d', 'e', 'f'}, 4, proto::PatchEncoding::GLYPH_KEYED));
 
-  // entry[2] {{1}} ignored
-  {
-    PatchMap::Entry condition({'a', 'b'}, 5, PatchEncoding::GLYPH_KEYED);
-    condition.ignored = true;
-    expected.push_back(condition);
-  }
-
-  // entry[3] {{4}} ignored
-  {
-    PatchMap::Entry condition({'g'}, 6, PatchEncoding::GLYPH_KEYED);
-    condition.ignored = true;
-    expected.push_back(condition);
-  }
-
-  // entry[4] {{1 OR 3}} -> 5
+  // entry[4] {{2 OR 4}} ignored
   {
     PatchMap::Entry condition;
-    condition.coverage.child_indices = {2, 1};
+    condition.coverage.child_indices = {0, 1};  // entry[0], entry[1]
     condition.patch_indices.push_back(5);
+    condition.ignored = true;
     expected.push_back(condition);
   }
 
-  // entry[5] {{2 OR 4}} ignored
+  // entry[5] {{1 OR 3}} -> 5
   {
     PatchMap::Entry condition;
-    condition.coverage.child_indices = {0, 3};  // entry[0], entry[3]
-    condition.patch_indices.push_back(6);
-    condition.ignored = true;
+    condition.coverage.child_indices = {2, 3};
+    condition.patch_indices.push_back(5);
     expected.push_back(condition);
   }
 
@@ -115,11 +115,25 @@ TEST(ActivationConditionTest,
 
   std::vector<PatchMap::Entry> expected;
 
-  // entry[0] {{2}} -> 2,
+  // entry[0] {{4}} ignored
+  {
+    PatchMap::Entry condition({'g'}, 1, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[1] {{2}} -> 2,
   expected.push_back(
       PatchMap::Entry({'c'}, 2, proto::PatchEncoding::GLYPH_KEYED));
 
-  // entry[1] {{3}} -> 4
+  // entry[2] {{1}} ignored
+  {
+    PatchMap::Entry condition({'a', 'b'}, 3, PatchEncoding::GLYPH_KEYED);
+    condition.ignored = true;
+    expected.push_back(condition);
+  }
+
+  // entry[2] {{3}} -> 4
   {
     PatchMap::Entry condition({'d', 'e', 'f'}, 4,
                               proto::PatchEncoding::TABLE_KEYED_FULL);
@@ -128,16 +142,11 @@ TEST(ActivationConditionTest,
     expected.push_back(condition);
   }
 
-  // entry[2] {{1}} ignored
+  // entry[3] {{2 OR 4}} ignored
   {
-    PatchMap::Entry condition({'a', 'b'}, 13, PatchEncoding::GLYPH_KEYED);
-    condition.ignored = true;
-    expected.push_back(condition);
-  }
-
-  // entry[3] {{4}} ignored
-  {
-    PatchMap::Entry condition({'g'}, 14, PatchEncoding::GLYPH_KEYED);
+    PatchMap::Entry condition;
+    condition.coverage.child_indices = {0, 1};  // entry[0], entry[1]
+    condition.patch_indices.push_back(13);
     condition.ignored = true;
     expected.push_back(condition);
   }
@@ -145,17 +154,8 @@ TEST(ActivationConditionTest,
   // entry[4] {{1 OR 3}} -> 5
   {
     PatchMap::Entry condition;
-    condition.coverage.child_indices = {2, 1};
+    condition.coverage.child_indices = {2, 3};
     condition.patch_indices.push_back(5);
-    expected.push_back(condition);
-  }
-
-  // entry[5] {{2 OR 4}} ignored
-  {
-    PatchMap::Entry condition;
-    condition.coverage.child_indices = {0, 3};  // entry[0], entry[3]
-    condition.patch_indices.push_back(6);
-    condition.ignored = true;
     expected.push_back(condition);
   }
 
@@ -193,10 +193,10 @@ TEST(ActivationConditionTest,
 
   std::vector<PatchMap::Entry> expected;
 
-  // entry[0] {{smcp}} -> 1,
+  // entry[0] {{dlig}} -> 1,
   {
     PatchMap::Entry condition;
-    condition.coverage.features = {HB_TAG('s', 'm', 'c', 'p')};
+    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
     condition.ignored = true;
     condition.patch_indices = {1};
     condition.encoding = PatchEncoding::GLYPH_KEYED;
@@ -213,20 +213,20 @@ TEST(ActivationConditionTest,
     expected.push_back(condition);
   }
 
-  // entry[2] {{dlig}} -> 3,
+  // entry[3] {e0 OR e1} -> 3,
   {
     PatchMap::Entry condition;
-    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
+    condition.coverage.child_indices = {0, 1};
     condition.ignored = true;
     condition.patch_indices = {3};
     condition.encoding = PatchEncoding::GLYPH_KEYED;
     expected.push_back(condition);
   }
 
-  // entry[3] {e1 OR e2} -> 4,
+  // entry[4] {{smcp}} -> 4,
   {
     PatchMap::Entry condition;
-    condition.coverage.child_indices = {1, 2};
+    condition.coverage.features = {HB_TAG('s', 'm', 'c', 'p')};
     condition.ignored = true;
     condition.patch_indices = {4};
     condition.encoding = PatchEncoding::GLYPH_KEYED;
@@ -236,7 +236,7 @@ TEST(ActivationConditionTest,
   // entry[2] s1 AND s2 -> 5,
   {
     PatchMap::Entry condition;
-    condition.coverage.child_indices = {0, 3};
+    condition.coverage.child_indices = {3, 4};
     condition.patch_indices = {5};
     condition.coverage.conjunctive = true;
     condition.encoding = PatchEncoding::GLYPH_KEYED;
