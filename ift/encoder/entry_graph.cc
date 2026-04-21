@@ -218,26 +218,48 @@ StatusOr<uint32_t> EntryGraph::AddMapping(
     return node_id;
   }
 
-  // TODO XXXX handle case with more then 127 child ids
   if (normalized.IsPurelyDisjunctive()) {
     const auto& or_segments = *normalized.conditions().begin();
     nodes[node_id].child_mode = OR;
+    std::vector<uint32_t> children;
     for (const auto& s : or_segments) {
-      uint32_t child_id = TRY(
-          AddMapping(ActivationCondition::exclusive_segment(s, 0), segments));
-      nodes[node_id].children_ids.insert(child_id);
+      children.push_back(TRY(
+          AddMapping(ActivationCondition::exclusive_segment(s, 0), segments)));
     }
+    TRYV(AddChildrenToNode(node_id, OR, children));
     return node_id;
   }
 
   nodes[node_id].child_mode = AND;
+  std::vector<uint32_t> children;
   for (const auto& or_segments : normalized.conditions()) {
-    uint32_t child_id = TRY(
-        AddMapping(ActivationCondition::or_segments(or_segments, 0), segments));
-    nodes[node_id].children_ids.insert(child_id);
+    children.push_back(TRY(
+        AddMapping(ActivationCondition::or_segments(or_segments, 0), segments)));
   }
+  TRYV(AddChildrenToNode(node_id, AND, children));
 
   return node_id;
+}
+
+absl::Status EntryGraph::AddChildrenToNode(uint32_t node_id, ChildMode mode,
+                                             Span<const uint32_t> children_ids) {
+  while (children_ids.size() > 127) {
+    for (size_t i = 0; i < 126; ++i) {
+      nodes[node_id].children_ids.insert(children_ids[i]);
+    }
+    uint32_t next_node_id = TRY(CreateNode());
+    nodes[next_node_id].child_mode = mode;
+    incoming_edge_count[next_node_id]++;
+    nodes[node_id].children_ids.insert(next_node_id);
+
+    node_id = next_node_id;
+    children_ids = children_ids.subspan(126);
+  }
+
+  for (uint32_t child_id : children_ids) {
+    nodes[node_id].children_ids.insert(child_id);
+  }
+  return absl::OkStatus();
 }
 
 StatusOr<uint32_t> EntryGraph::AddCodepointsOnly(

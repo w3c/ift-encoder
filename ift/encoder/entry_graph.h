@@ -16,8 +16,7 @@ enum ChildMode {
   OR,
 };
 
-// TODO XXX typedef node id?
-// TODO XXXX better optimize patch id encodings by ordering entries by patch ids
+// TODO(garretrieger): better optimize patch id encodings by ordering entries by patch ids
 // where possible.
 
 struct EntryNode {
@@ -68,6 +67,10 @@ class EntryGraph {
 
   absl::StatusOr<uint32_t> CreateNode();
 
+  absl::Status AddChildrenToNode(
+      uint32_t node_id, ChildMode mode,
+      absl::Span<const uint32_t> children_ids);
+
   absl::flat_hash_map<ActivationCondition, std::vector<uint32_t>>
       patch_mappings;
   absl::flat_hash_map<ActivationCondition, proto::PatchEncoding>
@@ -75,7 +78,7 @@ class EntryGraph {
 
   std::vector<EntryNode> nodes;
   std::vector<uint32_t> incoming_edge_count;
-  // TODO XXXX track which nodes are fully disjunctive after being fully
+  // TODO(garretrieger): track which nodes are fully disjunctive after being fully
   // resolved (ie. including children)
 
   absl::flat_hash_map<ActivationCondition, uint32_t> condition_to_node_id;
