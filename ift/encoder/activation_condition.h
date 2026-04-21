@@ -108,6 +108,8 @@ class ActivationCondition {
     return out;
   }
 
+  proto::PatchEncoding Encoding() const { return encoding_; }
+
   // Returns true if any of the condition groups intersects with 'segments'.
   bool Intersects(const common::SegmentSet& segments) const;
 
