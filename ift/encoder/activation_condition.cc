@@ -29,6 +29,7 @@ using ift::common::SegmentSet;
 using ift::freq::ProbabilityCalculator;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
+using ift::proto::GLYPH_KEYED;
 
 namespace ift::encoder {
 
@@ -285,14 +286,27 @@ StatusOr<std::vector<PatchMap::Entry>>
 ActivationCondition::ActivationConditionsToPatchMapEntries(
     Span<const ActivationCondition> conditions,
     const flat_hash_map<segment_index_t, SubsetDefinition>& segments) {
+
+  // Set whichever encoding occurs the most to be the default
+  PatchEncoding default_encoding = GLYPH_KEYED;
+  uint32_t max_count = 0;
+  flat_hash_map<PatchEncoding, uint32_t> encoding_count;
+  for (const auto& c : conditions) {
+    auto& count = encoding_count[c.Encoding()];
+    count++;
+    if (count > max_count) {
+      max_count = count;
+      default_encoding = c.Encoding();
+    }
+  }
+
   std::vector<PatchMap::Entry> entries;
   if (conditions.empty()) {
     return entries;
   }
 
   EntryGraph graph = TRY(EntryGraph::Create(conditions, segments));
-  return graph.ToPatchMapEntries(
-      PatchEncoding::GLYPH_KEYED);  // TODO XXXXX choose an appropriate default.
+  return graph.ToPatchMapEntries(default_encoding);
 }
 
 StatusOr<double> ActivationCondition::Probability(
