@@ -518,4 +518,24 @@ TEST_F(Format2PatchMapTest, MultipleIndexDeltas) {
   ASSERT_EQ(*encoded, absl::StrCat(header, entry_0, entry_1, entry_2));
 }
 
+TEST_F(Format2PatchMapTest, EstimateEncodingCost) {
+  PatchMap::Entry entry;
+  entry.coverage.codepoints.insert(1);
+  entry.coverage.codepoints.insert(2);
+  entry.coverage.codepoints.insert(3);
+  entry.patch_indices = {1};
+  entry.encoding = TABLE_KEYED_FULL;
+
+  // From Format2PatchMapTest.Simple:
+  // entry_0 = {
+  //     0x10,                   // format = 00010000 = Codepoints
+  //     0b00000101, 0b00001110  // codepoints (BF4, depth 1)= {1, 2, 3}
+  // };
+  // Total 3 bytes.
+
+  auto cost = Format2PatchMap::EstimateEncodingCost(entry);
+  ASSERT_TRUE(cost.ok()) << cost.status();
+  EXPECT_EQ(*cost, 3);
+}
+
 }  // namespace ift::proto

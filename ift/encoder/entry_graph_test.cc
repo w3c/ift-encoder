@@ -257,4 +257,24 @@ TEST(EntryGraphTest, SplitLargeNode) {
   EXPECT_EQ((*entries)[split_node_id].coverage.child_indices.size(), 4);
 }
 
+TEST(EntryGraphTest, NodeEncodingCost) {
+  EntryNode node;
+  node.and_codepoints.insert(1);
+  node.and_codepoints.insert(2);
+  node.child_mode = NONE;
+
+  auto cost1_or = node.EncodingCost();
+  ASSERT_TRUE(cost1_or.ok()) << cost1_or.status();
+  int64_t cost1 = *cost1_or;
+  EXPECT_GT(cost1, 0);
+
+  node.children_ids.insert(1);
+  node.children_ids.insert(2);
+
+  auto cost2_or = node.EncodingCost();
+  ASSERT_TRUE(cost2_or.ok()) << cost2_or.status();
+  int64_t cost2 = *cost2_or;
+  EXPECT_GT(cost2, cost1);
+}
+
 }  // namespace ift::encoder

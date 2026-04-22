@@ -7,6 +7,7 @@
 #include "ift/common/axis_range.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/proto/format_2_patch_map.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
@@ -19,6 +20,7 @@ using absl::StatusOr;
 using ift::common::AxisRange;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
+using ift::proto::Format2PatchMap;
 
 namespace ift::encoder {
 
@@ -319,6 +321,7 @@ StatusOr<uint32_t> EntryGraph::CreateNode() {
   nodes.push_back({
       .and_codepoints = {},
       .and_features = {},
+      .and_design_space = {},
       .child_mode = NONE,
       .children_ids = {},
   });
@@ -326,9 +329,20 @@ StatusOr<uint32_t> EntryGraph::CreateNode() {
   return node_id;
 }
 
-int64_t EntryNode::EncodingCost() const {
-  // TODO XXXX
-  return 0;
+absl::StatusOr<int64_t> EntryNode::EncodingCost() const {
+  proto::PatchMap::Entry entry;
+  entry.coverage.codepoints = and_codepoints;
+  entry.coverage.features.insert(and_features.begin(), and_features.end());
+  entry.coverage.design_space.insert(and_design_space.begin(),
+                                     and_design_space.end());
+  entry.coverage.conjunctive = (child_mode == AND);
+
+  uint32_t fake_id = 1;
+  for (size_t i = 0; i < children_ids.size(); ++i) {
+    entry.coverage.child_indices.insert(fake_id++);
+  }
+
+  return TRY(Format2PatchMap::EstimateEncodingCost(entry));
 }
 
 void EntryGraph::Optimize() {

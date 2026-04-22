@@ -13,6 +13,11 @@ class Format2PatchMap {
   static absl::StatusOr<std::string> Serialize(
       const IFTTable& ift_table, std::optional<uint32_t> cff_charstrings_offset,
       std::optional<uint32_t> cff2_charstrings_offset);
+
+  // Generate an estimated encoding cost, ignores the impact of last patch index
+  // and the default format selection on final encoding size.
+  static absl::StatusOr<size_t> EstimateEncodingCost(
+      const PatchMap::Entry& entry);
 };
 
 }  // namespace ift::proto
