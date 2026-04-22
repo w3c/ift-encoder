@@ -317,7 +317,6 @@ StatusOr<uint32_t> EntryGraph::CreateNode() {
   }
   uint32_t node_id = nodes.size();
   nodes.push_back({
-      .id = node_id,
       .and_codepoints = {},
       .and_features = {},
       .child_mode = NONE,
