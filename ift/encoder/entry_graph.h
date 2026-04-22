@@ -27,7 +27,9 @@ struct EntryNode {
   ChildMode child_mode;
   common::IntSet children_ids;
 
-  int64_t EncodingCost() const;
+  // Generate an estimated encoding cost, ignores the impact of last patch index
+  // and the default format selection on final encoding size.
+  absl::StatusOr<int64_t> EncodingCost() const;
 };
 
 // Models the condition graph formed by the patch map entries of an IFT

@@ -132,6 +132,7 @@ cc_library(
     deps = [
         ":common",
         "//ift/freq",
+        "//ift/proto",
     ],
     visibility = [
         "//visibility:public",

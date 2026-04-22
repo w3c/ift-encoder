@@ -172,6 +172,20 @@ StatusOr<std::string> Format2PatchMap::Serialize(
   return out;
 }
 
+StatusOr<size_t> Format2PatchMap::EstimateEncodingCost(
+    const PatchMap::Entry& entry) {
+  PatchMap::Entry dummy_entry = entry;
+  if (dummy_entry.patch_indices.empty()) {
+    dummy_entry.patch_indices.push_back(1);
+  }
+  // Ignore the impact of last_entry_index and default_encoding on the cost
+  // estimates by using fixed values.
+  std::string out;
+  TRYV(EncodeEntry(dummy_entry, /*last_entry_index=*/0,
+                       /*default_encoding=*/TABLE_KEYED_FULL, out));
+  return out.size();
+}
+
 Status DecodeAxisSegment(absl::string_view data, hb_tag_t& tag,
                          AxisRange& range) {
   READ_UINT32(tag_v, data, 0);
