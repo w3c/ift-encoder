@@ -20,7 +20,6 @@ enum ChildMode {
 // where possible.
 
 struct EntryNode {
-  uint32_t id;
   common::CodepointSet and_codepoints;
   absl::flat_hash_set<hb_tag_t> and_features;
   absl::flat_hash_map<hb_tag_t, ift::common::AxisRange> and_design_space;
@@ -31,17 +30,26 @@ struct EntryNode {
   int64_t EncodingCost() const;
 };
 
+// Models the condition graph formed by the patch map entries of an IFT
+// table. Can be used to construct the corresponding entry list.
 class EntryGraph {
  public:
+  // Create a new graph based on 'conditions' and 'segments'. Will utilize
+  // maximum sharing by default, and leave each segment as an individual node.
   static absl::StatusOr<EntryGraph> Create(
       absl::Span<const ActivationCondition> conditions,
       const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
 
+  // Modify this entry graph where possible to reduce the overall encoding cost
+  // without changing it's functionality.
   void Optimize();
 
+  // Convert this entry graph into an list of patch map entries, with child
+  // indices fully resolved.
   absl::StatusOr<std::vector<proto::PatchMap::Entry>> ToPatchMapEntries(
       proto::PatchEncoding default_encoding) const;
 
+  // Return a topological sorting of node ids for this graph.
   absl::StatusOr<std::vector<uint32_t>> TopologicalSort() const;
 
  private:
