@@ -55,7 +55,7 @@ class EntryGraph {
 
   // Modify this entry graph where possible to reduce the overall encoding cost
   // without changing it's functionality.
-  void Optimize();
+  absl::Status Optimize();
 
   // Returns the cost delta of subsuming child nodes for 'node_id'.
   absl::StatusOr<SubsumptionResult> CalculateSubsumptionCostDelta(
