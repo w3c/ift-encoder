@@ -1016,12 +1016,14 @@ TEST_F(DependencyClosureTest, SegmentsToAffected) {
                   /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
               });
 
-  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({0}), (GlyphSet{69 /* a */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({0}),
+            (GlyphSet{69 /* a */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({1}),
             (GlyphSet{74 /* f */, 444 /* fi */, 446 /* ffi */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({2}),
             (GlyphSet{77 /* i */, 444 /* fi */, 446 /* ffi */}));
-  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({4}), (GlyphSet{37 /* A */}));
+  EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({4}),
+            (GlyphSet{37 /* A */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({5}),
             (GlyphSet{37 /* A */, 117 /* acute */, 640 /* Aacute */}));
 
@@ -1029,13 +1031,9 @@ TEST_F(DependencyClosureTest, SegmentsToAffected) {
             (GlyphSet{74, 77, 444, 446}));
 
   auto nodes = dependency_closure->SegmentsToAffectedNodeConditions({1});
-  EXPECT_EQ(nodes, (flat_hash_set<Node>{
-    Node::Segment(1),
-    Node::Unicode('f'),
-    Node::Glyph(74),
-    Node::Glyph(444),
-    Node::Glyph(446)
-  }));
+  EXPECT_EQ(nodes, (flat_hash_set<Node>{Node::Segment(1), Node::Unicode('f'),
+                                        Node::Glyph(74), Node::Glyph(444),
+                                        Node::Glyph(446)}));
 }
 
 }  // namespace ift::encoder

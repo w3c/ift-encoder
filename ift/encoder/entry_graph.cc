@@ -473,9 +473,7 @@ static DisjunctiveSummary GetDisjunctiveSummary(
 }
 
 static absl::StatusOr<int64_t> SavedCostIfEdgeToRemoved(
-    uint32_t node_id,
-    std::vector<uint32_t>&
-        edge_counts,
+    uint32_t node_id, std::vector<uint32_t>& edge_counts,
     const std::vector<EntryNode>& nodes) {
   if (edge_counts[node_id] == 0) return 0;
   edge_counts[node_id]--;

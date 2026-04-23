@@ -39,7 +39,8 @@ TEST(ActivationConditionTest, ActivationConditionsToEncoderConditions) {
 
   // Entry 0: s1 OR s3 -> 5
   {
-    PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5, PatchEncoding::GLYPH_KEYED);
+    PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5,
+                          PatchEncoding::GLYPH_KEYED);
     expected.push_back(entry);
   }
 
@@ -99,7 +100,8 @@ TEST(ActivationConditionTest,
 
   // Entry 0: s1 OR s3 -> 5
   {
-    PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5, PatchEncoding::GLYPH_KEYED);
+    PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5,
+                          PatchEncoding::GLYPH_KEYED);
     expected.push_back(entry);
   }
 
@@ -116,7 +118,7 @@ TEST(ActivationConditionTest,
   // Entry 2: s3 -> 4
   {
     PatchMap::Entry entry({'d', 'e', 'f'}, {4, 13, 12},
-                              proto::PatchEncoding::TABLE_KEYED_FULL);
+                          proto::PatchEncoding::TABLE_KEYED_FULL);
     expected.push_back(entry);
   }
 

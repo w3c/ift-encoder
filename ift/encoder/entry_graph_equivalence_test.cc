@@ -1,24 +1,24 @@
 #include <fstream>
+#include <set>
 #include <string>
 #include <vector>
-#include <set>
 
-#include "gtest/gtest.h"
 #include "google/protobuf/text_format.h"
+#include "gtest/gtest.h"
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/entry_graph.h"
 #include "ift/encoder/subset_definition.h"
-#include "ift/proto/patch_encoding.h"
 #include "ift/proto/format_2_patch_map.h"
+#include "ift/proto/patch_encoding.h"
 
-using ift::config::SegmentationPlan;
-using ift::config::ActivationConditionProto;
-using ift::common::SegmentSet;
-using ift::common::CodepointSet;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
+using ift::common::CodepointSet;
+using ift::common::SegmentSet;
+using ift::config::ActivationConditionProto;
+using ift::config::SegmentationPlan;
 using ift::proto::Format2PatchMap;
 using ift::proto::PatchMap;
 
@@ -35,7 +35,8 @@ using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
-static ActivationCondition FromProto(const ActivationConditionProto& condition) {
+static ActivationCondition FromProto(
+    const ActivationConditionProto& condition) {
   std::vector<SegmentSet> groups;
   for (const auto& group : condition.required_segments()) {
     SegmentSet set;
@@ -53,7 +54,8 @@ static ActivationCondition Normalize(const ActivationCondition& condition) {
 
 static ActivationCondition RealToVirtual(
     const ActivationCondition& real_cond,
-    const flat_hash_map<segment_index_t, ActivationCondition>& segment_to_virtual) {
+    const flat_hash_map<segment_index_t, ActivationCondition>&
+        segment_to_virtual) {
   std::vector<SegmentSet> virtual_groups;
   for (const auto& real_group : real_cond.conditions()) {
     SegmentSet virt_group;
@@ -65,7 +67,8 @@ static ActivationCondition RealToVirtual(
   return ActivationCondition::composite_condition(virtual_groups, 0);
 }
 
-static int64_t TotalEncodingCost(const std::vector<proto::PatchMap::Entry>& entries) {
+static int64_t TotalEncodingCost(
+    const std::vector<proto::PatchMap::Entry>& entries) {
   int64_t total = 0;
   for (const auto& entry : entries) {
     auto cost = Format2PatchMap::EstimateEncodingCost(entry);
@@ -76,7 +79,6 @@ static int64_t TotalEncodingCost(const std::vector<proto::PatchMap::Entry>& entr
   return total;
 }
 
-
 struct VirtualMaps {
   flat_hash_map<hb_codepoint_t, uint32_t> cp_to_virtual;
   flat_hash_map<hb_tag_t, uint32_t> feature_to_virtual;
@@ -84,9 +86,7 @@ struct VirtualMaps {
 
 static ActivationCondition ResolveVirtualCondition(
     const PatchMap::Entry& entry,
-    const std::vector<PatchMap::Entry>& all_entries,
-    const VirtualMaps& maps) {
-
+    const std::vector<PatchMap::Entry>& all_entries, const VirtualMaps& maps) {
   std::vector<ActivationCondition> direct_conditions;
   if (!entry.coverage.codepoints.empty()) {
     SegmentSet s;
@@ -110,13 +110,14 @@ static ActivationCondition ResolveVirtualCondition(
 
   std::vector<ActivationCondition> children;
   for (uint32_t child_idx : entry.coverage.child_indices) {
-    children.push_back(ResolveVirtualCondition(all_entries[child_idx], all_entries,
-                                               maps));
+    children.push_back(
+        ResolveVirtualCondition(all_entries[child_idx], all_entries, maps));
   }
 
   if (entry.coverage.conjunctive) {
     ActivationCondition result = ActivationCondition::True(0);
-    for (const auto& c : direct_conditions) result = ActivationCondition::And(result, c);
+    for (const auto& c : direct_conditions)
+      result = ActivationCondition::And(result, c);
     for (const auto& c : children) result = ActivationCondition::And(result, c);
     return result;
   } else {
@@ -127,7 +128,8 @@ static ActivationCondition ResolveVirtualCondition(
     if (!children.empty()) {
       ActivationCondition children_condition = children[0];
       for (size_t i = 1; i < children.size(); ++i) {
-        children_condition = ActivationCondition::Or(children_condition, children[i]);
+        children_condition =
+            ActivationCondition::Or(children_condition, children[i]);
       }
       result = ActivationCondition::And(result, children_condition);
     }
@@ -143,7 +145,7 @@ class EntryGraphEquivalenceTest : public ::testing::Test {
     ASSERT_TRUE(file.is_open()) << "Could not open " << path;
 
     std::string content((std::istreambuf_iterator<char>(file)),
-                         std::istreambuf_iterator<char>());
+                        std::istreambuf_iterator<char>());
     ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(content, &plan_));
   }
 
@@ -178,7 +180,8 @@ struct SegmentData {
   flat_hash_map<segment_index_t, ActivationCondition> segment_to_virtual;
 };
 
-static SegmentData CreateSegments(const SegmentationPlan& plan, const VirtualMaps& maps) {
+static SegmentData CreateSegments(const SegmentationPlan& plan,
+                                  const VirtualMaps& maps) {
   SegmentData data;
   for (const auto& [id, set] : plan.segments()) {
     auto& segment = data.segments[id];
@@ -192,7 +195,8 @@ static SegmentData CreateSegments(const SegmentationPlan& plan, const VirtualMap
       segment.feature_tags.insert(tag);
       virtual_indices.insert(maps.feature_to_virtual.at(tag));
     }
-    data.segment_to_virtual.emplace(id, ActivationCondition::or_segments(virtual_indices, 0));
+    data.segment_to_virtual.emplace(
+        id, ActivationCondition::or_segments(virtual_indices, 0));
   }
   return data;
 }
@@ -202,14 +206,17 @@ TEST_F(EntryGraphEquivalenceTest, OptimizePreservesConditions) {
   SegmentData segment_data = CreateSegments(plan_, virtual_maps);
 
   std::vector<ActivationCondition> conditions;
-  flat_hash_map<std::vector<patch_id_t>, ActivationCondition> expected_virtual_conditions;
+  flat_hash_map<std::vector<patch_id_t>, ActivationCondition>
+      expected_virtual_conditions;
   for (const auto& c_proto : plan_.glyph_patch_conditions()) {
     ActivationCondition c = FromProto(c_proto);
     conditions.push_back(c);
 
     std::vector<patch_id_t> patches = {c.activated()};
     patches.insert(patches.end(), c.prefetches().begin(), c.prefetches().end());
-    expected_virtual_conditions.emplace(std::move(patches), RealToVirtual(Normalize(c), segment_data.segment_to_virtual));
+    expected_virtual_conditions.emplace(
+        std::move(patches),
+        RealToVirtual(Normalize(c), segment_data.segment_to_virtual));
   }
 
   auto graph = EntryGraph::Create(conditions, segment_data.segments);
@@ -223,15 +230,16 @@ TEST_F(EntryGraphEquivalenceTest, OptimizePreservesConditions) {
       if (entry.ignored) {
         continue;
       }
-      ActivationCondition resolved = ResolveVirtualCondition(
-          entry, entries, virtual_maps);
+      ActivationCondition resolved =
+          ResolveVirtualCondition(entry, entries, virtual_maps);
 
       auto it = expected_virtual_conditions.find(entry.patch_indices);
       ASSERT_NE(it, expected_virtual_conditions.end())
-          << "No expected condition for patches starting with " << entry.patch_indices[0];
+          << "No expected condition for patches starting with "
+          << entry.patch_indices[0];
       EXPECT_EQ(resolved, it->second)
-          << "Condition mismatch for patches starting with " << entry.patch_indices[0]
-          << "\nResolved: " << resolved.ToString()
+          << "Condition mismatch for patches starting with "
+          << entry.patch_indices[0] << "\nResolved: " << resolved.ToString()
           << "\nExpected: " << it->second.ToString();
     }
   };
@@ -247,10 +255,13 @@ TEST_F(EntryGraphEquivalenceTest, OptimizePreservesConditions) {
   // Check cost
   int64_t unoptimized_cost = TotalEncodingCost(*unoptimized_entries);
   int64_t optimized_cost = TotalEncodingCost(*optimized_entries);
-  std::cout << "Unoptimized cost: " << unoptimized_cost << " bytes" << std::endl;
+  std::cout << "Unoptimized cost: " << unoptimized_cost << " bytes"
+            << std::endl;
   std::cout << "Optimized cost:   " << optimized_cost << " bytes" << std::endl;
-  std::cout << "Savings:          " << unoptimized_cost - optimized_cost << " bytes ("
-            << (100.0 * (unoptimized_cost - optimized_cost) / unoptimized_cost) << "%)" << std::endl;
+  std::cout << "Savings:          " << unoptimized_cost - optimized_cost
+            << " bytes ("
+            << (100.0 * (unoptimized_cost - optimized_cost) / unoptimized_cost)
+            << "%)" << std::endl;
 
   EXPECT_LT(optimized_cost, unoptimized_cost);
 }
