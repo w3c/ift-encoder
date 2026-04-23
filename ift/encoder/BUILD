@@ -386,3 +386,22 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "entry_graph_equivalence_test",
+    size = "small",
+    srcs = [
+        "entry_graph_equivalence_test.cc",
+    ],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":activation_condition",
+        "//ift/common",
+        "//ift/config:segmentation_plan_cc_proto",
+        "//ift/proto",
+        "@googletest//:gtest_main",
+        "@protobuf//:protobuf",
+    ],
+)

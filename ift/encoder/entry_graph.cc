@@ -70,7 +70,9 @@ StatusOr<std::vector<PatchMap::Entry>> EntryGraph::ToPatchMapEntries(
   for (const auto& [condition, _] : patch_mappings) {
     auto it = condition_to_node_id.find(condition);
     if (it != condition_to_node_id.end()) {
-      node_to_condition.insert({it->second, condition});
+      if (!node_to_condition.insert({it->second, condition}).second) {
+        return absl::InternalError("Duplicate condtion.");
+      }
     } else {
       return absl::InternalError("Unexpected missing node.");
     }

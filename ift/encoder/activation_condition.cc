@@ -305,6 +305,7 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
   }
 
   EntryGraph graph = TRY(EntryGraph::Create(conditions, segments));
+  TRYV(graph.Optimize());
   return graph.ToPatchMapEntries(default_encoding);
 }
 
