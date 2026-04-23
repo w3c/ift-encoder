@@ -5,10 +5,12 @@
 #include "absl/container/flat_hash_map.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 
+using ::ift::common::SegmentSet;
 using ::ift::proto::PatchEncoding;
 using ::testing::UnorderedElementsAre;
 using ::ift::common::CodepointSet;
@@ -17,7 +19,7 @@ using ::absl::flat_hash_map;
 namespace ift::encoder {
 
 TEST(EntryGraphTest, ToPatchMapEntries) {
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, {'a'}},
       {2, {'b'}},
       {3, {'c'}},
@@ -47,8 +49,8 @@ TEST(EntryGraphTest, ToPatchMapEntries) {
   // (s3) -> ignored
   EXPECT_EQ(entries.size(), 6);
 
-  absl::flat_hash_map<uint32_t, size_t> codepoint_to_index;
-  absl::flat_hash_map<uint32_t, size_t> patch_to_index;
+  flat_hash_map<uint32_t, size_t> codepoint_to_index;
+  flat_hash_map<uint32_t, size_t> patch_to_index;
 
   for (size_t i = 0; i < entries.size(); ++i) {
     const auto& entry = entries[i];
@@ -117,7 +119,7 @@ TEST(EntryGraphTest, SplitSegment) {
   SubsetDefinition s1;
   s1.codepoints = {'a'};
   s1.feature_tags = {HB_TAG('f', '1', ' ', ' ')};
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, s1},
   };
 
@@ -173,7 +175,7 @@ TEST(EntryGraphTest, SplitSegment) {
 }
 
 TEST(EntryGraphTest, TopologicalSort_SharedChildren) {
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {1, {'a'}},
       {2, {'b'}},
       {3, {'c'}},
@@ -214,8 +216,8 @@ TEST(EntryGraphTest, TopologicalSort_SharedChildren) {
 }
 
 TEST(EntryGraphTest, SplitLargeNode) {
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments;
-  ift::common::SegmentSet segment_ids;
+  flat_hash_map<segment_index_t, SubsetDefinition> segments;
+  SegmentSet segment_ids;
   for (int i = 1; i <= 130; ++i) {
     segments[i].codepoints = {static_cast<hb_codepoint_t>(i)};
     segment_ids.insert(i);
@@ -281,7 +283,7 @@ TEST(EntryGraphTest, NodeEncodingCost) {
 TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Disjunctive) {
   // s0 = {a}, s1 = {b}, s2 = {c}
   // (s0 or s1 or s2) -> {g1}
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, {'a'}},
       {1, {'b'}},
       {2, {'c'}},
@@ -353,7 +355,7 @@ TEST(EntryGraphTest,
 }
 
 TEST(EntryGraphTest, ActuateSubsumption_Disjunctive) {
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, {'a'}},
       {1, {'b'}},
       {2, {'c'}},
@@ -388,7 +390,7 @@ TEST(EntryGraphTest, ActuateSubsumption_Disjunctive_Mixed) {
   s2.feature_tags = {HB_TAG('f', 'o', 'o', ' ')};
   s3.feature_tags = {HB_TAG('b', 'a', 'r', ' ')};
 
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, s0},
       {1, s1},
       {2, s2},
@@ -449,7 +451,7 @@ TEST(EntryGraphTest, ActuateSubsumption_Disjunctive_Mixed) {
 
 TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Conjunctive) {
   // node = {x} AND child1, child1 = {a} OR {b}
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, {'a'}},
       {1, {'b'}},
       {2, {'x'}},
@@ -471,7 +473,7 @@ TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Conjunctive) {
 }
 
 TEST(EntryGraphTest, ActuateSubsumption_Conjunctive) {
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, {'a'}},
       {1, {'b'}},
       {2, {'x'}},
@@ -506,7 +508,7 @@ TEST(EntryGraphTest, ActuateSubsumption_Conjunctive_Multi) {
   s1.feature_tags = {HB_TAG('f', 'o', 'o', ' ')};
   s2.codepoints = {'x'};
 
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, s0},
       {1, s1},
       {2, s2},
@@ -564,7 +566,7 @@ TEST(EntryGraphTest,
   SubsetDefinition s3;
   s3.feature_tags = {HB_TAG('b', 'a', 'r', ' ')};
 
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, s0},
       {1, s1},
       {2, s2},
@@ -601,7 +603,7 @@ TEST(EntryGraphTest,
   for (int i = 0; i < 100; i++) s0.codepoints.insert(i * 2);
   for (int i = 100; i < 200; i++) s1.codepoints.insert(i * 2);
 
-  absl::flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, s0},
       {1, s1},
   };
@@ -631,6 +633,54 @@ TEST(EntryGraphTest,
     }
   }
   ASSERT_TRUE(found_children);
+}
+
+TEST(EntryGraphTest, Optimize_Disjunctive) {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {0, {'a'}},
+      {1, {'b'}},
+      {2, {'c'}},
+  };
+  std::vector<ActivationCondition> activation_conditions = {
+      ActivationCondition::or_segments({0, 1, 2}, 10),
+  };
+  auto graph_or = EntryGraph::Create(activation_conditions, segments);
+  ASSERT_TRUE(graph_or.ok());
+  EntryGraph graph = std::move(*graph_or);
+
+  ASSERT_TRUE(graph.Optimize().ok());
+
+  auto entries = graph.ToPatchMapEntries(proto::GLYPH_KEYED);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+  // Should now have only 1 entry with all codepoints
+  EXPECT_EQ(entries->size(), 1);
+  EXPECT_THAT(entries->at(0).coverage.codepoints,
+              UnorderedElementsAre('a', 'b', 'c'));
+  EXPECT_TRUE(entries->at(0).coverage.child_indices.empty());
+}
+
+TEST(EntryGraphTest, Optimize_Conjunctive) {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {0, {'a'}},
+      {1, {'b'}},
+      {2, {'x'}},
+  };
+  // (s0 OR s1) AND (s2)
+  std::vector<ActivationCondition> activation_conditions = {
+      ActivationCondition::composite_condition({{0, 1}, {2}}, 10),
+  };
+  auto graph = EntryGraph::Create(activation_conditions, segments);
+  ASSERT_TRUE(graph.ok()) << graph.status();
+
+  ASSERT_TRUE(graph->Optimize().ok());
+
+  auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
+  ASSERT_TRUE(entries.ok()) << entries.status();
+
+  EXPECT_EQ(entries->size(), 2);
+  const auto& root_entry = entries->back();
+  EXPECT_THAT(root_entry.coverage.codepoints, UnorderedElementsAre('a', 'b'));
+  EXPECT_EQ(root_entry.coverage.child_indices.size(), 1);
 }
 
 }  // namespace ift::encoder

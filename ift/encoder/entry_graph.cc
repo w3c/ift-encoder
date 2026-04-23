@@ -364,8 +364,24 @@ absl::StatusOr<int64_t> EntryNode::EncodingCost() const {
   return TRY(Format2PatchMap::EstimateEncodingCost(entry));
 }
 
-void EntryGraph::Optimize() {
-  // TODO XXXXX
+Status EntryGraph::Optimize() {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    std::vector<uint32_t> sorted = TRY(TopologicalSort());
+    std::reverse(sorted.begin(), sorted.end());
+    // Iterate in reverse topological order so that changes
+    // made to the graph don't impact the following nodes
+    // in the iteration.
+    for (uint32_t node_id : sorted) {
+      auto result = TRY(CalculateSubsumptionCostDelta(node_id));
+      if (result.cost_delta < 0) {
+        TRYV(ActuateSubsumption(node_id, result));
+        changed = true;
+      }
+    }
+  }
+  return absl::OkStatus();
 }
 
 static absl::Status UnionAxisRanges(
