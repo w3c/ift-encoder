@@ -10,11 +10,11 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/patch_encoding.h"
 
+using ::absl::flat_hash_map;
+using ::ift::common::CodepointSet;
 using ::ift::common::SegmentSet;
 using ::ift::proto::PatchEncoding;
 using ::testing::UnorderedElementsAre;
-using ::ift::common::CodepointSet;
-using ::absl::flat_hash_map;
 
 namespace ift::encoder {
 
@@ -311,10 +311,9 @@ TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Disjunctive) {
   EXPECT_EQ(result->codepoints, (CodepointSet{'a', 'b', 'c'}));
 }
 
-TEST(EntryGraphTest,
-     CalculateSubsumptionCostDelta_Disjunctive_PositiveDelta) {
-  // Children are shared and large. Subsuming them into the parent adds to the
-  // outweights entry cost savings due to duplicating the codepoint sets.
+TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Disjunctive_PositiveDelta) {
+  // Children are shared and large. Subsuming them into the parent will duplicate
+  // them. Cost of duplication outweights entry cost savings.
 
   SubsetDefinition s0, s1;
   // Insert non-continous codepoints to ensure the sparse bit sets take up
@@ -450,7 +449,6 @@ TEST(EntryGraphTest, ActuateSubsumption_Disjunctive_Mixed) {
 }
 
 TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Conjunctive) {
-  // node = {x} AND child1, child1 = {a} OR {b}
   flat_hash_map<segment_index_t, SubsetDefinition> segments = {
       {0, {'a'}},
       {1, {'b'}},
@@ -494,6 +492,7 @@ TEST(EntryGraphTest, ActuateSubsumption_Conjunctive) {
   auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
   ASSERT_TRUE(entries.ok()) << entries.status();
 
+  // One of the codepoint sets should be pulled up into the root node.
   EXPECT_EQ(entries->size(), 2);
   const auto& root_entry = entries->back();
   EXPECT_FALSE(root_entry.coverage.codepoints.empty());
@@ -597,8 +596,7 @@ TEST(EntryGraphTest,
   EXPECT_FALSE(result->features.has_value());
 }
 
-TEST(EntryGraphTest,
-     CalculateSubsumptionCostDelta_Conjunctive_PositiveDelta) {
+TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Conjunctive_PositiveDelta) {
   SubsetDefinition s0, s1;
   for (int i = 0; i < 100; i++) s0.codepoints.insert(i * 2);
   for (int i = 100; i < 200; i++) s1.codepoints.insert(i * 2);
