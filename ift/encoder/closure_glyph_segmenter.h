@@ -17,9 +17,14 @@
 namespace ift::encoder {
 
 struct SegmentationCost {
-  double total_cost;
-  double cost_for_non_segmented;
-  double ideal_cost;
+  double ift_init_cost;
+  double ift_patch_cost;
+
+  double non_ift_total_cost;
+
+  double ideal_init_cost;
+  double ideal_patch_cost;
+
 };
 
 /*

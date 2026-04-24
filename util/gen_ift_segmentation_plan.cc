@@ -123,8 +123,16 @@ StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
 static Status Analysis(hb_face_t* font,
                        const btree_map<SegmentSet, MergeStrategy>& merge_groups,
                        const GlyphSegmentation& segmentation) {
+
   unsigned group_index = 0;
-  double overall_cost = 0.0;
+
+  double ift_init_cost = 0.0;
+  double non_ift_total_cost = 0.0;
+  double ideal_init_cost = 0.0;
+
+  double ift_patch_cost = 0.0;
+  double ideal_patch_cost = 0.0;
+
   for (const auto& [_, strategy] : merge_groups) {
     if (!strategy.UseCosts()) {
       // Can only evaluate costs for strategies that utilize costs.
@@ -136,21 +144,28 @@ static Status Analysis(hb_face_t* font,
     SegmentationCost cost =
         TRY(segmenter.TotalCost(font, segmentation, *calculator));
 
-    overall_cost += cost.total_cost;
+    if (ift_init_cost == 0.0) {
+      ideal_init_cost = cost.ideal_init_cost;
+      ift_init_cost = cost.ift_init_cost;
+      non_ift_total_cost = cost.non_ift_total_cost;
+    }
 
-    std::cerr << "non_ift_cost_bytes[" << group_index
-              << "] = " << (uint64_t)cost.cost_for_non_segmented << std::endl;
-    std::cerr << "total_cost_bytes[" << group_index
-              << "] = " << (uint64_t)cost.total_cost << std::endl;
+    ift_patch_cost += cost.ift_patch_cost;
+    ideal_patch_cost += cost.ideal_patch_cost;
+
+
+    std::cerr << "ift_cost_bytes[" << group_index
+              << "] = " << (uint64_t)cost.ift_patch_cost << std::endl;
     std::cerr << "ideal_cost_bytes[" << group_index
-              << "] = " << (uint64_t)cost.ideal_cost << std::endl;
+              << "] = " << (uint64_t)cost.ideal_patch_cost << std::endl;
     std::cerr << std::endl;
 
     group_index++;
   }
 
-  std::cerr << "total_cost_across_groups = " << (uint64_t)overall_cost
-            << std::endl;
+  std::cerr << "non_ift_total_cost = " << (uint64_t) non_ift_total_cost << std::endl;
+  std::cerr << "ift_total_cost = " << (uint64_t) (ift_init_cost + ift_patch_cost) << std::endl;
+  std::cerr << "ideal_total_cost = " << (uint64_t) (ideal_init_cost + ideal_patch_cost) << std::endl;
 
   return absl::OkStatus();
 }
