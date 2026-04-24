@@ -21,6 +21,7 @@ using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
+using ift::freq::UnicodeFrequenciesBuilder;
 
 class SegmenterConfigUtilTest : public ::testing::Test {
  protected:
@@ -36,10 +37,10 @@ void AddSegment(SegmenterConfig& config, uint32_t id, CodepointSet codepoints) {
 MergeStrategy ExpectedCostStrategy(
     unsigned net_overhead,
     std::optional<int> init_font_threshold = std::nullopt) {
-  UnicodeFrequencies freq;
-  freq.Add(1, 1, 1);
+  UnicodeFrequenciesBuilder freq_builder;
+  freq_builder.Add(1, 1, 1);
 
-  MergeStrategy s = *MergeStrategy::CostBased(std::move(freq), net_overhead, 1);
+  MergeStrategy s = *MergeStrategy::CostBased(freq_builder.Build(), net_overhead, 1);
   s.SetOptimizationCutoffFraction(0.001);
   s.SetInitFontMergeThreshold(init_font_threshold);
 

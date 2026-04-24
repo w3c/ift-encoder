@@ -29,6 +29,7 @@ using ift::common::FontData;
 using ift::common::hb_blob_unique_ptr;
 using ift::common::make_hb_blob;
 using ift::freq::UnicodeFrequencies;
+using ift::freq::UnicodeFrequenciesBuilder;
 using ift_encoder_data::CodepointCount;
 using ift_encoder_data::DatasetMetadata;
 
@@ -178,7 +179,7 @@ StatusOr<std::vector<std::string>> ExpandShardedPath(const char* path) {
 }
 
 static Status LoadFrequenciesFromRiegeliIndividual(
-    const char* path, UnicodeFrequencies& frequencies) {
+    const char* path, UnicodeFrequenciesBuilder& frequencies) {
   riegeli::RecordReader reader{riegeli::FdReader(path)};
   if (!reader.ok()) {
     return absl::InvalidArgumentError(
@@ -204,11 +205,11 @@ static Status LoadFrequenciesFromRiegeliIndividual(
 
 StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
   auto paths = TRY(ExpandShardedPath(path));
-  UnicodeFrequencies frequencies;
+  UnicodeFrequenciesBuilder builder;
   for (const auto& path : paths) {
-    TRYV(LoadFrequenciesFromRiegeliIndividual(path.c_str(), frequencies));
+    TRYV(LoadFrequenciesFromRiegeliIndividual(path.c_str(), builder));
   }
-  return frequencies;
+  return builder.Build();
 }
 
 StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(const char* name) {

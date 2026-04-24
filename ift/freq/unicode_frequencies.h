@@ -6,7 +6,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "hb.h"
 #include "ift/common/int_set.h"
-#include "ift/encoder/subset_definition.h"
 
 namespace ift::freq {
 
@@ -14,6 +13,8 @@ class UnicodeFrequencies {
  public:
   UnicodeFrequencies() = default;
   UnicodeFrequencies(UnicodeFrequencies&& other) = default;
+  UnicodeFrequencies& operator=(UnicodeFrequencies&& other) = default;
+
   UnicodeFrequencies(
       std::initializer_list<std::pair<std::pair<uint32_t, uint32_t>, uint64_t>>
           frequencies);
@@ -51,10 +52,25 @@ class UnicodeFrequencies {
   ift::common::CodepointSet CoveredCodepoints() const;
 
  private:
-  absl::flat_hash_map<uint64_t, uint64_t> frequencies_;
+  friend class UnicodeFrequenciesBuilder;
   absl::flat_hash_map<uint64_t, double> probabilities_;
   uint64_t max_count_ = 0;
-  double unknown_probability = 1.0;
+  double unknown_probability_ = 1.0;
+};
+
+class UnicodeFrequenciesBuilder {
+ public:
+  UnicodeFrequenciesBuilder() = default;
+
+  // Add frequency data for the codepoint pair (cp1, cp2).
+  // When cp1 == cp2 this supplies frequency for a single codepoint.
+  void Add(uint32_t cp1, uint32_t cp2, uint64_t count);
+
+  UnicodeFrequencies Build();
+
+ private:
+  absl::flat_hash_map<uint64_t, uint64_t> frequencies_;
+  uint64_t max_count_ = 0;
 };
 
 }  // namespace ift::freq
