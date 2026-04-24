@@ -657,7 +657,7 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   //                     may want to use the IFT compiler to produce the
   //                     complete encoding then compute table keyed costs from
   //                     that (in conjunction) with probability calculations.
-  double total_cost = init_font_size;
+  double total_cost = 0;
 
   // Use highest quality so we get the true cost.
   PatchSizeCacheImpl patch_sizer(original_face, 11);
@@ -671,15 +671,21 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   double ideal_cost = 0.0;
   double incremental_size =
       non_ift_font_size / (double)non_ift.codepoints.size();
+  double init_font_ideal_size = incremental_size * segmentation.InitialFontSegment().codepoints.size();
   for (unsigned cp : non_ift.codepoints) {
+    if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
+      continue;
+    }
     double Pcp = probability_calculator.ComputeProbability({cp}).Average();
     ideal_cost += Pcp * incremental_size;
   }
 
   return SegmentationCost{
-      .total_cost = total_cost,
-      .cost_for_non_segmented = non_ift_font_size,
-      .ideal_cost = ideal_cost,
+      .ift_init_cost = init_font_size,
+      .ift_patch_cost = total_cost,
+      .non_ift_total_cost = non_ift_font_size,
+      .ideal_init_cost = init_font_ideal_size,
+      .ideal_patch_cost = ideal_cost,
   };
 }
 

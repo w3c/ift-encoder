@@ -1105,9 +1105,9 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
   SegmentationCost base_cost =
       *segmenter.TotalCost(roboto.get(), segmentation1, calculator);
-  ASSERT_GT(base_cost.total_cost, 1000);
-  ASSERT_EQ(base_cost.total_cost, base_cost.cost_for_non_segmented);
-  ASSERT_LT(base_cost.ideal_cost, base_cost.total_cost);
+  ASSERT_GT(base_cost.ift_init_cost, 1000);
+  ASSERT_EQ(base_cost.ift_init_cost, base_cost.non_ift_total_cost);
+  ASSERT_EQ(base_cost.ift_init_cost, base_cost.ideal_init_cost);
 
   // Add some patches
   GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
@@ -1127,8 +1127,8 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
 
   SegmentationCost with_patches_cost =
       *segmenter.TotalCost(roboto.get(), segmentation2, calculator);
-  ASSERT_GT(with_patches_cost.total_cost, base_cost.total_cost + 400);
-  ASSERT_LT(with_patches_cost.ideal_cost, with_patches_cost.total_cost);
+  ASSERT_GT(with_patches_cost.ift_patch_cost, base_cost.ift_patch_cost);
+  ASSERT_LT(with_patches_cost.ideal_patch_cost, with_patches_cost.ift_patch_cost);
 }
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
