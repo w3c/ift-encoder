@@ -44,7 +44,7 @@ class MergeStrategy {
     MergeStrategy strategy(false, 0, 0, patch_size_min_bytes,
                            patch_size_max_bytes);
     strategy.probability_calculator_ =
-        std::make_unique<ift::freq::NoopProbabilityCalculator>();
+        std::make_shared<ift::freq::NoopProbabilityCalculator>();
     return strategy;
   }
 
@@ -69,7 +69,7 @@ class MergeStrategy {
     MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
                            UINT32_MAX);
     strategy.probability_calculator_ =
-        std::make_unique<ift::freq::UnigramProbabilityCalculator>(
+        std::make_shared<ift::freq::UnigramProbabilityCalculator>(
             std::move(frequency_data));
     return strategy;
   }
@@ -96,7 +96,7 @@ class MergeStrategy {
     MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
                            UINT32_MAX);
     strategy.probability_calculator_ =
-        std::make_unique<ift::freq::BigramProbabilityCalculator>(
+        std::make_shared<ift::freq::BigramProbabilityCalculator>(
             std::move(frequency_data));
     return strategy;
   }

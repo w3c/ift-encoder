@@ -12,12 +12,12 @@ using ift::encoder::SubsetDefinition;
 namespace ift::freq {
 
 TEST(UnigramProbabilityCalculatorTest, ComputeProbability) {
-  UnicodeFrequencies frequencies;
-  frequencies.Add(1, 1, 10);
-  frequencies.Add(2, 2, 20);
-  frequencies.Add(3, 3, 5);
+  UnicodeFrequenciesBuilder builder;
+  builder.Add(1, 1, 10);
+  builder.Add(2, 2, 20);
+  builder.Add(3, 3, 5);
 
-  UnigramProbabilityCalculator calculator(std::move(frequencies));
+  UnigramProbabilityCalculator calculator(builder.Build());
 
   SubsetDefinition def1;
   def1.codepoints = {1, 2};
@@ -42,12 +42,12 @@ TEST(UnigramProbabilityCalculatorTest, ComputeProbability) {
 }
 
 TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
-  UnicodeFrequencies frequencies;
-  frequencies.Add(1, 1, 10);
-  frequencies.Add(2, 2, 20);
-  frequencies.Add(3, 3, 5);
+  UnicodeFrequenciesBuilder builder;
+  builder.Add(1, 1, 10);
+  builder.Add(2, 2, 20);
+  builder.Add(3, 3, 5);
 
-  UnigramProbabilityCalculator calculator(std::move(frequencies));
+  UnigramProbabilityCalculator calculator(builder.Build());
 
   Segment s1{{1}, calculator.ComputeProbability({1})};
   Segment s3{{3}, calculator.ComputeProbability({3})};
@@ -67,10 +67,10 @@ TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
   Segment s2{{'b'}, ProbabilityBound{0.2, 0.2}};
   Segment s3{{'c'}, ProbabilityBound{0.7, 0.7}};
 
-  UnicodeFrequencies frequencies;
-  frequencies.Add(1, 1, 10);
+  UnicodeFrequenciesBuilder builder;
+  builder.Add(1, 1, 10);
 
-  UnigramProbabilityCalculator calculator(std::move(frequencies));
+  UnigramProbabilityCalculator calculator(builder.Build());
 
   std::vector<ProbabilityBound> bounds{s2.ProbabilityBound()};
   ProbabilityBound bound = calculator.ComputeConjunctiveProbability(bounds);

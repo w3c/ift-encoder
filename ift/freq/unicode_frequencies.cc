@@ -9,14 +9,6 @@ using ift::common::CodepointSet;
 
 namespace ift::freq {
 
-UnicodeFrequencies::UnicodeFrequencies(
-    std::initializer_list<std::pair<std::pair<uint32_t, uint32_t>, uint64_t>>
-        frequencies) {
-  for (const auto& pair : frequencies) {
-    Add(pair.first.first, pair.first.second, pair.second);
-  }
-}
-
 static uint64_t ToKey(uint32_t cp1, uint32_t cp2) {
   if (cp1 < cp2) {
     return (((uint64_t)cp1) << 32) | ((uint64_t)cp2);
@@ -25,19 +17,35 @@ static uint64_t ToKey(uint32_t cp1, uint32_t cp2) {
   }
 }
 
-void UnicodeFrequencies::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
+void UnicodeFrequenciesBuilder::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
   uint64_t key = ToKey(cp1, cp2);
   uint64_t& freq = frequencies_[key];
   freq += count;
   if (freq > max_count_) {
     max_count_ = freq;
-    unknown_probability = 1.0 / (double)max_count_;
-    for (auto it = frequencies_.begin(); it != frequencies_.end(); it++) {
-      probabilities_[it->first] = (double)it->second / (double)max_count_;
-    }
-  } else {
-    probabilities_[key] = (double)freq / (double)max_count_;
   }
+}
+
+UnicodeFrequencies UnicodeFrequenciesBuilder::Build() {
+  UnicodeFrequencies result;
+  result.max_count_ = max_count_;
+  if (max_count_ > 0) {
+    result.unknown_probability_ = 1.0 / (double)max_count_;
+    for (const auto& [key, count] : frequencies_) {
+      result.probabilities_[key] = (double)count / (double)max_count_;
+    }
+  }
+  return result;
+}
+
+UnicodeFrequencies::UnicodeFrequencies(
+    std::initializer_list<std::pair<std::pair<uint32_t, uint32_t>, uint64_t>>
+        frequencies) {
+  UnicodeFrequenciesBuilder builder;
+  for (const auto& pair : frequencies) {
+    builder.Add(pair.first.first, pair.first.second, pair.second);
+  }
+  *this = std::move(builder.Build());
 }
 
 double UnicodeFrequencies::ProbabilityFor(uint32_t cp) const {
@@ -48,7 +56,7 @@ double UnicodeFrequencies::ProbabilityFor(uint32_t cp) const {
   if (it != probabilities_.end()) {
     return it->second;
   }
-  return unknown_probability;
+  return unknown_probability_;
 }
 
 double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2) const {
@@ -70,7 +78,7 @@ double UnicodeFrequencies::ProbabilityFor(uint32_t cp1, uint32_t cp2, double p1,
     return it->second;
   }
 
-  // Since we don't have data  on P(cp1 n cp2), just assume the probabilities
+  // Since we don't have data on P(cp1 n cp2), just assume the probabilities
   // for P(cp1) and P(cp2) are independent:
   return p1 * p2;
 }

@@ -45,17 +45,17 @@ TEST(UnicodeFrequenciesTest, ProbabilityFor_MissingFrequency) {
 }
 
 TEST(UnicodeFrequenciesTest, AddAccumulates) {
-  UnicodeFrequencies freq;
+  UnicodeFrequenciesBuilder builder;
 
-  freq.Add(2, 3, 20);
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2, 3), 20.0 / 20.0);
+  builder.Add(2, 3, 20);
+  EXPECT_DOUBLE_EQ(builder.Build().ProbabilityFor(2, 3), 20.0 / 20.0);
 
-  freq.Add(1, 2, 10);
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 2), 10.0 / 20.0);
+  builder.Add(1, 2, 10);
+  EXPECT_DOUBLE_EQ(builder.Build().ProbabilityFor(1, 2), 10.0 / 20.0);
 
-  freq.Add(2, 1, 15);
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 2), 1.0);
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2, 3), 20.0 / 25.0);
+  builder.Add(2, 1, 15);
+  EXPECT_DOUBLE_EQ(builder.Build().ProbabilityFor(1, 2), 1.0);
+  EXPECT_DOUBLE_EQ(builder.Build().ProbabilityFor(2, 3), 20.0 / 25.0);
 }
 
 TEST(UnicodeFrequenciesTest, CoveredCodepoints) {
