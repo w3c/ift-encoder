@@ -30,6 +30,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "ift/freq/unigram_probability_calculator.h"
 #include "util/auto_config_flags.h"
 
 using ift::config::CLOSURE_ONLY;
@@ -96,6 +97,8 @@ using ift::encoder::Segment;
 using ift::encoder::SegmentationCost;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
+using ift::freq::UnigramProbabilityCalculator;
+using ift::freq::BigramProbabilityCalculator;
 
 static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
   if (absl::GetFlag(FLAGS_config) == "auto") {
@@ -123,23 +126,35 @@ StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
 }
 
 static Status Analysis(hb_face_t* font,
-                       const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+                       btree_map<SegmentSet, MergeStrategy>&& merge_groups,
                        const GlyphSegmentation& segmentation) {
 
+  std::vector<BigramProbabilityCalculator> calculator_storage;
+  calculator_storage.reserve(merge_groups.size());
 
   std::vector<const ProbabilityCalculator*> strategy_probability_calculators;
   std::vector<unsigned> strategy_group_index;
 
   unsigned i = 0;
-  for (const auto& [_, strategy] : merge_groups) {
+  for (auto& [_, strategy] : merge_groups) {
     i++;
     if (!strategy.UseCosts()) {
       // Can only evaluate costs for strategies that utilize costs.
       continue;
     }
 
+    // Depending on the configuration the encoding may have used unigram probability
+    // calculations. For the purpose of analysis we want to be consistent and so
+    // unigram probability calculator should be upgraded to a bigram
+    if (UnigramProbabilityCalculator* unigram =
+      dynamic_cast<UnigramProbabilityCalculator*>(strategy.ProbabilityCalculator())) {
+      calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
+      strategy_probability_calculators.push_back(&calculator_storage.back());
+    } else {
+      strategy_probability_calculators.push_back(strategy.ProbabilityCalculator());
+    }
+
     strategy_group_index.push_back(i - 1);
-    strategy_probability_calculators.push_back(strategy.ProbabilityCalculator());
   }
 
   ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
@@ -150,7 +165,6 @@ static Status Analysis(hb_face_t* font,
   double ideal_init_cost = 0.0;
   double ift_patch_cost = 0.0;
   double ideal_patch_cost = 0.0;
-
 
   i = 0;
   for (const auto& cost : costs) {
@@ -255,7 +269,7 @@ static Status Main(const std::vector<char*> args) {
   }
 
   std::cerr << ">> Analysis" << std::endl;
-  return Analysis(font.get(), result.merge_groups, segmentation);
+  return Analysis(font.get(), std::move(result.merge_groups), segmentation);
 }
 
 int main(int argc, char** argv) {

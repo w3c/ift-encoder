@@ -1,6 +1,7 @@
 #ifndef IFT_FREQ_UNIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_UNIGRAM_PROBABILITY_CALCULATOR_H_
 
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 
@@ -22,6 +23,10 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
 
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const override;
+
+  BigramProbabilityCalculator ToBigramCalculator() && {
+    return BigramProbabilityCalculator(std::move(frequencies_));
+  }
 
  private:
   UnicodeFrequencies frequencies_;
