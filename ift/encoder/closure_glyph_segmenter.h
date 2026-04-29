@@ -13,6 +13,7 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
+#include "ift/encoder/patch_size_cache.h"
 
 namespace ift::encoder {
 
@@ -73,9 +74,9 @@ class ClosureGlyphSegmenter {
    * Computes the total cost (expected number of bytes transferred) for a given
    * segmentation with respect to the provided frequency data.
    */
-  absl::StatusOr<SegmentationCost> TotalCost(
+  absl::StatusOr<std::vector<SegmentationCost>> TotalCosts(
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
-      const freq::ProbabilityCalculator& probability_calculator) const;
+      absl::Span<const freq::ProbabilityCalculator* const> probability_calculators) const;
 
   /*
    * Computes the total cost of the fallback patch (expected number of bytes

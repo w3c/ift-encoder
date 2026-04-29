@@ -1103,11 +1103,11 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
-  SegmentationCost base_cost =
-      *segmenter.TotalCost(roboto.get(), segmentation1, calculator);
-  ASSERT_GT(base_cost.ift_init_cost, 1000);
-  ASSERT_EQ(base_cost.ift_init_cost, base_cost.non_ift_total_cost);
-  ASSERT_EQ(base_cost.ift_init_cost, base_cost.ideal_init_cost);
+  std::vector<SegmentationCost> base_cost =
+      *segmenter.TotalCosts(roboto.get(), segmentation1, {&calculator});
+  ASSERT_GT(base_cost[0].ift_init_cost, 1000);
+  ASSERT_EQ(base_cost[0].ift_init_cost, base_cost[0].non_ift_total_cost);
+  ASSERT_EQ(base_cost[0].ift_init_cost, base_cost[0].ideal_init_cost);
 
   // Add some patches
   GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
@@ -1125,10 +1125,10 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   };
   segmentation2.CopySegments(segments);
 
-  SegmentationCost with_patches_cost =
-      *segmenter.TotalCost(roboto.get(), segmentation2, calculator);
-  ASSERT_GT(with_patches_cost.ift_patch_cost, base_cost.ift_patch_cost);
-  ASSERT_LT(with_patches_cost.ideal_patch_cost, with_patches_cost.ift_patch_cost);
+  std::vector<SegmentationCost> with_patches_cost =
+      *segmenter.TotalCosts(roboto.get(), segmentation2, {&calculator});
+  ASSERT_GT(with_patches_cost[0].ift_patch_cost, base_cost[0].ift_patch_cost);
+  ASSERT_LT(with_patches_cost[0].ideal_patch_cost, with_patches_cost[0].ift_patch_cost);
 }
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {

@@ -41,6 +41,7 @@ using ift::config::SegmentationPlan;
 using ift::config::SegmentsProto;
 using ift::config::UnmappedGlyphHandling;
 
+using absl::Span;
 using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -583,7 +584,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     merger_name = *mergers[merger_index].Strategy().Name();
   }
 
-  segment_index_t last_merged_segment_index = 0;
   VLOG(0) << "Starting merge selection for merge group " << merger_name
           << std::endl
           << "  " << mergers[merger_index].NumInscopeSegments()
@@ -632,19 +632,14 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   return absl::InternalError("unreachable");
 }
 
-StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
+StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     hb_face_t* original_face, const GlyphSegmentation& segmentation,
-    const ProbabilityCalculator& probability_calculator) const {
+    Span<const ProbabilityCalculator* const> probability_calculators) const {
   SubsetDefinition non_ift;
   non_ift.Union(segmentation.InitialFontSegment());
 
-  std::vector<Segment> segments;
   for (const auto& def : segmentation.Segments()) {
     non_ift.Union(def);
-
-    auto P = probability_calculator.ComputeProbability(def);
-    Segment s(def, P);
-    segments.push_back(std::move(s));
   }
 
   double init_font_size = TRY(CandidateMerge::Woff2SizeOf(
@@ -652,41 +647,54 @@ StatusOr<SegmentationCost> ClosureGlyphSegmenter::TotalCost(
   double non_ift_font_size =
       TRY(CandidateMerge::Woff2SizeOf(original_face, non_ift, 11));
 
-  // TODO(garretrieger): for the total cost we need to also add in the table
-  // keyed patch costs
-  //                     may want to use the IFT compiler to produce the
-  //                     complete encoding then compute table keyed costs from
-  //                     that (in conjunction) with probability calculations.
-  double total_cost = 0;
-
   // Use highest quality so we get the true cost.
   PatchSizeCacheImpl patch_sizer(original_face, 11);
-  for (const auto& c : segmentation.Conditions()) {
-    double Pc = TRY(c.Probability(segments, probability_calculator));
-    const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
-    double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
-    total_cost += Pc * (patch_size + 75);
-  }
 
-  double ideal_cost = 0.0;
-  double incremental_size =
-      non_ift_font_size / (double)non_ift.codepoints.size();
-  double init_font_ideal_size = incremental_size * segmentation.InitialFontSegment().codepoints.size();
-  for (unsigned cp : non_ift.codepoints) {
-    if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
-      continue;
+  std::vector<SegmentationCost> out;
+  for (const ProbabilityCalculator* probability_calculator : probability_calculators) {
+
+    std::vector<Segment> segments;
+    for (const auto& def : segmentation.Segments()) {
+      auto P = probability_calculator->ComputeProbability(def);
+      Segment s(def, P);
+      segments.push_back(std::move(s));
     }
-    double Pcp = probability_calculator.ComputeProbability({cp}).Average();
-    ideal_cost += Pcp * incremental_size;
-  }
 
-  return SegmentationCost{
+    // TODO(garretrieger): for the total cost we need to also add in the table
+    // keyed patch costs
+    //                     may want to use the IFT compiler to produce the
+    //                     complete encoding then compute table keyed costs from
+    //                     that (in conjunction) with probability calculations.
+    double total_cost = 0;
+
+    for (const auto& c : segmentation.Conditions()) {
+      double Pc = TRY(c.Probability(segments, *probability_calculator));
+      const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
+      double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
+      total_cost += Pc * (patch_size + 75);
+    }
+
+    double ideal_cost = 0.0;
+    double incremental_size =
+        non_ift_font_size / (double)non_ift.codepoints.size();
+    double init_font_ideal_size = incremental_size * segmentation.InitialFontSegment().codepoints.size();
+    for (unsigned cp : non_ift.codepoints) {
+      if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
+        continue;
+      }
+      double Pcp = probability_calculator->ComputeProbability({cp}).Average();
+      ideal_cost += Pcp * incremental_size;
+    }
+
+    out.push_back(SegmentationCost{
       .ift_init_cost = init_font_size,
       .ift_patch_cost = total_cost,
       .non_ift_total_cost = non_ift_font_size,
       .ideal_init_cost = init_font_ideal_size,
       .ideal_patch_cost = ideal_cost,
-  };
+    });
+  }
+  return out;
 }
 
 Status ClosureGlyphSegmenter::FallbackCost(
