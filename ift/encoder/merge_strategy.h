@@ -128,9 +128,16 @@ class MergeStrategy {
   uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
+
+  freq::ProbabilityCalculator* ProbabilityCalculator() {
+    return probability_calculator_.get();
+  }
+
   const freq::ProbabilityCalculator* ProbabilityCalculator() const {
     return probability_calculator_.get();
   }
+
+
 
   // Configures the threshold for when to stop optimizing segments.
   //
