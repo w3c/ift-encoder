@@ -28,6 +28,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "util/auto_config_flags.h"
 
@@ -35,6 +36,7 @@ using ift::config::CLOSURE_ONLY;
 using ift::config::PATCH;
 using ift::config::SegmentationPlan;
 using ift::config::SegmenterConfig;
+using ift::freq::ProbabilityCalculator;
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -124,31 +126,41 @@ static Status Analysis(hb_face_t* font,
                        const btree_map<SegmentSet, MergeStrategy>& merge_groups,
                        const GlyphSegmentation& segmentation) {
 
-  unsigned group_index = 0;
 
-  double ift_init_cost = 0.0;
-  double non_ift_total_cost = 0.0;
-  double ideal_init_cost = 0.0;
+  std::vector<const ProbabilityCalculator*> strategy_probability_calculators;
+  std::vector<unsigned> strategy_group_index;
 
-  double ift_patch_cost = 0.0;
-  double ideal_patch_cost = 0.0;
-
+  unsigned i = 0;
   for (const auto& [_, strategy] : merge_groups) {
+    i++;
     if (!strategy.UseCosts()) {
       // Can only evaluate costs for strategies that utilize costs.
       continue;
     }
 
-    auto calculator = strategy.ProbabilityCalculator();
-    ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
-    SegmentationCost cost =
-        TRY(segmenter.TotalCost(font, segmentation, *calculator));
+    strategy_group_index.push_back(i - 1);
+    strategy_probability_calculators.push_back(strategy.ProbabilityCalculator());
+  }
 
+  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
+  auto costs = TRY(segmenter.TotalCosts(font, segmentation, strategy_probability_calculators));
+
+  double ift_init_cost = 0.0;
+  double non_ift_total_cost = 0.0;
+  double ideal_init_cost = 0.0;
+  double ift_patch_cost = 0.0;
+  double ideal_patch_cost = 0.0;
+
+
+  i = 0;
+  for (const auto& cost : costs) {
     if (ift_init_cost == 0.0) {
       ideal_init_cost = cost.ideal_init_cost;
       ift_init_cost = cost.ift_init_cost;
       non_ift_total_cost = cost.non_ift_total_cost;
     }
+
+    unsigned group_index = strategy_group_index[i++];
 
     ift_patch_cost += cost.ift_patch_cost;
     ideal_patch_cost += cost.ideal_patch_cost;

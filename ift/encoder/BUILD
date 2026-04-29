@@ -38,6 +38,8 @@ cc_library(
     name = "glyph_partition",
     srcs = [
         "glyph_partition.cc",
+    ],
+    hdrs = [
         "glyph_partition.h",
     ],
     deps = [

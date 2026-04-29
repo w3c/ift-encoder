@@ -2,7 +2,6 @@
 #define IFT_ENCODER_PATCH_SIZE_CACHE_H_
 
 #include <cstdint>
-#include <memory>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
