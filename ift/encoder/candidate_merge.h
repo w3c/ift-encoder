@@ -140,11 +140,14 @@ struct CandidateMerge {
   // Computes the predicted change to the total cost if merged_segments
   // are joined together into a new segment, merged_segment.
   //
-  // If new_patch_size is not provided then this computes a "best case" delta
-  // where the new patch size is choosen to produce the best achievable delta.
+  // exclusive_gids is an optional hint that specifies which glyphs
+  // will end up in the exclusive patch after merged_segments are merged together.
+  //
+  // If best_case is true then this will compute an estimated best possible cost
+  // delta from the merge (computationally cheap) instead of the real delta.
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      const Segment& merged_segment, std::optional<uint32_t> new_patch_size);
+      const Segment& merged_segment, std::optional<common::GlyphSet> exclusive_gids, bool best_case);
 
   static absl::Status ComputeInitFontGlyphDelta(
       Merger& merger, const ift::common::GlyphSet& moved_glyphs,

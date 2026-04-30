@@ -194,8 +194,11 @@ static void MergeSegments(const Merger& merger, const SegmentSet& segments,
   base.SetProbability(bound);
 }
 
-static StatusOr<uint32_t> ConditionToPatchSize(
+static StatusOr<const GlyphSet*> ConditionToGlyphs(
     const Merger& merger, const ActivationCondition& condition) {
+
+  // TODO XXXXX this is hot in a profile (because of btree), can we use flat_hash? or improve speed?
+  //             ie. keep a second condition_and_glyphs mapping in hash set?
   const auto& conditions_and_glyphs =
       merger.Context().glyph_groupings.ConditionsAndGlyphs();
   auto it = conditions_and_glyphs.find(condition);
@@ -204,13 +207,13 @@ static StatusOr<uint32_t> ConditionToPatchSize(
         "Condition which should be present wasn't found.");
   }
 
-  const GlyphSet& glyphs = it->second;
-  return TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs));
+  return &it->second;
 }
 
-static Status AddConditionAndPatchSize(
+// TODO XXXXX this is hot in a profile (because of btree), can we use flat_hash? or improve speed?
+static Status AddConditionAndGlyphs(
     const Merger& merger, const ActivationCondition& condition,
-    btree_map<ActivationCondition, uint32_t>& conditions) {
+    btree_map<ActivationCondition, const GlyphSet*>& conditions) {
   auto existing = conditions.lower_bound(condition);
   if (existing != conditions.end() && existing->first == condition) {
     // already exists.
@@ -218,14 +221,13 @@ static Status AddConditionAndPatchSize(
   }
 
   conditions.emplace_hint(existing, condition,
-                          TRY(ConditionToPatchSize(merger, condition)));
+                          TRY(ConditionToGlyphs(merger, condition)));
   return absl::OkStatus();
 }
 
 static Status FindModifiedConditions(
     const Merger& merger, const SegmentSet& merged_segments,
-    btree_map<ActivationCondition, uint32_t>& removed_conditions,
-    btree_map<ActivationCondition, uint32_t>& modified_conditions) {
+    btree_map<ActivationCondition, const GlyphSet*>& modified_conditions) {
   for (auto s : merged_segments) {
     for (const auto& c :
          merger.Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
@@ -234,15 +236,8 @@ static Status FindModifiedConditions(
         continue;
       }
 
-      auto condition_segments = c.TriggeringSegments();
-      if (condition_segments.is_subset_of(merged_segments)) {
-        TRYV(AddConditionAndPatchSize(merger, c, removed_conditions));
-        continue;
-      }
-
-      condition_segments.intersect(merged_segments);
-      if (!condition_segments.empty()) {
-        TRYV(AddConditionAndPatchSize(merger, c, modified_conditions));
+      if (c.TriggeringSegments().intersects(merged_segments)) {
+        TRYV(AddConditionAndGlyphs(merger, c, modified_conditions));
       }
     }
   }
@@ -495,93 +490,73 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
   return cost_delta;
 }
 
-static std::optional<double> ComputeMergedSizeReduction(
-    uint32_t new_patch_size,
-    const btree_map<ActivationCondition, uint32_t>& removed_conditions) {
-  int32_t total_removed_size = 0;
-  int32_t largest_size = 0;
-  for (const auto& [_, removed_size] : removed_conditions) {
-    total_removed_size += removed_size;
-    largest_size = std::max((int32_t)removed_size, largest_size);
-  }
-
-  int32_t extra_raw = total_removed_size - largest_size;
-  int32_t extra_actual = ((int32_t)new_patch_size) - largest_size;
-  if (extra_raw == 0) {
-    return std::nullopt;
-  }
-  return (double)extra_actual / (double)extra_raw;
-}
-
 StatusOr<double> CandidateMerge::ComputeCostDelta(
-    Merger& merger, const SegmentSet& merged_segments,
-    const Segment& merged_segment,
-    std::optional<uint32_t> maybe_new_patch_size) {
-  // TODO(garretrieger): the accuracy of this can be improved by factoring
-  // in the new exclusive glyph set for the merged segment. These glyphs
-  // can be subtracted from any existing patches that contain them.
-  // We'll also need to check against fallback glyphs (there's a possibility
-  // some of them will be moved into the new merged patch)
-  const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
+      Merger& merger,
+      const SegmentSet& merged_segments,
+      const Segment& merged_segment,
+      std::optional<GlyphSet> exclusive_gids,
+      bool best_case
+    ) {
 
-  // These are conditions which will be removed by appying the merge.
-  // A condition is removed if it is a subset of the merged_segments.
+  if (merged_segments.size() <= 1) {
+    return 0;
+  }
+
+  // These are conditions which will be modified by applying the merge. These are
+  // conditions that intersect merged_segments.
   //
-  // Map value is the size of the patch associated with the condition.
-  btree_map<ActivationCondition, uint32_t> removed_conditions;
+  // Map value is the glyphs associated with condition.
+  btree_map<ActivationCondition, const GlyphSet*> modified_conditions;
 
-  // These are conditions which will be modified, but not removed
-  // by applying the merge. These are conditions that intersect
-  // but are not a subset of merged_segments.
+  TRYV(FindModifiedConditions(merger, merged_segments, modified_conditions));
+
+  // new_conditions is modified conditions updated to apply the segment merging.
+  // May have less conditions than modified as multiple conditions may merge together
+  // as a result of updating their segments.
   //
-  // Map value is the size of the patch associated with the condition.
-  btree_map<ActivationCondition, uint32_t> modified_conditions;
+  // Map value is the set of glyphs and probability associated with the new condition.
+  struct Info {
+    GlyphSet glyphs;
+    double probability = 0.0;
+    uint32_t largest_patch_size = 0;
+    uint32_t combined_patch_size = 0;
+  };
+  btree_map<ActivationCondition, Info> new_conditions;
 
-  TRYV(FindModifiedConditions(merger, merged_segments, removed_conditions,
-                              modified_conditions));
+  segment_index_t base = *merged_segments.min();
+  const auto& segments = merger.Context().SegmentationInfo().Segments();
+  const auto* calculator = merger.Strategy().ProbabilityCalculator();
+  for (const auto& [condition, glyphs] : modified_conditions) {
+    ActivationCondition updated = condition.ReplaceSegments(base, merged_segments);
+    if (updated.IsExclusive()) {
+      // Clear is exclusive flag so that de-dup happens properly
+      updated = ActivationCondition::composite_condition(updated.conditions(), 0);
+    }
+    auto [it, did_insert] = new_conditions.try_emplace(updated);
 
-  uint32_t new_patch_size = 0;
-  if (maybe_new_patch_size.has_value()) {
-    new_patch_size = *maybe_new_patch_size;
-    if (merger.ShouldRecordMergedSizeReductions()) {
-      std::optional<double> reduction =
-          ComputeMergedSizeReduction(new_patch_size, removed_conditions);
-      if (reduction.has_value()) {
-        merger.RecordMergedSizeReduction(*reduction);
-      }
+    auto& info = it->second;
+    if (did_insert) {
+      // Because we haven't actuated the merge yet (segments does not reflect it),
+      // MergedProbability() is needed to correctly compute the new probability.
+      info.probability = TRY(condition.MergedProbability(segments, merged_segments,
+                                       merged_segment, *calculator));
     }
-  } else {
-    // In the best case the merged patch size is equal to that of the largest
-    // removed patch, plus the data of all other removed patches reduced by a
-    // configured fraction.
-    uint32_t total_removed_size = 0;
-    uint32_t largest_size = 0;
-    for (const auto& [_, removed_size] : removed_conditions) {
-      total_removed_size += removed_size;
-      largest_size = std::max(removed_size, largest_size);
+
+    if (!best_case) {
+      info.glyphs.union_set(*glyphs);
     }
-    uint32_t extra = total_removed_size - largest_size;
-    extra = std::max(
-        (uint32_t)(extra * merger.Strategy().BestCaseSizeReductionFraction()),
-        Merger::BEST_CASE_MERGE_SIZE_DELTA);
-    new_patch_size = largest_size + extra;
+
+    uint32_t patch_size = TRY(merger.Context().patch_size_cache->GetPatchSize(*glyphs));
+    info.largest_patch_size = std::max(info.largest_patch_size, patch_size);
+    info.combined_patch_size += patch_size;
   }
 
   double cost_delta = 0.0;
-  VLOG(1) << "cost_delta for merge of " << merged_segments.ToString() << " =";
-  // Merge will introduce a new patch (merged_segment) with size
-  // "new_patch_size", add the associated cost.
-  double p = merged_segment.Probability();
-  double s = new_patch_size + per_request_overhead;
-  cost_delta += p * s;
-  VLOG(1) << "    + (" << p << " * " << s << ") -> " << cost_delta
-          << " [merged patch]";
 
-  // Now we remove all of the cost associated with segments that are either
-  // removed or modified.
-  const auto& segments = merger.Context().SegmentationInfo().Segments();
-  const auto* calculator = merger.Strategy().ProbabilityCalculator();
-  for (const auto& [c, size] : removed_conditions) {
+  // Remove cost associate within any modified conditions patch pairs.
+  const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
+  for (const auto& [c, glyphs] : modified_conditions) {
+    uint32_t size = TRY(merger.Context().patch_size_cache->GetPatchSize(*glyphs));
     double p = TRY(c.Probability(segments, *calculator));
     double s = (size + per_request_overhead);
     double d = p * s;
@@ -589,43 +564,66 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     VLOG(1) << "    - (" << p << " * " << s << ") -> " << d
             << " [removed patch " << c.ToString() << "]";
   }
-  for (const auto& [c, size] : modified_conditions) {
-    double p = TRY(c.Probability(segments, *calculator));
-    double s = size + per_request_overhead;
-    double d = p * s;
-    VLOG(1) << "    - (" << p << " * " << s << " ) -> " << d
-            << " [modified patch " << c.ToString() << "]";
-    cost_delta -= d;
-  }
 
-  // TODO(garretrieger): rework this to account for glyphs added via closure to
-  // the new exclusive patch.
-  //  - A new exclusive patch is introduced with a known set of glyphs.
-  //  - Patches that are effected are either those with merge segments in their
-  //  conditions.
-  //  - Or those containing glyphs that are in the new patch (includes
-  //  fallback), this part would be new.
-  //  - For those that intersect the new exclusive glyphs, we need to either
-  //  remove them or
-  //    compute new size as a result of glyph removal.
-  //  - An index from gid -> activation condition would be useful here.
-  //    Can be done currently by going gid -> (via glyph condition set) segments
-  //    -> (via triggering segments) conditions, but that will currently over
-  //    select conditions.
-
-  // Lastly add back the costs associated with the modified version of each
-  // segment.
-  for (const auto& [c, size] : modified_conditions) {
+  // Add in cost associated within the new conditions patch pairs.
+  bool fallback_changed = false;
+  for (auto& [c, info] : new_conditions) {
     // For modified conditions we assume the associated patch size does not
     // change, only the probability associated with the condition changes.
-    double d = TRY(c.MergedProbability(segments, merged_segments,
-                                       merged_segment, *calculator)) *
-               (size + per_request_overhead);
-    VLOG(1) << "    + " << d << " [modified patch " << c.ToString() << "]";
+    double p = info.probability;
+
+    uint32_t size = 0;
+    if (best_case) {
+      uint32_t extra = info.combined_patch_size - info.largest_patch_size;
+      extra = std::max(
+        (uint32_t)(extra * merger.Strategy().BestCaseSizeReductionFraction()),
+        Merger::BEST_CASE_MERGE_SIZE_DELTA);
+      size = info.largest_patch_size + extra;
+    } else {
+      if (exclusive_gids.has_value()) {
+        // When we do not have complete glyph conditions then exclusive_gids
+        // provides a hint at which glyphs will end up in the exclusive patch
+        // after the merge, incorporate them into the size calculation here.
+        // Remove them from all other patches and place them into the exclusive
+        // patch.
+        info.glyphs.subtract(*exclusive_gids);
+        if (c.IsUnitary()) {
+          info.glyphs.union_set(*exclusive_gids);
+          if (merger.Context().glyph_groupings.UnmappedGlyphs().intersects(*exclusive_gids)) {
+            fallback_changed = true;
+          }
+        }
+      }
+      size = TRY(merger.Context().patch_size_cache->GetPatchSize(info.glyphs));
+      if (merger.ShouldRecordMergedSizeReductions()) {
+        int32_t extra_raw = info.combined_patch_size - info.largest_patch_size;
+        int32_t extra_actual = ((int32_t)size) - info.largest_patch_size;
+        if (extra_raw != 0.0)  {
+          merger.RecordMergedSizeReduction((double)extra_actual / (double)extra_raw);
+        }
+      }
+    }
+
+    double s = (size + per_request_overhead);
+    double d = p * s;
+    VLOG(1) << "    + (" << p << " * " << s << ") -> " << d
+            << " [new patch " << c.ToString() << "]";
     cost_delta += d;
   }
-  VLOG(1) << "    = " << cost_delta;
 
+  if (fallback_changed) {
+    GlyphSet new_fallback = merger.Context().glyph_groupings.UnmappedGlyphs();
+    new_fallback.subtract(*exclusive_gids);
+
+    // Fallback is always needed with 100% probability so delta is just the size difference (new - old)
+    double diff = ((double) TRY(merger.Context().patch_size_cache->GetPatchSize(new_fallback)))
+      - ((double) TRY(merger.Context().patch_size_cache->GetPatchSize(merger.Context().glyph_groupings.UnmappedGlyphs())));
+    VLOG(1) << "    + " << diff
+            << " [fallback delta]";
+    cost_delta += diff;
+  }
+
+  VLOG(1) << "    = " << cost_delta;
   return cost_delta;
 }
 
@@ -639,6 +637,8 @@ StatusOr<double> CandidateMerge::ComputePatchMergeCostDelta(
   // 3. Add a new combined patch that contains all of the glyphs of 1 + 2.
   //    New condition is {base} union {merged}, with corresponding new
   //    probability.
+
+  // TODO XXXXX review this implementation wrt to dep graph glyph conditions.
 
   double network_overhead = merger.Strategy().NetworkOverheadCost();
   double base_patch_size =
@@ -694,6 +694,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     Merger& merger, segment_index_t base_segment_index,
     const SegmentSet& segments_to_merge_,
     const std::optional<CandidateMerge>& best_merge_candidate) {
+
   if (!merger.Strategy().UseCosts() &&
       WouldMixFeaturesAndCodepoints(merger.Context().SegmentationInfo(),
                                     base_segment_index, segments_to_merge_)) {
@@ -732,7 +733,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     // If that doesn't beat the current smallest there's no need to
     // do more indepth analysis.
     double best_case_delta = TRY(ComputeCostDelta(
-        merger, segments_to_merge_with_base, merged_segment, std::nullopt));
+        merger, segments_to_merge_with_base, merged_segment, std::nullopt, true));
     if (best_case_delta >= best_merge_candidate->CostDelta()) {
       // We can't possibly beat the current lowest delta.
       return std::nullopt;
@@ -753,25 +754,28 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   }
 
   uint32_t new_patch_size = 0;
-  if (!segments_to_merge_are_inert) {
-    // TODO(garretrieger): XXXX utilize and/or_gids to improve the cost
-    // computation.
-    GlyphSet and_gids, or_gids, exclusive_gids;
-    TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
-                                         or_gids, exclusive_gids));
+  std::optional<GlyphSet> exclusive_gids;
+  if (!merger.Strategy().UseCosts() || merger.Context().GetConditionAnalysisMode() != config::DEP_GRAPH_ONLY) {
+    if (!segments_to_merge_are_inert) {
+      // When we're not in pure depgraph mode then glyph conditions are incomplete.
+      // To help improve accuracy run a closure to find the new set of exclusive
+      // glyphs associated with the merge and incorporate that into the cost calculations.
+      GlyphSet and_gids, or_gids;
+      exclusive_gids = GlyphSet {};
+      TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
+                                           or_gids, *exclusive_gids));
+    } else {
+      // When the segments being added to base are all inert then we can assume
+      // the merged patch is just a combination of the glyphs from the base and
+      // the input segments. Since the segments being added are intert we know
+      // that they won't interact with base and will just bring along their own
+      // glyphs.
+      exclusive_gids = gid_conditions_to_update;
+      exclusive_gids->union_set(
+          merger.Context().glyph_groupings.ExclusiveGlyphs(base_segment_index));
+    }
     new_patch_size =
-        TRY(merger.Context().patch_size_cache->GetPatchSize(exclusive_gids));
-  } else {
-    // When the segments being added to base are all inert then we can assume
-    // the merged patch is just a combination of the glyphs from the base and
-    // the input segments. Since the segments being added are intert we know
-    // that they won't interact with base and will just bring along their own
-    // glyphs.
-    GlyphSet merged_glyphs = gid_conditions_to_update;
-    merged_glyphs.union_set(
-        merger.Context().glyph_groupings.ExclusiveGlyphs(base_segment_index));
-    new_patch_size =
-        TRY(merger.Context().patch_size_cache->GetPatchSize(merged_glyphs));
+          TRY(merger.Context().patch_size_cache->GetPatchSize(*exclusive_gids));
   }
 
   if (!merger.Strategy().UseCosts() &&
@@ -783,7 +787,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
     cost_delta = TRY(ComputeCostDelta(merger, segments_to_merge_with_base,
-                                      merged_segment, new_patch_size));
+                                      merged_segment, exclusive_gids, false));
   }
 
   if (best_merge_candidate.has_value() &&
