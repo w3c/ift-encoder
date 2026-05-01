@@ -92,9 +92,9 @@ class GlyphGroupings {
   }
 
   // Returns a list of conditions which include segment.
-  const absl::btree_set<ActivationCondition>& TriggeringSegmentToConditions(
+  const absl::flat_hash_set<ActivationCondition>& TriggeringSegmentToConditions(
       segment_index_t segment) const {
-    static absl::btree_set<ActivationCondition> empty;
+    static absl::flat_hash_set<ActivationCondition> empty;
     auto it =
         conditions_and_glyphs_.TriggeringSegmentToConditions().find(segment);
     if (it != conditions_and_glyphs_.TriggeringSegmentToConditions().end()) {

@@ -2,7 +2,6 @@
 #define IFT_ENCODER_MERGER_H_
 
 #include <cstdint>
-#include <sstream>
 
 #include "ift/common/int_set.h"
 #include "ift/encoder/candidate_merge.h"

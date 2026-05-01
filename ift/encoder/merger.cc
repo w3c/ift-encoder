@@ -644,7 +644,12 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryMergingACompositeCondition(
   ActivationCondition base_condition =
       ActivationCondition::exclusive_segment(base_segment_index, UINT32_MAX);
 
-  for (ActivationCondition next_condition : candidate_conditions) {
+  std::vector<ActivationCondition> sorted_conditions;
+  sorted_conditions.reserve(candidate_conditions.size());
+  sorted_conditions.insert(sorted_conditions.end(), candidate_conditions.begin(), candidate_conditions.end());
+  std::sort(sorted_conditions.begin(), sorted_conditions.end());
+
+  for (ActivationCondition next_condition : sorted_conditions) {
     if (next_condition.IsFallback()) {
       // Merging the fallback will cause all segments to be merged into one,
       // which is undesirable so don't consider the fallback.

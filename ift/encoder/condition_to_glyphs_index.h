@@ -146,7 +146,7 @@ class ConditionToGlyphsIndex {
   }
 
   const absl::flat_hash_map<segment_index_t,
-                            absl::btree_set<ActivationCondition>>&
+                            absl::flat_hash_set<ActivationCondition>>&
   TriggeringSegmentToConditions() const {
     return triggering_segment_to_conditions_;
   }
@@ -164,7 +164,7 @@ class ConditionToGlyphsIndex {
   absl::btree_set<ActivationCondition> ordered_conditions_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_to_condition_;
-  absl::flat_hash_map<segment_index_t, absl::btree_set<ActivationCondition>>
+  absl::flat_hash_map<segment_index_t, absl::flat_hash_set<ActivationCondition>>
       triggering_segment_to_conditions_;
 };
 
