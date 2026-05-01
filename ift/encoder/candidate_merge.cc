@@ -5,7 +5,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/container/btree_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -28,8 +27,8 @@
 
 namespace ift::encoder {
 
-using absl::btree_map;
-using absl::btree_set;
+using absl::flat_hash_set;
+using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using ift::GlyphKeyedDiff;
@@ -197,8 +196,6 @@ static void MergeSegments(const Merger& merger, const SegmentSet& segments,
 static StatusOr<const GlyphSet*> ConditionToGlyphs(
     const Merger& merger, const ActivationCondition& condition) {
 
-  // TODO XXXXX this is hot in a profile (because of btree), can we use flat_hash? or improve speed?
-  //             ie. keep a second condition_and_glyphs mapping in hash set?
   const auto& conditions_and_glyphs =
       merger.Context().glyph_groupings.ConditionsAndGlyphs();
   auto it = conditions_and_glyphs.find(condition);
@@ -206,28 +203,27 @@ static StatusOr<const GlyphSet*> ConditionToGlyphs(
     return absl::InternalError(
         "Condition which should be present wasn't found.");
   }
-
   return &it->second;
 }
 
-// TODO XXXXX this is hot in a profile (because of btree), can we use flat_hash? or improve speed?
 static Status AddConditionAndGlyphs(
     const Merger& merger, const ActivationCondition& condition,
-    btree_map<ActivationCondition, const GlyphSet*>& conditions) {
-  auto existing = conditions.lower_bound(condition);
-  if (existing != conditions.end() && existing->first == condition) {
+    flat_hash_map<ActivationCondition, const GlyphSet*>& conditions) {
+
+  auto existing = conditions.find(condition);
+  if (existing != conditions.end()) {
     // already exists.
     return absl::OkStatus();
   }
 
-  conditions.emplace_hint(existing, condition,
-                          TRY(ConditionToGlyphs(merger, condition)));
+  conditions.emplace(condition,
+                     TRY(ConditionToGlyphs(merger, condition)));
   return absl::OkStatus();
 }
 
 static Status FindModifiedConditions(
     const Merger& merger, const SegmentSet& merged_segments,
-    btree_map<ActivationCondition, const GlyphSet*>& modified_conditions) {
+    flat_hash_map<ActivationCondition, const GlyphSet*>& modified_conditions) {
   for (auto s : merged_segments) {
     for (const auto& c :
          merger.Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
@@ -268,12 +264,12 @@ StatusOr<uint32_t> CandidateMerge::Woff2SizeOf(hb_face_t* original_face,
 }
 
 // Finds the set of patches which intersect gids.
-static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
+static flat_hash_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
     const SegmentationContext& context, const GlyphSet& gids) {
   // To more efficiently target our search we can use the glyph_condition_set to
   // locate conditions that intersect with gids.
   GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
-  btree_set<ActivationCondition> conditions_of_interest;
+  flat_hash_set<ActivationCondition> conditions_of_interest;
   for (glyph_id_t gid : gids) {
     if (fallback_glyphs.contains(gid)) {
       // Fallback glyphs are handled separately at the end since the
@@ -290,7 +286,7 @@ static btree_map<ActivationCondition, GlyphSet> PatchesWithGlyphs(
     conditions_of_interest.insert(*result);
   }
 
-  btree_map<ActivationCondition, GlyphSet> result;
+  flat_hash_map<ActivationCondition, GlyphSet> result;
   for (const auto& condition : conditions_of_interest) {
     result.insert(std::make_pair(
         condition,
@@ -506,7 +502,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   // conditions that intersect merged_segments.
   //
   // Map value is the glyphs associated with condition.
-  btree_map<ActivationCondition, const GlyphSet*> modified_conditions;
+  flat_hash_map<ActivationCondition, const GlyphSet*> modified_conditions;
 
   TRYV(FindModifiedConditions(merger, merged_segments, modified_conditions));
 
@@ -521,7 +517,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     uint32_t largest_patch_size = 0;
     uint32_t combined_patch_size = 0;
   };
-  btree_map<ActivationCondition, Info> new_conditions;
+  flat_hash_map<ActivationCondition, Info> new_conditions;
 
   segment_index_t base = *merged_segments.min();
   const auto& segments = merger.Context().SegmentationInfo().Segments();
