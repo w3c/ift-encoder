@@ -12,6 +12,7 @@
 #include "ift/encoder/entry_graph.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
@@ -30,6 +31,7 @@ using ift::freq::ProbabilityCalculator;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
+using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
 
@@ -312,8 +314,14 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
 StatusOr<double> ActivationCondition::Probability(
     Span<const Segment> segments,
     const ProbabilityCalculator& calculator) const {
+  return TRY(this->ProbabilityBound(segments, calculator)).Average();
+}
+
+StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
+    Span<const Segment> segments,
+    const ProbabilityCalculator& calculator) const {
   if (conditions_.empty()) {
-    return 1.0;
+    return freq::ProbabilityBound(1.0, 1.0);
   }
 
   std::vector<freq::ProbabilityBound> bounds;
@@ -334,59 +342,69 @@ StatusOr<double> ActivationCondition::Probability(
     }
 
     if (!is_conjunctive) {
-      return set_bound.Average();
+      return set_bound;
     }
     bounds.push_back(set_bound);
   }
 
-  return calculator.ComputeConjunctiveProbability(bounds).Average();
+  return calculator.ComputeConjunctiveProbability(bounds);
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
     Span<const Segment> segments, const SegmentSet& merged_segments,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
+  return TRY(MergedProbabilityBound(segments, merged_segments, merged_segment, calculator)).Average();
+}
+
+
+StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
+    Span<const Segment> segments, const SegmentSet& merged_segments,
+    const Segment& merged_segment,
+    const ProbabilityCalculator& calculator) const {
+
   if (conditions_.empty()) {
-    return 1.0;
+    return freq::ProbabilityBound(1.0, 1.0);
   }
 
-  std::vector<freq::ProbabilityBound> bounds;
-  bool is_conjunctive = conditions_.size() > 1;
-  for (const auto& segment_set : conditions_) {
-    freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
+  if (merged_segments.empty()) {
+    // No merged segments, means we can just use the normal calculation.
+    return ProbabilityBound(segments, calculator);
+  }
 
+  segment_index_t base = *merged_segments.min();
+  ActivationCondition merged = ReplaceSegments(base, merged_segments);
+
+  std::vector<freq::ProbabilityBound> bounds;
+  bool is_conjunctive = merged.conditions_.size() > 1;
+  for (const auto& segment_set : merged.conditions_) {
+    freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
     if (segment_set.empty()) {
       return absl::InternalError("Unexpected empty disjunctive group.");
-    }
-
-    std::vector<const Segment*> union_segments;
-    if (segment_set.intersects(merged_segments)) {
-      // replace all segments in 'merged_segments' with 'merged_segment'.
-      union_segments.push_back(&merged_segment);
-      for (unsigned s : segment_set) {
-        if (!merged_segments.contains(s)) {
-          union_segments.push_back(&segments[s]);
+    } else if (segment_set.size() > 1) {
+      // For a group (s1 OR s2 OR ...), compute the union of their definitions.
+      std::vector<const Segment*> union_segments;
+      for (unsigned s_index : segment_set) {
+        if (s_index == base) {
+          union_segments.push_back(&merged_segment);
+        } else {
+          union_segments.push_back(&segments[s_index]);
         }
       }
-    } else {
-      for (unsigned s : segment_set) {
-        union_segments.push_back(&segments[s]);
-      }
-    }
-
-    if (union_segments.size() > 1) {
       set_bound = calculator.ComputeMergedProbability(union_segments);
+    } else if (*segment_set.min() ==  base) {
+      set_bound = merged_segment.ProbabilityBound();
     } else {
-      set_bound = union_segments[0]->ProbabilityBound();
+      set_bound = segments[*segment_set.min()].ProbabilityBound();
     }
 
     if (!is_conjunctive) {
-      return set_bound.Average();
+      return set_bound;
     }
     bounds.push_back(set_bound);
   }
 
-  return calculator.ComputeConjunctiveProbability(bounds).Average();
+  return calculator.ComputeConjunctiveProbability(bounds);
 }
 
 }  // namespace ift::encoder

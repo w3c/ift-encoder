@@ -6,6 +6,7 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
@@ -165,6 +166,10 @@ class ActivationCondition {
   // Important: this makes the assumption that segment probabilies are
   //            independent which means this is only an estimate as this is
   //            likely not true.
+  absl::StatusOr<freq::ProbabilityBound> ProbabilityBound(
+      absl::Span<const Segment> segments,
+      const ift::freq::ProbabilityCalculator& calculator) const;
+
   absl::StatusOr<double> Probability(
       absl::Span<const Segment> segments,
       const ift::freq::ProbabilityCalculator& calculator) const;
@@ -172,6 +177,12 @@ class ActivationCondition {
   // Compute and return the probability that this condition will be activated if
   // it is modified to merge all segments in "merged_segments" into a single
   // segment with "merged_probability".
+  absl::StatusOr<freq::ProbabilityBound> MergedProbabilityBound(
+      absl::Span<const Segment> segments,
+      const ift::common::SegmentSet& merged_segments,
+      const Segment& merged_segment,
+      const ift::freq::ProbabilityCalculator& calculator) const;
+
   absl::StatusOr<double> MergedProbability(
       absl::Span<const Segment> segments,
       const ift::common::SegmentSet& merged_segments,

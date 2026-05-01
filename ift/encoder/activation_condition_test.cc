@@ -347,13 +347,14 @@ TEST(ActivationConditionTest, MergedProbability) {
   EXPECT_NEAR(*ActivationCondition::and_segments({0, 1, 2}, 1)
                    .MergedProbability(segments, {1, 2}, merged_segment,
                                       probability_calculator),
-              0.75 * 0.85 * 0.85, 1e-9);
+              0.75 * 0.85, 1e-9); // .. AND 1 AND 2 becomes .. AND 1
 
   // Composite condition
+  // (0 or 1) AND 2 =merge {1, 2}=> (0 or 1)
   EXPECT_NEAR(*ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
                    .MergedProbability(segments, {1, 2}, merged_segment,
                                       probability_calculator),
-              0.90 * 0.85, 1e-9);
+              0.85, 1e-9);
 }
 
 TEST(ActivationConditionTest, True) {
