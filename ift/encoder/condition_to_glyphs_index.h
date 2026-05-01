@@ -3,7 +3,8 @@
 
 #include <optional>
 
-#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/types.h"
 
@@ -12,6 +13,7 @@ namespace ift::encoder {
 // Stores a mapping from ActivationCondition to a set of glyphs.
 //
 // Also maintains the reverse mapping indices.
+template<bool keep_ordered>
 class ConditionToGlyphsIndex {
  public:
   std::optional<ActivationCondition> Invalidate(glyph_id_t gid) {
@@ -22,17 +24,18 @@ class ConditionToGlyphsIndex {
 
     ActivationCondition condition = it->second;
 
-    auto& glyphs = conditions_and_glyphs_.at(condition);
-    glyphs.erase(gid);
+    auto glyphs_it = conditions_and_glyphs_.find(condition);
+
+    glyphs_it->second.erase(gid);
     glyph_to_condition_.erase(gid);
 
-    if (glyphs.empty()) {
-      Remove(condition);
+    if (glyphs_it->second.empty()) {
+      Remove(condition, glyphs_it);
     }
     return condition;
   }
 
-  void Remove(ActivationCondition condition) {
+  void Remove(const ActivationCondition& condition) {
     auto it = conditions_and_glyphs_.find(condition);
     if (it == conditions_and_glyphs_.end()) {
       return;
@@ -42,7 +45,16 @@ class ConditionToGlyphsIndex {
       glyph_to_condition_.erase(gid);
     }
 
-    conditions_and_glyphs_.erase(it);
+    Remove(condition, it);
+  }
+
+ private:
+  template<typename It>
+  void Remove(const ActivationCondition& condition, It conditions_and_glyphs_it) {
+    conditions_and_glyphs_.erase(conditions_and_glyphs_it);
+    if (keep_ordered) {
+      ordered_conditions_.erase(condition);
+    }
 
     for (segment_index_t s : condition.TriggeringSegments()) {
       auto it = triggering_segment_to_conditions_.find(s);
@@ -54,9 +66,13 @@ class ConditionToGlyphsIndex {
       }
     }
   }
+ public:
 
   absl::Status Union(ActivationCondition condition, common::GlyphSet glyphs) {
     conditions_and_glyphs_[condition].union_set(glyphs);
+    if (keep_ordered) {
+      ordered_conditions_.emplace(condition);
+    }
 
     for (segment_index_t s : condition.TriggeringSegments()) {
       triggering_segment_to_conditions_[s].insert(condition);
@@ -77,6 +93,9 @@ class ConditionToGlyphsIndex {
   absl::Status Add(ActivationCondition condition, common::GlyphSet glyphs) {
     const auto& [new_value_it, did_insert] =
         conditions_and_glyphs_.insert(std::pair(condition, glyphs));
+    if (keep_ordered) {
+      ordered_conditions_.emplace(condition);
+    }
 
     if (!did_insert) {
       // If there's an existing value it must match what we're trying to add
@@ -112,9 +131,13 @@ class ConditionToGlyphsIndex {
     return absl::OkStatus();
   }
 
-  const absl::btree_map<ActivationCondition, common::GlyphSet>&
+  const absl::flat_hash_map<ActivationCondition, common::GlyphSet>&
   ConditionsAndGlyphs() const {
     return conditions_and_glyphs_;
+  }
+
+  const absl::btree_set<ActivationCondition>& OrderedConditions() const {
+    return ordered_conditions_;
   }
 
   const absl::flat_hash_map<glyph_id_t, ActivationCondition>& GlyphToCondition()
@@ -130,13 +153,16 @@ class ConditionToGlyphsIndex {
 
   bool operator==(const ConditionToGlyphsIndex& other) const {
     return conditions_and_glyphs_ == other.conditions_and_glyphs_ &&
+           /* don't need to check ordered_conditions_ it's equivalent to conditions_and_glyphs_ */
            glyph_to_condition_ == other.glyph_to_condition_ &&
            triggering_segment_to_conditions_ ==
                other.triggering_segment_to_conditions_;
   }
 
  private:
-  absl::btree_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
+  absl::flat_hash_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
+  absl::btree_set<ActivationCondition> ordered_conditions_;
+
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_to_condition_;
   absl::flat_hash_map<segment_index_t, absl::btree_set<ActivationCondition>>
       triggering_segment_to_conditions_;

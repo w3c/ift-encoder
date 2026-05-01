@@ -521,10 +521,10 @@ Status Merger::CollectCompositeCandidateMerges(
   ActivationCondition last_exclusive =
       ActivationCondition::exclusive_segment(UINT32_MAX, 0);
 
-  for (auto it = context_->glyph_groupings.ConditionsAndGlyphs().lower_bound(
+  for (auto it = context_->glyph_groupings.OrderedConditions().lower_bound(
            last_exclusive);
-       it != context_->glyph_groupings.ConditionsAndGlyphs().end(); it++) {
-    const auto& next_condition = it->first;
+       it != context_->glyph_groupings.OrderedConditions().end(); it++) {
+    const auto& next_condition = *it;
     if (next_condition.IsFallback() || next_condition.IsExclusive()) {
       // Merging the fallback will cause all segments to be merged into one,
       // which is undesirable so don't consider the fallback. Also skip

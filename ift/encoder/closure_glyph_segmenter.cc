@@ -88,35 +88,36 @@ Status CheckForDisjointCodepoints(
 }
 
 static void PrintCondition(
-    const std::pair<ActivationCondition, GlyphSet>& condition, bool added) {
-  VLOG(0) << (added ? "++ " : "-- ") << condition.first.ToString() << " => "
-          << condition.second.ToString();
+    const GlyphGroupings& groupings, const ActivationCondition& condition, bool added) {
+  const auto& glyphs = groupings.ConditionsAndGlyphs().at(condition);
+  VLOG(0) << (added ? "++ " : "-- ") << condition.ToString() << " => "
+          << glyphs.ToString();
 }
 
-static void PrintDiff(const btree_map<ActivationCondition, GlyphSet>& a,
-                      const btree_map<ActivationCondition, GlyphSet>& b) {
-  auto it_a = a.begin();
-  auto it_b = b.begin();
+static void PrintDiff(const GlyphGroupings& a,
+                      const GlyphGroupings& b) {
+  auto it_a = a.OrderedConditions().begin();
+  auto it_b = b.OrderedConditions().begin();
 
-  while (it_a != a.end() || it_b != b.end()) {
-    if (it_a == a.end()) {
-      PrintCondition(*it_b, true);
+  while (it_a != a.OrderedConditions().end() || it_b != b.OrderedConditions().end()) {
+    if (it_a == a.OrderedConditions().end()) {
+      PrintCondition(b, *it_b, true);
       it_b++;
-    } else if (it_b == b.end()) {
-      PrintCondition(*it_a, false);
+    } else if (it_b == b.OrderedConditions().end()) {
+      PrintCondition(a, *it_a, false);
       it_a++;
-    } else if (it_a->first == it_b->first) {
-      if (it_a->second != it_b->second) {
-        PrintCondition(*it_a, false);
-        PrintCondition(*it_b, true);
+    } else if (*it_a == *it_b) {
+      if (a.ConditionsAndGlyphs().at(*it_a) != b.ConditionsAndGlyphs().at(*it_b)) {
+        PrintCondition(a, *it_a, false);
+        PrintCondition(b, *it_b, true);
       }
       it_a++;
       it_b++;
-    } else if (it_a->first < it_b->first) {
-      PrintCondition(*it_a, false);
+    } else if (*it_a < *it_b) {
+      PrintCondition(a, *it_a, false);
       it_a++;
     } else {
-      PrintCondition(*it_b, true);
+      PrintCondition(b, *it_b, true);
       it_b++;
     }
   }
@@ -217,8 +218,8 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
             non_incremental_context.glyph_groupings))) {
       VLOG(0) << "-- incremental grouping";
       VLOG(0) << "++ non-incremental grouping";
-      PrintDiff(context.glyph_groupings.ConditionsAndGlyphs(),
-                non_incremental_context.glyph_groupings.ConditionsAndGlyphs());
+      PrintDiff(context.glyph_groupings,
+                non_incremental_context.glyph_groupings);
       return absl::FailedPreconditionError(
           "conditions_and_glyphs aren't correct.");
     }

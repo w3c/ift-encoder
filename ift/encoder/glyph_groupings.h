@@ -37,9 +37,13 @@ class GlyphGroupings {
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
 
-  const absl::btree_map<ActivationCondition, ift::common::GlyphSet>&
+  const absl::flat_hash_map<ActivationCondition, ift::common::GlyphSet>&
   ConditionsAndGlyphs() const {
     return conditions_and_glyphs_.ConditionsAndGlyphs();
+  }
+
+  const absl::btree_set<ActivationCondition>& OrderedConditions() const {
+    return conditions_and_glyphs_.OrderedConditions();
   }
 
   // Returns the set all of segments that are part of a disjunctive condition.
@@ -251,15 +255,15 @@ class GlyphGroupings {
   GlyphPartition combined_patches_;
   bool combined_patches_dirty_ = false;
 
-  absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>
+  absl::flat_hash_map<ift::common::SegmentSet, ift::common::GlyphSet>
       or_glyph_groups_;
-  absl::btree_map<segment_index_t, ift::common::GlyphSet>
+  absl::flat_hash_map<segment_index_t, ift::common::GlyphSet>
       exclusive_glyph_groups_;
 
   // This is a set of disjunctive conditions which have been combined by the
   // CombinePatches() mechanism. Does not store groupings which have not been
   // modified the the mechanism.
-  absl::btree_map<ift::common::SegmentSet, ift::common::GlyphSet>
+  absl::flat_hash_map<ift::common::SegmentSet, ift::common::GlyphSet>
       combined_or_glyph_groups_;
 
   // This is a set of segments which are normally exclusive but have been
@@ -267,8 +271,8 @@ class GlyphGroupings {
   ift::common::SegmentSet combined_exclusive_segments_;
 
   // An alternate representation of and/or_glyph_groups_, derived from them.
-  ConditionToGlyphsIndex conditions_and_glyphs_;
-  ConditionToGlyphsIndex conditions_and_glyphs_pre_combination_;
+  ConditionToGlyphsIndex<true> conditions_and_glyphs_;
+  ConditionToGlyphsIndex<false> conditions_and_glyphs_pre_combination_;
 
   // These glyphs aren't mapped by any conditions and as a result should be
   // included in the fallback patch.
