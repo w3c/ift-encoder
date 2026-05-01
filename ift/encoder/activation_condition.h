@@ -101,10 +101,8 @@ class ActivationCondition {
    */
   ift::common::SegmentSet TriggeringSegments() const {
     ift::common::SegmentSet out;
-    for (auto g : conditions_) {
-      for (auto segment_id : g) {
-        out.insert(segment_id);
-      }
+    for (const auto& segments : conditions_) {
+      out.union_set(segments);
     }
     return out;
   }
