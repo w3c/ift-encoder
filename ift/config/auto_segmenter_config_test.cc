@@ -103,7 +103,10 @@ base_cost_config {
   min_group_size: 4
   optimization_cutoff_fraction: 0.005
 }
-preprocess_merging_group_size_for_ungrouped: 4
+ungrouped_config {
+  min_patch_size: 2500
+}
+preprocess_merging_group_size_for_ungrouped: 12
 merge_groups {
   name: "Cyrillic"
   preprocess_merging_group_size: 1
