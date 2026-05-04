@@ -92,6 +92,12 @@ ActivationCondition ActivationCondition::composite_condition(
   return conditions;
 }
 
+ActivationCondition ActivationCondition::clear_exclusive(ActivationCondition&& condition) {
+  ActivationCondition updated(std::move(condition));
+  updated.is_exclusive_ = false;
+  return updated;
+}
+
 static void Simplify(std::vector<SegmentSet>& conditions) {
   if (conditions.size() <= 1) return;
 

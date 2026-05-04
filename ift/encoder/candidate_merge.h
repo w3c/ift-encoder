@@ -145,9 +145,10 @@ struct CandidateMerge {
   //
   // If best_case is true then this will compute an estimated best possible cost
   // delta from the merge (computationally cheap) instead of the real delta.
+  template<bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      const Segment& merged_segment, std::optional<common::GlyphSet> exclusive_gids, bool best_case);
+      const Segment& merged_segment, std::optional<common::GlyphSet> exclusive_gids);
 
   static absl::Status ComputeInitFontGlyphDelta(
       Merger& merger, const ift::common::GlyphSet& moved_glyphs,

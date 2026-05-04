@@ -58,6 +58,12 @@ class ActivationCondition {
       absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated,
       bool is_fallback = false);
 
+  /*
+   * Constructs a new condition equal to 'condition' except with the is exclusive flag
+   * cleared.
+   */
+  static ActivationCondition clear_exclusive(ActivationCondition&& condition);
+
   // Returns a new activation condition that activates on (a && b)
   //
   // The new condition uses the values for the other fields

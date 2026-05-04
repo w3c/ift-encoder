@@ -486,12 +486,12 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
   return cost_delta;
 }
 
+template<bool best_case>
 StatusOr<double> CandidateMerge::ComputeCostDelta(
       Merger& merger,
       const SegmentSet& merged_segments,
       const Segment& merged_segment,
-      std::optional<GlyphSet> exclusive_gids,
-      bool best_case
+      std::optional<GlyphSet> exclusive_gids
     ) {
 
   if (merged_segments.size() <= 1) {
@@ -518,6 +518,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     uint32_t combined_patch_size = 0;
   };
   flat_hash_map<ActivationCondition, Info> new_conditions;
+  new_conditions.reserve(modified_conditions.size());
 
   segment_index_t base = *merged_segments.min();
   const auto& segments = merger.Context().SegmentationInfo().Segments();
@@ -526,9 +527,9 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     ActivationCondition updated = condition.ReplaceSegments(base, merged_segments);
     if (updated.IsExclusive()) {
       // Clear is exclusive flag so that de-dup happens properly
-      updated = ActivationCondition::composite_condition(updated.conditions(), 0);
+      updated = ActivationCondition::clear_exclusive(std::move(updated));
     }
-    auto [it, did_insert] = new_conditions.try_emplace(updated);
+    auto [it, did_insert] = new_conditions.try_emplace(std::move(updated));
 
     auto& info = it->second;
     if (did_insert) {
@@ -728,8 +729,8 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     // Before doing a full assessment check a "best case" cost delta.
     // If that doesn't beat the current smallest there's no need to
     // do more indepth analysis.
-    double best_case_delta = TRY(ComputeCostDelta(
-        merger, segments_to_merge_with_base, merged_segment, std::nullopt, true));
+    double best_case_delta = TRY(ComputeCostDelta<true>(
+        merger, segments_to_merge_with_base, merged_segment, std::nullopt));
     if (best_case_delta >= best_merge_candidate->CostDelta()) {
       // We can't possibly beat the current lowest delta.
       return std::nullopt;
@@ -782,8 +783,8 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   double cost_delta = 0.0;
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
-    cost_delta = TRY(ComputeCostDelta(merger, segments_to_merge_with_base,
-                                      merged_segment, exclusive_gids, false));
+    cost_delta = TRY(ComputeCostDelta<false>(merger, segments_to_merge_with_base,
+                                      merged_segment, exclusive_gids));
   }
 
   if (best_merge_candidate.has_value() &&
