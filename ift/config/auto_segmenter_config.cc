@@ -600,7 +600,7 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
 }
 
 static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
-  config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize*3);
+  config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize * 3);
 
   config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
 

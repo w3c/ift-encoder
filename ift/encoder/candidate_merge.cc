@@ -232,9 +232,7 @@ static Status FindModifiedConditions(
         continue;
       }
 
-      if (c.TriggeringSegments().intersects(merged_segments)) {
-        TRYV(AddConditionAndGlyphs(merger, c, modified_conditions));
-      }
+      TRYV(AddConditionAndGlyphs(merger, c, modified_conditions));
     }
   }
 
