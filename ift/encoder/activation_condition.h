@@ -183,13 +183,13 @@ class ActivationCondition {
   // segment with "merged_probability".
   absl::StatusOr<freq::ProbabilityBound> MergedProbabilityBound(
       absl::Span<const Segment> segments,
-      const ift::common::SegmentSet& merged_segments,
+      segment_index_t merged_segment_index,
       const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
   absl::StatusOr<double> MergedProbability(
       absl::Span<const Segment> segments,
-      const ift::common::SegmentSet& merged_segments,
+      segment_index_t merged_segment_index,
       const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 

@@ -357,15 +357,17 @@ StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
-    Span<const Segment> segments, const SegmentSet& merged_segments,
+    Span<const Segment> segments,
+    segment_index_t merged_segment_index,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
-  return TRY(MergedProbabilityBound(segments, merged_segments, merged_segment, calculator)).Average();
+  return TRY(MergedProbabilityBound(segments, merged_segment_index, merged_segment, calculator)).Average();
 }
 
 
 StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
-    Span<const Segment> segments, const SegmentSet& merged_segments,
+    Span<const Segment> segments,
+    segment_index_t merged_segment_index,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
 
@@ -373,17 +375,9 @@ StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
     return freq::ProbabilityBound(1.0, 1.0);
   }
 
-  if (merged_segments.empty()) {
-    // No merged segments, means we can just use the normal calculation.
-    return ProbabilityBound(segments, calculator);
-  }
-
-  segment_index_t base = *merged_segments.min();
-  ActivationCondition merged = ReplaceSegments(base, merged_segments);
-
   std::vector<freq::ProbabilityBound> bounds;
-  bool is_conjunctive = merged.conditions_.size() > 1;
-  for (const auto& segment_set : merged.conditions_) {
+  bool is_conjunctive = conditions_.size() > 1;
+  for (const auto& segment_set : conditions_) {
     freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
     if (segment_set.empty()) {
       return absl::InternalError("Unexpected empty disjunctive group.");
@@ -391,14 +385,14 @@ StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
       // For a group (s1 OR s2 OR ...), compute the union of their definitions.
       std::vector<const Segment*> union_segments;
       for (unsigned s_index : segment_set) {
-        if (s_index == base) {
+        if (s_index == merged_segment_index) {
           union_segments.push_back(&merged_segment);
         } else {
           union_segments.push_back(&segments[s_index]);
         }
       }
       set_bound = calculator.ComputeMergedProbability(union_segments);
-    } else if (*segment_set.min() ==  base) {
+    } else if (*segment_set.min() ==  merged_segment_index) {
       set_bound = merged_segment.ProbabilityBound();
     } else {
       set_bound = segments[*segment_set.min()].ProbabilityBound();

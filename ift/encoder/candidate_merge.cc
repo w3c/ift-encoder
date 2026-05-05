@@ -529,13 +529,13 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       // Clear is exclusive flag so that de-dup happens properly
       updated = ActivationCondition::clear_exclusive(std::move(updated));
     }
-    auto [it, did_insert] = new_conditions.try_emplace(std::move(updated));
+    auto [it, did_insert] = new_conditions.try_emplace(updated);
 
     auto& info = it->second;
     if (did_insert) {
       // Because we haven't actuated the merge yet (segments does not reflect it),
       // MergedProbability() is needed to correctly compute the new probability.
-      info.probability = TRY(condition.MergedProbability(segments, merged_segments,
+      info.probability = TRY(updated.MergedProbability(segments, base,
                                        merged_segment, *calculator));
     }
 
