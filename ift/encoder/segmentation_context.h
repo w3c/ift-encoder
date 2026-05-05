@@ -67,13 +67,26 @@ class SegmentationContext {
         init_font_brotli_quality, std::move(closure_cache),
         std::move(segmentation_info));
 
-    if ((condition_analysis_mode == ift::config::CLOSURE_AND_DEP_GRAPH) ||
-        (condition_analysis_mode ==
-         ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH) ||
-        (condition_analysis_mode == ift::config::DEP_GRAPH_ONLY)) {
-      context.dependency_closure_ = TRY(DependencyClosure::Create(
-          context.segmentation_info_.get(), context.original_face.get()));
-    }
+    TRYV(context.InitDependencyClosure());
+    return context;
+  }
+
+  absl::StatusOr<SegmentationContext> WithSameSettings() const {
+    std::unique_ptr<GlyphClosureCache> closure_cache =
+        std::make_unique<GlyphClosureCache>(original_face.get());
+
+    std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
+        TRY(RequestedSegmentationInformation::Create(SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),
+                                                     *closure_cache,
+                                                     SegmentationInfo().GetUnmappedGlyphHandling()));
+
+    SegmentationContext context(
+        original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(), condition_analysis_mode_, brotli_quality_,
+        init_font_brotli_quality_, std::move(closure_cache),
+        std::move(segmentation_info), estimated_compression_ratio_);
+
+    // TODO XXXX we can save some more time by copying the existing dependency closure object.
+    TRYV(context.InitDependencyClosure());
     return context;
   }
 
@@ -97,8 +110,11 @@ class SegmentationContext {
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::unique_ptr<GlyphClosureCache> closure_cache,
-      std::unique_ptr<RequestedSegmentationInformation> segmentation_info)
-      : patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
+      std::unique_ptr<RequestedSegmentationInformation> segmentation_info,
+      std::optional<double> estimated_compression_ratio = std::nullopt
+    )
+      : estimated_compression_ratio_(estimated_compression_ratio),
+        patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
         patch_size_cache_for_init_font(
             NewPatchSizeCache(face, init_font_brotli_quality)),
         glyph_closure_cache(std::move(closure_cache)),
@@ -108,7 +124,19 @@ class SegmentationContext {
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality),
+        init_font_brotli_quality_(init_font_brotli_quality),
         condition_analysis_mode_(condition_analysis_mode) {}
+
+  absl::Status InitDependencyClosure() {
+    if ((condition_analysis_mode_ == ift::config::CLOSURE_AND_DEP_GRAPH) ||
+        (condition_analysis_mode_ ==
+         ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH) ||
+        (condition_analysis_mode_ == ift::config::DEP_GRAPH_ONLY)) {
+      dependency_closure_ = TRY(DependencyClosure::Create(
+          segmentation_info_.get(), original_face.get()));
+    }
+    return absl::OkStatus();
+  }
 
  public:
   unsigned BrotliQuality() const { return brotli_quality_; }
@@ -268,17 +296,27 @@ class SegmentationContext {
   // too small to be worthwhile.
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
-  static std::unique_ptr<PatchSizeCache> NewPatchSizeCache(
+  // TODO XXXX make this return StatusOr<...>
+  std::unique_ptr<PatchSizeCache> NewPatchSizeCache(
       hb_face_t* face, uint32_t brotli_quality) {
     if (brotli_quality == 0) {
-      auto cache = EstimatedPatchSizeCache::New(face);
-      if (cache.ok()) {
-        return std::move(*cache);
+      if (!estimated_compression_ratio_.has_value()) {
+        auto r = EstimatedPatchSizeCache::EstimateCompressionRatio(face);
+        if (r.ok()) {
+          estimated_compression_ratio_ = *r;
+        }
+      }
+
+      if (estimated_compression_ratio_.has_value()) {
+        return EstimatedPatchSizeCache::New(face, *estimated_compression_ratio_);
       }
     }
     return std::unique_ptr<PatchSizeCache>(
         new PatchSizeCacheImpl(face, brotli_quality));
   }
+
+ private:
+  std::optional<double> estimated_compression_ratio_;
 
  public:
   // Caches and logging
@@ -306,6 +344,7 @@ class SegmentationContext {
   ift::common::SegmentSet inert_segments_;
 
   unsigned brotli_quality_;
+  unsigned init_font_brotli_quality_;
 
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
 };

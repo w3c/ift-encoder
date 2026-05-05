@@ -194,11 +194,8 @@ static StatusOr<bool> GlyphGroupingsAreEquivalent(
  */
 Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
-  SegmentationContext non_incremental_context = TRY(SegmentationContext::Create(
-      face, context.SegmentationInfo().InitFontSegment(),
-      context.SegmentationInfo().Segments(),
-      context.SegmentationInfo().GetUnmappedGlyphHandling(),
-      context.GetConditionAnalysisMode(), 1, 1));
+
+  SegmentationContext non_incremental_context = TRY(context.WithSameSettings());
 
   // Compute the glyph groupings/conditions from scratch to compare against the
   // incrementall produced ones.

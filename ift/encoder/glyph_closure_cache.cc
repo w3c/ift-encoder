@@ -29,16 +29,48 @@ StatusOr<GlyphSet> GlyphClosureCache::SegmentClosure(
   return GlyphClosure(closure_def);
 }
 
+// This generates the subset definition that contains all segments except for
+// those listed in segment_ids.
+SubsetDefinition ComputeExceptSegment(
+    const RequestedSegmentationInformation& segmentation_info,
+    const SegmentSet& segment_ids, const SubsetDefinition& combined) {
+  if (segmentation_info.SegmentsAreDisjoint() &&
+      (segment_ids.size() == 1 ||
+       segment_ids.size() < (segmentation_info.Segments().size() / 2))) {
+    // Approach that is optimized for the case where input segments are disjoint
+    // and the number of segment ids is smallish.
+    SubsetDefinition except_segment = segmentation_info.FullDefinition();
+    except_segment.Subtract(combined);
+    return except_segment;
+  }
+
+  // Otherwise this approach will always work even with non-disjoint segments
+  SegmentSet except_segment_ids = segment_ids;
+  except_segment_ids.invert();
+
+  uint32_t num_segments = segmentation_info.Segments().size();
+  SubsetDefinition except_segment = segmentation_info.InitFontSegment();
+  for (segment_index_t s : except_segment_ids) {
+    if (s >= num_segments) {
+      break;
+    }
+    except_segment.Union(segmentation_info.Segments()[s].Definition());
+  }
+
+  return except_segment;
+}
+
 StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
     const RequestedSegmentationInformation* segmentation_info,
     const SegmentSet& segments, const GlyphSet& glyphs) {
-  SegmentSet except;
-  if (!segmentation_info->Segments().empty()) {
-    except.insert_range(0, segmentation_info->Segments().size() - 1);
-  }
-  except.subtract(segments);
 
-  GlyphSet closure_glyphs = TRY(SegmentClosure(segmentation_info, except));
+  SubsetDefinition combined;
+  for (segment_index_t s : segments) {
+    combined.Union(segmentation_info->Segments().at(s).Definition());
+  }
+
+  SubsetDefinition except = ComputeExceptSegment(*segmentation_info, segments, combined);
+  GlyphSet closure_glyphs = TRY(GlyphClosure(except));
   return closure_glyphs.intersects(glyphs);
 }
 
@@ -86,37 +118,6 @@ StatusOr<GlyphSet> GlyphClosureCache::CodepointsToOrGids(
                       exclusive_gids));
 
   return or_gids;
-}
-
-// This generates the subset definition that contains all segments except for
-// those listed in segment_ids.
-SubsetDefinition ComputeExceptSegment(
-    const RequestedSegmentationInformation& segmentation_info,
-    const SegmentSet& segment_ids, const SubsetDefinition& combined) {
-  if (segmentation_info.SegmentsAreDisjoint() &&
-      (segment_ids.size() == 1 ||
-       segment_ids.size() < (segmentation_info.Segments().size() / 2))) {
-    // Approach that is optimized for the case where input segments are disjoint
-    // and the number of segment ids is smallish.
-    SubsetDefinition except_segment = segmentation_info.FullDefinition();
-    except_segment.Subtract(combined);
-    return except_segment;
-  }
-
-  // Otherwise this approach will always work even with non-disjoint segments
-  SegmentSet except_segment_ids = segment_ids;
-  except_segment_ids.invert();
-
-  uint32_t num_segments = segmentation_info.Segments().size();
-  SubsetDefinition except_segment = segmentation_info.InitFontSegment();
-  for (segment_index_t s : except_segment_ids) {
-    if (s >= num_segments) {
-      break;
-    }
-    except_segment.Union(segmentation_info.Segments()[s].Definition());
-  }
-
-  return except_segment;
 }
 
 Status GlyphClosureCache::AnalyzeSegment(

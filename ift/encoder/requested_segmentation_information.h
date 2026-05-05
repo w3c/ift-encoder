@@ -128,9 +128,6 @@ class RequestedSegmentationInformation {
 
   SubsetDefinition CombinedDefinition(
       const ift::common::SegmentSet& segments) const {
-    // TODO(garretrieger): this approach is inefficient vs the subtraction
-    // method, add the special case path or remove use of this function in
-    // favour of incrementally produced defs.
     SubsetDefinition def;
     for (segment_index_t s : segments) {
       def.Union(Segments().at(s).Definition());

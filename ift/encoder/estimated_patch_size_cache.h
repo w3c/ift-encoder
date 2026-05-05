@@ -23,6 +23,11 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
         new EstimatedPatchSizeCache(face, compression_ratio));
   }
 
+  static std::unique_ptr<PatchSizeCache> New(hb_face_t* face, double compression_ratio) {
+    return std::unique_ptr<PatchSizeCache>(
+        new EstimatedPatchSizeCache(face, compression_ratio));
+  }
+
   absl::StatusOr<uint32_t> GetPatchSize(
       const ift::common::GlyphSet& gids) override;
 
@@ -30,15 +35,15 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
 
   double CompressionRatio() const { return compression_ratio_; }
 
+  static absl::StatusOr<double> EstimateCompressionRatio(
+      hb_face_t* original_face);
+
  private:
   explicit EstimatedPatchSizeCache(hb_face_t* original_face,
                                    double compression_ratio)
       : face_(ift::common::make_hb_face(hb_face_reference(original_face))),
         compression_ratio_(compression_ratio),
         cache_() {}
-
-  static absl::StatusOr<double> EstimateCompressionRatio(
-      hb_face_t* original_face);
 
   ift::common::hb_face_unique_ptr face_;
   double compression_ratio_;
