@@ -85,7 +85,6 @@ class SegmentationContext {
         init_font_brotli_quality_, std::move(closure_cache),
         std::move(segmentation_info), estimated_compression_ratio_);
 
-    // TODO XXXX we can save some more time by copying the existing dependency closure object.
     TRYV(context.InitDependencyClosure());
     return context;
   }
