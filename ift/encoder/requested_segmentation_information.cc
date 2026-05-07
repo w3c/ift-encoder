@@ -3,11 +3,14 @@
 #include <memory>
 #include <vector>
 
+#include "ift/common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
 using ift::config::UnmappedGlyphHandling;
 
+using ift::common::CodepointSet;
+using ift::common::SegmentSet;
 using absl::StatusOr;
 
 namespace ift::encoder {
@@ -55,8 +58,42 @@ RequestedSegmentationInformation::RequestedSegmentationInformation(
       unmapped_glyph_handling_(unmapped_glyph_handling) {
   // ReassignInitSubset expects full_definition_ is already populated.
   full_definition_ = init_font_segment;
-  for (const auto& s : segments_) {
-    full_definition_.Union(s.Definition());
+  for (size_t i = 0; i < segments_.size(); ++i) {
+    full_definition_.Union(segments_[i].Definition());
+    AddToIndex(i, segments_[i].Definition().codepoints);
+  }
+}
+
+SegmentSet RequestedSegmentationInformation::SegmentsForCodepoints(
+    const CodepointSet& codepoints) const {
+  SegmentSet result;
+  for (hb_codepoint_t cp : codepoints) {
+    auto it = codepoint_to_segments_.find(cp);
+    if (it != codepoint_to_segments_.end()) {
+      result.union_set(it->second);
+    }
+  }
+  return result;
+}
+
+void RequestedSegmentationInformation::AddToIndex(
+    segment_index_t s, const CodepointSet& codepoints) {
+  for (hb_codepoint_t cp : codepoints) {
+    codepoint_to_segments_[cp].insert(s);
+  }
+}
+
+void RequestedSegmentationInformation::RemoveFromIndex(
+    segment_index_t s, const CodepointSet& codepoints) {
+  for (hb_codepoint_t cp : codepoints) {
+    auto it = codepoint_to_segments_.find(cp);
+    if (it == codepoint_to_segments_.end()) {
+      continue;
+    }
+    it->second.erase(s);
+    if (it->second.empty()) {
+      codepoint_to_segments_.erase(it);
+    }
   }
 }
 

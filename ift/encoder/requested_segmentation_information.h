@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "absl/container/flat_hash_map.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/config/common.pb.h"
@@ -36,10 +37,14 @@ class RequestedSegmentationInformation {
                                const ift::common::SegmentSet& to_merge,
                                const Segment& merged_segment) {
     auto& base_segment = segments_[base];
+    RemoveFromIndex(base, base_segment.Definition().codepoints);
     base_segment = merged_segment;
+    AddToIndex(base, base_segment.Definition().codepoints);
+
     for (segment_index_t s : to_merge) {
       // To avoid changing the indices of other segments set the ones we're
       // removing to empty sets. That effectively disables them.
+      RemoveFromIndex(s, segments_[s].Definition().codepoints);
       segments_[s].Clear();
     }
     return base_segment.Definition().codepoints.size();
@@ -60,9 +65,12 @@ class RequestedSegmentationInformation {
     // Changing the init font subset may have caused additional codepoints to be
     // moved to the init font. We need to update the segment definitions to
     // remove these.
-    for (auto& s : segments_) {
-      // TODO XXXXX this also needs to handle features?
+    for (size_t i = 0; i < segments_.size(); ++i) {
+      auto& s = segments_[i];
       if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
+        ift::common::CodepointSet intersection = s.Definition().codepoints;
+        intersection.intersect(init_font_segment_.codepoints);
+        RemoveFromIndex(i, intersection);
         s.Definition().codepoints.subtract(init_font_segment_.codepoints);
       }
     }
@@ -140,13 +148,23 @@ class RequestedSegmentationInformation {
     return def;
   }
 
+  ift::common::SegmentSet SegmentsForCodepoints(
+      const ift::common::CodepointSet& codepoints) const;
+
  private:
+  void AddToIndex(segment_index_t seg_idx,
+                  const ift::common::CodepointSet& codepoints);
+  void RemoveFromIndex(segment_index_t seg_idx,
+                       const ift::common::CodepointSet& codepoints);
+
   std::vector<Segment> segments_;
   SubsetDefinition init_font_segment_;
   SubsetDefinition full_definition_;
   ift::common::GlyphSet full_closure_;
   bool segments_disjoint_;
   enum ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
+  absl::flat_hash_map<hb_codepoint_t, ift::common::SegmentSet>
+      codepoint_to_segments_;
 };
 
 }  // namespace ift::encoder

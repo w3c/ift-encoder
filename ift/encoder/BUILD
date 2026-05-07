@@ -201,6 +201,23 @@ cc_test(
 )
 
 cc_test(
+    name = "requested_segmentation_information_test",
+    size = "small",
+    srcs = [
+        "requested_segmentation_information_test.cc",
+    ],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":encoder",
+        ":segmentation_info",
+        "//ift/common",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "subset_definition_test",
     size = "small",
     srcs = [
