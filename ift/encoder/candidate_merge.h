@@ -150,11 +150,6 @@ struct CandidateMerge {
       Merger& merger, const ift::common::SegmentSet& merged_segments,
       const Segment& merged_segment, std::optional<common::GlyphSet> exclusive_gids);
 
-  static absl::Status ComputeInitFontGlyphDelta(
-      Merger& merger, const ift::common::GlyphSet& moved_glyphs,
-      ift::common::GlyphSet& new_glyph_closure,
-      ift::common::GlyphSet& glyph_closure_delta);
-
   // Computes the predicted change to the toal cost if moved_glyphs are
   // moved from patches into the initial font.
   //
@@ -178,6 +173,14 @@ struct CandidateMerge {
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,
                                               int quality);
+
+ private:
+  static absl::Status ComputeInitFontGlyphDelta(
+      Merger& merger, const ift::common::GlyphSet& moved_glyphs,
+      ift::common::GlyphSet& glyph_closure_delta,
+      ift::common::GlyphSet& new_glyph_closure,
+      ift::common::CodepointSet& codepoint_closure_delta
+    );
 };
 
 }  // namespace ift::encoder
