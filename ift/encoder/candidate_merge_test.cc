@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 
+#include "absl/log/globals.h"
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
@@ -11,14 +12,17 @@
 #include "ift/encoder/merger.h"
 #include "ift/encoder/mock_patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/types.h"
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
 
 using ift::config::CLOSURE_ONLY;
+using ift::config::DEP_GRAPH_ONLY;
 using ift::config::PATCH;
 
 using ift::common::CodepointSet;
+using ift::common::GlyphSet;
 using ift::common::FontData;
 using ift::common::hb_face_unique_ptr;
 using ift::common::IntSet;
@@ -479,6 +483,119 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
   ASSERT_TRUE(r.ok()) << r.status();
   // {0 or 1} has no patch associated with it, so no merge is possible.
   ASSERT_FALSE(r->has_value());
+}
+
+TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
+  std::vector<Segment> segments = {
+      {{'b'}, ProbabilityBound{0.95, 0.95}},
+      {{'f'}, ProbabilityBound{0.85, 0.85}},
+      {{'i'}, ProbabilityBound{0.75, 0.75}},
+  };
+
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {'a'}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
+      all);
+
+  glyph_id_t g_a = 69;
+  glyph_id_t g_b = 70;
+  glyph_id_t g_f = 74;
+  glyph_id_t g_i = 77;
+  glyph_id_t g_fi = 444;
+  glyph_id_t g_ffi = 446;
+
+  uint32_t init_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a});
+  uint32_t plus_b_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a, g_b});
+  uint32_t plus_f_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a, g_f});
+  uint32_t plus_f_i_fi_ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a, g_f, g_i, g_fi, g_ffi});
+  uint32_t plus_fi_ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a, g_fi, g_ffi});
+  uint32_t plus_fi_size = *context->patch_size_cache_for_init_font->GetPatchSize({0, g_a, g_fi});
+
+  uint32_t b_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_b});
+  uint32_t f_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_f});
+  uint32_t i_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_i});
+  uint32_t fi_ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_fi, g_ffi});
+  uint32_t ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_ffi});
+  uint32_t i_fi_ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_i, g_fi, g_ffi});
+
+  /* Case 1: simple move */
+  auto r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b});
+  ASSERT_TRUE(r.ok()) << r.status();
+  double delta = r->first;
+  GlyphSet moved_glyphs = r->second;
+
+  EXPECT_EQ(delta,
+    // patch with b removed and moved to the init font.
+    (plus_b_size - init_size) - 0.95 * (b_size + 75));
+  EXPECT_EQ(moved_glyphs, (GlyphSet {g_b}));
+
+  /* Case 2: move + modified conditions (one half of (f AND i) moved) */
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f});
+  ASSERT_TRUE(r.ok()) << r.status();
+  delta = r->first;
+  moved_glyphs = r->second;
+
+  EXPECT_NEAR(delta,
+    (plus_f_size - init_size) /* init font increase */
+    - 0.85 * (f_size + 75) /* if (f) removed */
+    - 0.75 * (i_size + 75) /* if (i) removed */
+    - (0.75 * 0.85) * (fi_ffi_size + 75) /* if (f and i) removed */
+    + 0.75 * (i_fi_ffi_size + 75) /* if (i) with ligatures */,
+    1e-9
+  );
+  EXPECT_EQ(moved_glyphs, (GlyphSet {g_f}));
+
+  /* Case 3: move non exclusive */
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi, g_ffi});
+  ASSERT_TRUE(r.ok()) << r.status();
+  delta = r->first;
+  moved_glyphs = r->second;
+
+  EXPECT_NEAR(delta,
+    (plus_fi_ffi_size - init_size) /* init font increase */
+    - (0.85 * 0.75) * (fi_ffi_size + 75), /* if (f and i) removed */
+    1e-9
+  );
+  EXPECT_EQ(moved_glyphs, (GlyphSet {g_fi, g_ffi}));
+
+  /* Case 4: move part of a patch */
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi});
+  ASSERT_TRUE(r.ok()) << r.status();
+  delta = r->first;
+  moved_glyphs = r->second;
+
+  EXPECT_NEAR(delta,
+    (plus_fi_size - init_size) /* init font increase */
+    - (0.85 * 0.75) * (fi_ffi_size + 75) /* if (f and i) removed */
+    + (0.85 * 0.75) * (ffi_size + 75), /* if (f and i) added */
+    1e-9
+  );
+  EXPECT_EQ(moved_glyphs, (GlyphSet {g_fi}));
+
+  /* Case 5: move multiple */
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f, g_i});
+  ASSERT_TRUE(r.ok()) << r.status();
+  delta = r->first;
+  moved_glyphs = r->second;
+
+  EXPECT_NEAR(delta,
+    (plus_f_i_fi_ffi_size - init_size) /* init font increase */
+    - 0.85 * (f_size + 75) /* if (f) removed */
+    - 0.75 * (i_size + 75) /* if (i) removed */
+    - (0.75 * 0.85) * (fi_ffi_size + 75), /* if (f and i) removed */
+    1e-9
+  );
+  EXPECT_EQ(moved_glyphs, (GlyphSet {g_f, g_i, g_fi, g_ffi}));
 }
 
 }  // namespace ift::encoder

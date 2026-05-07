@@ -124,6 +124,10 @@ class ActivationCondition {
   ActivationCondition ReplaceSegments(segment_index_t base_segment,
                                       const common::SegmentSet& segments) const;
 
+  // Generate a new condition which is a copy of this one but with all
+  // sub grups that contain segments removed.
+  ActivationCondition RemoveIntersectingSubgroups(const common::SegmentSet& segments) const;
+
   /*
    * Returns a human readable string representation of this condition.
    */

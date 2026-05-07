@@ -1,6 +1,7 @@
 #include "ift/encoder/activation_condition.h"
 
 #include <algorithm>
+#include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -181,7 +182,7 @@ bool ActivationCondition::Intersects(const common::SegmentSet& segments) const {
 }
 
 ActivationCondition ActivationCondition::ReplaceSegments(
-    segment_index_t base_segment, const common::SegmentSet& segments) const {
+    segment_index_t base_segment, const SegmentSet& segments) const {
   ActivationCondition new_condition = *this;
   for (auto& condition_group : new_condition.conditions_) {
     if (condition_group.intersects(segments)) {
@@ -190,6 +191,25 @@ ActivationCondition ActivationCondition::ReplaceSegments(
     }
   }
   Simplify(new_condition.conditions_);
+  return new_condition;
+}
+
+ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(const SegmentSet& segments) const {
+  ActivationCondition new_condition = ActivationCondition::True(0);
+  new_condition.activated_ = activated_;
+  new_condition.encoding_ = encoding_;
+  new_condition.is_fallback_ = is_fallback_;
+  new_condition.is_exclusive_ = is_exclusive_;
+
+
+  for (const auto& condition_group : conditions_) {
+    if (!condition_group.intersects(segments)) {
+      new_condition.conditions_.push_back(condition_group);
+    }
+  }
+
+  // Simplify is not needed as the existing condition will already be simplified and removing
+  // sub-groups does not affect simplification.
   return new_condition;
 }
 
