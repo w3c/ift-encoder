@@ -32,6 +32,10 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
       const ift::common::CodepointSet& codepoints,
       double current_best_lower) const;
 
+  ProbabilityBound ComputeProbabilityInternal(
+      const ift::encoder::SubsetDefinition& definition,
+      double best_lower) const;
+
   UnicodeFrequencies frequencies_;
 };
 
