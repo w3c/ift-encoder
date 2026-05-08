@@ -187,6 +187,7 @@ static void MergeSegments(const Merger& merger, const SegmentSet& segments,
     merged_segments.push_back(&s);
   }
 
+  // Compute probability before modifying base since it's in the merged segments array.
   const auto* calculator = merger.Strategy().ProbabilityCalculator();
   const auto& bound = calculator->ComputeMergedProbability(merged_segments);
   base.Definition() = std::move(union_def);
@@ -669,8 +670,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     const SegmentSet& segments_to_merge_,
     const std::optional<CandidateMerge>& best_merge_candidate) {
 
-  if (!merger.Strategy().UseCosts() &&
-      WouldMixFeaturesAndCodepoints(merger.Context().SegmentationInfo(),
+  if (WouldMixFeaturesAndCodepoints(merger.Context().SegmentationInfo(),
                                     base_segment_index, segments_to_merge_)) {
     // With the heuristic merger if it doesn't find a previous merge candidate
     // will try to merge together segments that are composed of codepoints with
@@ -678,8 +678,13 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     // likely rarely used this will inflate the size of the patches for those
     // codepoint segments unnecessarily.
     //
-    // So don't merge cases where we would be combining codepoint
-    // only segments with feature only segments.
+    // In the cost case we don't have proper frequency data for features and
+    // likewise don't have co-occurence data with features + codepoints. This
+    // makes it difficult to make proper merging decisions that involve
+    // mixing codepoints and features.
+    //
+    // As a result, don't do merges that mix features and codepoints in any
+    // cases.
     VLOG(0) << "  Merge would mix features into a codepoint only segment, "
                "skipping.";
     return std::nullopt;

@@ -328,14 +328,27 @@ static std::vector<Segment> PreGroupSegments(
         Segment{subset_definitions[o.original_index], o.probability};
     ordering_it++;
 
-    if (strategy == nullptr || strategy->PreClosureGroupSize() <= 1 ||
-        o.probability.Max() > strategy->PreClosureProbabilityThreshold()) {
-      segment_index_map[o.original_index] = i;
-    } else {
+    // Don't pregroup feature segments, these genearlly have broad interactions
+    // and pre-grouping can them blindly can cause poor outcomes.
+    bool is_feature_segment = !segment.Definition().feature_tags.empty();
+
+    segment_index_map[o.original_index] = i;
+
+    if (strategy != nullptr &&
+        !is_feature_segment &&
+        strategy->PreClosureGroupSize() > 1 &&
+        o.probability.Max() <= strategy->PreClosureProbabilityThreshold()) {
+
       uint32_t remaining = strategy->PreClosureGroupSize() - 1;
       while (remaining > 0) {
         if (ordering_it == ordering.end() ||
             ordering_it->group_index != o.group_index) {
+          break;
+        }
+
+        // Don't pregroup feature segments, these genearlly have broad interactions
+        // and pre-grouping can them blindly can cause poor outcomes.
+        if (!subset_definitions[ordering_it->original_index].feature_tags.empty()) {
           break;
         }
 
@@ -348,6 +361,7 @@ static std::vector<Segment> PreGroupSegments(
       }
 
       if (strategy->UseCosts()) {
+        // Segment definition has changed so probability needs to be recomputed.
         segment.SetProbability(
             strategy->ProbabilityCalculator()->ComputeProbability(
                 segment.Definition()));
