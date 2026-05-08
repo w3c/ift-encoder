@@ -1881,6 +1881,126 @@ if (s3) then p0
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_MidGroup) {
+  UnicodeFrequencies freq{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 30}, {{'b', 'b'}, 29},
+  };
+
+  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  costs.SetPreClosureProbabilityThreshold(0.55);
+  costs.SetPreClosureGroupSize(3);
+
+  SubsetDefinition feat_seg;
+  feat_seg.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  feat_seg.codepoints.insert('c');
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {
+                                                   {'a'},
+                                                   {'b'},
+                                                   feat_seg,
+                                               },
+                                               costs);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b'},
+      feat_seg,
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+
+  // Use heuristic so that segments don't get re-ordered by probability.
+  MergeStrategy heuristic = MergeStrategy::Heuristic(0);
+  heuristic.SetPreClosureProbabilityThreshold(0.55);
+  heuristic.SetPreClosureGroupSize(3);
+  segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {
+                                                   {'a'},
+                                                   feat_seg,
+                                                   {'b'},
+                                               },
+                                               heuristic);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // The feature segment comes up mid group so it breaks up the group and segments
+  // all stay separate.
+  expected_segments = {
+      {'a'},
+      feat_seg,
+      {'b'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_AsFirst) {
+  UnicodeFrequencies freq{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 30}, {{'b', 'b'}, 29}, {{'c', 'c'}, 28},
+  };
+
+  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  costs.SetPreClosureProbabilityThreshold(0.55);
+  costs.SetPreClosureGroupSize(3);
+
+  SubsetDefinition feat_seg;
+  feat_seg.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  feat_seg.codepoints.insert('a');
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {
+                                                   feat_seg,
+                                                   {'b'},
+                                                   {'c'},
+                                               },
+                                               costs);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      feat_seg,
+      {'b', 'c'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
+  // Regression test for a bug in assigned updated segment indices after pre-grouping
+  // The first segment in a group was always being remapped to segment 0. This uses
+  // two separate merge groups to ensure the second one does not end up with segment 0.
+  UnicodeFrequencies freq_high{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 100},
+  };
+
+  MergeStrategy strategy_0 = *MergeStrategy::CostBased(std::move(freq_high), 0, 1);
+
+  // Use Heuristic for Group 1 to force merging of whatever ends up in it.
+  MergeStrategy strategy_1 = MergeStrategy::Heuristic(1000);
+  strategy_1.SetPreClosureProbabilityThreshold(0.5);
+  strategy_1.SetPreClosureGroupSize(2);
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0}, strategy_0},
+      {{1, 2}, strategy_1},
+  };
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {
+                                                   {'a'},
+                                                   {'b'},
+                                                   {'c'},
+                                               },
+                                               merge_groups);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+
+
+  // We should not see 'a' show up in the second group
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'},
+      {'b', 'c'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+}
+
 // TODO(garretrieger): test that segments are excluded by init font segment. ie.
 // if a segment is present in the init font then it should be cleared out in the
 // segmentation.
