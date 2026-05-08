@@ -1,5 +1,7 @@
 #include "ift/freq/bigram_probability_calculator.h"
 
+#include <algorithm>
+
 #include "ift/common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
@@ -87,11 +89,32 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
 
 ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
     const SubsetDefinition& definition) const {
+  return ComputeProbabilityInternal(definition, 0.0);
+}
+
+ProbabilityBound BigramProbabilityCalculator::ComputeProbabilityInternal(
+    const SubsetDefinition& definition, double best_lower) const {
   if (definition.Empty()) {
     return {1, 1};
   }
-  // TODO(garretrieger): XXXX incorporate layout tags
-  return BigramProbabilityBound(definition.codepoints, 0.0);
+
+  ProbabilityBound codepoints_bound = BigramProbabilityBound(definition.codepoints, best_lower);
+
+  if (definition.feature_tags.empty()) {
+    return codepoints_bound;
+  }
+
+  double feature_min = 0.0;
+  double feature_sum = 0.0;
+  for (hb_tag_t tag : definition.feature_tags) {
+    double p = frequencies_.ProbabilityForLayoutTag(tag);
+    feature_min = std::max(feature_min, p);
+    feature_sum += p;
+  }
+  double t_max = std::min(1.0, feature_sum);
+
+  return ProbabilityBound(std::max(codepoints_bound.Min(), feature_min),
+                          std::min(1.0, codepoints_bound.Max() + t_max));
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
@@ -140,7 +163,7 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
     }
   }
   */
-  return BigramProbabilityBound(union_def.codepoints, best_lower);
+  return ComputeProbabilityInternal(union_def, best_lower);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(

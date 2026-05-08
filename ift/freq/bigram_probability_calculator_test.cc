@@ -128,7 +128,39 @@ TEST(BigramProbabilityCalculatorTest, ComputeProbability_ClampedUpper) {
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeProbability_WithLayoutTags) {
-  // TODO(garretrieger): XXXX test with layout tags once implemented.
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70},
+      {{'c', 'c'}, 100},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies));
+
+  SubsetDefinition def;
+  def.feature_tags.insert(HB_TAG('l', 'i', 'g', 'a'));
+
+  // P(liga) = 0.001
+  // Codepoints are empty, so codepoints_bound = {0, 0}
+  // Combined: Lower = max(0, 0.001) = 0.001
+  //           Upper = min(1.0, 0 + 0.001) = 0.001
+  ASSERT_EQ(calc.ComputeProbability(def), (ProbabilityBound{0.001, 0.001}));
+
+  // Add another tag
+  def.feature_tags.insert(HB_TAG('c', 'c', 'm', 'p'));
+  // P(ccmp) = 0.001
+  // Combined tags probability:
+  // features_min = 0.001
+  // features_sum = 0.002
+  // Lower = max(0, 0.001) = 0.001
+  // Upper = min(1.0, 0 + 0.002) = 0.002
+  ASSERT_EQ(calc.ComputeProbability(def), (ProbabilityBound{0.001, 0.002}));
+
+  // Add a codepoint
+  def.codepoints.insert('a');
+  // P(a) = 0.7
+  // codepoints_bound = {0.7, 0.7}
+  // Lower = max(0.7, 0.001) = 0.7
+  // Upper = min(1.0, 0.7 + 0.002) = 0.702
+  ASSERT_EQ(calc.ComputeProbability(def), (ProbabilityBound{0.7, 0.702}));
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
