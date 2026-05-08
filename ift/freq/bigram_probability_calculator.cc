@@ -19,6 +19,13 @@ BigramProbabilityCalculator::BigramProbabilityCalculator(
 
 ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
     const CodepointSet& codepoints, double best_lower) const {
+  auto it = cache_.find(codepoints);
+  if (it != cache_.end()) {
+    double lower = std::max(it->second.Min(), best_lower);
+    double upper = std::max(it->second.Max(), lower);
+    return ProbabilityBound(lower, upper);
+  }
+
   unsigned n = codepoints.size();
   std::vector<unsigned> cps;
   std::vector<double> P;
@@ -39,7 +46,9 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
 
   if (max_single_bound >= 1.0) {
     // Bounds can't be lower than [1, 1] stop checking.
-    return ProbabilityBound(1.0, 1.0);
+    ProbabilityBound bound(1.0, 1.0);
+    cache_.emplace(codepoints, bound);
+    return bound;
   }
 
   double bigram_total = 0.0;
@@ -54,7 +63,9 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
       max_pair_bound = std::max(P[i] + P[j] - Pij, max_pair_bound);
       if (max_pair_bound >= 1.0) {
         // Bounds can't be lower than [1, 1] stop checking.
-        return ProbabilityBound(1.0, 1.0);
+        ProbabilityBound bound(1.0, 1.0);
+        cache_.emplace(codepoints, bound);
+        return bound;
       }
     }
   }
@@ -73,18 +84,23 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
   // - Either the largest individual codepoint frequency.
   // - max(Pi + Pj - Pij)
   // - Or: sum(Pi) - sum(Pj<k)
-  double lower =
-      std::max(std::max(std::max(unigram_total - bigram_total, max_pair_bound),
-                        max_single_bound),
-               best_lower);
+  double raw_lower =
+      std::max(std::max(unigram_total - bigram_total, max_pair_bound),
+               max_single_bound);
 
   // == Upper Bound ==
   // An upper bound is given by
   // sum(Pi) - max_j=1..n [ sum_j!=k(Pjk) ]
-  double upper =
-      std::max(std::min(unigram_total - max_partial_bigram_total, 1.0), lower);
+  double raw_upper =
+      std::max(std::min(unigram_total - max_partial_bigram_total, 1.0), raw_lower);
 
-  return ProbabilityBound(lower, upper);
+  ProbabilityBound raw_bound(raw_lower, raw_upper);
+  cache_.emplace(codepoints, raw_bound);
+
+  double final_lower = std::max(raw_lower, best_lower);
+  double final_upper = std::max(raw_upper, final_lower);
+
+  return ProbabilityBound(final_lower, final_upper);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeProbability(

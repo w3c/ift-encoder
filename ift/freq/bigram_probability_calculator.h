@@ -1,6 +1,7 @@
 #ifndef IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 
+#include "absl/container/flat_hash_map.h"
 #include "ift/common/int_set.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
@@ -37,6 +38,7 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
       double best_lower) const;
 
   UnicodeFrequencies frequencies_;
+  mutable absl::flat_hash_map<ift::common::CodepointSet, ProbabilityBound> cache_;
 };
 
 }  // namespace ift::freq
