@@ -38,6 +38,22 @@ TEST(BigramProbabilityCalculatorTest, ComputeProbability) {
   ASSERT_DOUBLE_EQ(b.Max(), Pabd_upper);
 }
 
+TEST(BigramProbabilityCalculatorTest, ComputeProbability_Cached) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
+      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies));
+
+  // Call once to populate cache
+  calc.ComputeProbability({'a', 'b'});
+
+  // Call again to use cache
+  double Pab = 0.70 + 0.60 - 0.40;
+  ASSERT_EQ(calc.ComputeProbability({'a', 'b'}), (ProbabilityBound{Pab, Pab}));
+}
+
 TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
   UnicodeFrequencies frequencies{
       {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},

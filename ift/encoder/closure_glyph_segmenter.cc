@@ -328,8 +328,8 @@ static std::vector<Segment> PreGroupSegments(
         Segment{subset_definitions[o.original_index], o.probability};
     ordering_it++;
 
-    // Don't pregroup feature segments, these genearlly have broad interactions
-    // and pre-grouping can them blindly can cause poor outcomes.
+    // Don't pregroup feature segments, these generally have broad interactions
+    // and pre-grouping them blindly can cause poor outcomes.
     bool is_feature_segment = !segment.Definition().feature_tags.empty();
 
     segment_index_map[o.original_index] = i;
@@ -346,8 +346,8 @@ static std::vector<Segment> PreGroupSegments(
           break;
         }
 
-        // Don't pregroup feature segments, these genearlly have broad interactions
-        // and pre-grouping can them blindly can cause poor outcomes.
+        // Don't pregroup feature segments, these generally have broad interactions
+        // and pre-grouping them blindly can cause poor outcomes.
         if (!subset_definitions[ordering_it->original_index].feature_tags.empty()) {
           break;
         }
