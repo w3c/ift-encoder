@@ -160,6 +160,8 @@ static Status Analysis(hb_face_t* font,
   ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
   auto costs = TRY(segmenter.TotalCosts(font, segmentation, strategy_probability_calculators));
 
+  std::cerr << "number_of_codepoints = " << FontHelper::ToCodepointsSet(font).size() << std::endl;
+
   double ift_init_cost = 0.0;
   double non_ift_total_cost = 0.0;
   double ideal_init_cost = 0.0;
