@@ -2008,4 +2008,74 @@ TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 
+TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_FeatureOnlyAndUncovered) {
+  ift::config::SegmentationPlan plan;
+  btree_map<SegmentSet, MergeStrategy> merge_groups;
+  std::vector<SubsetDefinition> segments(4);
+  segments[0].codepoints.insert('a');
+  segments[1].codepoints.insert('b');
+  segments[2].codepoints.insert('c');
+  segments[3].feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+
+  SegmentSet group;
+  group.insert(0);
+  group.insert(1);
+  group.insert(3);
+  merge_groups.insert({group, MergeStrategy::Heuristic(100)});
+
+  SubsetDefinition init_segment;
+
+  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
+
+  ASSERT_EQ(plan.non_glyph_segments_size(), 3);
+
+  // Check segment 1 (from merge group)
+  {
+    uint32_t id = plan.non_glyph_segments(0).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.codepoints().values_size(), 2);
+    EXPECT_EQ(seg_proto.codepoints().values(0), 'a');
+    EXPECT_EQ(seg_proto.codepoints().values(1), 'b');
+  }
+
+  // Check segment 2 (uncovered)
+  {
+    uint32_t id = plan.non_glyph_segments(1).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.codepoints().values_size(), 1);
+    EXPECT_EQ(seg_proto.codepoints().values(0), 'c');
+  }
+
+  // Check segment 3 (feature only)
+  {
+    uint32_t id = plan.non_glyph_segments(2).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.features().values_size(), 1);
+    EXPECT_EQ(seg_proto.features().values(0), "smcp");
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_SubtractInitSegment) {
+  ift::config::SegmentationPlan plan;
+  btree_map<SegmentSet, MergeStrategy> merge_groups;
+  std::vector<SubsetDefinition> segments(1);
+  segments[0].codepoints.insert('a');
+  segments[0].codepoints.insert('b');
+
+  SegmentSet group;
+  group.insert(0);
+  merge_groups.insert({group, MergeStrategy::Heuristic(100)});
+
+  SubsetDefinition init_segment;
+  init_segment.codepoints.insert('a');
+
+  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
+
+  ASSERT_EQ(plan.non_glyph_segments_size(), 1);
+  uint32_t id = plan.non_glyph_segments(0).values(0);
+  const auto& seg_proto = plan.segments().at(id);
+  ASSERT_EQ(seg_proto.codepoints().values_size(), 1);
+  EXPECT_EQ(seg_proto.codepoints().values(0), 'b');
+}
+
 }  // namespace ift::encoder
