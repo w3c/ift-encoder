@@ -58,6 +58,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
     }
 
     MarkFinished(base_segment_index);
+    strategy_.ProbabilityCalculator()->ResetCache();
   }
 
   return std::nullopt;
@@ -204,6 +205,7 @@ Status Merger::MoveSegmentsToInitFont() {
     }
 
     TRYV(ApplyInitFontMove(*glyphs_for_lowest, total_delta));
+    strategy_.ProbabilityCalculator()->ResetCache();
   } while (true);
 
   VLOG(0) << "Initial font now has "
