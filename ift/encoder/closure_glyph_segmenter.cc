@@ -731,10 +731,53 @@ void ClosureGlyphSegmenter::AddTableKeyedSegments(
     const btree_map<SegmentSet, MergeStrategy>& merge_groups,
     const std::vector<SubsetDefinition>& segments,
     const SubsetDefinition& init_segment) {
+
+  SegmentSet uncovered_segments;
+  if (!segments.empty()) {
+    uncovered_segments.insert_range(0, segments.size() - 1);
+  }
+
+  SegmentSet feature_only_segments;
+  for (segment_index_t s = 0; s < segments.size(); s++) {
+    const auto& segment = segments.at(s);
+    if (!segment.feature_tags.empty() && segment.codepoints.empty()) {
+      feature_only_segments.insert(s);
+      uncovered_segments.erase(s);
+    }
+  }
+
   std::vector<SubsetDefinition> table_keyed_segments;
   for (const auto& [segment_ids, _] : merge_groups) {
+    uncovered_segments.subtract(segment_ids);
     SubsetDefinition new_segment;
     for (uint32_t s : segment_ids) {
+      if (feature_only_segments.contains(s)) {
+        // feature only segments are placed in their own dedicated group
+        continue;
+      }
+      new_segment.Union(segments.at(s));
+    }
+    new_segment.Subtract(init_segment);
+
+    if (new_segment.Empty()) {
+      continue;
+    }
+
+    table_keyed_segments.push_back(new_segment);
+  }
+
+  if (!uncovered_segments.empty()) {
+    SubsetDefinition new_segment;
+    for (uint32_t s : uncovered_segments) {
+      new_segment.Union(segments.at(s));
+    }
+    new_segment.Subtract(init_segment);
+    table_keyed_segments.push_back(new_segment);
+  }
+
+  if (!feature_only_segments.empty()) {
+    SubsetDefinition new_segment;
+    for (uint32_t s : feature_only_segments) {
       new_segment.Union(segments.at(s));
     }
     new_segment.Subtract(init_segment);
