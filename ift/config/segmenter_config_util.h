@@ -1,6 +1,7 @@
 #ifndef IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 #define IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 
+#include <optional>
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
@@ -81,11 +82,13 @@ class SegmenterConfigUtil {
       absl::flat_hash_map<SegmentId, uint32_t>& segment_id_to_index);
 
   absl::StatusOr<ift::freq::UnicodeFrequencies> GetFrequencyData(
-      const std::string& frequency_data_file_path, bool built_in);
+      const std::string& frequency_data_file_path, bool built_in,
+      std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToCostStrategy(
       const CostConfiguration& base, const CostConfiguration& config,
-      ift::common::CodepointSet& covered_codepoints);
+      ift::common::CodepointSet& covered_codepoints,
+      const ift::common::CodepointSet& font_codepoints);
 
   absl::StatusOr<
       std::pair<ift::common::SegmentSet, ift::encoder::MergeStrategy>>
@@ -93,7 +96,8 @@ class SegmenterConfigUtil {
                     const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
                     const HeuristicConfiguration& base_heuristic,
                     const CostConfiguration& base_cost,
-                    const MergeGroup& group);
+                    const MergeGroup& group,
+                    const ift::common::CodepointSet& font_codepoints);
 
   static ift::common::SegmentSet MapToIndices(
       const SegmentsProto& segments,

@@ -203,18 +203,22 @@ static Status LoadFrequenciesFromRiegeliIndividual(
   return absl::OkStatus();
 }
 
-StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(const char* path) {
+StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(
+    const char* path,
+    std::optional<CodepointSet> filter) {
   auto paths = TRY(ExpandShardedPath(path));
-  UnicodeFrequenciesBuilder builder;
+  UnicodeFrequenciesBuilder builder(filter);
   for (const auto& path : paths) {
     TRYV(LoadFrequenciesFromRiegeliIndividual(path.c_str(), builder));
   }
   return builder.Build();
 }
 
-StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(const char* name) {
+StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(
+    const char* name,
+    std::optional<CodepointSet> filter) {
   std::string path = StrCat("../ift_encoder_data+/data/", name);
-  return LoadFrequenciesFromRiegeli(path.c_str());
+  return LoadFrequenciesFromRiegeli(path.c_str(), filter);
 }
 
 StatusOr<flat_hash_map<std::string, CodepointSet>> BuiltInFrequenciesList() {

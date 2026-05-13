@@ -42,14 +42,16 @@ absl::StatusOr<ift::common::FontData> LoadFile(const char* path);
 // For example "FrequencyData.riegeli@*" will load all files of the
 // form FrequencyData.riegeli-*-of-* into the frequency data set.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
-    const char* path);
+    const char* path,
+    std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
 // loads frequency data from https://github.com/w3c/ift-encoder-data
 //
 // name is the file name to load.
 // Append "@*" to the name to load all sharded files for a name.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
-    const char* name);
+    const char* name,
+    std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
 // Returns a list of all built-in frequency data sets and the codepoints
 // they cover.

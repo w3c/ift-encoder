@@ -32,9 +32,10 @@ namespace ift::config {
 // Loads unicode frequency data from either a dedicated frequency data file or
 // from the codepoint and frequency entries if no data file is given.
 StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
-    const std::string& frequency_data_file_path, bool built_in) {
+    const std::string& frequency_data_file_path, bool built_in,
+    std::optional<CodepointSet> filter) {
   if (built_in) {
-    return LoadBuiltInFrequencies(frequency_data_file_path.c_str());
+    return LoadBuiltInFrequencies(frequency_data_file_path.c_str(), filter);
   }
 
   std::filesystem::path freq_path = frequency_data_file_path;
@@ -44,7 +45,7 @@ StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
     resolved_path = config_path.parent_path() / freq_path;
   }
 
-  return LoadFrequenciesFromRiegeli(resolved_path.c_str());
+  return LoadFrequenciesFromRiegeli(resolved_path.c_str(), filter);
 }
 
 SubsetDefinition SegmenterConfigUtil::SegmentProtoToSubsetDefinition(
@@ -115,7 +116,8 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
 
 StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
     const CostConfiguration& base, const CostConfiguration& config,
-    CodepointSet& covered_codepoints) {
+    CodepointSet& covered_codepoints,
+    const CodepointSet& font_codepoints) {
   CostConfiguration merged = base;
   merged.MergeFrom(config);
 
@@ -127,8 +129,8 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
 
   UnicodeFrequencies freq =
       config.has_built_in_freq_data_name()
-          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true))
-          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false));
+          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true, font_codepoints))
+          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false, font_codepoints));
 
   covered_codepoints = freq.CoveredCodepoints();
 
@@ -184,7 +186,8 @@ SegmenterConfigUtil::ProtoToMergeGroup(
     const std::vector<SubsetDefinition>& segments,
     const flat_hash_map<SegmentId, uint32_t>& id_to_index,
     const HeuristicConfiguration& base_heuristic,
-    const CostConfiguration& base_cost, const MergeGroup& group) {
+    const CostConfiguration& base_cost, const MergeGroup& group,
+    const CodepointSet& font_codepoints) {
   SegmentSet segment_indices;
   for (uint32_t feature_group_id : group.feature_segment_ids().values()) {
     segment_indices.insert(id_to_index.at(
@@ -196,7 +199,7 @@ SegmenterConfigUtil::ProtoToMergeGroup(
   if (group.has_cost_config()) {
     CodepointSet covered_codepoints;
     strategy = TRY(ProtoToCostStrategy(base_cost, group.cost_config(),
-                                       covered_codepoints));
+                                       covered_codepoints, font_codepoints));
 
     if (group.has_segment_ids()) {
       segment_indices.union_set(MapToIndices(group.segment_ids(), id_to_index));
@@ -248,7 +251,7 @@ SegmenterConfigUtil::ConfigToMergeGroups(
   for (const auto& merge_group : config.merge_groups()) {
     merge_groups.insert(TRY(ProtoToMergeGroup(
         segments, segment_id_to_index, config.base_heuristic_config(),
-        config.base_cost_config(), merge_group)));
+        config.base_cost_config(), merge_group, font_codepoints)));
   }
 
   // If provided add a final merge group that applies to any segments not yet

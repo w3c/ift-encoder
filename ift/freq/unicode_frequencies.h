@@ -2,6 +2,7 @@
 #define IFT_FREQ_UNICODE_FREQUENCIES_H_
 
 #include <cstdint>
+#include <optional>
 
 #include "absl/container/flat_hash_map.h"
 #include "hb.h"
@@ -60,7 +61,9 @@ class UnicodeFrequencies {
 
 class UnicodeFrequenciesBuilder {
  public:
-  UnicodeFrequenciesBuilder() = default;
+  UnicodeFrequenciesBuilder(
+      std::optional<ift::common::CodepointSet> filter = std::nullopt)
+      : filter_(std::move(filter)) {}
 
   // Add frequency data for the codepoint pair (cp1, cp2).
   // When cp1 == cp2 this supplies frequency for a single codepoint.
@@ -71,6 +74,7 @@ class UnicodeFrequenciesBuilder {
  private:
   absl::flat_hash_map<uint64_t, uint64_t> frequencies_;
   uint64_t max_count_ = 0;
+  std::optional<ift::common::CodepointSet> filter_;
 };
 
 }  // namespace ift::freq

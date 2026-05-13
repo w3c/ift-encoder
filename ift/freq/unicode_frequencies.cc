@@ -32,6 +32,13 @@ UnicodeFrequencies UnicodeFrequenciesBuilder::Build() {
   if (max_count_ > 0) {
     result.unknown_probability_ = 1.0 / (double)max_count_;
     for (const auto& [key, count] : frequencies_) {
+      if (filter_.has_value()) {
+        uint32_t cp1 = key >> 32;
+        uint32_t cp2 = key & (uint64_t)0x00000000FFFFFFFF;
+        if (!filter_->contains(cp1) || !filter_->contains(cp2)) {
+          continue;
+        }
+      }
       result.probabilities_[key] = (double)count / (double)max_count_;
     }
   }
@@ -45,7 +52,7 @@ UnicodeFrequencies::UnicodeFrequencies(
   for (const auto& pair : frequencies) {
     builder.Add(pair.first.first, pair.first.second, pair.second);
   }
-  *this = std::move(builder.Build());
+  *this = builder.Build();
 }
 
 double UnicodeFrequencies::ProbabilityFor(uint32_t cp) const {
