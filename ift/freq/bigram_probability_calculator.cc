@@ -21,9 +21,12 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
     const CodepointSet& codepoints, double best_lower) const {
   auto it = cache_.find(codepoints);
   if (it != cache_.end()) {
+    cache_hit_++;
     double lower = std::max(it->second.Min(), best_lower);
     double upper = std::max(it->second.Max(), lower);
     return ProbabilityBound(lower, upper);
+  } else {
+    cache_miss_++;
   }
 
   unsigned n = codepoints.size();

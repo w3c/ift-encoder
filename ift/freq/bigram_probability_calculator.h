@@ -1,6 +1,8 @@
 #ifndef IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 
+
+#include "absl/log/log.h"
 #include "absl/container/flat_hash_map.h"
 #include "ift/common/int_set.h"
 #include "ift/freq/probability_bound.h"
@@ -28,6 +30,15 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const override;
 
+  void ResetCache() const override {
+    if (cache_hit_ || cache_miss_) {
+        VLOG(1) << "bigram prob cache hit % = " << ((double) cache_hit_ / (double) (cache_hit_ + cache_miss_)) * 100.0;
+    }
+    cache_hit_ = 0;
+    cache_miss_ = 0;
+    cache_.clear();
+  }
+
  private:
   ProbabilityBound BigramProbabilityBound(
       const ift::common::CodepointSet& codepoints,
@@ -39,6 +50,8 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
 
   UnicodeFrequencies frequencies_;
   mutable absl::flat_hash_map<ift::common::CodepointSet, ProbabilityBound> cache_;
+  mutable uint64_t cache_hit_ = 0;
+  mutable uint64_t cache_miss_ = 0;
 };
 
 }  // namespace ift::freq
