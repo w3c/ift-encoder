@@ -355,7 +355,14 @@ static StatusOr<double> CostFor(Merger& merger, const ActivationCondition& condi
 
 StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     Merger& merger, uint32_t existing_init_font_size,
-    const GlyphSet& moved_glyphs) {
+    const GlyphSet& moved_glyphs,
+    absl::flat_hash_map<ift::common::GlyphSet, uint32_t>& smallest_size_increases
+  ) {
+  // Brotli compression results can be a bit noisy and it's common to see very different
+  // size increase (in both directions) for adding the same glyphs as the base changes.
+  // So to help control some of this noise we use smallest_size_increases to track the smallest
+  // size increase we've seen for moving a specific set of glyphs.
+
   VLOG(1) << "cost_delta for move of glyphs " << moved_glyphs.ToString()
           << " to the initial font =";
 
@@ -379,18 +386,22 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   TRYV(ComputeInitFontGlyphDelta(merger, moved_glyphs, new_glyph_closure,
                                  glyph_closure_delta, codepoint_closure_delta));
 
-  double total_delta = 0.0;
-  double before = existing_init_font_size;
-  double after =
-      TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
+  uint32_t after = TRY(merger.Context().patch_size_cache_for_init_font->GetPatchSize(
           new_glyph_closure));
+  uint32_t init_increase = 0;
 
-  if (after > before) {
-    // case where after is < before happen occasionally as the result of
-    // running with lower brotli compression quality. Ignores these in order
-    // to stay consistent with the 'best case' used above.
-    total_delta = after - before;
+  if (after >= existing_init_font_size) {
+    init_increase = after - existing_init_font_size;
+    auto [it, _] = smallest_size_increases.emplace(glyph_closure_delta, UINT32_MAX);
+    if (init_increase < it->second) {
+      it->second = init_increase;
+    } else {
+      init_increase = it->second;
+    }
   }
+
+  double total_delta = init_increase;
+
   VLOG(1) << "    + " << total_delta << " [init font increase]";
 
   SegmentSet modified_segments = merger.Context().SegmentationInfo().SegmentsForCodepoints(codepoint_closure_delta);
