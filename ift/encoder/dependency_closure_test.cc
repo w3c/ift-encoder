@@ -235,6 +235,38 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
   ASSERT_EQ(conditions.at(77).ToString(), "if (s1) then p0");
 }
 
+TEST_F(DependencyClosureTest, InertSegments) {
+  Reconfigure(face.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 3 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1}));
+
+  Reconfigure(face.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'f', 'i'}, ProbabilityBound::Zero()},
+              });
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1, 2}));
+}
+
+TEST_F(DependencyClosureTest, InertSegments_InitFont) {
+  Reconfigure(face.get(), WithDefaultFeatures({'f'}),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1, 2}));
+}
+
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
   SubsetDefinition aalt;
   aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
@@ -770,6 +802,22 @@ TEST_F(DependencyClosureTest, SegmentsMerged_GlyphConditionsUpdate) {
   EXPECT_EQ(conditions.at(444).ToString(), "if (s2) then p0");
 }
 
+TEST_F(DependencyClosureTest, SegmentsMerged_InertSegments) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0}));
+
+  Status s = dependency_closure->SegmentsMerged(2, {1, 2});
+  ASSERT_TRUE(s.ok()) << s;
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 2}));
+}
+
 TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
   Reconfigure(face.get(), WithDefaultFeatures(),
               {
@@ -793,6 +841,26 @@ TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
   EXPECT_FALSE(conditions.contains(74 /* f */));
   // 'fi' should now only depend on 'i' (s2)
   EXPECT_EQ(conditions.at(444 /* fi */).ToString(), "if (s2) then p0");
+}
+
+TEST_F(DependencyClosureTest, InitFontChanged_InertSegments) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0}));
+
+  Status s = segmentation_info->ReassignInitSubset(closure_cache,
+                                                   WithDefaultFeatures({'f'}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 2}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {

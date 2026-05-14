@@ -101,6 +101,10 @@ class DependencyClosure {
       const common::SegmentSet& segments) const;
 #endif
 
+  const ift::common::SegmentSet& InertSegments() const {
+    return inert_segments_;
+  }
+
   // This structure caches information derived from the segmentation info
   // segments. These two function signal that segmentation info segments have
   // changed and recomputes the internal cached information.
@@ -138,6 +142,8 @@ class DependencyClosure {
   // graph.
   absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
   ExtractAllNodeConditions() const;
+
+  ift::common::SegmentSet ComputeInertSegments(const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions) const;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
   InitializeConditions() const;
@@ -191,6 +197,11 @@ class DependencyClosure {
 
   ift::common::GlyphSet context_glyphs_;
   ift::common::GlyphSet init_font_context_glyphs_;
+
+  // Inert segments are segments that:
+  // - Appear only in a single unitary condition, that is
+  //   they do not interact with any other segments.
+  ift::common::SegmentSet inert_segments_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>

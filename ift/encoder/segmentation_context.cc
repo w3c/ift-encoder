@@ -366,6 +366,7 @@ void SegmentationContext::TransferDependencyGraphGlyphConditions(
     }
     glyph_condition_set.SetCondition(g, condition);
   }
+  inert_segments_ = (*dependency_closure_)->InertSegments();
 #endif
 }
 

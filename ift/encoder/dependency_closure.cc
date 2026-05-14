@@ -100,12 +100,16 @@ Status DependencyClosure::InitNodeConditionsCache() {
     }
   }
 
+  inert_segments_ = ComputeInertSegments(glyph_condition_cache_);
+
   return absl::OkStatus();
 }
 
 void DependencyClosure::UpdateNodeConditionsCache(
     segment_index_t base_segment, const common::SegmentSet& segments) {
   auto affected_nodes = SegmentsToAffectedNodeConditions(segments);
+
+  bool base_is_inert = true;
 
   for (Node node : affected_nodes) {
     auto it = node_condition_cache_.find(node);
@@ -129,9 +133,20 @@ void DependencyClosure::UpdateNodeConditionsCache(
       glyph_condition_cache_.insert({node.Id(), new_condition});
     }
 
+    if (!new_condition.IsUnitary()) {
+      base_is_inert = false;
+    }
+
     for (segment_index_t s : it->second.TriggeringSegments()) {
       node_conditions_with_segment_[s].insert(node);
     }
+  }
+
+  inert_segments_.subtract(segments);
+  if (base_is_inert) {
+    inert_segments_.insert(base_segment);
+  } else {
+    inert_segments_.erase(base_segment);
   }
 }
 
@@ -537,4 +552,15 @@ DependencyClosure::ExtractAllNodeConditions() const {
 
   return conditions;
 }
+
+SegmentSet DependencyClosure::ComputeInertSegments(const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions) const {
+  SegmentSet candidates = segmentation_info_->NonEmptySegments();
+  for (const auto& [_, condition] : conditions) {
+    if (!condition.IsUnitary()) {
+      candidates.subtract(condition.TriggeringSegments());
+    }
+  }
+  return candidates;
+}
+
 }  // namespace ift::encoder
