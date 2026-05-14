@@ -3,7 +3,6 @@
 #include <memory>
 #include <optional>
 
-#include "absl/log/globals.h"
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
@@ -16,6 +15,8 @@
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/unicode_frequencies.h"
+
+using absl::flat_hash_map;
 
 using ift::config::CLOSURE_ONLY;
 using ift::config::DEP_GRAPH_ONLY;
@@ -529,7 +530,8 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   uint32_t i_fi_ffi_size = *context->patch_size_cache_for_init_font->GetPatchSize({g_i, g_fi, g_ffi});
 
   /* Case 1: simple move */
-  auto r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b});
+  flat_hash_map<GlyphSet, uint32_t> smallest;
+  auto r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b}, smallest);
   ASSERT_TRUE(r.ok()) << r.status();
   double delta = r->first;
   GlyphSet moved_glyphs = r->second;
@@ -540,7 +542,8 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   EXPECT_EQ(moved_glyphs, (GlyphSet {g_b}));
 
   /* Case 2: move + modified conditions (one half of (f AND i) moved) */
-  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f});
+  smallest.clear();
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f}, smallest);
   ASSERT_TRUE(r.ok()) << r.status();
   delta = r->first;
   moved_glyphs = r->second;
@@ -556,7 +559,8 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   EXPECT_EQ(moved_glyphs, (GlyphSet {g_f}));
 
   /* Case 3: move non exclusive */
-  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi, g_ffi});
+  smallest.clear();
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi, g_ffi}, smallest);
   ASSERT_TRUE(r.ok()) << r.status();
   delta = r->first;
   moved_glyphs = r->second;
@@ -569,7 +573,8 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   EXPECT_EQ(moved_glyphs, (GlyphSet {g_fi, g_ffi}));
 
   /* Case 4: move part of a patch */
-  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi});
+  smallest.clear();
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_fi}, smallest);
   ASSERT_TRUE(r.ok()) << r.status();
   delta = r->first;
   moved_glyphs = r->second;
@@ -583,7 +588,8 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   EXPECT_EQ(moved_glyphs, (GlyphSet {g_fi}));
 
   /* Case 5: move multiple */
-  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f, g_i});
+  smallest.clear();
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_f, g_i}, smallest);
   ASSERT_TRUE(r.ok()) << r.status();
   delta = r->first;
   moved_glyphs = r->second;
@@ -596,6 +602,68 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
     1e-9
   );
   EXPECT_EQ(moved_glyphs, (GlyphSet {g_f, g_i, g_fi, g_ffi}));
+}
+
+TEST_F(CandidateMergeTest, ComputeInitFontCostDelta_TracksSmallestDelta) {
+  std::vector<Segment> segments = {
+      {{'b'}, ProbabilityBound{0.95, 0.95}},
+      {{'f'}, ProbabilityBound{0.85, 0.85}},
+      {{'i'}, ProbabilityBound{0.75, 0.75}},
+  };
+
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments);
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {'a'}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality());
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
+      all);
+
+  glyph_id_t g_a = 69;
+  glyph_id_t g_b = 70;
+
+  MockPatchSizeCache* mock_cache = new MockPatchSizeCache();
+  context->patch_size_cache_for_init_font.reset(mock_cache);
+
+  uint32_t init_size = 1000;
+  mock_cache->SetPatchSize({0, g_a}, init_size);
+  mock_cache->SetPatchSize({0, g_a, g_b}, 1100);
+
+  flat_hash_map<GlyphSet, uint32_t> smallest_size_increases;
+
+  // First call: size increase is 100.
+  auto r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b}, smallest_size_increases);
+  ASSERT_TRUE(r.ok()) << r.status();
+  double first_delta = r->first;
+  EXPECT_EQ(smallest_size_increases.at({g_b}), 100);
+
+  // Second call: simulated size increase is 200 (1200 - 1000).
+  // But it should use the stored smallest increase (100).
+  mock_cache->SetPatchSize({0, g_a, g_b}, 1200);
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b}, smallest_size_increases);
+  ASSERT_TRUE(r.ok()) << r.status();
+  double second_delta = r->first;
+
+  EXPECT_EQ(smallest_size_increases.at({g_b}), 100);
+  EXPECT_EQ(first_delta, second_delta);
+
+  // Third call: simulated size increase is 50 (1050 - 1000).
+  // It should update the stored smallest increase to 50 and return a smaller delta.
+  mock_cache->SetPatchSize({0, g_a, g_b}, 1050);
+  r = CandidateMerge::ComputeInitFontCostDelta(merger, init_size, {g_b}, smallest_size_increases);
+  ASSERT_TRUE(r.ok()) << r.status();
+  double third_delta = r->first;
+
+  EXPECT_EQ(smallest_size_increases.at({g_b}), 50);
+
+  EXPECT_LT(third_delta, first_delta);
 }
 
 }  // namespace ift::encoder

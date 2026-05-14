@@ -99,11 +99,11 @@ class DependencyClosure {
 
   absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
       const common::SegmentSet& segments) const;
-#endif
 
   const ift::common::SegmentSet& InertSegments() const {
     return inert_segments_;
   }
+#endif
 
   // This structure caches information derived from the segmentation info
   // segments. These two function signal that segmentation info segments have

@@ -13,6 +13,7 @@
 #include "ift/encoder/types.h"
 
 using absl::btree_map;
+using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using ift::common::GlyphSet;
@@ -146,6 +147,8 @@ Status Merger::MoveSegmentsToInitFont() {
   // to non-batch processing where all candidate conditions are checked
   // and moved one at a time.
 
+  flat_hash_map<ift::common::GlyphSet, uint32_t> smallest_size_increases;
+
   bool batch_mode = true;
   VLOG(0) << " batch checking inert segments for move to init font.";
   do {
@@ -172,7 +175,7 @@ Status Merger::MoveSegmentsToInitFont() {
       }
 
       auto [delta, all_glyphs] = TRY(CandidateMerge::ComputeInitFontCostDelta(
-          *this, init_font_size, glyphs));
+          *this, init_font_size, glyphs, smallest_size_increases));
       if (delta >= lowest_delta) {
         continue;
       }

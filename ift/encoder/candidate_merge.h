@@ -157,11 +157,14 @@ struct CandidateMerge {
   // (including those added by closure).
   static absl::StatusOr<std::pair<double, ift::common::GlyphSet>>
   ComputeInitFontCostDelta(Merger& merger, uint32_t existing_init_font_size,
-                           const ift::common::GlyphSet& moved_glyphs);
+                           const ift::common::GlyphSet& moved_glyphs,
+                           absl::flat_hash_map<ift::common::GlyphSet, uint32_t>& smallest_size_increases
+                          );
 
   static absl::StatusOr<double> ComputeBestCaseInitFontCostDelta(
       Merger& merger, uint32_t existing_init_font_size,
-      const ift::common::GlyphSet& moved_glyphs);
+      const ift::common::GlyphSet& moved_glyphs
+  );
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
       const Merger& context, segment_index_t base_segment,
