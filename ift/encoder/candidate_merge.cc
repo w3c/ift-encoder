@@ -657,6 +657,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
             fallback_changed = true;
           }
         }
+        if (info.glyphs.empty()) {
+          // Patch has no remaining glyphs, so don't add back any cost for it.
+          continue;
+        }
       }
       size = TRY(patch_size_cache->GetPatchSize(info.glyphs));
       if (merger.ShouldRecordMergedSizeReductions()) {
