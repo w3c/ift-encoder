@@ -88,7 +88,7 @@ enum Quality {
 //     Would be reasonable to always have this set to at least the minimum group
 //     size.
 //
-// - condition_analysis_mode: always use CLOSURE_AND_DEP_GRAPH.
+// - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available, otherwise CLOSURE_ONLY.
 //
 // Merge group settings:
 //
@@ -144,6 +144,8 @@ enum Quality {
 
 // TODO(garretrieger): collect data on brotli compression times as a function of
 // quality assuming group sizes of 4 using a CJK font
+
+static constexpr uint32_t DEFAULT_NETWORK_COST = 200;
 
 static bool IsScript(absl::string_view file_name) {
   return absl::StartsWith(file_name, "Script_");
@@ -644,6 +646,10 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   ApplyQualityLevelTo(quality, *config.mutable_ungrouped_config());
   ApplyQualityLevelTo(quality, *config.mutable_base_cost_config());
 
+  // Based on measured network overhead cost in practice from the
+  // ift demo.
+  config.mutable_base_cost_config()->set_network_overhead_cost(DEFAULT_NETWORK_COST);
+
   for (auto& merge_group : *config.mutable_merge_groups()) {
     ApplyQualityLevelTo(quality, merge_group);
   }
@@ -655,7 +661,11 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
   config.set_generate_feature_segments(true);
+#ifdef HB_DEPEND_API
   config.set_condition_analysis_mode(DEP_GRAPH_ONLY);
+#else
+  config.set_condition_analysis_mode(CLOSURE_ONLY);
+#endif
 
   auto* base_plan = config.mutable_base_segmentation_plan();
   base_plan->set_jump_ahead(2);
@@ -706,7 +716,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
 
     cost->set_built_in_freq_data_name(script);
     if (script == primary_script_file) {
-      cost->set_initial_font_merge_threshold(-60);
+      cost->set_initial_font_merge_threshold(-(double) DEFAULT_NETWORK_COST * (0.8));
     }
   }
 
