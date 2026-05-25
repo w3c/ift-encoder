@@ -100,6 +100,7 @@ base_heuristic_config {
 }
 base_cost_config {
   use_bigrams: true
+  network_overhead_cost: 200
   min_group_size: 4
   optimization_cutoff_fraction: 0.005
 }
@@ -126,7 +127,7 @@ merge_groups {
   preprocess_merging_group_size: 1
   cost_config {
     built_in_freq_data_name: "Script_latin.riegeli"
-    initial_font_merge_threshold: -60
+    initial_font_merge_threshold: -160
     initial_font_merge_probability_threshold: 0.25
   }
 }
@@ -149,8 +150,13 @@ base_segmentation_plan {
   use_prefetch_lists: true
 }
 generate_feature_segments: true
-condition_analysis_mode: DEP_GRAPH_ONLY
-)");
+)"
+#ifdef HB_DEPEND_API
+"condition_analysis_mode: DEP_GRAPH_ONLY\n"
+#else
+"condition_analysis_mode: CLOSURE_ONLY\n"
+#endif
+);
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {
