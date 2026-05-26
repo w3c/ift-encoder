@@ -71,7 +71,7 @@ class GlyphGroupingsTest : public ::testing::Test {
     SubsetDefinition init_font_segment;
     AddInitSubsetDefaults(init_font_segment);
 
-    closure_cache_ = std::make_unique<GlyphClosureCache>(roboto_.get());
+    closure_cache_ = std::move(*GlyphClosureCache::Create(roboto_.get()));
     requested_segmentation_info_ = *RequestedSegmentationInformation::Create(
         segments_, init_font_segment, *closure_cache_, PATCH);
 

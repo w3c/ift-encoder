@@ -56,7 +56,7 @@ class SegmentationContext {
     // pattern for construction.
 
     std::unique_ptr<GlyphClosureCache> closure_cache =
-        std::make_unique<GlyphClosureCache>(face);
+        TRY(GlyphClosureCache::Create(face));
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(segments, initial_segment,
                                                      *closure_cache,
@@ -73,7 +73,7 @@ class SegmentationContext {
 
   absl::StatusOr<SegmentationContext> WithSameSettings() const {
     std::unique_ptr<GlyphClosureCache> closure_cache =
-        std::make_unique<GlyphClosureCache>(original_face.get());
+        TRY(GlyphClosureCache::Create(original_face.get()));
 
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),

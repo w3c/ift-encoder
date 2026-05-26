@@ -6,7 +6,9 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include <memory>
 #include "ift/encoder/subset_definition.h"
+#include "ift/dep_graph/unicode_edges.h"
 
 namespace ift::encoder {
 
@@ -17,19 +19,23 @@ class RequestedSegmentationInformation;
  */
 class GlyphClosureCache {
  public:
-  GlyphClosureCache(hb_face_t* face)
-      : preprocessed_face_(
-            ift::common::make_hb_face(hb_subset_preprocess(face))),
-        original_face_(ift::common::make_hb_face(hb_face_reference(face))),
-        gid_to_unicode_(
-            common::FontHelper::GidToUnicodeMap(preprocessed_face_.get())) {}
+  static absl::StatusOr<std::unique_ptr<GlyphClosureCache>> Create(hb_face_t* face);
 
+ private:
+  GlyphClosureCache(
+    hb_face_t* original_face,
+    common::hb_face_unique_ptr preprocessed_face,
+    dep_graph::UnicodeEdges unicode_edges);
+
+ public:
   absl::StatusOr<ift::common::GlyphSet> GlyphClosure(
       const SubsetDefinition& segment);
 
   absl::StatusOr<ift::common::GlyphSet> SegmentClosure(
       const RequestedSegmentationInformation* segmentation_info,
       const ift::common::SegmentSet& segments);
+
+  common::CodepointSet CodepointsForGlyphs(const common::GlyphSet& glyphs) const;
 
   // Checks if a disjunction accross segments satisifies the closure require for
   // glyphs, returns true if there are potential additional conditions beyond
@@ -60,13 +66,16 @@ class GlyphClosureCache {
   hb_face_t* Face() { return preprocessed_face_.get(); }
 
  private:
-  ift::common::hb_face_unique_ptr preprocessed_face_;
+  common::CodepointSet UnicodeClosure(const common::CodepointSet& unicodes) const;
+
   ift::common::hb_face_unique_ptr original_face_;
+  ift::common::hb_face_unique_ptr preprocessed_face_;
   absl::flat_hash_map<SubsetDefinition, ift::common::GlyphSet>
       glyph_closure_cache_;
   uint64_t glyph_closure_cache_hit_ = 0;
   uint64_t glyph_closure_cache_miss_ = 0;
   absl::flat_hash_map<uint32_t, common::CodepointSet> gid_to_unicode_;
+  dep_graph::UnicodeEdges unicode_edges_;
 };
 
 }  // namespace ift::encoder

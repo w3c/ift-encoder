@@ -322,6 +322,24 @@ class IntSet {
     return out.str();
   }
 
+  std::string ToStringHex() const {
+    std::stringstream out;
+
+    out << "{";
+
+    bool first = true;
+    for (uint32_t v : *this) {
+      if (!first) {
+        out << ", ";
+      }
+      first = false;
+      out << std::hex << v;
+    }
+
+    out << "}";
+    return out.str();
+  }
+
  private:
   static bool intersects(const hb_set_t* a, const hb_set_t* b) {
     if (hb_set_get_population(a) > hb_set_get_population(b)) {

@@ -15,6 +15,7 @@
 #include "ift/common/try.h"
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/traversal.h"
+#include "ift/dep_graph/unicode_edges.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
@@ -37,6 +38,8 @@ class TraversalContext;
  * Allows exploring glyph dependencies within a font.
  */
 class DependencyGraph {
+ private:
+
  public:
   static constexpr uint32_t kNumberOfClosurePhases = 6;
 
@@ -71,16 +74,7 @@ class DependencyGraph {
 
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face) {
-    auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
-    auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
-    hb_depend_t* depend = hb_depend_from_face_or_fail(face);
-    if (!depend) {
-      return absl::InternalError(
-          "Call to hb_depend_from_face_or_fail() failed.");
-    }
-    return DependencyGraph(segmentation_info, depend, face, full_feature_set);
-  }
+      hb_face_t* face);
 
   // Traverse the full dependency graph (segments, unicodes, and gids), starting
   // at one or more specific starting nodes. Attempts to mimic hb glyph closure
@@ -134,15 +128,9 @@ class DependencyGraph {
   DependencyGraph(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_depend_t* depend, hb_face_t* face,
-      absl::flat_hash_set<hb_tag_t> full_feature_set)
-      : segmentation_info_(segmentation_info),
-        original_face_(ift::common::make_hb_face(hb_face_reference(face))),
-        full_feature_set_(full_feature_set),
-        unicode_to_gid_(UnicodeToGid(face)),
-        dependency_graph_(depend, &hb_depend_destroy),
-        variation_selector_implied_edges_(ComputeUVSEdges()),
-        layout_feature_implied_edges_(ComputeFeatureEdges()),
-        context_glyph_implied_edges_(ComputeContextGlyphEdges()) {}
+      absl::flat_hash_set<hb_tag_t> full_feature_set,
+      absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid,
+      UnicodeEdges unicode_edges);
 
   struct ClosureState {
     std::vector<Node> next{};
@@ -223,14 +211,16 @@ class DependencyGraph {
   const ift::encoder::RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   absl::flat_hash_set<hb_tag_t> full_feature_set_;
-
   absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid_;
+
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
 
   struct VariationSelectorEdge {
     hb_codepoint_t unicode;
     hb_codepoint_t gid;
   };
+
+
 
   struct LayoutFeatureEdge {
     hb_tag_t layout_tag;
@@ -268,6 +258,15 @@ class DependencyGraph {
   ComputeFeatureEdges() const;
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
   ComputeContextGlyphEdges() const;
+  static absl::Status ParseDerivedNormalizationProps(
+      const std::string& path,
+      common::CodepointSet& full_composition_exclusions);
+
+  static absl::Status ParseUnicodeData(
+      const std::string& path,
+      const common::CodepointSet& unicodes,
+      const common::CodepointSet& full_composition_exclusions,
+      UnicodeEdges& result);
 
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
       variation_selector_implied_edges_;
@@ -277,6 +276,12 @@ class DependencyGraph {
 
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
       context_glyph_implied_edges_;
+
+  absl::flat_hash_map<hb_codepoint_t, std::vector<UnicodeConjunctiveEdge>>
+      composition_implied_edges_;
+
+  absl::flat_hash_map<hb_codepoint_t, ift::common::CodepointSet>
+      decomposition_implied_edges_;
 
   common::hb_set_unique_ptr scratch_set_ = common::make_hb_set();
   common::hb_set_unique_ptr scratch_set_aux_ = common::make_hb_set();

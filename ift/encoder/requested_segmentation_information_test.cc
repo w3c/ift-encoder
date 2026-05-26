@@ -4,6 +4,7 @@
 
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
+#include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
@@ -37,7 +38,7 @@ class RequestedSegmentationInformationTest : public ::testing::Test {
 };
 
 TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
-  GlyphClosureCache cache(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},
@@ -45,7 +46,7 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
   };
 
   auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 
@@ -59,7 +60,7 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
-  GlyphClosureCache cache(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
   std::vector<Segment> segments{
       {{'a'}, ProbabilityBound::Zero()},
       {{'b'}, ProbabilityBound::Zero()},
@@ -67,7 +68,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
   };
 
   auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 
@@ -85,14 +86,14 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
-  GlyphClosureCache cache(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},
   };
 
   auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 
@@ -103,7 +104,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
   // Reassign init subset to include 'b'. This should remove 'b' from all segments.
   SubsetDefinition new_init;
   new_init.codepoints = {'b'};
-  ASSERT_TRUE(info->ReassignInitSubset(cache, new_init).ok());
+  ASSERT_TRUE(info->ReassignInitSubset(*cache, new_init).ok());
 
   EXPECT_EQ(info->SegmentsForCodepoints({'a'}), (SegmentSet{0}));
   EXPECT_EQ(info->SegmentsForCodepoints({'b'}), (SegmentSet{}));

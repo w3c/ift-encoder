@@ -1,9 +1,11 @@
 #include "ift/encoder/glyph_closure_cache.h"
 
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
+#include "ift/dep_graph/unicode_edges.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
@@ -17,9 +19,30 @@ using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_set_unique_ptr;
 using ift::common::make_hb_set;
+using ift::common::make_hb_face;
 using ift::common::SegmentSet;
+using ift::common::FontHelper;
+using ift::common::hb_face_unique_ptr;
+using ift::dep_graph::UnicodeEdges;
 
 namespace ift::encoder {
+
+StatusOr<std::unique_ptr<GlyphClosureCache>> GlyphClosureCache::Create(hb_face_t* face) {
+  auto preprocessed_face = make_hb_face(hb_subset_preprocess(face));
+  CodepointSet unicodes = FontHelper::ToCodepointsSet(preprocessed_face.get());
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(unicodes));
+  return std::unique_ptr<GlyphClosureCache>(new GlyphClosureCache(face, std::move(preprocessed_face), std::move(unicode_edges)));
+}
+
+GlyphClosureCache::GlyphClosureCache(
+  hb_face_t* original_face,
+  hb_face_unique_ptr preprocessed_face,
+  dep_graph::UnicodeEdges unicode_edges)
+    : original_face_(make_hb_face(hb_face_reference(original_face))),
+      preprocessed_face_(std::move(preprocessed_face)),
+      gid_to_unicode_(
+          FontHelper::GidToUnicodeMap(preprocessed_face_.get())),
+      unicode_edges_(std::move(unicode_edges)) {}
 
 StatusOr<GlyphSet> GlyphClosureCache::SegmentClosure(
     const RequestedSegmentationInformation* segmentation_info,
@@ -74,6 +97,47 @@ StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
   return closure_glyphs.intersects(glyphs);
 }
 
+CodepointSet GlyphClosureCache::UnicodeClosure(const CodepointSet& unicodes) const {
+
+  CodepointSet queue = unicodes;
+  CodepointSet visited;
+
+  while (!queue.empty()) {
+    hb_codepoint_t u = *queue.min();
+    queue.erase(u);
+    visited.insert(u);
+
+    // outgoing decomp edges
+    auto decomp = unicode_edges_.decomposition.find(u);
+    if (decomp != unicode_edges_.decomposition.end()) {
+      CodepointSet edges = decomp->second;
+      edges.subtract(visited);
+      queue.union_set(edges);
+      visited.union_set(edges);
+    }
+
+    // outgoing comp edges
+    auto comp = unicode_edges_.composition.find(u);
+    if (comp != unicode_edges_.composition.end()) {
+      for (const auto& edge : comp->second) {
+        if (!visited.contains(edge.dest) && visited.contains(edge.other_source)) {
+          // edge requirements are satisfied, we can follow it.
+          queue.insert(edge.dest);
+          visited.insert(edge.dest);
+        }
+        // Note: if edge requirements are not satisfied, then this edge will be rechecked
+        // later on if edge.other_source is visited, since edges for a dest are always
+        // present from both sources.
+      }
+    }
+  }
+
+  CodepointSet delta = visited;
+  delta.subtract(unicodes);
+
+  return visited;
+}
+
 StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
     const SubsetDefinition& segment) {
   auto it = glyph_closure_cache_.find(segment);
@@ -89,8 +153,10 @@ StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
     return absl::InternalError("Closure subset configuration failed.");
   }
 
-  segment.ConfigureInput(input, preprocessed_face_.get());
+  SubsetDefinition expanded_segment = segment;
+  expanded_segment.codepoints = UnicodeClosure(segment.codepoints);
 
+  expanded_segment.ConfigureInput(input, preprocessed_face_.get());
   hb_subset_plan_t* plan =
       hb_subset_plan_create_or_fail(preprocessed_face_.get(), input);
   hb_subset_input_destroy(input);
@@ -184,6 +250,18 @@ Status GlyphClosureCache::AnalyzeSegment(
   return absl::OkStatus();
 }
 
+CodepointSet GlyphClosureCache::CodepointsForGlyphs(const GlyphSet& glyphs) const {
+  CodepointSet unicodes;
+  for (glyph_id_t gid : glyphs) {
+    auto unicode = gid_to_unicode_.find(gid);
+    if (unicode != gid_to_unicode_.end()) {
+      unicodes.union_set(unicode->second);
+    }
+  }
+  // TODO XXXX This needs to also pull in relevant variation selectors.
+  return unicodes;
+}
+
 StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(
     const SubsetDefinition& definition) {
   SubsetDefinition expanded = definition;
@@ -191,13 +269,7 @@ StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(
   while (changed) {
     GlyphSet closure_gids = TRY(GlyphClosure(expanded));
 
-    CodepointSet closure_unicodes;
-    for (glyph_id_t gid : closure_gids) {
-      auto unicode = gid_to_unicode_.find(gid);
-      if (unicode != gid_to_unicode_.end()) {
-        closure_unicodes.union_set(unicode->second);
-      }
-    }
+    CodepointSet closure_unicodes = CodepointsForGlyphs(closure_gids);
 
     changed = false;
     if (!closure_gids.is_subset_of(expanded.gids)) {

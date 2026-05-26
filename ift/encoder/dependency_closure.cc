@@ -546,6 +546,7 @@ DependencyClosure::ExtractAllNodeConditions() const {
           {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
       auto incoming_edges = TRY(graph_.CollectIncomingEdges(
           {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+
       TRYV(PropagateConditions(incoming_edges, sccs, conditions));
     }
   }

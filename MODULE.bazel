@@ -24,6 +24,21 @@ git_override(module_name = "ift_encoder_data", remote = "https://github.com/w3c/
 
 # Non Bazel Modules
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+# Unicode Data
+http_file(
+    name = "unicode_data",
+    integrity = "sha256-Lh78HctZxXXu31zK5g+VIp9wbubQMYNSR9hDwR2WRww=",
+    urls = ["https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt"],
+)
+
+http_file(
+    name = "derived_normalization_props",
+    integrity = "sha256-cf1qIGosDN1B/ra39laqMQkdtF6c7ckmmF1xg5f55Ig=",
+    urls = ["https://www.unicode.org/Public/17.0.0/ucd/DerivedNormalizationProps.txt"],
+)
+
 
 # WOFF2 Encoder/Decoder
 http_archive(
