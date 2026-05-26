@@ -116,6 +116,7 @@ cc_library(
     deps = [
         ":common",
         "//ift/feature_registry",
+        "//ift/dep_graph:unicode_edges",
     ],
 )
 
@@ -364,6 +365,7 @@ cc_test(
         ":segmentation_context",
         "//ift/config:common_cc_proto",
         "@googletest//:gtest_main",
+        "@bazel_tools//tools/cpp/runfiles",
     ],
 )
 

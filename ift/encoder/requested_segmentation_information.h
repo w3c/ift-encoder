@@ -59,6 +59,7 @@ class RequestedSegmentationInformation {
       auto closure = closure_cache.GlyphClosure(full_definition_);
       if (closure.ok()) {
         full_closure_ = std::move(*closure);
+        full_codepoint_closure_ = closure_cache.CodepointsForGlyphs(full_closure_);
       }
     }
 
@@ -106,6 +107,7 @@ class RequestedSegmentationInformation {
   }
 
   const ift::common::GlyphSet& FullClosure() const { return full_closure_; }
+  const ift::common::CodepointSet& FullCodepointClosure() const { return full_codepoint_closure_; }
 
   const SubsetDefinition& FullDefinition() const { return full_definition_; }
 
@@ -161,6 +163,8 @@ class RequestedSegmentationInformation {
   SubsetDefinition init_font_segment_;
   SubsetDefinition full_definition_;
   ift::common::GlyphSet full_closure_;
+  ift::common::CodepointSet full_codepoint_closure_;
+
   bool segments_disjoint_;
   enum ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
   absl::flat_hash_map<hb_codepoint_t, ift::common::SegmentSet>

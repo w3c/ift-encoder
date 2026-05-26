@@ -41,14 +41,16 @@ class GlyphClosureCacheTest : public ::testing::Test {
 };
 
 TEST_F(GlyphClosureCacheTest, GlyphClosure) {
-  GlyphClosureCache cache(roboto.get());
-  auto closure = cache.GlyphClosure({'a'});
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
+  auto closure = (*cache)->GlyphClosure({'a'});
   ASSERT_TRUE(closure.ok());
   ASSERT_EQ(*closure, (GlyphSet{0, 69}));
 }
 
 TEST_F(GlyphClosureCacheTest, SegmentClosure) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'f'}, ProbabilityBound::Zero()},
       {{'i'}, ProbabilityBound::Zero()},
@@ -57,24 +59,25 @@ TEST_F(GlyphClosureCacheTest, SegmentClosure) {
   SubsetDefinition init;
   init.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   auto info =
-      RequestedSegmentationInformation::Create(segments, init, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
-  auto closure = cache.SegmentClosure(info->get(), {0});
+  auto closure = (*cache)->SegmentClosure(info->get(), {0});
   ASSERT_TRUE(closure.ok());
   ASSERT_EQ(*closure, (GlyphSet{0, 74 /* f */}));
 
-  closure = cache.SegmentClosure(info->get(), {1});
+  closure = (*cache)->SegmentClosure(info->get(), {1});
   ASSERT_TRUE(closure.ok());
   ASSERT_EQ(*closure, (GlyphSet{0, 77 /* i */}));
 
-  closure = cache.SegmentClosure(info->get(), {0, 1});
+  closure = (*cache)->SegmentClosure(info->get(), {0, 1});
   ASSERT_TRUE(closure.ok());
   ASSERT_EQ(*closure, (GlyphSet{0, 74, 77, 444, 446}));
 }
 
 TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
       {{0xC1 /* Aacute*/}, ProbabilityBound::Zero()},
@@ -83,22 +86,23 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
   // s0 or s1 -> g37 (A)
 
   auto info =
-      RequestedSegmentationInformation::Create(segments, {}, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, {}, **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
-  ASSERT_TRUE(*cache.HasAdditionalConditions(info->get(), {0}, {37 /* A */}));
-  ASSERT_TRUE(*cache.HasAdditionalConditions(info->get(), {1}, {37 /* A */}));
+  ASSERT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {0}, {37 /* A */}));
+  ASSERT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {1}, {37 /* A */}));
   ASSERT_FALSE(
-      *cache.HasAdditionalConditions(info->get(), {0, 1}, {37 /* A */}));
+      *(*cache)->HasAdditionalConditions(info->get(), {0, 1}, {37 /* A */}));
 
   ASSERT_FALSE(
-      *cache.HasAdditionalConditions(info->get(), {0}, {668 /* Aacute */}));
+      *(*cache)->HasAdditionalConditions(info->get(), {0}, {668 /* Aacute */}));
   ASSERT_FALSE(
-      *cache.HasAdditionalConditions(info->get(), {1}, {668 /* Aacute */}));
+      *(*cache)->HasAdditionalConditions(info->get(), {1}, {668 /* Aacute */}));
 }
 
 TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
       {{0xC1 /* Aacute*/}, ProbabilityBound::Zero()},
@@ -108,20 +112,21 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
   init.feature_tags = {HB_TAG('c', '2', 's', 'c')};
 
   auto info =
-      RequestedSegmentationInformation::Create(segments, init, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
   // s0 or s1 -> g563 (smcap A)
-  EXPECT_EQ(*cache.CodepointsToOrGids(*info->get(), {0}), (GlyphSet{37, 563}));
-  EXPECT_EQ(*cache.CodepointsToOrGids(*info->get(), {1}), (GlyphSet{37, 563}));
+  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {0}), (GlyphSet{37, 563}));
+  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {1}), (GlyphSet{37, 563}));
 
-  EXPECT_TRUE(*cache.HasAdditionalConditions(info->get(), {0}, {563}));
-  EXPECT_TRUE(*cache.HasAdditionalConditions(info->get(), {1}, {563}));
-  EXPECT_FALSE(*cache.HasAdditionalConditions(info->get(), {0, 1}, {563}));
+  EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {0}, {563}));
+  EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {1}, {563}));
+  EXPECT_FALSE(*(*cache)->HasAdditionalConditions(info->get(), {0, 1}, {563}));
 }
 
 TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'f'}, ProbabilityBound::Zero()},
       {{'i'}, ProbabilityBound::Zero()},
@@ -130,11 +135,11 @@ TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
   SubsetDefinition init;
   init.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   auto info =
-      RequestedSegmentationInformation::Create(segments, init, cache, PATCH);
+      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
   GlyphSet and_gids, or_gids, exclusive_gids;
-  auto status = cache.AnalyzeSegment(*info->get(), {0}, and_gids, or_gids,
+  auto status = (*cache)->AnalyzeSegment(*info->get(), {0}, and_gids, or_gids,
                                      exclusive_gids);
   ASSERT_TRUE(status.ok());
 
@@ -144,7 +149,9 @@ TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
 }
 
 TEST_F(GlyphClosureCacheTest, ExpandClosure) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
   SubsetDefinition def;
   def.gids = {74 /* f */, 77 /* i */};
   def.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
@@ -153,13 +160,14 @@ TEST_F(GlyphClosureCacheTest, ExpandClosure) {
   expected.gids = {0, 74, 77, 444, 446};
   expected.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
 
-  auto expanded = cache.ExpandClosure(def);
+  auto expanded = (*cache)->ExpandClosure(def);
   ASSERT_TRUE(expanded.ok());
   ASSERT_EQ(*expanded, expected);
 }
 
 TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
-  GlyphClosureCache cache(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
       {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
@@ -167,15 +175,42 @@ TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
 
   SubsetDefinition init_font;
   auto info = RequestedSegmentationInformation::Create(segments, init_font,
-                                                       cache, PATCH);
+                                                       **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
   SegmentSet segs;
   segs.insert(0);
 
-  auto or_gids = cache.CodepointsToOrGids(*info->get(), {0});
+  auto or_gids = (*cache)->CodepointsToOrGids(*info->get(), {0});
   ASSERT_TRUE(or_gids.ok());
   EXPECT_EQ(*or_gids, (GlyphSet{37}));
+}
+
+TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_ExpandClosure) {
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
+  SubsetDefinition def;
+  def.codepoints = {0xe1}; // á
+
+  auto expanded = (*cache)->ExpandClosure(def);
+  ASSERT_TRUE(expanded.ok());
+
+  EXPECT_TRUE(expanded->codepoints.contains(0x61)); // a
+  EXPECT_TRUE(expanded->codepoints.contains(0x301)); // combining acute
+}
+
+TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
+  auto cache = GlyphClosureCache::Create(roboto.get());
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
+  SubsetDefinition def;
+  def.codepoints = {0x61, 0x301}; // a, combining acute
+
+  auto expanded = (*cache)->ExpandClosure(def);
+  ASSERT_TRUE(expanded.ok());
+
+  EXPECT_TRUE(expanded->codepoints.contains(0xe1)); // á
 }
 
 }  // namespace ift::encoder

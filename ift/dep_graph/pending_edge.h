@@ -26,6 +26,14 @@ struct PendingEdge {
     return edge;
   }
 
+  static PendingEdge UnicodeComposition(hb_codepoint_t a, hb_codepoint_t b,
+                                        hb_codepoint_t dest_unicode) {
+    PendingEdge edge(Node::Unicode(a), Node::Unicode(dest_unicode),
+                     HB_TAG('c', 'm', 'a', 'p'));
+    edge.required_codepoints = std::make_pair(a, b);
+    return edge;
+  }
+
   static PendingEdge Gsub(encoder::glyph_id_t source_gid, hb_tag_t feature,
                           encoder::glyph_id_t dest_gid) {
     PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),

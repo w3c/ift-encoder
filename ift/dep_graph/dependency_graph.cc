@@ -1,12 +1,15 @@
 #include "ift/dep_graph/dependency_graph.h"
+#include "ift/dep_graph/unicode_edges.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <utility>
 #include <vector>
+#include <fstream>
 
 #include "absl/log/log.h"
+#include "absl/strings/numbers.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
@@ -17,12 +20,14 @@
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
+#include "tools/cpp/runfiles/runfiles.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
+using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
@@ -40,8 +45,44 @@ using ift::encoder::SubsetDefinition;
 
 namespace ift::dep_graph {
 
+StatusOr<DependencyGraph> DependencyGraph::Create(
+    const RequestedSegmentationInformation* segmentation_info,
+    hb_face_t* face) {
+  auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
+  auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
+  hb_depend_t* depend = hb_depend_from_face_or_fail(face);
+  if (!depend) {
+    return absl::InternalError(
+        "Call to hb_depend_from_face_or_fail() failed.");
+  }
+
+  CodepointSet codepoints = FontHelper::ToCodepointsSet(face);
+
+  auto unicode_to_gid = UnicodeToGid(face);
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(codepoints));
+
+  return DependencyGraph(segmentation_info, depend, face, full_feature_set, std::move(unicode_to_gid), std::move(unicode_edges));
+}
+
+DependencyGraph::DependencyGraph(
+    const RequestedSegmentationInformation* segmentation_info,
+    hb_depend_t* depend, hb_face_t* face,
+    flat_hash_set<hb_tag_t> full_feature_set,
+    flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid,
+    UnicodeEdges unicode_edges)
+    : segmentation_info_(segmentation_info),
+      original_face_(ift::common::make_hb_face(hb_face_reference(face))),
+      full_feature_set_(full_feature_set),
+      unicode_to_gid_(std::move(unicode_to_gid)),
+      dependency_graph_(depend, &hb_depend_destroy),
+      variation_selector_implied_edges_(ComputeUVSEdges()),
+      layout_feature_implied_edges_(ComputeFeatureEdges()),
+      context_glyph_implied_edges_(ComputeContextGlyphEdges()),
+      composition_implied_edges_(std::move(unicode_edges.composition)),
+      decomposition_implied_edges_(std::move(unicode_edges.decomposition)) {}
+
 StatusOr<GlyphSet> GetContextSet(hb_depend_t* depend,
-                                 const ift::common::GlyphSet* full_closure,
+                                 const GlyphSet* full_closure,
                                  hb_codepoint_t context_set_id) {
   // the context set is actually a set of sets.
   hb_set_unique_ptr context_sets = make_hb_set();
@@ -222,6 +263,20 @@ class TraversalContext {
 
     PendingEdge edge = PendingEdge::Uvs(a, b, gid);
     Node dest = Node::Glyph(gid);
+    return TraverseEdgeTo(dest, edge, FontHelper::kCmap);
+  }
+
+  Status TraverseCompositionEdge(hb_codepoint_t a, hb_codepoint_t b, hb_codepoint_t dest_unicode) {
+    bool can_reach_a = !unicode_filter || reached_unicodes_.contains(a) ||
+                       unicode_filter->contains(a);
+    bool can_reach_b = !unicode_filter || reached_unicodes_.contains(b) ||
+                       unicode_filter->contains(b);
+    if (enforce_context && (!can_reach_a || !can_reach_b)) {
+      return absl::OkStatus();
+    }
+
+    PendingEdge edge = PendingEdge::UnicodeComposition(a, b, dest_unicode);
+    Node dest = Node::Unicode(dest_unicode);
     return TraverseEdgeTo(dest, edge, FontHelper::kCmap);
   }
 
@@ -542,7 +597,7 @@ DependencyGraph::StronglyConnectedComponents(
   };
 
   CodepointSet non_init_font_codepoints =
-      segmentation_info_->FullDefinition().codepoints;
+      segmentation_info_->FullCodepointClosure();
   non_init_font_codepoints.subtract(
       segmentation_info_->InitFontSegment().codepoints);
 
@@ -733,7 +788,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   // some context cases in accurate analysis.
   CodepointSet non_init_font_codepoints;
   if (unicode_filter_ptr == nullptr) {
-    non_init_font_codepoints = segmentation_info_->FullDefinition().codepoints;
+    non_init_font_codepoints = segmentation_info_->FullCodepointClosure();
     non_init_font_codepoints.subtract(
         segmentation_info_->InitFontSegment().codepoints);
   }
@@ -855,6 +910,20 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
   if (vs_edges != variation_selector_implied_edges_.end()) {
     for (VariationSelectorEdge edge : vs_edges->second) {
       TRYV(context->TraverseUvsEdge(unicode, edge.unicode, edge.gid));
+    }
+  }
+
+  auto comp_edges = composition_implied_edges_.find(unicode);
+  if (comp_edges != composition_implied_edges_.end()) {
+    for (const auto& edge : comp_edges->second) {
+      TRYV(context->TraverseCompositionEdge(unicode, edge.other_source, edge.dest));
+    }
+  }
+
+  auto decomp_edges = decomposition_implied_edges_.find(unicode);
+  if (decomp_edges != decomposition_implied_edges_.end()) {
+    for (hb_codepoint_t dest : decomp_edges->second) {
+      context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(dest), FontHelper::kCmap);
     }
   }
 
@@ -1216,6 +1285,7 @@ DependencyGraph::ComputeUVSEdges() const {
   return edges;
 }
 
+
 flat_hash_map<hb_tag_t, std::vector<DependencyGraph::LayoutFeatureEdge>>
 DependencyGraph::ComputeFeatureEdges() const {
   flat_hash_map<hb_tag_t, btree_set<DependencyGraph::LayoutFeatureEdge>> edges;
@@ -1287,7 +1357,7 @@ DependencyGraph::CollectIncomingEdges(
   context.full_closure = &segmentation_info_->FullClosure();
   context.feature_filter = &full_feature_set_;
   context.glyph_filter = &segmentation_info_->FullClosure();
-  context.unicode_filter = &segmentation_info_->FullDefinition().codepoints;
+  context.unicode_filter = &segmentation_info_->FullCodepointClosure();
   context.enforce_context = false;
   context.table_filter = table_filter;
   context.node_type_filter = node_type_filter;
@@ -1301,7 +1371,7 @@ DependencyGraph::CollectIncomingEdges(
   for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
     all_nodes.insert(Node::Segment(s));
   }
-  for (hb_codepoint_t u : segmentation_info_->FullDefinition().codepoints) {
+  for (hb_codepoint_t u : segmentation_info_->FullCodepointClosure()) {
     all_nodes.insert(Node::Unicode(u));
   }
   for (hb_tag_t f : full_feature_set_) {

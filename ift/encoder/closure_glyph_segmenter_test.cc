@@ -766,8 +766,8 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
       segmenter_dep_graph_only.CodepointToGlyphSegments(
           roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_only_segmentation.ok()) << segmentation.status();
+  ASSERT_TRUE(dep_graph_segmentation.ok()) << dep_graph_segmentation.status();
+  ASSERT_TRUE(dep_graph_only_segmentation.ok()) << dep_graph_only_segmentation.status();
   ASSERT_EQ(segmentation, dep_graph_segmentation);
 }
 
