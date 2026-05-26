@@ -893,7 +893,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {
   s = dependency_closure->SegmentsThatInteractWith(
       {Node::Unicode(0x798f), Node::Feature(HB_TAG('j', 'p', '7', '8'))});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet{2, 5, 7}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3, 5, 6, 7}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_SubsetDef) {
@@ -913,7 +913,16 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_SubsetDef) {
 
   auto s = dependency_closure->SegmentsThatInteractWith(query_def);
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet{0, 2}));
+  // Since aalt is in the input 640f is reached from it and thus s1
+  // is in the interaction group.
+  ASSERT_EQ(*s, (SegmentSet{0, 1, 2}));
+
+  query_def.codepoints = {0x640f};
+  query_def.feature_tags = {};
+  s = dependency_closure->SegmentsThatInteractWith(query_def);
+  ASSERT_TRUE(s.ok()) << s.status();
+  // without aalt, s0 isn't interacting since 640f doesn't interact with 6406
+  ASSERT_EQ(*s, (SegmentSet{1, 2}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
@@ -938,7 +947,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
 
   s = dependency_closure->SegmentsThatInteractWith(GlyphSet{74 /* f */});
   ASSERT_TRUE(s.ok()) << s.status();
-  ASSERT_EQ(*s, (SegmentSet{2}));
+  ASSERT_EQ(*s, (SegmentSet{2, 3}));
 
   s = dependency_closure->SegmentsThatInteractWith(GlyphSet{444});
   ASSERT_TRUE(s.ok()) << s.status();
@@ -1036,8 +1045,10 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_LayoutFeatures) {
   auto s =
       dependency_closure->SegmentsThatInteractWith(GlyphSet{1 /* U+6406 */});
   ASSERT_TRUE(s.ok()) << s.status();
-  // g1 is only mapped from cmap, so only segment s0 interacts with it.
-  ASSERT_EQ(*s, (SegmentSet{0}));
+  // The key result here is that for s1 isn't considered to be in the
+  // interaction group despite both interacting with s2 and s3 (likewise for
+  // s0).
+  ASSERT_EQ(*s, (SegmentSet{0, 2, 3}));
 
   s = dependency_closure->SegmentsThatInteractWith(
       GlyphSet{9 /* single sub of U+6406 */});

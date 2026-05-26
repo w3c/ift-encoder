@@ -774,14 +774,31 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
                                       TRY(InitFontFeatureSet()));
   }
 
+  // TraverseGraph(...) only records things reached via edges and not the starting nodes.
+  // So explicitly mark starting nodes as reached (if they are not filtered).
+  btree_set<Node> filtered_nodes;
+  for (const auto& node : nodes) {
+    if (node.IsGlyph() && !base_context.glyph_filter->contains(node.Id())) {
+      continue;
+    }
+    if (node.IsUnicode() && !base_context.unicode_filter->contains(node.Id())) {
+      continue;
+    }
+    if (node.IsFeature() && !base_context.feature_filter->contains(node.Id())) {
+      continue;
+    }
+    filtered_nodes.insert(node);
+    traversal_full.Visit(node);
+  }
+
   /* ### Phase 1 + 2: Unicode and Unicode to glyph */
   {
     TraversalContext context = base_context;
-    context.SetReached(nodes);
-    context.callback.SetStartNodes(nodes);
+    context.SetReached(filtered_nodes);
+    context.callback.SetStartNodes(filtered_nodes);
     context.table_filter = {DependencyGraph::kClosurePhaseTable[0]};
     context.node_type_filter = DependencyGraph::kClosurePhaseNodeFilter[0];
-    traversal_full = TRY(TraverseGraph(&context));
+    traversal_full.Merge(TRY(TraverseGraph(&context)));
   }
 
   /* ### Remaining Phases ### */
