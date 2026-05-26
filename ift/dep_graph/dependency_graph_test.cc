@@ -127,6 +127,38 @@ TEST_F(DependencyGraphTest, InitFontTraversal) {
                                               }));
 }
 
+TEST_F(DependencyGraphTest, ClosureTraversalRecordsInputNodes) {
+  GlyphSet all_g = GlyphSet::all();
+  CodepointSet all_u = CodepointSet::all();
+
+  Node glyph_node = Node::Glyph(74); // 'f'
+  Node unicode_node = Node::Unicode('a');
+  Node feature_node = Node::Feature(HB_TAG('l', 'i', 'g', 'a'));
+
+  auto r = graph.ClosureTraversal({glyph_node, unicode_node, feature_node}, &all_g, &all_u);
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  EXPECT_TRUE(traversal.ReachedGlyphs().contains(74));
+  EXPECT_TRUE(traversal.ReachedCodepoints().contains('a'));
+  EXPECT_TRUE(traversal.ReachedLayoutFeatures().contains(HB_TAG('l', 'i', 'g', 'a')));
+}
+
+TEST_F(DependencyGraphTest, ClosureTraversalFiltersInputNodes) {
+  GlyphSet empty_g;
+  CodepointSet empty_u;
+
+  Node glyph_node = Node::Glyph(74); // 'f'
+  Node unicode_node = Node::Unicode('a');
+
+  auto r = graph.ClosureTraversal({glyph_node, unicode_node}, &empty_g, &empty_u);
+  ASSERT_TRUE(r.ok()) << r.status();
+  const auto& traversal = *r;
+
+  EXPECT_FALSE(traversal.ReachedGlyphs().contains(74));
+  EXPECT_FALSE(traversal.ReachedCodepoints().contains('a'));
+}
+
 TEST_F(DependencyGraphTest, ContextGlyphs) {
   SubsetDefinition init = WithDefaultFeatures({});
   init.feature_tags.insert(HB_TAG('f', 'r', 'a', 'c'));
