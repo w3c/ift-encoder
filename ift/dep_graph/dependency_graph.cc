@@ -6,10 +6,8 @@
 #include <optional>
 #include <utility>
 #include <vector>
-#include <fstream>
 
 #include "absl/log/log.h"
-#include "absl/strings/numbers.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
@@ -56,30 +54,23 @@ StatusOr<DependencyGraph> DependencyGraph::Create(
         "Call to hb_depend_from_face_or_fail() failed.");
   }
 
-  CodepointSet codepoints = FontHelper::ToCodepointsSet(face);
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(face));
 
-  auto unicode_to_gid = UnicodeToGid(face);
-  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(codepoints));
-
-  return DependencyGraph(segmentation_info, depend, face, full_feature_set, std::move(unicode_to_gid), std::move(unicode_edges));
+  return DependencyGraph(segmentation_info, depend, face, full_feature_set, std::move(unicode_edges));
 }
 
 DependencyGraph::DependencyGraph(
     const RequestedSegmentationInformation* segmentation_info,
     hb_depend_t* depend, hb_face_t* face,
     flat_hash_set<hb_tag_t> full_feature_set,
-    flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid,
     UnicodeEdges unicode_edges)
     : segmentation_info_(segmentation_info),
       original_face_(ift::common::make_hb_face(hb_face_reference(face))),
       full_feature_set_(full_feature_set),
-      unicode_to_gid_(std::move(unicode_to_gid)),
       dependency_graph_(depend, &hb_depend_destroy),
-      variation_selector_implied_edges_(ComputeUVSEdges()),
       layout_feature_implied_edges_(ComputeFeatureEdges()),
       context_glyph_implied_edges_(ComputeContextGlyphEdges()),
-      composition_implied_edges_(std::move(unicode_edges.composition)),
-      decomposition_implied_edges_(std::move(unicode_edges.decomposition)) {}
+      unicode_edges_(std::move(unicode_edges)) {}
 
 StatusOr<GlyphSet> GetContextSet(hb_depend_t* depend,
                                  const GlyphSet* full_closure,
@@ -900,28 +891,28 @@ template <typename CallbackT>
 Status DependencyGraph::HandleUnicodeOutgoingEdges(
     hb_codepoint_t unicode, TraversalContext<CallbackT>* context) const {
   {
-    auto it = unicode_to_gid_.find(unicode);
-    if (it != unicode_to_gid_.end()) {
+    auto it = unicode_edges_.unicode_to_gid.find(unicode);
+    if (it != unicode_edges_.unicode_to_gid.end()) {
       context->TraverseEdgeTo(Node::Unicode(unicode), Node::Glyph(it->second));
     }
   }
 
-  auto vs_edges = variation_selector_implied_edges_.find(unicode);
-  if (vs_edges != variation_selector_implied_edges_.end()) {
+  auto vs_edges = unicode_edges_.variation_selector.find(unicode);
+  if (vs_edges != unicode_edges_.variation_selector.end()) {
     for (VariationSelectorEdge edge : vs_edges->second) {
       TRYV(context->TraverseUvsEdge(unicode, edge.unicode, edge.gid));
     }
   }
 
-  auto comp_edges = composition_implied_edges_.find(unicode);
-  if (comp_edges != composition_implied_edges_.end()) {
+  auto comp_edges = unicode_edges_.composition.find(unicode);
+  if (comp_edges != unicode_edges_.composition.end()) {
     for (const auto& edge : comp_edges->second) {
       TRYV(context->TraverseCompositionEdge(unicode, edge.other_source, edge.dest));
     }
   }
 
-  auto decomp_edges = decomposition_implied_edges_.find(unicode);
-  if (decomp_edges != decomposition_implied_edges_.end()) {
+  auto decomp_edges = unicode_edges_.decomposition.find(unicode);
+  if (decomp_edges != unicode_edges_.decomposition.end()) {
     for (hb_codepoint_t dest : decomp_edges->second) {
       context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(dest), FontHelper::kCmap);
     }
@@ -1054,19 +1045,7 @@ void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
   }
 }
 
-flat_hash_map<hb_codepoint_t, glyph_id_t> DependencyGraph::UnicodeToGid(
-    hb_face_t* face) {
-  flat_hash_map<hb_codepoint_t, glyph_id_t> out;
-  hb_map_t* unicode_to_gid = hb_map_create();
-  hb_face_collect_nominal_glyph_mapping(face, unicode_to_gid, nullptr);
-  int index = -1;
-  uint32_t cp = HB_MAP_VALUE_INVALID;
-  uint32_t gid = HB_MAP_VALUE_INVALID;
-  while (hb_map_next(unicode_to_gid, &index, &cp, &gid)) {
-    out[cp] = gid;
-  }
-  return out;
-}
+
 
 StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::FullFeatureSet(
     const RequestedSegmentationInformation* segmentation_info,
@@ -1248,42 +1227,7 @@ DependencyGraph::ComputeContextGlyphEdges() const {
   return out;
 }
 
-flat_hash_map<hb_codepoint_t,
-              std::vector<DependencyGraph::VariationSelectorEdge>>
-DependencyGraph::ComputeUVSEdges() const {
-  hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
-  hb_face_collect_variation_selectors(original_face_.get(),
-                                      vs_unicodes_hb.get());
-  CodepointSet vs_unicodes(vs_unicodes_hb.get());
 
-  hb_font_unique_ptr font = make_hb_font(hb_font_create(original_face_.get()));
-
-  flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> edges;
-  for (auto [u, gid] : unicode_to_gid_) {
-    for (auto vs : vs_unicodes) {
-      glyph_id_t dep_gid;
-      if (!hb_font_get_variation_glyph(font.get(), u, vs, &dep_gid)) {
-        continue;
-      }
-
-      if (dep_gid == gid) {
-        // default mapping, gid isn't changed so we can ignore.
-        continue;
-      }
-
-      edges[u].push_back(VariationSelectorEdge{
-          .unicode = vs,
-          .gid = dep_gid,
-      });
-      edges[vs].push_back(VariationSelectorEdge{
-          .unicode = u,
-          .gid = dep_gid,
-      });
-    }
-  }
-
-  return edges;
-}
 
 
 flat_hash_map<hb_tag_t, std::vector<DependencyGraph::LayoutFeatureEdge>>

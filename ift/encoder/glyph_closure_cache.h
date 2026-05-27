@@ -2,9 +2,7 @@
 #define IFT_ENCODER_GLYPH_CLOSURE_CACHE_H_
 
 #include "absl/status/status.h"
-#include "hb-subset.h"
 #include "ift/common/font_data.h"
-#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include <memory>
 #include "ift/encoder/subset_definition.h"

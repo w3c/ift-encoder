@@ -4,11 +4,23 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "tools/cpp/runfiles/runfiles.h"
+#include "ift/common/font_data.h"
+#include "ift/common/hb_set_unique_ptr.h"
 
+using absl::flat_hash_map;
+using absl::Status;
+using absl::StatusOr;
 using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::make_hb_set;
+using ift::common::make_hb_font;
+using ift::common::hb_set_unique_ptr;
+using ift::common::hb_font_unique_ptr;
 
 namespace ift::dep_graph {
 
@@ -71,7 +83,7 @@ absl::Status ParseDerivedNormalizationProps(
   return absl::OkStatus();
 }
 
-absl::Status ParseUnicodeData(
+Status ParseUnicodeData(
     const std::string& path,
     const CodepointSet& unicodes,
     const CodepointSet& full_composition_exclusions,
@@ -159,8 +171,54 @@ absl::Status ParseUnicodeData(
   return absl::OkStatus();
 }
 
-absl::StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
-    const CodepointSet& unicodes) {
+flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeEdges::UnicodeToGid(
+    hb_face_t* face) {
+  flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> out;
+  hb_map_t* unicode_to_gid = hb_map_create();
+  hb_face_collect_nominal_glyph_mapping(face, unicode_to_gid, nullptr);
+  int index = -1;
+  uint32_t cp = HB_MAP_VALUE_INVALID;
+  uint32_t gid = HB_MAP_VALUE_INVALID;
+  while (hb_map_next(unicode_to_gid, &index, &cp, &gid)) {
+    out[cp] = gid;
+  }
+  hb_map_destroy(unicode_to_gid);
+  return out;
+}
+
+void UnicodeEdges::ComputeUVSEdges(hb_face_t* face, const flat_hash_map<hb_codepoint_t, encoder::glyph_id_t>& unicode_to_gid, UnicodeEdges& result) {
+  hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
+  hb_face_collect_variation_selectors(face, vs_unicodes_hb.get());
+  CodepointSet vs_unicodes(vs_unicodes_hb.get());
+
+  hb_font_unique_ptr font = make_hb_font(hb_font_create(face));
+
+  for (auto [u, gid] : unicode_to_gid) {
+    for (auto vs : vs_unicodes) {
+      hb_codepoint_t dep_gid;
+      if (!hb_font_get_variation_glyph(font.get(), u, vs, &dep_gid)) {
+        continue;
+      }
+
+      if (dep_gid == gid) {
+        // default mapping, gid isn't changed so we can ignore.
+        continue;
+      }
+
+      result.variation_selector[u].push_back(VariationSelectorEdge{
+          .unicode = vs,
+          .gid = dep_gid,
+      });
+      result.variation_selector[vs].push_back(VariationSelectorEdge{
+          .unicode = u,
+          .gid = dep_gid,
+      });
+      result.gid_to_vs[dep_gid].insert(vs);
+    }
+  }
+}
+
+StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(hb_face_t* face) {
 
   std::string error;
   std::unique_ptr<Runfiles> runfiles(Runfiles::Create("", &error));
@@ -179,10 +237,15 @@ absl::StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
     return absl::NotFoundError("Failed to find DerivedNormalizationProps.txt via runfiles");
   }
 
+  CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   UnicodeEdges result;
   CodepointSet full_composition_exclusions;
   TRYV(ParseDerivedNormalizationProps(derived_props_path, full_composition_exclusions));
   TRYV(ParseUnicodeData(unicode_data_path, unicodes, full_composition_exclusions, result));
+
+  // Compute UVS edges
+  result.unicode_to_gid = UnicodeToGid(face);
+  ComputeUVSEdges(face, result.unicode_to_gid, result);
 
   return result;
 }

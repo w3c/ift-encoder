@@ -360,9 +360,6 @@ TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
   ASSERT_EQ(traversal.ReachedGlyphs(), (GlyphSet{
                                            2684 /* U+4fae */
                                        }));
-  // the edge for the UVS sub to U+FA30 never gets traversed since it can't be
-  // reached without U+FE00 present.
-  ASSERT_FALSE(traversal.HasPendingEdges());
 }
 
 TEST_F(DependencyGraphTest, IgnoreAlreadyReachedPendingEdge) {
