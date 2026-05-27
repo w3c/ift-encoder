@@ -129,7 +129,6 @@ class DependencyGraph {
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_depend_t* depend, hb_face_t* face,
       absl::flat_hash_set<hb_tag_t> full_feature_set,
-      absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid,
       UnicodeEdges unicode_edges);
 
   struct ClosureState {
@@ -205,20 +204,14 @@ class DependencyGraph {
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face);
 
-  static absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeToGid(
-      hb_face_t* face);
+
 
   const ift::encoder::RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   absl::flat_hash_set<hb_tag_t> full_feature_set_;
-  absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid_;
+
 
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
-
-  struct VariationSelectorEdge {
-    hb_codepoint_t unicode;
-    hb_codepoint_t gid;
-  };
 
 
 
@@ -252,8 +245,7 @@ class DependencyGraph {
     }
   };
 
-  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
-  ComputeUVSEdges() const;
+
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
   ComputeFeatureEdges() const;
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
@@ -268,20 +260,13 @@ class DependencyGraph {
       const common::CodepointSet& full_composition_exclusions,
       UnicodeEdges& result);
 
-  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
-      variation_selector_implied_edges_;
-
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
       layout_feature_implied_edges_;
 
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
       context_glyph_implied_edges_;
 
-  absl::flat_hash_map<hb_codepoint_t, std::vector<UnicodeConjunctiveEdge>>
-      composition_implied_edges_;
-
-  absl::flat_hash_map<hb_codepoint_t, ift::common::CodepointSet>
-      decomposition_implied_edges_;
+  UnicodeEdges unicode_edges_;
 
   common::hb_set_unique_ptr scratch_set_ = common::make_hb_set();
   common::hb_set_unique_ptr scratch_set_aux_ = common::make_hb_set();

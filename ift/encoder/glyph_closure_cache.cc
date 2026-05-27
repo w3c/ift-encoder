@@ -29,8 +29,7 @@ namespace ift::encoder {
 
 StatusOr<std::unique_ptr<GlyphClosureCache>> GlyphClosureCache::Create(hb_face_t* face) {
   auto preprocessed_face = make_hb_face(hb_subset_preprocess(face));
-  CodepointSet unicodes = FontHelper::ToCodepointsSet(preprocessed_face.get());
-  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(unicodes));
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(preprocessed_face.get()));
   return std::unique_ptr<GlyphClosureCache>(new GlyphClosureCache(face, std::move(preprocessed_face), std::move(unicode_edges)));
 }
 
@@ -251,14 +250,20 @@ Status GlyphClosureCache::AnalyzeSegment(
 }
 
 CodepointSet GlyphClosureCache::CodepointsForGlyphs(const GlyphSet& glyphs) const {
+  // Codepoints can map to glyphs via either standard cmap mappings, or via variation selectors
+  // this method captures both.
   CodepointSet unicodes;
   for (glyph_id_t gid : glyphs) {
     auto unicode = gid_to_unicode_.find(gid);
     if (unicode != gid_to_unicode_.end()) {
       unicodes.union_set(unicode->second);
     }
+
+    auto vs_unicodes = unicode_edges_.gid_to_vs.find(gid);
+    if (vs_unicodes != unicode_edges_.gid_to_vs.end()) {
+      unicodes.union_set(vs_unicodes->second);
+    }
   }
-  // TODO XXXX This needs to also pull in relevant variation selectors.
   return unicodes;
 }
 
