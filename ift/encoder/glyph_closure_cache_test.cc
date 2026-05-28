@@ -4,6 +4,8 @@
 
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
@@ -18,6 +20,7 @@ using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
+using ift::common::FontHelper;
 
 namespace ift::encoder {
 
@@ -211,6 +214,50 @@ TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
   ASSERT_TRUE(expanded.ok());
 
   EXPECT_TRUE(expanded->codepoints.contains(0xe1)); // á
+}
+
+TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
+  // Test with Roboto for standard mappings.
+  {
+    auto cache = GlyphClosureCache::Create(roboto.get());
+    ASSERT_TRUE(cache.ok()) << cache.status();
+
+    // 1. Empty set
+    EXPECT_TRUE((*cache)->CodepointsForGlyphs({}).empty());
+
+    // 2. Single nominal glyph
+    auto a_gid = *FontHelper::GetNominalGlyph(roboto.get(), 'a');
+    auto cps = (*cache)->CodepointsForGlyphs({a_gid});
+    EXPECT_EQ(cps, (CodepointSet {'a'}));
+
+    // 3. Multiple nominal glyphs
+    auto b_gid = *FontHelper::GetNominalGlyph(roboto.get(), 'b');
+    cps = (*cache)->CodepointsForGlyphs({a_gid, b_gid});
+    EXPECT_EQ(cps, (CodepointSet {'a', 'b'}));
+  }
+
+  // Test with NotoSansJP for UVS mappings.
+  {
+    auto face = from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
+    ASSERT_TRUE(face);
+
+    auto cache = GlyphClosureCache::Create(face.get());
+    ASSERT_TRUE(cache.ok()) << cache.status();
+
+    auto font = ift::common::make_hb_font(hb_font_create(face.get()));
+    hb_codepoint_t gid = 0;
+    ASSERT_TRUE(hb_font_get_variation_glyph(font.get(), 0x4FAE, 0xFE00, &gid));
+
+    // 4. UVS glyph
+    auto cps = (*cache)->CodepointsForGlyphs({gid});
+    EXPECT_TRUE(cps.contains(0xFE00));
+
+    // 5. Mix of nominal and UVS glyphs
+    auto x_gid = *ift::common::FontHelper::GetNominalGlyph(face.get(), 'x');
+    auto cps_mix = (*cache)->CodepointsForGlyphs({gid, x_gid});
+    EXPECT_TRUE(cps_mix.contains(0xFE00));
+    EXPECT_TRUE(cps_mix.contains('x'));
+  }
 }
 
 }  // namespace ift::encoder

@@ -249,7 +249,6 @@ Status GlyphClosureCache::AnalyzeSegment(
   return absl::OkStatus();
 }
 
-// TODO XXXXX add unit tests
 CodepointSet GlyphClosureCache::CodepointsForGlyphs(const GlyphSet& glyphs) const {
   // Codepoints can map to glyphs via either standard cmap mappings, or via variation selectors
   // this method captures both.

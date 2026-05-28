@@ -8,18 +8,20 @@
 #include "ift/common/int_set.h"
 #include "ift/encoder/types.h"
 
-// TODO XXXXX add unit tests
-
 namespace ift::dep_graph {
 
 struct UnicodeConjunctiveEdge {
   hb_codepoint_t other_source;
   hb_codepoint_t dest;
+
+  bool operator==(const UnicodeConjunctiveEdge& other) const = default;
 };
 
 struct VariationSelectorEdge {
   hb_codepoint_t unicode;
   hb_codepoint_t gid;
+
+  bool operator==(const VariationSelectorEdge& other) const = default;
 };
 
 struct UnicodeEdges {
