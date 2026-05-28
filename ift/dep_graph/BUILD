@@ -71,3 +71,16 @@ cc_test(
         "//ift/encoder:segmentation_info",
     ],
 )
+
+cc_test(
+    name = "unicode_edges_test",
+    size = "small",
+    srcs = ["unicode_edges_test.cc"],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":unicode_edges",
+        "@googletest//:gtest_main",
+    ],
+)
