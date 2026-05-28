@@ -445,7 +445,7 @@ TEST_F(ClosureGlyphSegmenterTest, OrCondition) {
             R"(initial font: { gid0, gid69 }
 p0: { gid37, gid640 }
 p1: { gid39, gid700 }
-p2: { gid117 }
+p2: { gid117, gid169, gid667 }
 if (s0) then p0
 if (s1) then p1
 if ((s0 OR s1)) then p2
@@ -542,8 +542,8 @@ TEST_F(ClosureGlyphSegmenterTest, MixedAndOr) {
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid37, gid74, gid640 }
-p1: { gid39, gid77, gid700 }
-p2: { gid117 }
+p1: { gid39, gid77, gid141, gid609, gid679, gid700 }
+p2: { gid117, gid169, gid667 }
 p3: { gid444, gid446 }
 if (s0) then p0
 if (s1) then p1
@@ -1167,10 +1167,12 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid117, gid700 }
+p0: { gid117, gid169, gid700 }
 p1: { gid37, gid39 }
+p2: { gid640 }
 if (s2) then p0
 if ((s0 OR s1 OR s2)) then p1
+if (s0 AND s2) then p2
 )");
 }
 
@@ -1208,8 +1210,8 @@ TEST_F(ClosureGlyphSegmenterTest, InitNoGlyphSegments_CostMerging) {
   // And it shouldn't be present in the segmenation conditions,
   // so no s2 should appear in the conditions.
   ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0, gid39, gid117, gid700 }
-p0: { gid37, gid38 }
+            R"(initial font: { gid0, gid39, gid117, gid169, gid700 }
+p0: { gid37, gid38, gid640 }
 if (s0) then p0
 )");
 }
@@ -1328,7 +1330,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid37, gid39 }
 p0: { gid38 }
-p1: { gid117, gid700 }
+p1: { gid117, gid169, gid640, gid700 }
 if (s2) then p0
 if (s3) then p1
 )");
@@ -1358,8 +1360,8 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
   // C get's covered by the Cacute merge into init, so only A is left in the
   // patch.
   ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0, gid39, gid117, gid700 }
-p0: { gid37 }
+            R"(initial font: { gid0, gid39, gid117, gid169, gid700 }
+p0: { gid37, gid640 }
 if (s1) then p0
 )");
 }
