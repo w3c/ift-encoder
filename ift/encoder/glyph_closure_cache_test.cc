@@ -1,4 +1,5 @@
 #include "ift/encoder/glyph_closure_cache.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <vector>
 
@@ -21,12 +22,16 @@ using ift::common::make_hb_face;
 using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
 using ift::common::FontHelper;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 
 class GlyphClosureCacheTest : public ::testing::Test {
  protected:
-  GlyphClosureCacheTest() : roboto(make_hb_face(nullptr)) {
+  GlyphClosureCacheTest()
+      : roboto(make_hb_face(nullptr)),
+        resolver(*BazelDataFileResolver::CreateForTest()) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
   }
 
@@ -41,10 +46,11 @@ class GlyphClosureCacheTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr roboto;
+  std::shared_ptr<DataFileResolver> resolver;
 };
 
 TEST_F(GlyphClosureCacheTest, GlyphClosure) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   auto closure = (*cache)->GlyphClosure({'a'});
   ASSERT_TRUE(closure.ok());
@@ -52,7 +58,7 @@ TEST_F(GlyphClosureCacheTest, GlyphClosure) {
 }
 
 TEST_F(GlyphClosureCacheTest, SegmentClosure) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'f'}, ProbabilityBound::Zero()},
@@ -79,7 +85,7 @@ TEST_F(GlyphClosureCacheTest, SegmentClosure) {
 }
 
 TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
@@ -104,7 +110,7 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
 }
 
 TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
@@ -128,7 +134,7 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
 }
 
 TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'f'}, ProbabilityBound::Zero()},
@@ -152,7 +158,7 @@ TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
 }
 
 TEST_F(GlyphClosureCacheTest, ExpandClosure) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
 
   SubsetDefinition def;
@@ -169,7 +175,7 @@ TEST_F(GlyphClosureCacheTest, ExpandClosure) {
 }
 
 TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
       {{'A'}, ProbabilityBound::Zero()},
@@ -190,7 +196,7 @@ TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
 }
 
 TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_ExpandClosure) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
 
   SubsetDefinition def;
@@ -204,7 +210,7 @@ TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_ExpandClosure) {
 }
 
 TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
-  auto cache = GlyphClosureCache::Create(roboto.get());
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
 
   SubsetDefinition def;
@@ -219,7 +225,7 @@ TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
 TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
   // Test with Roboto for standard mappings.
   {
-    auto cache = GlyphClosureCache::Create(roboto.get());
+    auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
     ASSERT_TRUE(cache.ok()) << cache.status();
 
     // 1. Empty set
@@ -241,7 +247,7 @@ TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
     auto face = from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
     ASSERT_TRUE(face);
 
-    auto cache = GlyphClosureCache::Create(face.get());
+    auto cache = GlyphClosureCache::Create(face.get(), *resolver);
     ASSERT_TRUE(cache.ok()) << cache.status();
 
     auto font = ift::common::make_hb_font(hb_font_create(face.get()));

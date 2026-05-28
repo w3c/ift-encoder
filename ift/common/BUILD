@@ -64,6 +64,38 @@ cc_library(
 )
 
 cc_library(
+    name = "data_file_resolver",
+    srcs = [
+        "bazel_data_file_resolver.cc",
+    ],
+    hdrs = [
+        "data_file_resolver.h",
+        "bazel_data_file_resolver.h",
+        "fixed_data_file_resolver.h",
+    ],
+    data = [
+        "@unicode_data//file",
+        "@derived_normalization_props//file",
+        "@ift_encoder_data//:freq_data",
+        "@ift_encoder_data//:data/metadata.binpb",
+    ],
+    defines = [
+        "FREQ_DATA_METADATA=\\\"$(rlocationpath @ift_encoder_data//:data/metadata.binpb)\\\"",
+        "UNICODE_DATA_PATH=\\\"$(rlocationpath @unicode_data//file)\\\"",
+        "DERIVED_PROPS_PATH=\\\"$(rlocationpath @derived_normalization_props//file)\\\"",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@bazel_tools//tools/cpp/runfiles",
+    ],
+)
+
+
+cc_library(
     name = "mocks",
     srcs = [
         "mock_binary_diff.h",

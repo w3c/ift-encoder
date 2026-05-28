@@ -1,4 +1,5 @@
 #include "ift/encoder/glyph_groupings.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 
@@ -27,6 +28,8 @@ using absl::btree_map;
 using absl::flat_hash_map;
 using freq::ProbabilityBound;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 using ift::common::FontData;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
@@ -71,7 +74,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     SubsetDefinition init_font_segment;
     AddInitSubsetDefaults(init_font_segment);
 
-    closure_cache_ = std::move(*GlyphClosureCache::Create(roboto_.get()));
+    resolver = *BazelDataFileResolver::CreateForTest();
+    closure_cache_ = std::move(*GlyphClosureCache::Create(roboto_.get(), *resolver));
     requested_segmentation_info_ = *RequestedSegmentationInformation::Create(
         segments_, init_font_segment, *closure_cache_, PATCH);
 
@@ -166,6 +170,7 @@ class GlyphGroupingsTest : public ::testing::Test {
   glyph_id_t ToGlyph(hb_codepoint_t cp) { return cp_to_gid_.at(cp); }
 
   hb_face_unique_ptr roboto_;
+  std::shared_ptr<DataFileResolver> resolver;
   std::unique_ptr<GlyphClosureCache> closure_cache_;
   std::unique_ptr<RequestedSegmentationInformation>
       requested_segmentation_info_;
@@ -640,7 +645,7 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
 #ifdef HB_DEPEND_API
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDependencyGraph) {
   std::unique_ptr<DependencyClosure> dep_closure = *DependencyClosure::Create(
-      requested_segmentation_info_complex_.get(), roboto_.get());
+      requested_segmentation_info_complex_.get(), roboto_.get(), *resolver);
 
   auto sc = glyph_groupings_complex_.GroupGlyphs(
       *requested_segmentation_info_complex_, *glyph_conditions_complex_,

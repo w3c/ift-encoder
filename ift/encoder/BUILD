@@ -213,6 +213,7 @@ cc_test(
     deps = [
         ":encoder",
         ":segmentation_info",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -247,6 +248,7 @@ cc_test(
     deps = [
         ":activation_condition",
         ":encoder",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -265,6 +267,7 @@ cc_test(
     deps = [
         ":encoder",
         ":segmentation_context",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -282,6 +285,7 @@ cc_test(
     ],
     deps = [
         ":encoder",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -299,6 +303,7 @@ cc_test(
     deps = [
         ":encoder",
         ":segmentation_info",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -312,6 +317,7 @@ cc_test(
     ],
     deps = [
         ":segmentation_context",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
     ],
@@ -364,6 +370,7 @@ cc_test(
     deps = [
         ":segmentation_context",
         "//ift/config:common_cc_proto",
+        "//ift/common:data_file_resolver",
         "@googletest//:gtest_main",
         "@bazel_tools//tools/cpp/runfiles",
     ],

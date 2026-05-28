@@ -4,23 +4,23 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
-#include "tools/cpp/runfiles/runfiles.h"
 #include "ift/common/font_data.h"
 #include "ift/common/hb_set_unique_ptr.h"
 
 using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
-using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
 using ift::common::FontHelper;
 using ift::common::make_hb_set;
 using ift::common::make_hb_font;
 using ift::common::hb_set_unique_ptr;
 using ift::common::hb_font_unique_ptr;
+using ift::common::DataFileResolver;
 
 namespace ift::dep_graph {
 
@@ -218,24 +218,12 @@ void UnicodeEdges::ComputeUVSEdges(hb_face_t* face, const flat_hash_map<hb_codep
   }
 }
 
-StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(hb_face_t* face) {
+StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
+  hb_face_t* face,
+  const DataFileResolver& resolver) {
 
-  std::string error;
-  std::unique_ptr<Runfiles> runfiles(Runfiles::Create("", &error));
-
-  if (!runfiles) {
-    return absl::InternalError(absl::StrCat("Failed to create runfiles: ", error));
-  }
-
-  std::string unicode_data_path = runfiles->Rlocation("+_repo_rules2+unicode_data/file/downloaded");
-  std::string derived_props_path = runfiles->Rlocation("+_repo_rules2+derived_normalization_props/file/downloaded");
-
-  if (unicode_data_path.empty()) {
-    return absl::NotFoundError("Failed to find UnicodeData.txt via runfiles");
-  }
-  if (derived_props_path.empty()) {
-    return absl::NotFoundError("Failed to find DerivedNormalizationProps.txt via runfiles");
-  }
+  std::string unicode_data_path = TRY(resolver.GetUnicodeDataPath());
+  std::string derived_props_path = TRY(resolver.GetDerivedNormalizationPropsPath());
 
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   UnicodeEdges result;

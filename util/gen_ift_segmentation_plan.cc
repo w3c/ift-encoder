@@ -18,6 +18,8 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/data_file_resolver.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/load_codepoints.h"
@@ -38,6 +40,8 @@ using ift::config::PATCH;
 using ift::config::SegmentationPlan;
 using ift::config::SegmenterConfig;
 using ift::freq::ProbabilityCalculator;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -100,14 +104,14 @@ using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
 using ift::freq::BigramProbabilityCalculator;
 
-static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font) {
+static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font, const DataFileResolver& resolver) {
   if (absl::GetFlag(FLAGS_config) == "auto") {
     std::optional<int> quality_level = std::nullopt;
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
     return AutoSegmenterConfig::GenerateConfig(
-        font, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
+        font, resolver, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
   }
 
   FontData config_text =
@@ -127,7 +131,8 @@ StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
 
 static Status Analysis(hb_face_t* font,
                        btree_map<SegmentSet, MergeStrategy>&& merge_groups,
-                       const GlyphSegmentation& segmentation) {
+                       const GlyphSegmentation& segmentation,
+                       std::shared_ptr<DataFileResolver> resolver) {
 
   std::vector<BigramProbabilityCalculator> calculator_storage;
   calculator_storage.reserve(merge_groups.size());
@@ -157,7 +162,7 @@ static Status Analysis(hb_face_t* font,
     strategy_group_index.push_back(i - 1);
   }
 
-  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver);
   auto costs = TRY(segmenter.TotalCosts(font, segmentation, strategy_probability_calculators));
 
   std::cerr << "number_of_codepoints = " << FontHelper::ToCodepointsSet(font).size() << std::endl;
@@ -221,13 +226,16 @@ static Status OutputFallbackGlyphCount(hb_face_t* original_face,
 }
 
 static Status Main(const std::vector<char*> args) {
+  auto resolver = TRY(BazelDataFileResolver::Create(args[0]));
+
   hb_face_unique_ptr font =
       TRY(LoadFont(absl::GetFlag(FLAGS_input_font).c_str()));
-  SegmenterConfig config = TRY(LoadConfig(font.get()));
+  SegmenterConfig config = TRY(LoadConfig(font.get(), *resolver));
 
   SegmenterConfigUtil config_util((absl::GetFlag(FLAGS_config) == "auto")
                                       ? ""
-                                      : absl::GetFlag(FLAGS_config));
+                                      : absl::GetFlag(FLAGS_config),
+                                  resolver);
 
   auto start_time = std::chrono::high_resolution_clock::now();
   auto result = TRY(config_util.RunSegmenter(font.get(), config));
@@ -262,7 +270,8 @@ static Status Main(const std::vector<char*> args) {
     ClosureGlyphSegmenter segmenter(
         config.brotli_quality(),
         config.brotli_quality_for_initial_font_merging(),
-        config.unmapped_glyph_handling(), config.condition_analysis_mode());
+        config.unmapped_glyph_handling(), config.condition_analysis_mode(),
+        resolver);
     TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }
 
@@ -271,7 +280,7 @@ static Status Main(const std::vector<char*> args) {
   }
 
   std::cerr << ">> Analysis" << std::endl;
-  return Analysis(font.get(), std::move(result.merge_groups), segmentation);
+  return Analysis(font.get(), std::move(result.merge_groups), segmentation, resolver);
 }
 
 int main(int argc, char** argv) {

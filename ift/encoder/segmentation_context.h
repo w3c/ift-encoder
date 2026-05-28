@@ -51,12 +51,13 @@ class SegmentationContext {
       const std::vector<Segment>& segments,
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
-      uint32_t brotli_quality, uint32_t init_font_brotli_quality) {
+      uint32_t brotli_quality, uint32_t init_font_brotli_quality,
+      std::shared_ptr<ift::common::DataFileResolver> resolver) {
     // TODO(garretrieger): argument list is getting long, switch to a builder
     // pattern for construction.
 
     std::unique_ptr<GlyphClosureCache> closure_cache =
-        TRY(GlyphClosureCache::Create(face));
+        TRY(GlyphClosureCache::Create(face, *resolver));
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(segments, initial_segment,
                                                      *closure_cache,
@@ -65,7 +66,7 @@ class SegmentationContext {
     SegmentationContext context(
         face, unmapped_glyph_handling, condition_analysis_mode, brotli_quality,
         init_font_brotli_quality, std::move(closure_cache),
-        std::move(segmentation_info));
+        std::move(segmentation_info), std::move(resolver));
 
     TRYV(context.InitDependencyClosure());
     return context;
@@ -73,7 +74,7 @@ class SegmentationContext {
 
   absl::StatusOr<SegmentationContext> WithSameSettings() const {
     std::unique_ptr<GlyphClosureCache> closure_cache =
-        TRY(GlyphClosureCache::Create(original_face.get()));
+        TRY(GlyphClosureCache::Create(original_face.get(), *resolver_));
 
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),
@@ -83,10 +84,10 @@ class SegmentationContext {
     SegmentationContext context(
         original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(), condition_analysis_mode_, brotli_quality_,
         init_font_brotli_quality_, std::move(closure_cache),
-        std::move(segmentation_info), estimated_compression_ratio_);
+        std::move(segmentation_info), resolver_, estimated_compression_ratio_);
 
     TRYV(context.InitDependencyClosure());
-    return context;
+    return std::move(context);
   }
 
   /*
@@ -100,7 +101,8 @@ class SegmentationContext {
       std::vector<Segment> segments,
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
-      uint32_t brotli_quality, uint32_t init_font_brotli_quality);
+      uint32_t brotli_quality, uint32_t init_font_brotli_quality,
+      std::shared_ptr<ift::common::DataFileResolver> resolver);
 
  private:
   SegmentationContext(
@@ -110,6 +112,7 @@ class SegmentationContext {
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::unique_ptr<GlyphClosureCache> closure_cache,
       std::unique_ptr<RequestedSegmentationInformation> segmentation_info,
+      std::shared_ptr<ift::common::DataFileResolver> resolver,
       std::optional<double> estimated_compression_ratio = std::nullopt
     )
       : estimated_compression_ratio_(estimated_compression_ratio),
@@ -124,7 +127,8 @@ class SegmentationContext {
         glyph_groupings(hb_face_get_glyph_count(face)),
         brotli_quality_(brotli_quality),
         init_font_brotli_quality_(init_font_brotli_quality),
-        condition_analysis_mode_(condition_analysis_mode) {}
+        condition_analysis_mode_(condition_analysis_mode),
+        resolver_(std::move(resolver)) {}
 
   absl::Status InitDependencyClosure() {
     if ((condition_analysis_mode_ == ift::config::CLOSURE_AND_DEP_GRAPH) ||
@@ -132,7 +136,7 @@ class SegmentationContext {
          ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH) ||
         (condition_analysis_mode_ == ift::config::DEP_GRAPH_ONLY)) {
       dependency_closure_ = TRY(DependencyClosure::Create(
-          segmentation_info_.get(), original_face.get()));
+          segmentation_info_.get(), original_face.get(), *resolver_));
     }
     return absl::OkStatus();
   }
@@ -346,6 +350,7 @@ class SegmentationContext {
   unsigned init_font_brotli_quality_;
 
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
+  std::shared_ptr<ift::common::DataFileResolver> resolver_;
 };
 
 }  // namespace ift::encoder

@@ -4,6 +4,7 @@
 #include "absl/status/status.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
+#include "ift/common/data_file_resolver.h"
 #include <memory>
 #include "ift/encoder/subset_definition.h"
 #include "ift/dep_graph/unicode_edges.h"
@@ -17,7 +18,7 @@ class RequestedSegmentationInformation;
  */
 class GlyphClosureCache {
  public:
-  static absl::StatusOr<std::unique_ptr<GlyphClosureCache>> Create(hb_face_t* face);
+  static absl::StatusOr<std::unique_ptr<GlyphClosureCache>> Create(hb_face_t* face, const ift::common::DataFileResolver& resolver);
 
  private:
   GlyphClosureCache(

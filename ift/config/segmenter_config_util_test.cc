@@ -1,10 +1,12 @@
 #include "ift/config/segmenter_config_util.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <optional>
 #include <vector>
 
 #include "absl/container/btree_map.h"
 #include "gtest/gtest.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
@@ -22,10 +24,15 @@ using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnicodeFrequenciesBuilder;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 
 class SegmenterConfigUtilTest : public ::testing::Test {
  protected:
-  SegmenterConfigUtilTest() {}
+  SegmenterConfigUtilTest()
+      : resolver(*BazelDataFileResolver::CreateForTest()) {}
+
+  std::shared_ptr<DataFileResolver> resolver;
 };
 
 void AddSegment(SegmenterConfig& config, uint32_t id, CodepointSet codepoints) {
@@ -58,7 +65,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoMergeGroups) {
       32,
   };
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -80,7 +87,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{1, 2, 4, 8, 9};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -106,7 +113,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoSegments_Heuristic) {
 
   CodepointSet font_codepoints{1, 2, 4};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -132,7 +139,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{1, 2, 4};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -164,7 +171,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegments) {
 
   CodepointSet font_codepoints{1, 2, 4};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -196,7 +203,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegmentsInferred) {
                                     HB_TAG('b', 'a', 'r', ' '),
                                     HB_TAG('c', 'u', 'r', 's')};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups = util.ConfigToMergeGroups(config, font_codepoints, font_features,
@@ -245,7 +252,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{1, 2, 4, 6};
 
-  SegmenterConfigUtil util("");
+  SegmenterConfigUtil util("", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -272,7 +279,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsInferred_Cost) {
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -303,7 +310,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -335,7 +342,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x44, 0x45, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -384,7 +391,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_SegmentsProvided_Cost) {
 
   CodepointSet font_codepoints{0x42, 0x43, 0x44, 0x45};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -412,7 +419,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_CostRequiresFreqData) {
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -442,7 +449,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FallbackMergeGroup) {
 
   CodepointSet font_codepoints{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -485,7 +492,7 @@ TEST_F(SegmenterConfigUtilTest,
 
   CodepointSet font_codepoints{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =
@@ -515,7 +522,7 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_OptimizationSettings) {
 
   CodepointSet font_codepoints{0x40, 0x42, 0x43, 0x45, 0x47};
 
-  SegmenterConfigUtil util("util/testdata/config.txtpb");
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
   std::vector<SubsetDefinition> segments_out;
   auto groups =

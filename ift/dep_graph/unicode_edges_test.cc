@@ -1,4 +1,5 @@
 #include "ift/dep_graph/unicode_edges.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 
@@ -12,6 +13,7 @@ namespace ift::dep_graph {
 using ift::common::FontHelper;
 using ift::common::FontData;
 using ift::common::hb_face_unique_ptr;
+using ift::common::BazelDataFileResolver;
 using ::testing::Contains;
 using ::testing::Not;
 
@@ -27,7 +29,8 @@ TEST(UnicodeEdgesTest, ComputeUnicodeDependencyEdges_Roboto) {
   auto face = from_file("ift/common/testdata/Roboto-Regular.ttf");
   ASSERT_TRUE(face);
 
-  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get());
+  auto resolver = *BazelDataFileResolver::CreateForTest();
+  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get(), *resolver);
   ASSERT_TRUE(edges.ok()) << edges.status();
 
   // U+00C1 (Á) decomposes to U+0041 (A) and U+0301 (◌́)
@@ -65,7 +68,8 @@ TEST(UnicodeEdgesTest, ComputeUnicodeDependencyEdges_UVS) {
   auto face = from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
   ASSERT_TRUE(face);
 
-  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get());
+  auto resolver = *BazelDataFileResolver::CreateForTest();
+  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get(), *resolver);
   ASSERT_TRUE(edges.ok()) << edges.status();
 
   // Check a specific known mapping: U+4FAE with U+FE00 -> U+FA30
@@ -93,7 +97,8 @@ TEST(UnicodeEdgesTest, ComputeUnicodeDependencyEdges_CompositionExclusion) {
   auto face = from_file("ift/common/testdata/Roboto-Regular.ttf");
   ASSERT_TRUE(face);
 
-  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get());
+  auto resolver = *BazelDataFileResolver::CreateForTest();
+  auto edges = UnicodeEdges::ComputeUnicodeDependencyEdges(face.get(), *resolver);
   ASSERT_TRUE(edges.ok()) << edges.status();
 
   // U+2126 (OHM SIGN) decomposes to U+03A9 (GREEK CAPITAL LETTER OMEGA)

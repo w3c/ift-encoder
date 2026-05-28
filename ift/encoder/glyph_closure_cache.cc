@@ -18,6 +18,7 @@ using ift::common::CodepointSet;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_set_unique_ptr;
+using ift::common::DataFileResolver;
 using ift::common::make_hb_set;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
@@ -27,9 +28,9 @@ using ift::dep_graph::UnicodeEdges;
 
 namespace ift::encoder {
 
-StatusOr<std::unique_ptr<GlyphClosureCache>> GlyphClosureCache::Create(hb_face_t* face) {
+StatusOr<std::unique_ptr<GlyphClosureCache>> GlyphClosureCache::Create(hb_face_t* face, const DataFileResolver& resolver) {
   auto preprocessed_face = make_hb_face(hb_subset_preprocess(face));
-  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(preprocessed_face.get()));
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(preprocessed_face.get(), resolver));
   return std::unique_ptr<GlyphClosureCache>(new GlyphClosureCache(face, std::move(preprocessed_face), std::move(unicode_edges)));
 }
 

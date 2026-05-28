@@ -2,6 +2,7 @@
 #define IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 
 #include <optional>
+#include <memory>
 #include <vector>
 
 #include "absl/container/btree_map.h"
@@ -14,6 +15,7 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/encoder/patch_size_cache.h"
+#include "ift/common/data_file_resolver.h"
 
 namespace ift::encoder {
 
@@ -45,11 +47,13 @@ class ClosureGlyphSegmenter {
   ClosureGlyphSegmenter(
       uint32_t brotli_quality, uint32_t init_font_merging_brotli_quality,
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
-      ift::config::ConditionAnalysisMode condition_analysis_mode)
+      ift::config::ConditionAnalysisMode condition_analysis_mode,
+      std::shared_ptr<ift::common::DataFileResolver> resolver)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
         unmapped_glyph_handling_(unmapped_glyph_handling),
-        condition_analysis_mode_(condition_analysis_mode) {}
+        condition_analysis_mode_(condition_analysis_mode),
+        resolver_(std::move(resolver)) {}
 
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
@@ -110,6 +114,7 @@ class ClosureGlyphSegmenter {
   uint32_t init_font_merging_brotli_quality_;
   ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
+  std::shared_ptr<ift::common::DataFileResolver> resolver_;
 };
 
 }  // namespace ift::encoder

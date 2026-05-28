@@ -541,7 +541,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       TRY(SegmentationContext::InitializeSegmentationContext(
           face, initial_segment, std::move(segments), unmapped_glyph_handling_,
           condition_analysis_mode_, brotli_quality_,
-          init_font_merging_brotli_quality_));
+          init_font_merging_brotli_quality_, resolver_));
 
   std::vector<Merger> mergers =
       TRY(ToMergers(context, with_shared, merge_groups));

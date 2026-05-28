@@ -1,4 +1,5 @@
 #include "ift/config/load_codepoints.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <cstdint>
 
@@ -13,7 +14,10 @@ bool operator==(const CodepointAndFrequency& lhs,
 
 class LoadCodepointsTest : public ::testing::Test {
  protected:
-  LoadCodepointsTest() {}
+  LoadCodepointsTest()
+      : resolver(*ift::common::BazelDataFileResolver::CreateForTest()) {}
+
+  std::shared_ptr<ift::common::DataFileResolver> resolver;
 };
 
 TEST_F(LoadCodepointsTest, LoadCodepoints_NotFound) {
@@ -157,7 +161,7 @@ TEST_F(LoadCodepointsTest, ExpandShardedPath) {
 }
 
 TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
-  auto result = ift::config::LoadBuiltInFrequencies("Script_latin.riegeli");
+  auto result = ift::config::LoadBuiltInFrequencies("Script_latin.riegeli", *resolver);
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x20, 0x20), 1.0);
@@ -166,7 +170,7 @@ TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
 }
 
 TEST_F(LoadCodepointsTest, BuiltInFrequenciesList) {
-  auto result = ift::config::BuiltInFrequenciesList();
+  auto result = ift::config::BuiltInFrequenciesList(*resolver);
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_FALSE(result->empty());
 

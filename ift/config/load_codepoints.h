@@ -10,6 +10,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::config {
@@ -51,12 +52,13 @@ absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
 // Append "@*" to the name to load all sharded files for a name.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
     const char* name,
+    const ift::common::DataFileResolver& resolver,
     std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
 // Returns a list of all built-in frequency data sets and the codepoints
 // they cover.
 absl::StatusOr<absl::flat_hash_map<std::string, ift::common::CodepointSet>>
-BuiltInFrequenciesList();
+BuiltInFrequenciesList(const ift::common::DataFileResolver& resolver);
 
 // Given a filepath if it ends with @* this will expand the path into
 // the list of paths matching the pattern: <path>-?????-of-?????

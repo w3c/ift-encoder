@@ -1,4 +1,5 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <optional>
 
@@ -27,6 +28,8 @@ using ift::common::CodepointSet;
 using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::hb_face_unique_ptr;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 using ift::common::IntSet;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
@@ -41,24 +44,25 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
       : roboto(make_hb_face(nullptr)),
         noto_nastaliq_urdu(make_hb_face(nullptr)),
         noto_sans_jp(make_hb_face(nullptr)),
+        resolver(*BazelDataFileResolver::CreateForTest()),
 
-        segmenter(8, 8, PATCH, CLOSURE_ONLY),
-        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY),
-        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY),
+        segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver),
+        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver),
+        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY, resolver),
 #ifdef HB_DEPEND_API
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH),
-        segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY),
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
+        segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY, resolver),
         segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS,
-                                            CLOSURE_AND_VALIDATE_DEP_GRAPH),
+                                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
         segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
-                                              CLOSURE_AND_VALIDATE_DEP_GRAPH)
+                                              CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver)
 #else
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY),
-        segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY),
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY, resolver),
+        segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY, resolver),
         segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS,
-                                            CLOSURE_ONLY),
+                                            CLOSURE_ONLY, resolver),
         segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
-                                              CLOSURE_ONLY)
+                                              CLOSURE_ONLY, resolver)
 #endif
   {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
@@ -179,6 +183,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   hb_face_unique_ptr noto_nastaliq_urdu;
   hb_face_unique_ptr noto_sans_jp;
 
+  std::shared_ptr<DataFileResolver> resolver;
   ClosureGlyphSegmenter segmenter;
   ClosureGlyphSegmenter segmenter_find_conditions;
   ClosureGlyphSegmenter segmenter_move_to_init_font;
@@ -1102,7 +1107,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   auto sc = GlyphSegmentation::ConditionsToSegmentation({}, {}, segmentation1);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   std::vector<SegmentationCost> base_cost =
       *segmenter.TotalCosts(roboto.get(), segmentation1, {&calculator});
   ASSERT_GT(base_cost[0].ift_init_cost, 1000);

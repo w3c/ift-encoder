@@ -24,6 +24,7 @@ using absl::StatusOr;
 using ift::common::GlyphSet;
 using ift::common::IntSet;
 using ift::common::SegmentSet;
+using ift::common::DataFileResolver;
 
 namespace ift::encoder {
 
@@ -332,7 +333,8 @@ SegmentationContext::InitializeSegmentationContext(
     std::vector<Segment> segments,
     UnmappedGlyphHandling unmapped_glyph_handling,
     ConditionAnalysisMode condition_analysis_mode, uint32_t brotli_quality,
-    uint32_t init_font_brotli_quality) {
+    uint32_t init_font_brotli_quality,
+    std::shared_ptr<DataFileResolver> resolver) {
   if (!hb_face_get_glyph_count(face)) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
   }
@@ -344,7 +346,7 @@ SegmentationContext::InitializeSegmentationContext(
   // No merging is done during init.
   SegmentationContext context = TRY(SegmentationContext::Create(
       face, initial_segment, segments, unmapped_glyph_handling,
-      condition_analysis_mode, brotli_quality, init_font_brotli_quality));
+      condition_analysis_mode, brotli_quality, init_font_brotli_quality, std::move(resolver)));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

@@ -1,4 +1,5 @@
 #include "ift/dep_graph/dependency_graph.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/dep_graph/unicode_edges.h"
 
 #include <algorithm>
@@ -35,6 +36,7 @@ using ift::common::IntSet;
 using ift::common::make_hb_font;
 using ift::common::make_hb_set;
 using ift::common::SegmentSet;
+using ift::common::DataFileResolver;
 using ift::encoder::glyph_id_t;
 using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
@@ -45,7 +47,8 @@ namespace ift::dep_graph {
 
 StatusOr<DependencyGraph> DependencyGraph::Create(
     const RequestedSegmentationInformation* segmentation_info,
-    hb_face_t* face) {
+    hb_face_t* face,
+    const DataFileResolver& resolver) {
   auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
   auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
   hb_depend_t* depend = hb_depend_from_face_or_fail(face);
@@ -54,7 +57,7 @@ StatusOr<DependencyGraph> DependencyGraph::Create(
         "Call to hb_depend_from_face_or_fail() failed.");
   }
 
-  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(face));
+  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(face, resolver));
 
   return DependencyGraph(segmentation_info, depend, face, full_feature_set, std::move(unicode_edges));
 }

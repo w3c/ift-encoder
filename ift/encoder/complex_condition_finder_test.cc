@@ -1,4 +1,5 @@
 #include "ift/encoder/complex_condition_finder.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include "absl/container/btree_map.h"
 #include "gtest/gtest.h"
@@ -21,13 +22,17 @@ using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 
 class ComplexConditionFinderTest : public ::testing::Test {
  protected:
   ComplexConditionFinderTest()
-      : roboto(make_hb_face(nullptr)), segmenter(1, 1, PATCH, CLOSURE_ONLY) {
+      : roboto(make_hb_face(nullptr)),
+        resolver(*BazelDataFileResolver::CreateForTest()),
+        segmenter(1, 1, PATCH, CLOSURE_ONLY, resolver) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
   }
 
@@ -71,7 +76,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
         },
         segmenter.unmapped_glyph_handling(),
         segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-        segmenter.init_font_merging_brotli_quality());
+        segmenter.init_font_merging_brotli_quality(), resolver);
 
     if (!basic_closure_analysis) {
       // initialaztion populates the basic conditions, clear those
@@ -84,6 +89,7 @@ class ComplexConditionFinderTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr roboto;
+  std::shared_ptr<DataFileResolver> resolver;
   ClosureGlyphSegmenter segmenter;
 
   // Expected complex conditions:

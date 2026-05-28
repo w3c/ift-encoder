@@ -9,9 +9,7 @@ cc_binary(
     srcs = [
         "font2ift.cc",
     ],
-    data = [
-        "@ift_encoder_data//:freq_data",
-    ],
+
     deps = [
         ":auto_config_flags",
         "//ift/config:auto_segmenter_config",
@@ -19,6 +17,7 @@ cc_binary(
         "//ift/config:load_codepoints",
         "//ift/config:segmentation_plan_cc_proto",
         "//ift/config:segmenter_config_util",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "//ift",
         "//ift/encoder",
@@ -53,9 +52,7 @@ cc_binary(
     srcs = [
         "gen_ift_segmentation_plan.cc",
     ],
-    data = [
-        "@ift_encoder_data//:freq_data",
-    ],
+
     deps = [
         ":auto_config_flags",
         "//ift/config:auto_segmenter_config",
@@ -63,6 +60,7 @@ cc_binary(
         "//ift/config:segmentation_plan_cc_proto",
         "//ift/config:segmenter_config_cc_proto",
         "//ift/config:segmenter_config_util",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "//ift",
         "//ift/encoder",
@@ -107,9 +105,7 @@ cc_binary(
     srcs = [
         "gen_ift_segmenter_config.cc",
     ],
-    data = [
-        "@ift_encoder_data//:freq_data",
-    ],
+
     deps = [
         "//ift/config:auto_segmenter_config",
         "//ift/config:load_codepoints",
