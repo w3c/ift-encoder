@@ -25,6 +25,7 @@ using absl::StatusOr;
 using absl::StrCat;
 using absl::string_view;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
 using ift::common::hb_blob_unique_ptr;
 using ift::common::make_hb_blob;
@@ -216,13 +217,17 @@ StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(
 
 StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(
     const char* name,
+    const DataFileResolver& resolver,
     std::optional<CodepointSet> filter) {
-  std::string path = StrCat("../ift_encoder_data+/data/", name);
+  std::string data_dir = TRY(resolver.GetFrequencyDataDirectory());
+  std::string path = StrCat(data_dir, "/", name);
   return LoadFrequenciesFromRiegeli(path.c_str(), filter);
 }
 
-StatusOr<flat_hash_map<std::string, CodepointSet>> BuiltInFrequenciesList() {
-  std::string path = "../ift_encoder_data+/data/metadata.binpb";
+StatusOr<flat_hash_map<std::string, CodepointSet>> BuiltInFrequenciesList(
+    const DataFileResolver& resolver) {
+  std::string data_dir = TRY(resolver.GetFrequencyDataDirectory());
+  std::string path = StrCat(data_dir, "/metadata.binpb");
   std::ifstream in(path, std::ios::binary);
   if (!in.is_open()) {
     return absl::NotFoundError(

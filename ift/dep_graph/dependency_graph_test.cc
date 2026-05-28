@@ -1,9 +1,11 @@
 #include "ift/dep_graph/dependency_graph.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
@@ -24,6 +26,8 @@ using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
+using ift::common::BazelDataFileResolver;
+using ift::common::DataFileResolver;
 using ift::encoder::glyph_id_t;
 using ift::encoder::GlyphClosureCache;
 using ift::encoder::RequestedSegmentationInformation;
@@ -39,14 +43,15 @@ class DependencyGraphTest : public ::testing::Test {
  protected:
   DependencyGraphTest()
       : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
-        closure_cache(std::move(*GlyphClosureCache::Create(face.get()))),
+        resolver(*BazelDataFileResolver::CreateForTest()),
+        closure_cache(std::move(*GlyphClosureCache::Create(face.get(), *resolver))),
         noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
         noto_sans_jp_vf(
             from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
         noto_sans_kr(from_file("ift/common/testdata/NotoSansKR[wght].subset.ttf")),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures({}), *closure_cache, PATCH)),
-        graph(*DependencyGraph::Create(segmentation_info.get(), face.get())) {}
+        graph(*DependencyGraph::Create(segmentation_info.get(), face.get(), *resolver)) {}
 
   static hb_face_unique_ptr from_file(const char* filename) {
     hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
@@ -68,15 +73,15 @@ class DependencyGraphTest : public ::testing::Test {
                    std::vector<Segment> new_segments) {
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    graph = *DependencyGraph::Create(segmentation_info.get(), face.get());
+    graph = *DependencyGraph::Create(segmentation_info.get(), face.get(), *resolver);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
                    std::vector<Segment> new_segments) {
-    closure_cache = std::move(*GlyphClosureCache::Create(new_face));
+    closure_cache = std::move(*GlyphClosureCache::Create(new_face, *resolver));
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    graph = *DependencyGraph::Create(segmentation_info.get(), new_face);
+    graph = *DependencyGraph::Create(segmentation_info.get(), new_face, *resolver);
   }
 
  private:
@@ -88,6 +93,7 @@ class DependencyGraphTest : public ::testing::Test {
 
  protected:
   hb_face_unique_ptr face;
+  std::shared_ptr<DataFileResolver> resolver;
   std::unique_ptr<GlyphClosureCache> closure_cache;
 
  public:

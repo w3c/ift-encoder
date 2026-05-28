@@ -12,6 +12,8 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/feature_registry/feature_registry.h"
 #include "ift/freq/unicode_frequencies.h"
+#include "absl/strings/str_cat.h"
+
 
 using absl::btree_map;
 using absl::btree_set;
@@ -35,7 +37,9 @@ StatusOr<UnicodeFrequencies> SegmenterConfigUtil::GetFrequencyData(
     const std::string& frequency_data_file_path, bool built_in,
     std::optional<CodepointSet> filter) {
   if (built_in) {
-    return LoadBuiltInFrequencies(frequency_data_file_path.c_str(), filter);
+    std::string data_dir = TRY(resolver_->GetFrequencyDataDirectory());
+    std::string path = absl::StrCat(data_dir, "/", frequency_data_file_path);
+    return LoadFrequenciesFromRiegeli(path.c_str(), filter);
   }
 
   std::filesystem::path freq_path = frequency_data_file_path;
@@ -298,7 +302,8 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
-      config.unmapped_glyph_handling(), config.condition_analysis_mode());
+      config.unmapped_glyph_handling(), config.condition_analysis_mode(),
+      resolver_);
 
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       face, init_segment, segments, merge_groups));

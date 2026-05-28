@@ -7,6 +7,7 @@ cc_library(
     hdrs = ["unicode_edges.h"],
     deps = [
         "//ift/encoder:common",
+        "//ift/common:data_file_resolver",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -14,10 +15,7 @@ cc_library(
         "@bazel_tools//tools/cpp/runfiles",
         "@harfbuzz",
     ],
-    data = [
-        "@unicode_data//file",
-        "@derived_normalization_props//file",
-    ],
+
     visibility = [
         "//ift/encoder:__pkg__",
     ],
@@ -67,6 +65,7 @@ cc_test(
     deps = [
         ":dep_graph",
         ":unicode_edges",
+        "//ift/common:data_file_resolver",
         "@googletest//:gtest_main",
         "//ift/encoder:segmentation_info",
     ],
@@ -81,6 +80,7 @@ cc_test(
     ],
     deps = [
         ":unicode_edges",
+        "//ift/common:data_file_resolver",
         "@googletest//:gtest_main",
     ],
 )

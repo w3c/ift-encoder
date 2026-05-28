@@ -1,4 +1,5 @@
 #include "ift/encoder/glyph_segmentation.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <google/protobuf/text_format.h>
 
@@ -25,6 +26,8 @@ using ift::common::SegmentSet;
 using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 
@@ -32,7 +35,8 @@ class GlyphSegmentationTest : public ::testing::Test {
  protected:
   GlyphSegmentationTest()
       : roboto(make_hb_face(nullptr)),
-        noto_nastaliq_urdu(make_hb_face(nullptr)) {
+        noto_nastaliq_urdu(make_hb_face(nullptr)),
+        resolver(*BazelDataFileResolver::CreateForTest()) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("ift/common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -50,10 +54,11 @@ class GlyphSegmentationTest : public ::testing::Test {
 
   hb_face_unique_ptr roboto;
   hb_face_unique_ptr noto_nastaliq_urdu;
+  std::shared_ptr<DataFileResolver> resolver;
 };
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -124,7 +129,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
 
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
@@ -265,7 +270,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
   UnicodeFrequencies freq;
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
@@ -383,7 +388,7 @@ initial_glyphs {
 TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY);
+  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                          {

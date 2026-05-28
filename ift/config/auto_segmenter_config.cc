@@ -656,7 +656,9 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 }
 
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
-    hb_face_t* face, std::optional<std::string> primary_script,
+    hb_face_t* face,
+    const ift::common::DataFileResolver& resolver,
+    std::optional<std::string> primary_script,
     std::optional<int> quality_level) {
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
@@ -672,7 +674,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   base_plan->set_use_prefetch_lists(true);
 
   // Collect codepoints
-  auto freq_list = TRY(BuiltInFrequenciesList());
+  auto freq_list = TRY(BuiltInFrequenciesList(resolver));
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   uint32_t cp_count = unicodes.size();
 

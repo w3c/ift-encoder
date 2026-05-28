@@ -1,4 +1,5 @@
 #include <google/protobuf/text_format.h>
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <iostream>
 #include <string>
@@ -34,8 +35,11 @@ ABSL_FLAG(
 using absl::Status;
 using ift::common::hb_face_unique_ptr;
 using ift::config::AutoSegmenterConfig;
+using ift::common::BazelDataFileResolver;
 
 static Status Main(const std::vector<char*> args) {
+  auto resolver = TRY(BazelDataFileResolver::Create(args[0]));
+
   std::string input_font_path = absl::GetFlag(FLAGS_input_font);
   auto font_data = TRY(ift::config::LoadFile(input_font_path.c_str()));
   hb_face_unique_ptr font = font_data.face();
@@ -46,7 +50,7 @@ static Status Main(const std::vector<char*> args) {
   }
 
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), absl::GetFlag(FLAGS_primary_script), quality_level));
+      font.get(), *resolver, absl::GetFlag(FLAGS_primary_script), quality_level));
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {

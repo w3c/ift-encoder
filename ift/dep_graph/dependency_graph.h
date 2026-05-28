@@ -10,6 +10,7 @@
 #include "hb.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
@@ -74,7 +75,8 @@ class DependencyGraph {
 
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face);
+      hb_face_t* face,
+      const ift::common::DataFileResolver& resolver);
 
   // Traverse the full dependency graph (segments, unicodes, and gids), starting
   // at one or more specific starting nodes. Attempts to mimic hb glyph closure

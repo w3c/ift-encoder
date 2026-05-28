@@ -1,4 +1,5 @@
 #include "ift/encoder/requested_segmentation_information.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <vector>
 
@@ -12,6 +13,8 @@ using ift::config::PATCH;
 using ift::common::CodepointSet;
 using ift::common::SegmentSet;
 using ift::common::FontData;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::freq::ProbabilityBound;
@@ -20,7 +23,9 @@ namespace ift::encoder {
 
 class RequestedSegmentationInformationTest : public ::testing::Test {
  protected:
-  RequestedSegmentationInformationTest() : roboto(make_hb_face(nullptr)) {
+  RequestedSegmentationInformationTest()
+      : roboto(make_hb_face(nullptr)),
+        resolver(*BazelDataFileResolver::CreateForTest()) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
   }
 
@@ -35,10 +40,11 @@ class RequestedSegmentationInformationTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr roboto;
+  std::shared_ptr<DataFileResolver> resolver;
 };
 
 TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},
@@ -60,7 +66,7 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a'}, ProbabilityBound::Zero()},
       {{'b'}, ProbabilityBound::Zero()},
@@ -86,7 +92,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get());
+  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},

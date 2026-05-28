@@ -2,9 +2,11 @@
 #define IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 
 #include <optional>
+#include <memory>
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/config/segmenter_config.pb.h"
@@ -27,8 +29,8 @@ struct SegmentationResult {
  */
 class SegmenterConfigUtil {
  public:
-  SegmenterConfigUtil(std::string config_file_path)
-      : config_file_path_(config_file_path) {}
+  SegmenterConfigUtil(std::string config_file_path, std::shared_ptr<ift::common::DataFileResolver> resolver)
+      : config_file_path_(config_file_path), resolver_(std::move(resolver)) {}
 
   /*
    * Create a new segmenter, configure it with config, and then run the
@@ -104,6 +106,7 @@ class SegmenterConfigUtil {
       const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index);
 
   std::string config_file_path_;
+  std::shared_ptr<ift::common::DataFileResolver> resolver_;
 };
 
 }  // namespace ift::config

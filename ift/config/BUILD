@@ -94,6 +94,7 @@ cc_library(
     deps = [
         ":load_codepoints",
         ":segmenter_config_cc_proto",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@harfbuzz",
@@ -112,6 +113,7 @@ cc_library(
         "load_codepoints.h",
     ],
     deps = [
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "//ift/freq",
         "@abseil-cpp//absl/status:statusor",
@@ -169,10 +171,10 @@ cc_test(
     ],
     data = [
         "//ift/common:testdata",
-        "@ift_encoder_data//:freq_data",
     ],
     deps = [
         ":auto_segmenter_config",
+        "//ift/common:data_file_resolver",
         "//ift/common",
         "@googletest//:gtest_main",
         "@harfbuzz",
@@ -187,10 +189,10 @@ cc_test(
     ],
     data = [
         "//util:testdata",
-        "@ift_encoder_data//:freq_data",
     ],
     deps = [
         ":load_codepoints",
+        "//ift/common:data_file_resolver",
         "@googletest//:gtest_main",
     ],
 )
@@ -206,6 +208,7 @@ cc_test(
     ],
     deps = [
         ":segmenter_config_util",
+        "//ift/common:data_file_resolver",
         "@googletest//:gtest_main",
     ],
 )

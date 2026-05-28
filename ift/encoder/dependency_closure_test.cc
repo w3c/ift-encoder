@@ -1,4 +1,5 @@
 #include "ift/encoder/dependency_closure.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 #include <vector>
@@ -27,6 +28,8 @@ using absl::flat_hash_set;
 using absl::Status;
 using ift::common::CodepointSet;
 using ift::common::FontData;
+using ift::common::DataFileResolver;
+using ift::common::BazelDataFileResolver;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
@@ -47,11 +50,12 @@ class DependencyClosureTest : public ::testing::Test {
         noto_sans_jp_vf(
             from_file("_main/ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
         roboto_vf(from_file("_main/ift/common/testdata/Roboto[wdth,wght].ttf")),
-        closure_cache(*GlyphClosureCache::Create(face.get())),
+        resolver(*BazelDataFileResolver::CreateForTest()),
+        closure_cache(*GlyphClosureCache::Create(face.get(), *resolver)),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures(), *closure_cache, PATCH)),
         dependency_closure(
-            *DependencyClosure::Create(segmentation_info.get(), face.get())) {}
+            *DependencyClosure::Create(segmentation_info.get(), face.get(), *resolver)) {}
 
   static SubsetDefinition WithDefaultFeatures() {
     SubsetDefinition def;
@@ -95,16 +99,16 @@ class DependencyClosureTest : public ::testing::Test {
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
     dependency_closure =
-        *DependencyClosure::Create(segmentation_info.get(), face.get());
+        *DependencyClosure::Create(segmentation_info.get(), face.get(), *resolver);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
                    std::vector<Segment> new_segments) {
-    closure_cache = *GlyphClosureCache::Create(new_face);
+    closure_cache = *GlyphClosureCache::Create(new_face, *resolver);
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
     dependency_closure =
-        *DependencyClosure::Create(segmentation_info.get(), new_face);
+        *DependencyClosure::Create(segmentation_info.get(), new_face, *resolver);
   }
 
   Status RejectedAnalysis(segment_index_t segment) {
@@ -178,6 +182,7 @@ class DependencyClosureTest : public ::testing::Test {
   hb_face_unique_ptr noto_sans_jp;
   hb_face_unique_ptr noto_sans_jp_vf;
   hb_face_unique_ptr roboto_vf;
+  std::shared_ptr<DataFileResolver> resolver;
   std::unique_ptr<GlyphClosureCache> closure_cache;
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   std::unique_ptr<DependencyClosure> dependency_closure;
