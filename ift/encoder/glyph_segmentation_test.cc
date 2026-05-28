@@ -277,9 +277,9 @@ TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
 
   // initial font: { gid0, gid69 }
   // p0: { gid37, gid74, gid640 }
-  // p1: { gid39, gid77, gid700 }
+  // p1: { gid39, gid77, g141, g609, g679, gid700 }
   // p2: { gid444, gid446 }
-  // p3: { gid117 }
+  // p3: { gid117, g169, g667 }
   // if (s0) then p0
   // if (s1) then p1
   // if ((s0 OR s1)) then p3
@@ -319,6 +319,9 @@ glyph_patches {
   value {
     values: 39
     values: 77
+    values: 141
+    values: 609
+    values: 679
     values: 700
   }
 }
@@ -326,6 +329,8 @@ glyph_patches {
   key: 2
   value {
     values: 117
+    values: 169
+    values: 667
   }
 }
 glyph_patches {

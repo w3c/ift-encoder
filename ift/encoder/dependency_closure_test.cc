@@ -971,7 +971,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
               });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
-            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
+            (GlyphSet{0, 68, 77, 85, 92, 141, 168, 609, 678}));
 
   auto s = dependency_closure->SegmentsThatInteractWith(
       GlyphSet{609 /* dotlessi */});
@@ -991,7 +991,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
                   });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
-            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
+            (GlyphSet{0, 68, 77, 85, 92, 141, 168, 609, 678}));
 
   auto s = dependency_closure->SegmentsThatInteractWith(
       GlyphSet{609 /* dotlessi */});
@@ -1008,7 +1008,7 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
               });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
-            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
+            (GlyphSet{0, 68, 77, 85, 92, 141, 168, 609, 678}));
 
   auto s = dependency_closure->SegmentsThatInteractWith(
       GlyphSet{609 /* dotlessi */});
@@ -1028,7 +1028,7 @@ TEST_F(DependencyClosureTest,
                      });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
-            (GlyphSet{0, 77, 85, 92, 141, 168, 609}));
+            (GlyphSet{0, 68, 77, 85, 92, 141, 168, 609, 678}));
 
   auto s = dependency_closure->SegmentsThatInteractWith(
       GlyphSet{609 /* dotlessi */});

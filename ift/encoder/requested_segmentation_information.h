@@ -52,6 +52,9 @@ class RequestedSegmentationInformation {
 
   absl::Status ReassignInitSubset(GlyphClosureCache& closure_cache,
                                   const SubsetDefinition& new_def) {
+
+    // TODO XXXXX Can we avoid aggressively expanding the init closure?
+    // ie. run the init subsetting/closure operation purely in glyph form.
     init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
 
     full_definition_.Union(init_font_segment_);
