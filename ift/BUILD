@@ -63,6 +63,7 @@ cc_test(
     deps = [
         ":ift",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "//ift/encoder",
         "//ift/proto",
         "@abseil-cpp//absl/container:btree",
@@ -84,6 +85,7 @@ cc_test(
         ":ift",
         ":test_segments",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "//ift/client:fontations",
         "//ift/encoder",
         "@abseil-cpp//absl/container:flat_hash_set",

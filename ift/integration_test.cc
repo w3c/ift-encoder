@@ -10,6 +10,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/common/try.h"
 #include "ift/common/woff2.h"
 #include "ift/encoder/compiler.h"
@@ -29,10 +30,8 @@ using ift::common::AxisRange;
 using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
-using ift::common::hb_blob_unique_ptr;
 using ift::common::hb_face_unique_ptr;
 using ift::common::IntSet;
-using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
 using ift::common::make_hb_set;
 using ift::common::Woff2;
@@ -67,32 +66,36 @@ constexpr hb_tag_t kWght = HB_TAG('w', 'g', 'h', 't');
 class IntegrationTest : public ::testing::Test {
  protected:
   IntegrationTest() {
-    // Noto Sans JP
-    auto blob = make_hb_blob(
-        hb_blob_create_from_file("ift/testdata/NotoSansJP-Regular.subset.ttf"));
-    noto_sans_jp_.set(blob.get());
+    auto loader = ift::common::TestFontLoader::Default().value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.otf"));
-    noto_sans_jp_cff_.set(blob.get());
+    noto_sans_jp_ =
+        loader
+            ->LoadFontData("ift/common/testdata/NotoSansJP-Regular.subset.ttf")
+            .value();
 
-    blob = make_hb_blob(hb_blob_create_from_file(
-        "ift/common/testdata/NotoSansJP-VF.subset.otf"));
-    noto_sans_jp_cff2_.set(blob.get());
+    noto_sans_jp_cff_ =
+        loader->LoadFontData("ift/common/testdata/NotoSansJP-Regular.otf")
+            .value();
+
+    noto_sans_jp_cff2_ =
+        loader->LoadFontData("ift/common/testdata/NotoSansJP-VF.subset.otf")
+            .value();
 
     // Noto Sans JP VF
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/testdata/NotoSansJP[wght].subset.ttf"));
-    noto_sans_vf_.set(blob.get());
+    noto_sans_vf_ =
+        loader->LoadFontData("ift/common/testdata/NotoSansJP[wght].subset.ttf")
+            .value();
 
     // Feature Test
-    blob = make_hb_blob(hb_blob_create_from_file(
-        "ift/testdata/NotoSansJP-Regular.feature-test.ttf"));
-    feature_test_.set(blob.get());
+    feature_test_ =
+        loader
+            ->LoadFontData(
+                "ift/common/testdata/NotoSansJP-Regular.feature-test.ttf")
+            .value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto[wdth,wght].ttf"));
-    roboto_vf_.set(blob.get());
+    roboto_vf_ =
+        loader->LoadFontData("ift/common/testdata/Roboto[wdth,wght].ttf")
+            .value();
   }
 
   StatusOr<GlyphSet> InitEncoderForMixedMode(Compiler& compiler) {

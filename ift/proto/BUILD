@@ -40,6 +40,7 @@ cc_test(
     deps = [
         ":proto",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@googletest//:gtest_main",

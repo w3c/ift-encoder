@@ -12,6 +12,7 @@
 #include "hb.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/config/load_codepoints.h"
 
 using ift::config::CLOSURE_AND_DEP_GRAPH;
@@ -41,15 +42,12 @@ class AutoSegmenterConfigTest : public ::testing::Test {
   std::shared_ptr<ift::common::DataFileResolver> resolver;
 
   void SetUp() override {
-    hb_blob_unique_ptr roboto_blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ttf"));
-    face_ = make_hb_face(hb_face_create(roboto_blob.get(), 0));
+    auto loader = ift::common::TestFontLoader::Default().value();
 
-    hb_blob_unique_ptr noto_blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.ttf"));
-    if (hb_blob_get_length(noto_blob.get()) > 0) {
-      cjk_face_ = make_hb_face(hb_face_create(noto_blob.get(), 0));
-    }
+    face_ = loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+    cjk_face_ =
+        loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.ttf").value();
   }
 
   hb_face_unique_ptr face_;

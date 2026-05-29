@@ -5,6 +5,7 @@
 #include "hb-subset.h"
 #include "ift/common/brotli_binary_patch.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 
 namespace brotli {
 
@@ -32,17 +33,16 @@ class BrotliFontDiffTest : public ::testing::Test {
   ~BrotliFontDiffTest() override {}
 
   void SetUp() override {
-    hb_blob_t* font_data = hb_blob_create_from_file_or_fail(
-        (kTestDataDir + "Roboto-Regular.ttf").c_str());
-    ASSERT_TRUE(font_data);
-    roboto = hb_face_create(font_data, 0);
-    hb_blob_destroy(font_data);
+    auto loader = ift::common::TestFontLoader::Default().value();
 
-    font_data = hb_blob_create_from_file_or_fail(
-        (kTestDataDir + "NotoSansJP-Regular.ttf").c_str());
-    ASSERT_TRUE(font_data);
-    noto_sans_jp = hb_face_create(font_data, 0);
-    hb_blob_destroy(font_data);
+    auto roboto_data =
+        loader->LoadFontData("ift/common/testdata/Roboto-Regular.ttf").value();
+    roboto = roboto_data.reference_face();
+
+    auto noto_data =
+        loader->LoadFontData("ift/common/testdata/NotoSansJP-Regular.ttf")
+            .value();
+    noto_sans_jp = noto_data.reference_face();
 
     input = hb_subset_input_create_or_fail();
 

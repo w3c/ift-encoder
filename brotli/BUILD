@@ -55,6 +55,7 @@ cc_test(
     deps = [
         ":encoding",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@abseil-cpp//absl/types:span",
         "@brotli//:brotlienc",
         "@googletest//:gtest_main",

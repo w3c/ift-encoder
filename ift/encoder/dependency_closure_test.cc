@@ -8,6 +8,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/config/common.pb.h"
 #include "ift/dep_graph/node.h"
 #include "ift/encoder/glyph_closure_cache.h"
@@ -43,14 +44,13 @@ namespace ift::encoder {
 class DependencyClosureTest : public ::testing::Test {
  protected:
   DependencyClosureTest()
-      : face(from_file("_main/ift/common/testdata/Roboto-Regular.ttf")),
-        double_nested_face(from_file(
-            "_main/ift/common/testdata/double-nested-components.ttf")),
-        noto_sans_jp(
-            from_file("_main/ift/common/testdata/NotoSansJP-Regular.ttf")),
+      : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
+        double_nested_face(
+            from_file("ift/common/testdata/double-nested-components.ttf")),
+        noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
         noto_sans_jp_vf(
-            from_file("_main/ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
-        roboto_vf(from_file("_main/ift/common/testdata/Roboto[wdth,wght].ttf")),
+            from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
+        roboto_vf(from_file("ift/common/testdata/Roboto[wdth,wght].ttf")),
         resolver(*BazelDataFileResolver::CreateForTest()),
         closure_cache(*GlyphClosureCache::Create(face.get(), *resolver)),
         segmentation_info(*RequestedSegmentationInformation::Create(
@@ -72,18 +72,8 @@ class DependencyClosureTest : public ::testing::Test {
   }
 
   static hb_face_unique_ptr from_file(const char* filename) {
-    std::string error;
-    std::unique_ptr<Runfiles> runfiles(Runfiles::Create("", &error));
-    assert(runfiles);
-
-    std::string actual_path = runfiles->Rlocation(filename);
-    hb_blob_t* blob = hb_blob_create_from_file_or_fail(actual_path.c_str());
-    if (!blob) {
-      assert(false);
-    }
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result.face();
+    auto loader = ift::common::TestFontLoader::Default().value();
+    return loader->LoadFace(filename).value();
   }
 
   std::vector<Segment> segments = {

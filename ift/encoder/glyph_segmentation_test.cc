@@ -6,6 +6,7 @@
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
 #include "ift/encoder/subset_definition.h"
@@ -43,13 +44,8 @@ class GlyphSegmentationTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
-    hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
-    if (!blob) {
-      assert(false);
-    }
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result.face();
+    auto loader = ift::common::TestFontLoader::Default().value();
+    return loader->LoadFace(filename).value();
   }
 
   hb_face_unique_ptr roboto;

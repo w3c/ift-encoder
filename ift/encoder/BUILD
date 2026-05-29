@@ -195,6 +195,7 @@ cc_test(
     deps = [
         ":encoder",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "//ift:test_segments",
         "//ift/client:fontations",
         "@googletest//:gtest_main",
@@ -215,6 +216,7 @@ cc_test(
         ":segmentation_info",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -230,6 +232,7 @@ cc_test(
     ],
     deps = [
         ":encoder",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
         "@harfbuzz",
     ],
@@ -250,6 +253,7 @@ cc_test(
         ":encoder",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -269,6 +273,7 @@ cc_test(
         ":segmentation_context",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -287,6 +292,7 @@ cc_test(
         ":encoder",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -305,6 +311,7 @@ cc_test(
         ":segmentation_info",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -319,6 +326,7 @@ cc_test(
         ":segmentation_context",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )
@@ -336,6 +344,7 @@ cc_test(
     deps = [
         ":encoder",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],
@@ -371,6 +380,7 @@ cc_test(
         ":segmentation_context",
         "//ift/config:common_cc_proto",
         "//ift/common:data_file_resolver",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
         "@bazel_tools//tools/cpp/runfiles",
     ],
@@ -396,6 +406,7 @@ cc_test(
     deps = [
         ":segmentation_context",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )

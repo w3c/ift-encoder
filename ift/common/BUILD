@@ -94,6 +94,24 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "test_font_loader",
+    srcs = ["bazel_test_font_loader.cc"],
+    hdrs = [
+        "test_font_loader.h",
+        "bazel_test_font_loader.h",
+    ],
+    visibility = ["//visibility:public"],
+    testonly = True,
+    deps = [
+        ":common",
+        ":try",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@bazel_tools//tools/cpp/runfiles",
+        "@harfbuzz",
+    ],
+)
 
 cc_library(
     name = "mocks",
@@ -150,6 +168,7 @@ cc_test(
     deps = [
         ":common",
         ":mocks",
+        ":test_font_loader",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/hash:hash_test",
         "@googletest//:gtest_main",

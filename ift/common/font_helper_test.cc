@@ -7,6 +7,7 @@
 #include "gtest/gtest.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 
 using absl::flat_hash_map;
 using absl::string_view;
@@ -76,37 +77,34 @@ class FontHelperTest : public ::testing::Test {
         roboto(make_hb_face(nullptr)),
         roboto_vf(make_hb_face(nullptr)),
         roboto_vf_abcd(make_hb_face(nullptr)) {
-    hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ab.ttf"));
-    roboto_ab = make_hb_face(hb_face_create(blob.get(), 0));
+    auto loader = TestFontLoader::Default().value();
 
-    blob = make_hb_blob(hb_blob_create_from_file(
-        "ift/common/testdata/Roboto-Regular.Awesome.ttf"));
-    roboto_Awesome = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto_ab =
+        loader->LoadFace("ift/common/testdata/Roboto-Regular.ab.ttf").value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ttf"));
-    roboto = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto_Awesome =
+        loader->LoadFace("ift/common/testdata/Roboto-Regular.Awesome.ttf")
+            .value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto[wdth,wght].ttf"));
-    roboto_vf = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto = loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
 
-    blob = make_hb_blob(hb_blob_create_from_file(
-        "ift/common/testdata/Roboto[wdth,wght].abcd.ttf"));
-    roboto_vf_abcd = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto_vf =
+        loader->LoadFace("ift/common/testdata/Roboto[wdth,wght].ttf").value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.otf"));
-    noto_sans_jp_otf = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto_vf_abcd =
+        loader->LoadFace("ift/common/testdata/Roboto[wdth,wght].abcd.ttf")
+            .value();
 
-    blob = make_hb_blob(hb_blob_create_from_file(
-        "ift/common/testdata/NotoSansJP-VF.subset.otf"));
-    noto_sans_vf_jp_otf = make_hb_face(hb_face_create(blob.get(), 0));
+    noto_sans_jp_otf =
+        loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.otf").value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/testdata/NotoSansJP-Regular.ift.ttf"));
-    noto_sans_ift_ttf = make_hb_face(hb_face_create(blob.get(), 0));
+    noto_sans_vf_jp_otf =
+        loader->LoadFace("ift/common/testdata/NotoSansJP-VF.subset.otf")
+            .value();
+
+    noto_sans_ift_ttf =
+        loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.ift.ttf")
+            .value();
   }
 
   hb_face_unique_ptr noto_sans_jp_otf;

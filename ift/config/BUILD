@@ -176,6 +176,7 @@ cc_test(
         ":auto_segmenter_config",
         "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
         "@harfbuzz",
     ],

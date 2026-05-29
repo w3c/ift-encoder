@@ -7,6 +7,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -75,13 +76,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
   }
 
   hb_face_unique_ptr from_file(const char* filename) {
-    hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
-    if (!blob) {
-      assert(false);
-    }
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result.face();
+    auto loader = ift::common::TestFontLoader::Default().value();
+    return loader->LoadFace(filename).value();
   }
 
   StatusOr<GlyphSegmentation> CodepointToGlyphSegments(

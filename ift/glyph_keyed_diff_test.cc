@@ -11,6 +11,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/proto/ift_table.h"
 
 using absl::StatusOr;
@@ -147,8 +148,9 @@ namespace ift {
 class GlyphKeyedDiffTest : public ::testing::Test {
  protected:
   GlyphKeyedDiffTest() {
-    font = from_file("ift/testdata/NotoSansJP-Regular.ift.ttf");
-    original = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
+    loader = ift::common::TestFontLoader::Default().value();
+    font = from_file("ift/common/testdata/NotoSansJP-Regular.ift.ttf");
+    original = from_file("ift/common/testdata/NotoSansJP-Regular.subset.ttf");
     roboto = from_file("ift/common/testdata/Roboto-Regular.Awesome.ttf");
     roboto_vf = from_file("ift/common/testdata/Roboto[wdth,wght].abcd.ttf");
     noto_sans_jp_cff = from_file("ift/common/testdata/NotoSansJP-Regular.otf");
@@ -157,8 +159,10 @@ class GlyphKeyedDiffTest : public ::testing::Test {
   }
 
   FontData from_file(const char* filename) {
-    return FontData(make_hb_blob(hb_blob_create_from_file(filename)));
+    return loader->LoadFontData(filename).value();
   }
+
+  std::unique_ptr<ift::common::TestFontLoader> loader;
 
   FontData Subset(const FontData& font, IntSet gids) {
     hb_face_unique_ptr face = font.face();
