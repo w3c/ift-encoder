@@ -66,6 +66,7 @@ cc_test(
         ":dep_graph",
         ":unicode_edges",
         "//ift/common:data_file_resolver",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
         "//ift/encoder:segmentation_info",
     ],
@@ -81,6 +82,7 @@ cc_test(
     deps = [
         ":unicode_edges",
         "//ift/common:data_file_resolver",
+        "//ift/common:test_font_loader",
         "@googletest//:gtest_main",
     ],
 )

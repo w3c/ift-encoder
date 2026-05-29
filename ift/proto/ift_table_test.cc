@@ -12,6 +12,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/sparse_bit_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/proto/format_2_patch_map.h"
 #include "ift/proto/patch_encoding.h"
 
@@ -58,13 +59,13 @@ class IFTTableTest : public ::testing::Test {
     sc.Update(complex_ids.GetPatchMap().AddEntry({4}, 4, TABLE_KEYED_PARTIAL));
     assert(sc.ok());
 
-    hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ab.ttf"));
-    roboto_ab = make_hb_face(hb_face_create(blob.get(), 0));
+    auto loader = ift::common::TestFontLoader::Default().value();
 
-    blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/NotoSansJP-Regular.otf"));
-    noto_sans_jp = make_hb_face(hb_face_create(blob.get(), 0));
+    roboto_ab =
+        loader->LoadFace("ift/common/testdata/Roboto-Regular.ab.ttf").value();
+
+    noto_sans_jp =
+        loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.otf").value();
   }
 
   hb_face_unique_ptr roboto_ab;

@@ -37,34 +37,32 @@ using ift::freq::ProbabilityBound;
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
 
+#include "ift/common/test_font_loader.h"
+
 namespace ift::dep_graph {
 
 class DependencyGraphTest : public ::testing::Test {
  protected:
   DependencyGraphTest()
-      : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
+      : loader(ift::common::TestFontLoader::Default().value()),
+        face(
+            loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value()),
         resolver(*BazelDataFileResolver::CreateForTest()),
         closure_cache(
             std::move(*GlyphClosureCache::Create(face.get(), *resolver))),
-        noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
+        noto_sans_jp(
+            loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.ttf")
+                .value()),
         noto_sans_jp_vf(
-            from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
+            loader->LoadFace("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")
+                .value()),
         noto_sans_kr(
-            from_file("ift/common/testdata/NotoSansKR[wght].subset.ttf")),
+            loader->LoadFace("ift/common/testdata/NotoSansKR[wght].subset.ttf")
+                .value()),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures({}), *closure_cache, PATCH)),
         graph(*DependencyGraph::Create(segmentation_info.get(), face.get(),
                                        *resolver)) {}
-
-  static hb_face_unique_ptr from_file(const char* filename) {
-    hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
-    if (!blob) {
-      assert(false);
-    }
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result.face();
-  }
 
   static SubsetDefinition WithDefaultFeatures(SubsetDefinition def) {
     AddInitSubsetDefaults(def);
@@ -97,6 +95,7 @@ class DependencyGraphTest : public ::testing::Test {
   };
 
  protected:
+  std::unique_ptr<ift::common::TestFontLoader> loader;
   hb_face_unique_ptr face;
   std::shared_ptr<DataFileResolver> resolver;
   std::unique_ptr<GlyphClosureCache> closure_cache;

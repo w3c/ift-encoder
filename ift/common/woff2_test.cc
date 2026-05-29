@@ -1,6 +1,7 @@
 #include "ift/common/woff2.h"
 
 #include "gtest/gtest.h"
+#include "ift/common/test_font_loader.h"
 
 using absl::Span;
 using absl::string_view;
@@ -10,16 +11,16 @@ namespace ift::common {
 class Woff2Test : public ::testing::Test {
  protected:
   Woff2Test() {
+    loader = TestFontLoader::Default().value();
     font = from_file("ift/common/testdata/Roboto-Regular.abcd.ttf");
     woff2_font = from_file("ift/common/testdata/Roboto-Regular.abcd.woff2");
   }
 
   FontData from_file(const char* filename) {
-    hb_blob_t* blob = hb_blob_create_from_file(filename);
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result;
+    return loader->LoadFontData(filename).value();
   }
+
+  std::unique_ptr<TestFontLoader> loader;
 
   FontData font;
   FontData woff2_font;

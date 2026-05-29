@@ -4,6 +4,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
@@ -17,8 +18,10 @@ namespace ift::encoder {
 class EstimatedPatchSizeCacheTest : public ::testing::Test {
  protected:
   EstimatedPatchSizeCacheTest() : roboto(make_hb_face(nullptr)) {
-    hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.ttf"));
+    auto loader = ift::common::TestFontLoader::Default().value();
+    auto blob = loader->LoadFontData("ift/common/testdata/Roboto-Regular.ttf")
+                    .value()
+                    .blob();
     roboto = make_hb_face(hb_face_create(blob.get(), 0));
   }
 

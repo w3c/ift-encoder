@@ -19,6 +19,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/proto/ift_table.h"
 #include "ift/proto/patch_encoding.h"
@@ -64,11 +65,13 @@ constexpr hb_tag_t kWdth = HB_TAG('w', 'd', 't', 'h');
 class CompilerTest : public ::testing::Test {
  protected:
   CompilerTest() {
+    loader = ift::common::TestFontLoader::Default().value();
     font = from_file("ift/common/testdata/Roboto-Regular.abcd.ttf");
     full_font = from_file("ift/common/testdata/Roboto-Regular.ttf");
     woff2_font = from_file("ift/common/testdata/Roboto-Regular.abcd.woff2");
     vf_font = from_file("ift/common/testdata/Roboto[wdth,wght].ttf");
-    noto_sans_jp = from_file("ift/testdata/NotoSansJP-Regular.subset.ttf");
+    noto_sans_jp =
+        from_file("ift/common/testdata/NotoSansJP-Regular.subset.ttf");
 
     auto face = noto_sans_jp.face();
     GlyphSet init;
@@ -100,6 +103,7 @@ class CompilerTest : public ::testing::Test {
   FontData woff2_font;
   FontData vf_font;
   FontData noto_sans_jp;
+  std::unique_ptr<ift::common::TestFontLoader> loader;
 
   GlyphSet segment_0_gids;
   GlyphSet segment_1_gids;
@@ -120,13 +124,7 @@ class CompilerTest : public ::testing::Test {
   uint32_t chunk4_cp = 0xa8;
 
   FontData from_file(const char* filename) {
-    hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
-    if (!blob) {
-      assert(false);
-    }
-    FontData result(blob);
-    hb_blob_destroy(blob);
-    return result;
+    return loader->LoadFontData(filename).value();
   }
 
   std::string GetVarInfo(const FontData& font_data) {

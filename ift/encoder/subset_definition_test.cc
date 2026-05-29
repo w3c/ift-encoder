@@ -6,13 +6,12 @@
 #include "hb.h"
 #include "ift/common/axis_range.h"
 #include "ift/common/font_data.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
 using ift::common::AxisRange;
-using ift::common::hb_blob_unique_ptr;
 using ift::common::hb_face_unique_ptr;
-using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
@@ -65,15 +64,14 @@ TEST_F(SubsetDefinitionTest, ToEntries_Composite) {
 }
 
 TEST_F(SubsetDefinitionTest, IsVariableFor) {
-  hb_blob_unique_ptr blob = make_hb_blob(hb_blob_create_from_file(
-      "ift/common/testdata/Roboto[wdth,wght].abcd.ttf"));
-  ASSERT_GT(hb_blob_get_length(blob.get()), 0);
-  hb_face_unique_ptr face = make_hb_face(hb_face_create(blob.get(), 0));
+  auto loader = ift::common::TestFontLoader::Default().value();
 
-  blob = make_hb_blob(
-      hb_blob_create_from_file("ift/common/testdata/Roboto-Regular.abcd.ttf"));
-  ASSERT_GT(hb_blob_get_length(blob.get()), 0);
-  hb_face_unique_ptr static_face = make_hb_face(hb_face_create(blob.get(), 0));
+  hb_face_unique_ptr face =
+      loader->LoadFace("ift/common/testdata/Roboto[wdth,wght].abcd.ttf")
+          .value();
+
+  hb_face_unique_ptr static_face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.abcd.ttf").value();
 
   {
     SubsetDefinition noop;
