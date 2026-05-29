@@ -651,6 +651,7 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   // ift demo.
   config.mutable_base_cost_config()->set_network_overhead_cost(
       DEFAULT_NETWORK_COST);
+  config.mutable_base_cost_config()->set_experimental_use_patch_merges(true);
 
   for (auto& merge_group : *config.mutable_merge_groups()) {
     ApplyQualityLevelTo(quality, merge_group);
