@@ -50,7 +50,7 @@ absl::string_view BitInputBuffer::Remaining() const {
   }
 }
 
-bool BitInputBuffer::read(uint32_t *out) {
+bool BitInputBuffer::read(uint32_t* out) {
   if (!out) {
     return false;
   }

@@ -1,9 +1,9 @@
 #include "ift/encoder/glyph_closure_cache.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
@@ -14,16 +14,16 @@
 using ift::config::PATCH;
 
 using absl::StatusOr;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
+using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
-using ift::common::FontHelper;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 
@@ -98,8 +98,10 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
       RequestedSegmentationInformation::Create(segments, {}, **cache, PATCH);
   ASSERT_TRUE(info.ok());
 
-  ASSERT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {0}, {37 /* A */}));
-  ASSERT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {1}, {37 /* A */}));
+  ASSERT_TRUE(
+      *(*cache)->HasAdditionalConditions(info->get(), {0}, {37 /* A */}));
+  ASSERT_TRUE(
+      *(*cache)->HasAdditionalConditions(info->get(), {1}, {37 /* A */}));
   ASSERT_FALSE(
       *(*cache)->HasAdditionalConditions(info->get(), {0, 1}, {37 /* A */}));
 
@@ -125,8 +127,10 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
   ASSERT_TRUE(info.ok());
 
   // s0 or s1 -> g563 (smcap A)
-  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {0}), (GlyphSet{37, 563}));
-  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {1}), (GlyphSet{37, 563}));
+  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {0}),
+            (GlyphSet{37, 563}));
+  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {1}),
+            (GlyphSet{37, 563}));
 
   EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {0}, {563}));
   EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {1}, {563}));
@@ -149,7 +153,7 @@ TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
 
   GlyphSet and_gids, or_gids, exclusive_gids;
   auto status = (*cache)->AnalyzeSegment(*info->get(), {0}, and_gids, or_gids,
-                                     exclusive_gids);
+                                         exclusive_gids);
   ASSERT_TRUE(status.ok());
 
   EXPECT_EQ(exclusive_gids, (GlyphSet{74 /* f */}));
@@ -200,13 +204,13 @@ TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_ExpandClosure) {
   ASSERT_TRUE(cache.ok()) << cache.status();
 
   SubsetDefinition def;
-  def.codepoints = {0xe1}; // á
+  def.codepoints = {0xe1};  // á
 
   auto expanded = (*cache)->ExpandClosure(def);
   ASSERT_TRUE(expanded.ok());
 
-  EXPECT_TRUE(expanded->codepoints.contains(0x61)); // a
-  EXPECT_TRUE(expanded->codepoints.contains(0x301)); // combining acute
+  EXPECT_TRUE(expanded->codepoints.contains(0x61));   // a
+  EXPECT_TRUE(expanded->codepoints.contains(0x301));  // combining acute
 }
 
 TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
@@ -214,12 +218,12 @@ TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_Composition) {
   ASSERT_TRUE(cache.ok()) << cache.status();
 
   SubsetDefinition def;
-  def.codepoints = {0x61, 0x301}; // a, combining acute
+  def.codepoints = {0x61, 0x301};  // a, combining acute
 
   auto expanded = (*cache)->ExpandClosure(def);
   ASSERT_TRUE(expanded.ok());
 
-  EXPECT_TRUE(expanded->codepoints.contains(0xe1)); // á
+  EXPECT_TRUE(expanded->codepoints.contains(0xe1));  // á
 }
 
 TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
@@ -234,12 +238,12 @@ TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
     // 2. Single nominal glyph
     auto a_gid = *FontHelper::GetNominalGlyph(roboto.get(), 'a');
     auto cps = (*cache)->CodepointsForGlyphs({a_gid});
-    EXPECT_EQ(cps, (CodepointSet {'a'}));
+    EXPECT_EQ(cps, (CodepointSet{'a'}));
 
     // 3. Multiple nominal glyphs
     auto b_gid = *FontHelper::GetNominalGlyph(roboto.get(), 'b');
     cps = (*cache)->CodepointsForGlyphs({a_gid, b_gid});
-    EXPECT_EQ(cps, (CodepointSet {'a', 'b'}));
+    EXPECT_EQ(cps, (CodepointSet{'a', 'b'}));
   }
 
   // Test with NotoSansJP for UVS mappings.

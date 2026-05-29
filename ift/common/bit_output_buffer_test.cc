@@ -13,7 +13,7 @@ using std::string;
 
 class BitOutputBufferTest : public ::testing::Test {
  protected:
-  static string Bits(const string &s) {
+  static string Bits(const string& s) {
     if (s.empty()) {
       return "";
     }

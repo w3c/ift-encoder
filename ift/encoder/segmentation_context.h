@@ -77,14 +77,15 @@ class SegmentationContext {
         TRY(GlyphClosureCache::Create(original_face.get(), *resolver_));
 
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
-        TRY(RequestedSegmentationInformation::Create(SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),
-                                                     *closure_cache,
-                                                     SegmentationInfo().GetUnmappedGlyphHandling()));
+        TRY(RequestedSegmentationInformation::Create(
+            SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),
+            *closure_cache, SegmentationInfo().GetUnmappedGlyphHandling()));
 
     SegmentationContext context(
-        original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(), condition_analysis_mode_, brotli_quality_,
-        init_font_brotli_quality_, std::move(closure_cache),
-        std::move(segmentation_info), resolver_, estimated_compression_ratio_);
+        original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(),
+        condition_analysis_mode_, brotli_quality_, init_font_brotli_quality_,
+        std::move(closure_cache), std::move(segmentation_info), resolver_,
+        estimated_compression_ratio_);
 
     TRYV(context.InitDependencyClosure());
     return std::move(context);
@@ -113,8 +114,7 @@ class SegmentationContext {
       std::unique_ptr<GlyphClosureCache> closure_cache,
       std::unique_ptr<RequestedSegmentationInformation> segmentation_info,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
-      std::optional<double> estimated_compression_ratio = std::nullopt
-    )
+      std::optional<double> estimated_compression_ratio = std::nullopt)
       : estimated_compression_ratio_(estimated_compression_ratio),
         patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
         patch_size_cache_for_init_font(
@@ -300,8 +300,8 @@ class SegmentationContext {
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
   // TODO XXXX make this return StatusOr<...>
-  std::unique_ptr<PatchSizeCache> NewPatchSizeCache(
-      hb_face_t* face, uint32_t brotli_quality) {
+  std::unique_ptr<PatchSizeCache> NewPatchSizeCache(hb_face_t* face,
+                                                    uint32_t brotli_quality) {
     if (brotli_quality == 0) {
       if (!estimated_compression_ratio_.has_value()) {
         auto r = EstimatedPatchSizeCache::EstimateCompressionRatio(face);
@@ -311,7 +311,8 @@ class SegmentationContext {
       }
 
       if (estimated_compression_ratio_.has_value()) {
-        return EstimatedPatchSizeCache::New(face, *estimated_compression_ratio_);
+        return EstimatedPatchSizeCache::New(face,
+                                            *estimated_compression_ratio_);
       }
     }
     return std::unique_ptr<PatchSizeCache>(

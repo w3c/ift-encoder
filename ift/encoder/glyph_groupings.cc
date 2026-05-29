@@ -145,7 +145,8 @@ StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
   // manually.
   SegmentSet fallback_segments;
   btree_map<ActivationCondition, GlyphSet> conditions_with_fallback;
-  conditions_with_fallback.insert(ConditionsAndGlyphs().begin(), ConditionsAndGlyphs().end());
+  conditions_with_fallback.insert(ConditionsAndGlyphs().begin(),
+                                  ConditionsAndGlyphs().end());
   if (!unmapped_glyphs_.empty()) {
     fallback_segments = segmentation_info.NonEmptySegments();
 

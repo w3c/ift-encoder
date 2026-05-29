@@ -17,7 +17,8 @@ static uint64_t ToKey(uint32_t cp1, uint32_t cp2) {
   }
 }
 
-void UnicodeFrequenciesBuilder::Add(uint32_t cp1, uint32_t cp2, uint64_t count) {
+void UnicodeFrequenciesBuilder::Add(uint32_t cp1, uint32_t cp2,
+                                    uint64_t count) {
   uint64_t key = ToKey(cp1, cp2);
   uint64_t& freq = frequencies_[key];
   freq += count;

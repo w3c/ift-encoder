@@ -1,11 +1,11 @@
 #include "ift/config/segmenter_config_util.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <optional>
 #include <vector>
 
 #include "absl/container/btree_map.h"
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/data_file_resolver.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/merge_strategy.h"
@@ -17,15 +17,15 @@ using ift::config::SegmenterConfig;
 
 using absl::btree_map;
 using absl::btree_set;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::SegmentSet;
 using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnicodeFrequenciesBuilder;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 class SegmenterConfigUtilTest : public ::testing::Test {
  protected:
@@ -47,7 +47,8 @@ MergeStrategy ExpectedCostStrategy(
   UnicodeFrequenciesBuilder freq_builder;
   freq_builder.Add(1, 1, 1);
 
-  MergeStrategy s = *MergeStrategy::CostBased(freq_builder.Build(), net_overhead, 1);
+  MergeStrategy s =
+      *MergeStrategy::CostBased(freq_builder.Build(), net_overhead, 1);
   s.SetOptimizationCutoffFraction(0.001);
   s.SetInitFontMergeThreshold(init_font_threshold);
 

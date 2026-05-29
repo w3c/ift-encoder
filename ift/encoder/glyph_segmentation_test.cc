@@ -1,9 +1,9 @@
 #include "ift/encoder/glyph_segmentation.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <google/protobuf/text_format.h>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
@@ -17,7 +17,9 @@ using ift::config::CLOSURE_ONLY;
 using ift::config::PATCH;
 
 using google::protobuf::TextFormat;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
 using ift::common::hb_face_unique_ptr;
 using ift::common::IntSet;
@@ -26,8 +28,6 @@ using ift::common::SegmentSet;
 using ift::freq::UnicodeFrequencies;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 

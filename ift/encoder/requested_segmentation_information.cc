@@ -9,9 +9,9 @@
 
 using ift::config::UnmappedGlyphHandling;
 
+using absl::StatusOr;
 using ift::common::CodepointSet;
 using ift::common::SegmentSet;
-using absl::StatusOr;
 
 namespace ift::encoder {
 

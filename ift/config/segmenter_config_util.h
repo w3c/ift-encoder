@@ -1,8 +1,9 @@
 #ifndef IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 #define IFT_CONFIG_SEGMENTER_CONFIG_UTIL_H_
 
-#include <optional>
 #include <memory>
+#include <optional>
+
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
@@ -29,7 +30,8 @@ struct SegmentationResult {
  */
 class SegmenterConfigUtil {
  public:
-  SegmenterConfigUtil(std::string config_file_path, std::shared_ptr<ift::common::DataFileResolver> resolver)
+  SegmenterConfigUtil(std::string config_file_path,
+                      std::shared_ptr<ift::common::DataFileResolver> resolver)
       : config_file_path_(config_file_path), resolver_(std::move(resolver)) {}
 
   /*
@@ -97,8 +99,7 @@ class SegmenterConfigUtil {
   ProtoToMergeGroup(const std::vector<ift::encoder::SubsetDefinition>& segments,
                     const absl::flat_hash_map<SegmentId, uint32_t>& id_to_index,
                     const HeuristicConfiguration& base_heuristic,
-                    const CostConfiguration& base_cost,
-                    const MergeGroup& group,
+                    const CostConfiguration& base_cost, const MergeGroup& group,
                     const ift::common::CodepointSet& font_codepoints);
 
   static ift::common::SegmentSet MapToIndices(

@@ -1,8 +1,8 @@
 #include "ift/encoder/complex_condition_finder.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include "absl/container/btree_map.h"
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
@@ -16,14 +16,14 @@ using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;
+using ift::common::BazelDataFileResolver;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
 using ift::freq::ProbabilityBound;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 namespace ift::encoder {
 
@@ -295,7 +295,9 @@ TEST_F(ComplexConditionFinderTest, FindConditions_WithBadInscope) {
                                                     756,
                                                 },
                                                 {
-                                                    2, 3, 4,  // missing 1, 6
+                                                    2,
+                                                    3,
+                                                    4,  // missing 1, 6
                                                 });
   ASSERT_TRUE(absl::IsInternal(r.status()));
 }

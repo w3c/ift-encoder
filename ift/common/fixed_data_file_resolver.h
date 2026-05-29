@@ -21,7 +21,8 @@ class FixedDataFileResolver : public DataFileResolver {
     return unicode_data_path_;
   }
 
-  absl::StatusOr<std::string> GetDerivedNormalizationPropsPath() const override {
+  absl::StatusOr<std::string> GetDerivedNormalizationPropsPath()
+      const override {
     return derived_props_path_;
   }
 

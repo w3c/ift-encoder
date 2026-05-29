@@ -2,6 +2,7 @@
 #define IFT_DEP_GRAPH_UNICODE_EDGES_H_
 
 #include <vector>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
@@ -26,17 +27,23 @@ struct VariationSelectorEdge {
 };
 
 struct UnicodeEdges {
-  absl::flat_hash_map<hb_codepoint_t, std::vector<UnicodeConjunctiveEdge>> composition;
+  absl::flat_hash_map<hb_codepoint_t, std::vector<UnicodeConjunctiveEdge>>
+      composition;
   absl::flat_hash_map<hb_codepoint_t, ift::common::CodepointSet> decomposition;
-  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>> variation_selector;
+  absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
+      variation_selector;
   absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::CodepointSet> gid_to_vs;
 
   static absl::StatusOr<UnicodeEdges> ComputeUnicodeDependencyEdges(
-    hb_face_t* face, const ift::common::DataFileResolver& resolver);
+      hb_face_t* face, const ift::common::DataFileResolver& resolver);
 
  private:
-  static void ComputeUVSEdges(hb_face_t* face, const absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t>& unicode_to_gid, UnicodeEdges& result);
+  static void ComputeUVSEdges(
+      hb_face_t* face,
+      const absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t>&
+          unicode_to_gid,
+      UnicodeEdges& result);
 
   static absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeToGid(
       hb_face_t* face);

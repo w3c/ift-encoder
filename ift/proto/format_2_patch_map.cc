@@ -182,7 +182,7 @@ StatusOr<size_t> Format2PatchMap::EstimateEncodingCost(
   // estimates by using fixed values.
   std::string out;
   TRYV(EncodeEntry(dummy_entry, /*last_entry_index=*/0,
-                       /*default_encoding=*/TABLE_KEYED_FULL, out));
+                   /*default_encoding=*/TABLE_KEYED_FULL, out));
   return out.size();
 }
 

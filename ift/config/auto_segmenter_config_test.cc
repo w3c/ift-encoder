@@ -1,5 +1,4 @@
 #include "ift/config/auto_segmenter_config.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <google/protobuf/text_format.h>
 
@@ -11,6 +10,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "hb.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/config/load_codepoints.h"
 
@@ -157,16 +157,16 @@ base_segmentation_plan {
 generate_feature_segments: true
 )"
 #ifdef HB_DEPEND_API
-"condition_analysis_mode: DEP_GRAPH_ONLY\n"
+                           "condition_analysis_mode: DEP_GRAPH_ONLY\n"
 #else
-"condition_analysis_mode: CLOSURE_ONLY\n"
+                           "condition_analysis_mode: CLOSURE_ONLY\n"
 #endif
-);
+  );
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, "Script_cyrillic");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       "Script_cyrillic");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(
       GetScripts(*config_or),
@@ -176,8 +176,8 @@ TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_LanguageFr) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, "Language_fr");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       "Language_fr");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(Pair("Language_fr", "Language_fr.riegeli"),
@@ -188,7 +188,8 @@ TEST_F(AutoSegmenterConfigTest, Roboto_LanguageFr) {
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
   if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
-  auto config_or = AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver);
+  auto config_or =
+      AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(kLatin, kGreek, kCyrillic, kCJK, kSymbols,
@@ -199,8 +200,8 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
   if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver, "Script_CJK");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(cjk_face_.get(),
+                                                       *resolver, "Script_CJK");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(kLatin, kGreek, kCyrillic, kCJK, kSymbols,
@@ -211,8 +212,8 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
   if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver, "Script_japanese");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      cjk_face_.get(), *resolver, "Script_japanese");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(
       GetScripts(*config_or),
@@ -225,8 +226,8 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_LanguageZhHans) {
   if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver, "Language_zh-Hans");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      cjk_face_.get(), *resolver, "Language_zh-Hans");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(
@@ -238,14 +239,14 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_LanguageZhHans) {
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptNotFound) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, "Script_foobar");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       "Script_foobar");
   EXPECT_EQ(config_or.status().code(), absl::StatusCode::kNotFound);
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_LanguageNotFound) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, "Language_foobar");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       "Language_foobar");
   EXPECT_EQ(config_or.status().code(), absl::StatusCode::kNotFound);
 }
 
@@ -267,8 +268,8 @@ TEST_F(AutoSegmenterConfigTest, Roboto_FullFileName_Script) {
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_FullFileName_Language) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, "Language_fr.riegeli");
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       "Language_fr.riegeli");
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(Pair("Language_fr", "Language_fr.riegeli"),
                                    kCyrillic, kGreek, kSymbols, kFallback));
@@ -291,8 +292,8 @@ TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
 }
 
 TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
-  auto config_or =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, std::nullopt, 1);
+  auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                       std::nullopt, 1);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_EQ(config_or->brotli_quality(), 0);
   EXPECT_EQ(config_or->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
@@ -300,8 +301,8 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   EXPECT_EQ(config_or->brotli_quality_for_initial_font_merging(), 0);
   EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
 
-  auto config_or_8 =
-      AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver, std::nullopt, 8);
+  auto config_or_8 = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
+                                                         std::nullopt, 8);
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
   EXPECT_EQ(config_or_8->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);

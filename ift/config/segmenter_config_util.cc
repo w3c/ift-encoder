@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "absl/strings/str_cat.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
@@ -12,8 +13,6 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/feature_registry/feature_registry.h"
 #include "ift/freq/unicode_frequencies.h"
-#include "absl/strings/str_cat.h"
-
 
 using absl::btree_map;
 using absl::btree_set;
@@ -120,8 +119,7 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
 
 StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
     const CostConfiguration& base, const CostConfiguration& config,
-    CodepointSet& covered_codepoints,
-    const CodepointSet& font_codepoints) {
+    CodepointSet& covered_codepoints, const CodepointSet& font_codepoints) {
   CostConfiguration merged = base;
   merged.MergeFrom(config);
 
@@ -133,8 +131,10 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
 
   UnicodeFrequencies freq =
       config.has_built_in_freq_data_name()
-          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true, font_codepoints))
-          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false, font_codepoints));
+          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true,
+                                 font_codepoints))
+          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false,
+                                 font_codepoints));
 
   covered_codepoints = freq.CoveredCodepoints();
 

@@ -7,8 +7,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
-#include "ift/common/font_data.h"
 #include "ift/common/data_file_resolver.h"
+#include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
@@ -34,13 +34,12 @@ class DependencyClosure {
  public:
   static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face,
-      const ift::common::DataFileResolver& resolver) {
+      hb_face_t* face, const ift::common::DataFileResolver& resolver) {
 #ifndef HB_DEPEND_API
     return std::unique_ptr<DependencyClosure>(new DependencyClosure());
 #else
-    dep_graph::DependencyGraph graph =
-        TRY(dep_graph::DependencyGraph::Create(segmentation_info, face, resolver));
+    dep_graph::DependencyGraph graph = TRY(
+        dep_graph::DependencyGraph::Create(segmentation_info, face, resolver));
     auto result = std::unique_ptr<DependencyClosure>(
         new DependencyClosure(std::move(graph), segmentation_info, face));
     TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
@@ -145,7 +144,9 @@ class DependencyClosure {
   absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
   ExtractAllNodeConditions() const;
 
-  ift::common::SegmentSet ComputeInertSegments(const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions) const;
+  ift::common::SegmentSet ComputeInertSegments(
+      const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
+      const;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
   InitializeConditions() const;

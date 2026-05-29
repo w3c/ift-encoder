@@ -23,7 +23,8 @@ class EstimatedPatchSizeCache : public PatchSizeCache {
         new EstimatedPatchSizeCache(face, compression_ratio));
   }
 
-  static std::unique_ptr<PatchSizeCache> New(hb_face_t* face, double compression_ratio) {
+  static std::unique_ptr<PatchSizeCache> New(hb_face_t* face,
+                                             double compression_ratio) {
     return std::unique_ptr<PatchSizeCache>(
         new EstimatedPatchSizeCache(face, compression_ratio));
   }

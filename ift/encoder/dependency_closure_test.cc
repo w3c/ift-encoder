@@ -1,10 +1,10 @@
 #include "ift/encoder/dependency_closure.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
@@ -21,15 +21,15 @@
 
 using ift::config::PATCH;
 
-using bazel::tools::cpp::runfiles::Runfiles;
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
-using ift::common::CodepointSet;
-using ift::common::FontData;
-using ift::common::DataFileResolver;
+using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::BazelDataFileResolver;
+using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
+using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
@@ -44,9 +44,10 @@ class DependencyClosureTest : public ::testing::Test {
  protected:
   DependencyClosureTest()
       : face(from_file("_main/ift/common/testdata/Roboto-Regular.ttf")),
-        double_nested_face(
-            from_file("_main/ift/common/testdata/double-nested-components.ttf")),
-        noto_sans_jp(from_file("_main/ift/common/testdata/NotoSansJP-Regular.ttf")),
+        double_nested_face(from_file(
+            "_main/ift/common/testdata/double-nested-components.ttf")),
+        noto_sans_jp(
+            from_file("_main/ift/common/testdata/NotoSansJP-Regular.ttf")),
         noto_sans_jp_vf(
             from_file("_main/ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
         roboto_vf(from_file("_main/ift/common/testdata/Roboto[wdth,wght].ttf")),
@@ -54,8 +55,8 @@ class DependencyClosureTest : public ::testing::Test {
         closure_cache(*GlyphClosureCache::Create(face.get(), *resolver)),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures(), *closure_cache, PATCH)),
-        dependency_closure(
-            *DependencyClosure::Create(segmentation_info.get(), face.get(), *resolver)) {}
+        dependency_closure(*DependencyClosure::Create(segmentation_info.get(),
+                                                      face.get(), *resolver)) {}
 
   static SubsetDefinition WithDefaultFeatures() {
     SubsetDefinition def;
@@ -98,8 +99,8 @@ class DependencyClosureTest : public ::testing::Test {
                    std::vector<Segment> new_segments) {
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    dependency_closure =
-        *DependencyClosure::Create(segmentation_info.get(), face.get(), *resolver);
+    dependency_closure = *DependencyClosure::Create(segmentation_info.get(),
+                                                    face.get(), *resolver);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
@@ -107,8 +108,8 @@ class DependencyClosureTest : public ::testing::Test {
     closure_cache = *GlyphClosureCache::Create(new_face, *resolver);
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    dependency_closure =
-        *DependencyClosure::Create(segmentation_info.get(), new_face, *resolver);
+    dependency_closure = *DependencyClosure::Create(segmentation_info.get(),
+                                                    new_face, *resolver);
   }
 
   Status RejectedAnalysis(segment_index_t segment) {
@@ -141,8 +142,8 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet expected_or_gids;
     GlyphSet expected_exclusive_gids;
     TRYV(closure_cache->AnalyzeSegment(*segmentation_info, segments,
-                                      expected_and_gids, expected_or_gids,
-                                      expected_exclusive_gids));
+                                       expected_and_gids, expected_or_gids,
+                                       expected_exclusive_gids));
 
     std::string message;
     bool success = true;
@@ -256,7 +257,7 @@ TEST_F(DependencyClosureTest, InertSegments) {
                   /* 3 */ {{'i'}, ProbabilityBound::Zero()},
               });
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1}));
 
   Reconfigure(face.get(), WithDefaultFeatures({}),
               {
@@ -265,7 +266,7 @@ TEST_F(DependencyClosureTest, InertSegments) {
                   /* 2 */ {{'f', 'i'}, ProbabilityBound::Zero()},
               });
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1, 2}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1, 2}));
 }
 
 TEST_F(DependencyClosureTest, InertSegments_InitFont) {
@@ -276,7 +277,7 @@ TEST_F(DependencyClosureTest, InertSegments_InitFont) {
                   /* 2 */ {{'i'}, ProbabilityBound::Zero()},
               });
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 1, 2}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1, 2}));
 }
 
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
@@ -822,12 +823,12 @@ TEST_F(DependencyClosureTest, SegmentsMerged_InertSegments) {
                   /* 2 */ {{'i'}, ProbabilityBound::Zero()},
               });
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0}));
 
   Status s = dependency_closure->SegmentsMerged(2, {1, 2});
   ASSERT_TRUE(s.ok()) << s;
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 2}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 2}));
 }
 
 TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
@@ -863,7 +864,7 @@ TEST_F(DependencyClosureTest, InitFontChanged_InertSegments) {
                   /* 2 */ {{'i'}, ProbabilityBound::Zero()},
               });
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0}));
 
   Status s = segmentation_info->ReassignInitSubset(*closure_cache,
                                                    WithDefaultFeatures({'f'}));
@@ -872,7 +873,7 @@ TEST_F(DependencyClosureTest, InitFontChanged_InertSegments) {
   s = dependency_closure->InitFontChanged(SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
-  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet {0, 2}));
+  ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 2}));
 }
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {
@@ -1112,19 +1113,20 @@ TEST_F(DependencyClosureTest, SegmentsToAffected) {
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({1}),
             (GlyphSet{74 /* f */, 444 /* fi */, 446 /* ffi */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({2}),
-            (GlyphSet{77 /* i */, 141 /* dotlessi */, 444 /* fi */, 446 /* ffi */, 609 /* dotlessi */, 679 /* iacute */}));
+            (GlyphSet{77 /* i */, 141 /* dotlessi */, 444 /* fi */,
+                      446 /* ffi */, 609 /* dotlessi */, 679 /* iacute */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({4}),
             (GlyphSet{37 /* A */}));
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({5}),
             (GlyphSet{
-              37 /* A */,
-              117  /* acute */,
-              141, /* dotlessi */
-              169, /* acutecomb */
-              609, /* dotlessi */
-              640  /* Aacute */,
-              667, /* aacute */
-              679, /* iacute */
+                37 /* A */,
+                117 /* acute */,
+                141, /* dotlessi */
+                169, /* acutecomb */
+                609, /* dotlessi */
+                640 /* Aacute */,
+                667, /* aacute */
+                679, /* iacute */
             }));
 
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({1, 2}),

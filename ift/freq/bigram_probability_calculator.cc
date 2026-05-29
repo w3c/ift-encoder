@@ -87,15 +87,14 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
   // - Either the largest individual codepoint frequency.
   // - max(Pi + Pj - Pij)
   // - Or: sum(Pi) - sum(Pj<k)
-  double raw_lower =
-      std::max(std::max(unigram_total - bigram_total, max_pair_bound),
-               max_single_bound);
+  double raw_lower = std::max(
+      std::max(unigram_total - bigram_total, max_pair_bound), max_single_bound);
 
   // == Upper Bound ==
   // An upper bound is given by
   // sum(Pi) - max_j=1..n [ sum_j!=k(Pjk) ]
-  double raw_upper =
-      std::max(std::min(unigram_total - max_partial_bigram_total, 1.0), raw_lower);
+  double raw_upper = std::max(
+      std::min(unigram_total - max_partial_bigram_total, 1.0), raw_lower);
 
   ProbabilityBound raw_bound(raw_lower, raw_upper);
   cache_.emplace(codepoints, raw_bound);
@@ -117,7 +116,8 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbabilityInternal(
     return {1, 1};
   }
 
-  ProbabilityBound codepoints_bound = BigramProbabilityBound(definition.codepoints, best_lower);
+  ProbabilityBound codepoints_bound =
+      BigramProbabilityBound(definition.codepoints, best_lower);
 
   if (definition.feature_tags.empty()) {
     return codepoints_bound;

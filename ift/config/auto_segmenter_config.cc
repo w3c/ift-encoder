@@ -88,7 +88,8 @@ enum Quality {
 //     Would be reasonable to always have this set to at least the minimum group
 //     size.
 //
-// - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available, otherwise CLOSURE_ONLY.
+// - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available,
+// otherwise CLOSURE_ONLY.
 //
 // Merge group settings:
 //
@@ -648,7 +649,8 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 
   // Based on measured network overhead cost in practice from the
   // ift demo.
-  config.mutable_base_cost_config()->set_network_overhead_cost(DEFAULT_NETWORK_COST);
+  config.mutable_base_cost_config()->set_network_overhead_cost(
+      DEFAULT_NETWORK_COST);
 
   for (auto& merge_group : *config.mutable_merge_groups()) {
     ApplyQualityLevelTo(quality, merge_group);
@@ -656,8 +658,7 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 }
 
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
-    hb_face_t* face,
-    const ift::common::DataFileResolver& resolver,
+    hb_face_t* face, const ift::common::DataFileResolver& resolver,
     std::optional<std::string> primary_script,
     std::optional<int> quality_level) {
   SegmenterConfig config;
@@ -718,7 +719,8 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
 
     cost->set_built_in_freq_data_name(script);
     if (script == primary_script_file) {
-      cost->set_initial_font_merge_threshold(-(double) DEFAULT_NETWORK_COST * (0.8));
+      cost->set_initial_font_merge_threshold(-(double)DEFAULT_NETWORK_COST *
+                                             (0.8));
     }
   }
 

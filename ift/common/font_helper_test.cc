@@ -575,8 +575,10 @@ TEST_F(FontHelperTest, GlyfData_ShortOverflowSynthetic) {
   hb_face_unique_ptr face = make_hb_face(hb_face_builder_create());
 
   std::vector<uint8_t> loca = {
-      0xC3, 0x50,  // 50,000 (100,000 actual)
-      0xC3, 0x52,  // 50,002 (100,005 actual)
+      0xC3,
+      0x50,  // 50,000 (100,000 actual)
+      0xC3,
+      0x52,  // 50,002 (100,005 actual)
   };
   {
     auto blob =

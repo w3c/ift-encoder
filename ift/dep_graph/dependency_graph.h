@@ -8,9 +8,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
-#include "ift/common/data_file_resolver.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
@@ -40,7 +40,6 @@ class TraversalContext;
  */
 class DependencyGraph {
  private:
-
  public:
   static constexpr uint32_t kNumberOfClosurePhases = 6;
 
@@ -75,8 +74,7 @@ class DependencyGraph {
 
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face,
-      const ift::common::DataFileResolver& resolver);
+      hb_face_t* face, const ift::common::DataFileResolver& resolver);
 
   // Traverse the full dependency graph (segments, unicodes, and gids), starting
   // at one or more specific starting nodes. Attempts to mimic hb glyph closure
@@ -206,16 +204,11 @@ class DependencyGraph {
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face);
 
-
-
   const ift::encoder::RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   absl::flat_hash_set<hb_tag_t> full_feature_set_;
 
-
   std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
-
-
 
   struct LayoutFeatureEdge {
     hb_tag_t layout_tag;
@@ -247,20 +240,10 @@ class DependencyGraph {
     }
   };
 
-
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
   ComputeFeatureEdges() const;
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
   ComputeContextGlyphEdges() const;
-  static absl::Status ParseDerivedNormalizationProps(
-      const std::string& path,
-      common::CodepointSet& full_composition_exclusions);
-
-  static absl::Status ParseUnicodeData(
-      const std::string& path,
-      const common::CodepointSet& unicodes,
-      const common::CodepointSet& full_composition_exclusions,
-      UnicodeEdges& result);
 
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
       layout_feature_implied_edges_;

@@ -16,10 +16,10 @@
 #include "absl/strings/str_cat.h"
 #include "hb.h"
 #include "ift/common/axis_range.h"
+#include "ift/common/bazel_data_file_resolver.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
-#include "ift/common/data_file_resolver.h"
-#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
@@ -34,12 +34,12 @@
 #include "ift/encoder/subset_definition.h"
 #include "util/auto_config_flags.h"
 
+using ift::common::BazelDataFileResolver;
+using ift::common::DataFileResolver;
 using ift::config::ActivationConditionProto;
 using ift::config::ConfigCompiler;
 using ift::config::DesignSpace;
 using ift::config::SegmentationPlan;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 /*
  * Utility that converts a standard font file into an IFT font file optionally
@@ -153,7 +153,8 @@ int write_output(const Compiler::Encoding& encoding) {
   return 0;
 }
 
-StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font, std::shared_ptr<DataFileResolver> resolver) {
+StatusOr<SegmentationPlan> CreateSegmentationPlan(
+    hb_face_t* font, std::shared_ptr<DataFileResolver> resolver) {
   SegmentationPlan plan;
   if (absl::GetFlag(FLAGS_plan).empty() ||
       absl::GetFlag(FLAGS_plan) == "auto") {
@@ -163,7 +164,8 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(hb_face_t* font, std::shared_p
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
     auto config = AutoSegmenterConfig::GenerateConfig(
-        font, *resolver, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
+        font, *resolver, absl::GetFlag(FLAGS_auto_config_primary_script),
+        quality_level);
     if (!config.ok()) {
       return absl::InternalError(
           StrCat("Failed to generate config: ", config.status().message()));
@@ -212,7 +214,8 @@ int main(int argc, char** argv) {
 
   auto resolver_status = BazelDataFileResolver::Create(argv[0]);
   if (!resolver_status.ok()) {
-    std::cerr << "Failed to create data file resolver: " << resolver_status.status() << std::endl;
+    std::cerr << "Failed to create data file resolver: "
+              << resolver_status.status() << std::endl;
     return -1;
   }
   auto resolver = std::move(*resolver_status);

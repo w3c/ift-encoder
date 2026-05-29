@@ -41,12 +41,12 @@ using ift::config::SegmentationPlan;
 using ift::config::SegmentsProto;
 using ift::config::UnmappedGlyphHandling;
 
-using absl::Span;
 using absl::btree_map;
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::node_hash_map;
+using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
@@ -87,19 +87,19 @@ Status CheckForDisjointCodepoints(
   return absl::OkStatus();
 }
 
-static void PrintCondition(
-    const GlyphGroupings& groupings, const ActivationCondition& condition, bool added) {
+static void PrintCondition(const GlyphGroupings& groupings,
+                           const ActivationCondition& condition, bool added) {
   const auto& glyphs = groupings.ConditionsAndGlyphs().at(condition);
   VLOG(0) << (added ? "++ " : "-- ") << condition.ToString() << " => "
           << glyphs.ToString();
 }
 
-static void PrintDiff(const GlyphGroupings& a,
-                      const GlyphGroupings& b) {
+static void PrintDiff(const GlyphGroupings& a, const GlyphGroupings& b) {
   auto it_a = a.OrderedConditions().begin();
   auto it_b = b.OrderedConditions().begin();
 
-  while (it_a != a.OrderedConditions().end() || it_b != b.OrderedConditions().end()) {
+  while (it_a != a.OrderedConditions().end() ||
+         it_b != b.OrderedConditions().end()) {
     if (it_a == a.OrderedConditions().end()) {
       PrintCondition(b, *it_b, true);
       it_b++;
@@ -107,7 +107,8 @@ static void PrintDiff(const GlyphGroupings& a,
       PrintCondition(a, *it_a, false);
       it_a++;
     } else if (*it_a == *it_b) {
-      if (a.ConditionsAndGlyphs().at(*it_a) != b.ConditionsAndGlyphs().at(*it_b)) {
+      if (a.ConditionsAndGlyphs().at(*it_a) !=
+          b.ConditionsAndGlyphs().at(*it_b)) {
         PrintCondition(a, *it_a, false);
         PrintCondition(b, *it_b, true);
       }
@@ -194,7 +195,6 @@ static StatusOr<bool> GlyphGroupingsAreEquivalent(
  */
 Status ValidateIncrementalGroupings(hb_face_t* face,
                                     const SegmentationContext& context) {
-
   SegmentationContext non_incremental_context = TRY(context.WithSameSettings());
 
   // Compute the glyph groupings/conditions from scratch to compare against the
@@ -334,11 +334,9 @@ static std::vector<Segment> PreGroupSegments(
 
     segment_index_map[o.original_index] = i;
 
-    if (strategy != nullptr &&
-        !is_feature_segment &&
+    if (strategy != nullptr && !is_feature_segment &&
         strategy->PreClosureGroupSize() > 1 &&
         o.probability.Max() <= strategy->PreClosureProbabilityThreshold()) {
-
       uint32_t remaining = strategy->PreClosureGroupSize() - 1;
       while (remaining > 0) {
         if (ordering_it == ordering.end() ||
@@ -346,9 +344,10 @@ static std::vector<Segment> PreGroupSegments(
           break;
         }
 
-        // Don't pregroup feature segments, these generally have broad interactions
-        // and pre-grouping them blindly can cause poor outcomes.
-        if (!subset_definitions[ordering_it->original_index].feature_tags.empty()) {
+        // Don't pregroup feature segments, these generally have broad
+        // interactions and pre-grouping them blindly can cause poor outcomes.
+        if (!subset_definitions[ordering_it->original_index]
+                 .feature_tags.empty()) {
           break;
         }
 
@@ -663,8 +662,8 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
   PatchSizeCacheImpl patch_sizer(original_face, 11);
 
   std::vector<SegmentationCost> out;
-  for (const ProbabilityCalculator* probability_calculator : probability_calculators) {
-
+  for (const ProbabilityCalculator* probability_calculator :
+       probability_calculators) {
     std::vector<Segment> segments;
     for (const auto& def : segmentation.Segments()) {
       auto P = probability_calculator->ComputeProbability(def);
@@ -689,7 +688,8 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     double ideal_cost = 0.0;
     double incremental_size =
         non_ift_font_size / (double)non_ift.codepoints.size();
-    double init_font_ideal_size = incremental_size * segmentation.InitialFontSegment().codepoints.size();
+    double init_font_ideal_size =
+        incremental_size * segmentation.InitialFontSegment().codepoints.size();
     for (unsigned cp : non_ift.codepoints) {
       if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
         continue;
@@ -699,11 +699,11 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     }
 
     out.push_back(SegmentationCost{
-      .ift_init_cost = init_font_size,
-      .ift_patch_cost = total_cost,
-      .non_ift_total_cost = non_ift_font_size,
-      .ideal_init_cost = init_font_ideal_size,
-      .ideal_patch_cost = ideal_cost,
+        .ift_init_cost = init_font_size,
+        .ift_patch_cost = total_cost,
+        .non_ift_total_cost = non_ift_font_size,
+        .ideal_init_cost = init_font_ideal_size,
+        .ideal_patch_cost = ideal_cost,
     });
   }
   return out;
@@ -731,7 +731,6 @@ void ClosureGlyphSegmenter::AddTableKeyedSegments(
     const btree_map<SegmentSet, MergeStrategy>& merge_groups,
     const std::vector<SubsetDefinition>& segments,
     const SubsetDefinition& init_segment) {
-
   SegmentSet uncovered_segments;
   if (!segments.empty()) {
     uncovered_segments.insert_range(0, segments.size() - 1);

@@ -1,6 +1,4 @@
 #include "ift/dep_graph/dependency_graph.h"
-#include "ift/common/data_file_resolver.h"
-#include "ift/dep_graph/unicode_edges.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -9,6 +7,7 @@
 #include <vector>
 
 #include "absl/log/log.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
@@ -16,6 +15,7 @@
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"
+#include "ift/dep_graph/unicode_edges.h"
 #include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
@@ -28,6 +28,7 @@ using absl::Status;
 using absl::StatusOr;
 using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_font_unique_ptr;
@@ -36,7 +37,6 @@ using ift::common::IntSet;
 using ift::common::make_hb_font;
 using ift::common::make_hb_set;
 using ift::common::SegmentSet;
-using ift::common::DataFileResolver;
 using ift::encoder::glyph_id_t;
 using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
@@ -46,27 +46,26 @@ using ift::encoder::SubsetDefinition;
 namespace ift::dep_graph {
 
 StatusOr<DependencyGraph> DependencyGraph::Create(
-    const RequestedSegmentationInformation* segmentation_info,
-    hb_face_t* face,
+    const RequestedSegmentationInformation* segmentation_info, hb_face_t* face,
     const DataFileResolver& resolver) {
   auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
   auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
   hb_depend_t* depend = hb_depend_from_face_or_fail(face);
   if (!depend) {
-    return absl::InternalError(
-        "Call to hb_depend_from_face_or_fail() failed.");
+    return absl::InternalError("Call to hb_depend_from_face_or_fail() failed.");
   }
 
-  auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(face, resolver));
+  auto unicode_edges =
+      TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(face, resolver));
 
-  return DependencyGraph(segmentation_info, depend, face, full_feature_set, std::move(unicode_edges));
+  return DependencyGraph(segmentation_info, depend, face, full_feature_set,
+                         std::move(unicode_edges));
 }
 
 DependencyGraph::DependencyGraph(
     const RequestedSegmentationInformation* segmentation_info,
     hb_depend_t* depend, hb_face_t* face,
-    flat_hash_set<hb_tag_t> full_feature_set,
-    UnicodeEdges unicode_edges)
+    flat_hash_set<hb_tag_t> full_feature_set, UnicodeEdges unicode_edges)
     : segmentation_info_(segmentation_info),
       original_face_(ift::common::make_hb_face(hb_face_reference(face))),
       full_feature_set_(full_feature_set),
@@ -260,7 +259,8 @@ class TraversalContext {
     return TraverseEdgeTo(dest, edge, FontHelper::kCmap);
   }
 
-  Status TraverseCompositionEdge(hb_codepoint_t a, hb_codepoint_t b, hb_codepoint_t dest_unicode) {
+  Status TraverseCompositionEdge(hb_codepoint_t a, hb_codepoint_t b,
+                                 hb_codepoint_t dest_unicode) {
     bool can_reach_a = !unicode_filter || reached_unicodes_.contains(a) ||
                        unicode_filter->contains(a);
     bool can_reach_b = !unicode_filter || reached_unicodes_.contains(b) ||
@@ -823,8 +823,9 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
                                       TRY(InitFontFeatureSet()));
   }
 
-  // TraverseGraph(...) only records things reached via edges and not the starting nodes.
-  // So explicitly mark starting nodes as reached (if they are not filtered).
+  // TraverseGraph(...) only records things reached via edges and not the
+  // starting nodes. So explicitly mark starting nodes as reached (if they are
+  // not filtered).
   btree_set<Node> filtered_nodes;
   for (const auto& node : nodes) {
     if (node.IsGlyph() && !base_context.glyph_filter->contains(node.Id())) {
@@ -910,14 +911,16 @@ Status DependencyGraph::HandleUnicodeOutgoingEdges(
   auto comp_edges = unicode_edges_.composition.find(unicode);
   if (comp_edges != unicode_edges_.composition.end()) {
     for (const auto& edge : comp_edges->second) {
-      TRYV(context->TraverseCompositionEdge(unicode, edge.other_source, edge.dest));
+      TRYV(context->TraverseCompositionEdge(unicode, edge.other_source,
+                                            edge.dest));
     }
   }
 
   auto decomp_edges = unicode_edges_.decomposition.find(unicode);
   if (decomp_edges != unicode_edges_.decomposition.end()) {
     for (hb_codepoint_t dest : decomp_edges->second) {
-      context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(dest), FontHelper::kCmap);
+      context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(dest),
+                              FontHelper::kCmap);
     }
   }
 
@@ -1047,8 +1050,6 @@ void DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
     context->TraverseEdgeTo(source, Node::Feature(f));
   }
 }
-
-
 
 StatusOr<flat_hash_set<hb_tag_t>> DependencyGraph::FullFeatureSet(
     const RequestedSegmentationInformation* segmentation_info,
@@ -1229,9 +1230,6 @@ DependencyGraph::ComputeContextGlyphEdges() const {
 
   return out;
 }
-
-
-
 
 flat_hash_map<hb_tag_t, std::vector<DependencyGraph::LayoutFeatureEdge>>
 DependencyGraph::ComputeFeatureEdges() const {

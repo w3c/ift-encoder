@@ -13,7 +13,7 @@ namespace ift::encoder {
 // Stores a mapping from ActivationCondition to a set of glyphs.
 //
 // Also maintains the reverse mapping indices.
-template<bool keep_ordered>
+template <bool keep_ordered>
 class ConditionToGlyphsIndex {
  public:
   std::optional<ActivationCondition> Invalidate(glyph_id_t gid) {
@@ -49,8 +49,9 @@ class ConditionToGlyphsIndex {
   }
 
  private:
-  template<typename It>
-  void Remove(const ActivationCondition& condition, It conditions_and_glyphs_it) {
+  template <typename It>
+  void Remove(const ActivationCondition& condition,
+              It conditions_and_glyphs_it) {
     conditions_and_glyphs_.erase(conditions_and_glyphs_it);
     if (keep_ordered) {
       ordered_conditions_.erase(condition);
@@ -66,8 +67,8 @@ class ConditionToGlyphsIndex {
       }
     }
   }
- public:
 
+ public:
   absl::Status Union(ActivationCondition condition, common::GlyphSet glyphs) {
     conditions_and_glyphs_[condition].union_set(glyphs);
     if (keep_ordered) {
@@ -153,14 +154,16 @@ class ConditionToGlyphsIndex {
 
   bool operator==(const ConditionToGlyphsIndex& other) const {
     return conditions_and_glyphs_ == other.conditions_and_glyphs_ &&
-           /* don't need to check ordered_conditions_ it's equivalent to conditions_and_glyphs_ */
+           /* don't need to check ordered_conditions_ it's equivalent to
+              conditions_and_glyphs_ */
            glyph_to_condition_ == other.glyph_to_condition_ &&
            triggering_segment_to_conditions_ ==
                other.triggering_segment_to_conditions_;
   }
 
  private:
-  absl::flat_hash_map<ActivationCondition, common::GlyphSet> conditions_and_glyphs_;
+  absl::flat_hash_map<ActivationCondition, common::GlyphSet>
+      conditions_and_glyphs_;
   absl::btree_set<ActivationCondition> ordered_conditions_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_to_condition_;

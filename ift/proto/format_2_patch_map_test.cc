@@ -384,8 +384,9 @@ TEST_F(Format2PatchMapTest, NonDefaultPatchFormat) {
   };
 
   std::string entry_0 = {
-      0x10,        // Codepoints
-      0x05, 0x0e,  // codepoints = {1, 2, 3}
+      0x10,  // Codepoints
+      0x05,
+      0x0e,  // codepoints = {1, 2, 3}
   };
 
   std::string entry_1 = {

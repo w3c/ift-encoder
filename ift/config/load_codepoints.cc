@@ -205,8 +205,7 @@ static Status LoadFrequenciesFromRiegeliIndividual(
 }
 
 StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(
-    const char* path,
-    std::optional<CodepointSet> filter) {
+    const char* path, std::optional<CodepointSet> filter) {
   auto paths = TRY(ExpandShardedPath(path));
   UnicodeFrequenciesBuilder builder(filter);
   for (const auto& path : paths) {
@@ -216,8 +215,7 @@ StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(
 }
 
 StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(
-    const char* name,
-    const DataFileResolver& resolver,
+    const char* name, const DataFileResolver& resolver,
     std::optional<CodepointSet> filter) {
   std::string data_dir = TRY(resolver.GetFrequencyDataDirectory());
   std::string path = StrCat(data_dir, "/", name);

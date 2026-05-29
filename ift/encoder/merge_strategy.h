@@ -137,8 +137,6 @@ class MergeStrategy {
     return probability_calculator_.get();
   }
 
-
-
   // Configures the threshold for when to stop optimizing segments.
   //
   // For the set of segments which account for less than this fraction of the

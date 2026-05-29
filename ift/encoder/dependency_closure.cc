@@ -554,7 +554,9 @@ DependencyClosure::ExtractAllNodeConditions() const {
   return conditions;
 }
 
-SegmentSet DependencyClosure::ComputeInertSegments(const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions) const {
+SegmentSet DependencyClosure::ComputeInertSegments(
+    const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
+    const {
   SegmentSet candidates = segmentation_info_->NonEmptySegments();
   for (const auto& [_, condition] : conditions) {
     if (!condition.IsUnitary()) {
