@@ -1,9 +1,9 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <optional>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
@@ -24,12 +24,12 @@ using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::hb_face_unique_ptr;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 using ift::common::IntSet;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
@@ -47,20 +47,23 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         resolver(*BazelDataFileResolver::CreateForTest()),
 
         segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver),
-        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY, resolver),
+        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY,
+                                  resolver),
+        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY,
+                                    resolver),
 #ifdef HB_DEPEND_API
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
+        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH,
+                            resolver),
         segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY, resolver),
-        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS,
-                                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
-        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
-                                              CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver)
+        segmenter_find_conditions_dep_graph(
+            8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
+        segmenter_move_to_init_font_dep_graph(
+            8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver)
 #else
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY, resolver),
         segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS,
-                                            CLOSURE_ONLY, resolver),
+        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_ONLY,
+                                            resolver),
         segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
                                               CLOSURE_ONLY, resolver)
 #endif
@@ -772,7 +775,8 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
           roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
   ASSERT_TRUE(dep_graph_segmentation.ok()) << dep_graph_segmentation.status();
-  ASSERT_TRUE(dep_graph_only_segmentation.ok()) << dep_graph_only_segmentation.status();
+  ASSERT_TRUE(dep_graph_only_segmentation.ok())
+      << dep_graph_only_segmentation.status();
   ASSERT_EQ(segmentation, dep_graph_segmentation);
 }
 
@@ -1133,7 +1137,8 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   std::vector<SegmentationCost> with_patches_cost =
       *segmenter.TotalCosts(roboto.get(), segmentation2, {&calculator});
   ASSERT_GT(with_patches_cost[0].ift_patch_cost, base_cost[0].ift_patch_cost);
-  ASSERT_LT(with_patches_cost[0].ideal_patch_cost, with_patches_cost[0].ift_patch_cost);
+  ASSERT_LT(with_patches_cost[0].ideal_patch_cost,
+            with_patches_cost[0].ift_patch_cost);
 }
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
@@ -1143,7 +1148,9 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   // analysis and final output.
 
   UnicodeFrequencies frequencies{
-      {{'A', 'A'}, 1000}, {{'C', 'C'}, 1000}, {{0x106, 0x106}, 1}, /* Cacute */
+      {{'A', 'A'}, 1000},
+      {{'C', 'C'}, 1000},
+      {{0x106, 0x106}, 1}, /* Cacute */
   };
 
   MergeStrategy strategy =
@@ -1151,12 +1158,13 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation =
-      CodepointToGlyphSegments(roboto.get(), {},
-                               {
-                                   {'A'}, {'C'}, {0x106}, /* Cacute */
-                               },
-                               strategy);
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {
+                                                   {'A'},
+                                                   {'C'},
+                                                   {0x106}, /* Cacute */
+                                               },
+                                               strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // The initial conditions are:
@@ -1890,7 +1898,9 @@ if (s3) then p0
 
 TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_MidGroup) {
   UnicodeFrequencies freq{
-      {{' ', ' '}, 100}, {{'a', 'a'}, 30}, {{'b', 'b'}, 29},
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 30},
+      {{'b', 'b'}, 29},
   };
 
   MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
@@ -1916,22 +1926,21 @@ TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_MidGroup) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-
   // Use heuristic so that segments don't get re-ordered by probability.
   MergeStrategy heuristic = MergeStrategy::Heuristic(0);
   heuristic.SetPreClosureProbabilityThreshold(0.55);
   heuristic.SetPreClosureGroupSize(3);
   segmentation = CodepointToGlyphSegments(roboto.get(), {},
-                                               {
-                                                   {'a'},
-                                                   feat_seg,
-                                                   {'b'},
-                                               },
-                                               heuristic);
+                                          {
+                                              {'a'},
+                                              feat_seg,
+                                              {'b'},
+                                          },
+                                          heuristic);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  // The feature segment comes up mid group so it breaks up the group and segments
-  // all stay separate.
+  // The feature segment comes up mid group so it breaks up the group and
+  // segments all stay separate.
   expected_segments = {
       {'a'},
       feat_seg,
@@ -1942,7 +1951,10 @@ TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_MidGroup) {
 
 TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_AsFirst) {
   UnicodeFrequencies freq{
-      {{' ', ' '}, 100}, {{'a', 'a'}, 30}, {{'b', 'b'}, 29}, {{'c', 'c'}, 28},
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 30},
+      {{'b', 'b'}, 29},
+      {{'c', 'c'}, 28},
   };
 
   MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
@@ -1970,14 +1982,17 @@ TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_AsFirst) {
 }
 
 TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
-  // Regression test for a bug in assigned updated segment indices after pre-grouping
-  // The first segment in a group was always being remapped to segment 0. This uses
-  // two separate merge groups to ensure the second one does not end up with segment 0.
+  // Regression test for a bug in assigned updated segment indices after
+  // pre-grouping The first segment in a group was always being remapped to
+  // segment 0. This uses two separate merge groups to ensure the second one
+  // does not end up with segment 0.
   UnicodeFrequencies freq_high{
-      {{' ', ' '}, 100}, {{'a', 'a'}, 100},
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 100},
   };
 
-  MergeStrategy strategy_0 = *MergeStrategy::CostBased(std::move(freq_high), 0, 1);
+  MergeStrategy strategy_0 =
+      *MergeStrategy::CostBased(std::move(freq_high), 0, 1);
 
   // Use Heuristic for Group 1 to force merging of whatever ends up in it.
   MergeStrategy strategy_1 = MergeStrategy::Heuristic(1000);
@@ -1998,8 +2013,6 @@ TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
                                                merge_groups);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-
-
   // We should not see 'a' show up in the second group
   std::vector<SubsetDefinition> expected_segments = {
       {'a'},
@@ -2015,7 +2028,8 @@ TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
 // TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
 // due to found "additional conditions".
 
-TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_FeatureOnlyAndUncovered) {
+TEST_F(ClosureGlyphSegmenterTest,
+       AddTableKeyedSegments_FeatureOnlyAndUncovered) {
   ift::config::SegmentationPlan plan;
   btree_map<SegmentSet, MergeStrategy> merge_groups;
   std::vector<SubsetDefinition> segments(4);
@@ -2032,7 +2046,8 @@ TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_FeatureOnlyAndUncovered)
 
   SubsetDefinition init_segment;
 
-  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
+  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
+                                               init_segment);
 
   ASSERT_EQ(plan.non_glyph_segments_size(), 3);
 
@@ -2076,7 +2091,8 @@ TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_SubtractInitSegment) {
   SubsetDefinition init_segment;
   init_segment.codepoints.insert('a');
 
-  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments, init_segment);
+  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
+                                               init_segment);
 
   ASSERT_EQ(plan.non_glyph_segments_size(), 1);
   uint32_t id = plan.non_glyph_segments(0).values(0);

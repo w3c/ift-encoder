@@ -312,8 +312,8 @@ TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Disjunctive) {
 }
 
 TEST(EntryGraphTest, CalculateSubsumptionCostDelta_Disjunctive_PositiveDelta) {
-  // Children are shared and large. Subsuming them into the parent will duplicate
-  // them. Cost of duplication outweights entry cost savings.
+  // Children are shared and large. Subsuming them into the parent will
+  // duplicate them. Cost of duplication outweights entry cost savings.
 
   SubsetDefinition s0, s1;
   // Insert non-continous codepoints to ensure the sparse bit sets take up

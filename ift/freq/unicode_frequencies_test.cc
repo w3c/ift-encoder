@@ -4,9 +4,9 @@
 #include "gtest/gtest.h"
 #include "ift/common/int_set.h"
 
-using testing::Not;
-using testing::DoubleEq;
 using ift::common::CodepointSet;
+using testing::DoubleEq;
+using testing::Not;
 
 namespace ift::freq {
 
@@ -79,10 +79,10 @@ TEST(UnicodeFrequenciesTest, FilteredBuilder) {
   UnicodeFrequenciesBuilder builder(filter);
   UnicodeFrequenciesBuilder unfiltered_builder;
 
-  builder.Add(1, 2, 10); // Kept
+  builder.Add(1, 2, 10);  // Kept
   unfiltered_builder.Add(1, 2, 10);
 
-  builder.Add(2, 3, 20); // Ignored (3 not in filter)
+  builder.Add(2, 3, 20);  // Ignored (3 not in filter)
   unfiltered_builder.Add(2, 3, 20);
 
   builder.Add(1, 1, 5);  // Kept
@@ -91,14 +91,17 @@ TEST(UnicodeFrequenciesTest, FilteredBuilder) {
   UnicodeFrequencies freq = builder.Build();
   UnicodeFrequencies unfiltered_freq = unfiltered_builder.Build();
 
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 2), unfiltered_freq.ProbabilityFor(1, 2));
+  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1, 2),
+                   unfiltered_freq.ProbabilityFor(1, 2));
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(1), unfiltered_freq.ProbabilityFor(1));
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2), unfiltered_freq.ProbabilityFor(2));
   EXPECT_DOUBLE_EQ(freq.ProbabilityFor(3), unfiltered_freq.ProbabilityFor(3));
 
   // (2, 3) is filtered out and should equal the default probability
-  EXPECT_THAT(freq.ProbabilityFor(2, 3), Not(DoubleEq(unfiltered_freq.ProbabilityFor(2, 3))));
-  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2, 3), unfiltered_freq.ProbabilityFor(100, 200));
+  EXPECT_THAT(freq.ProbabilityFor(2, 3),
+              Not(DoubleEq(unfiltered_freq.ProbabilityFor(2, 3))));
+  EXPECT_DOUBLE_EQ(freq.ProbabilityFor(2, 3),
+                   unfiltered_freq.ProbabilityFor(100, 200));
 }
 
 }  // namespace ift::freq

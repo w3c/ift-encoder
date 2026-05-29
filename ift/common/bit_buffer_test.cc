@@ -11,7 +11,7 @@ using std::vector;
 
 class BitBufferTest : public ::testing::Test {
  protected:
-  static void check_transcode(const vector<uint32_t> &input, BranchFactor bf,
+  static void check_transcode(const vector<uint32_t>& input, BranchFactor bf,
                               unsigned int depth) {
     BitOutputBuffer bout(bf, depth);
     for (uint32_t value : input) {

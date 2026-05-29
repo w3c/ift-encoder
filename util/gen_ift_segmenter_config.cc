@@ -1,5 +1,4 @@
 #include <google/protobuf/text_format.h>
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <iostream>
 #include <string>
@@ -11,6 +10,7 @@
 #include "absl/log/globals.h"
 #include "absl/log/initialize.h"
 #include "absl/status/status.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
@@ -33,9 +33,9 @@ ABSL_FLAG(
     "Log verbosity level from. 0 is least verbose, higher values are more.");
 
 using absl::Status;
+using ift::common::BazelDataFileResolver;
 using ift::common::hb_face_unique_ptr;
 using ift::config::AutoSegmenterConfig;
-using ift::common::BazelDataFileResolver;
 
 static Status Main(const std::vector<char*> args) {
   auto resolver = TRY(BazelDataFileResolver::Create(args[0]));
@@ -50,7 +50,8 @@ static Status Main(const std::vector<char*> args) {
   }
 
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), *resolver, absl::GetFlag(FLAGS_primary_script), quality_level));
+      font.get(), *resolver, absl::GetFlag(FLAGS_primary_script),
+      quality_level));
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {

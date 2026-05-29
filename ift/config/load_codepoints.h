@@ -7,10 +7,10 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
-#include "ift/common/data_file_resolver.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::config {
@@ -51,8 +51,7 @@ absl::StatusOr<ift::freq::UnicodeFrequencies> LoadFrequenciesFromRiegeli(
 // name is the file name to load.
 // Append "@*" to the name to load all sharded files for a name.
 absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
-    const char* name,
-    const ift::common::DataFileResolver& resolver,
+    const char* name, const ift::common::DataFileResolver& resolver,
     std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
 // Returns a list of all built-in frequency data sets and the codepoints

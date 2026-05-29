@@ -24,7 +24,7 @@ class BitInputBuffer {
   // The lowest/rightmost bits of the value bits are set, the remaining are
   // cleared. The number of bits set depends on the BranchFactor this
   // BitInputBuffer was constructed with.
-  bool read(uint32_t *out);
+  bool read(uint32_t* out);
 
  private:
   const BranchFactor branch_factor;

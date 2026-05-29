@@ -1,21 +1,21 @@
 #ifndef IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 #define IFT_ENCODER_CLOSURE_GLYPH_SEGMENTER_H_
 
-#include <optional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/config/common.pb.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
+#include "ift/encoder/patch_size_cache.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_calculator.h"
-#include "ift/encoder/patch_size_cache.h"
-#include "ift/common/data_file_resolver.h"
 
 namespace ift::encoder {
 
@@ -27,7 +27,6 @@ struct SegmentationCost {
 
   double ideal_init_cost;
   double ideal_patch_cost;
-
 };
 
 /*
@@ -80,7 +79,8 @@ class ClosureGlyphSegmenter {
    */
   absl::StatusOr<std::vector<SegmentationCost>> TotalCosts(
       hb_face_t* original_face, const GlyphSegmentation& segmentation,
-      absl::Span<const freq::ProbabilityCalculator* const> probability_calculators) const;
+      absl::Span<const freq::ProbabilityCalculator* const>
+          probability_calculators) const;
 
   /*
    * Computes the total cost of the fallback patch (expected number of bytes

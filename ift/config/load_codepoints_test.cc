@@ -1,9 +1,9 @@
 #include "ift/config/load_codepoints.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <cstdint>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 
 namespace ift::config {
 
@@ -161,7 +161,8 @@ TEST_F(LoadCodepointsTest, ExpandShardedPath) {
 }
 
 TEST_F(LoadCodepointsTest, LoadBuiltInFrequencies) {
-  auto result = ift::config::LoadBuiltInFrequencies("Script_latin.riegeli", *resolver);
+  auto result =
+      ift::config::LoadBuiltInFrequencies("Script_latin.riegeli", *resolver);
   ASSERT_TRUE(result.ok()) << result.status();
 
   EXPECT_EQ(result->ProbabilityFor(0x20, 0x20), 1.0);

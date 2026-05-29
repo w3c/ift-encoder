@@ -21,10 +21,10 @@ using ift::config::UnmappedGlyphHandling;
 
 using absl::Status;
 using absl::StatusOr;
+using ift::common::DataFileResolver;
 using ift::common::GlyphSet;
 using ift::common::IntSet;
 using ift::common::SegmentSet;
-using ift::common::DataFileResolver;
 
 namespace ift::encoder {
 
@@ -93,7 +93,8 @@ Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
     }
   } else {
 #ifndef HB_DEPEND_API
-    return absl::InternalError("DEP_GRAPH_ONLY mode requires dependency graph support.");
+    return absl::InternalError(
+        "DEP_GRAPH_ONLY mode requires dependency graph support.");
 #else
     modified.glyphs.union_set(
         (*dependency_closure_)
@@ -114,7 +115,8 @@ Status SegmentationContext::ReprocessAll() {
     }
   } else {
 #ifndef HB_DEPEND_API
-    return absl::InternalError("DEP_GRAPH_ONLY mode requires dependency graph support.");
+    return absl::InternalError(
+        "DEP_GRAPH_ONLY mode requires dependency graph support.");
 #else
     // Pull conditions directly out of the dep graph instead of running closure
     // processing.
@@ -229,7 +231,8 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     }
   } else {
 #ifndef HB_DEPEND_API
-    return absl::InternalError("DEP_GRAPH_ONLY mode requires dependency graph support.");
+    return absl::InternalError(
+        "DEP_GRAPH_ONLY mode requires dependency graph support.");
 #else
     GlyphSet gids;
     for (segment_index_t s : segments_to_reprocess) {
@@ -346,7 +349,8 @@ SegmentationContext::InitializeSegmentationContext(
   // No merging is done during init.
   SegmentationContext context = TRY(SegmentationContext::Create(
       face, initial_segment, segments, unmapped_glyph_handling,
-      condition_analysis_mode, brotli_quality, init_font_brotli_quality, std::move(resolver)));
+      condition_analysis_mode, brotli_quality, init_font_brotli_quality,
+      std::move(resolver)));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

@@ -141,14 +141,16 @@ struct CandidateMerge {
   // are joined together into a new segment, merged_segment.
   //
   // exclusive_gids is an optional hint that specifies which glyphs
-  // will end up in the exclusive patch after merged_segments are merged together.
+  // will end up in the exclusive patch after merged_segments are merged
+  // together.
   //
   // If best_case is true then this will compute an estimated best possible cost
   // delta from the merge (computationally cheap) instead of the real delta.
-  template<bool best_case>
+  template <bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      const Segment& merged_segment, std::optional<common::GlyphSet> exclusive_gids);
+      const Segment& merged_segment,
+      std::optional<common::GlyphSet> exclusive_gids);
 
   // Computes the predicted change to the toal cost if moved_glyphs are
   // moved from patches into the initial font.
@@ -158,13 +160,12 @@ struct CandidateMerge {
   static absl::StatusOr<std::pair<double, ift::common::GlyphSet>>
   ComputeInitFontCostDelta(Merger& merger, uint32_t existing_init_font_size,
                            const ift::common::GlyphSet& moved_glyphs,
-                           absl::flat_hash_map<ift::common::GlyphSet, uint32_t>& smallest_size_increases
-                          );
+                           absl::flat_hash_map<ift::common::GlyphSet, uint32_t>&
+                               smallest_size_increases);
 
   static absl::StatusOr<double> ComputeBestCaseInitFontCostDelta(
       Merger& merger, uint32_t existing_init_font_size,
-      const ift::common::GlyphSet& moved_glyphs
-  );
+      const ift::common::GlyphSet& moved_glyphs);
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
       const Merger& context, segment_index_t base_segment,
@@ -182,8 +183,7 @@ struct CandidateMerge {
       Merger& merger, const ift::common::GlyphSet& moved_glyphs,
       ift::common::GlyphSet& glyph_closure_delta,
       ift::common::GlyphSet& new_glyph_closure,
-      ift::common::CodepointSet& codepoint_closure_delta
-    );
+      ift::common::CodepointSet& codepoint_closure_delta);
 };
 
 }  // namespace ift::encoder

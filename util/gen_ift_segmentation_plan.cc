@@ -15,11 +15,11 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "hb.h"
+#include "ift/common/bazel_data_file_resolver.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
-#include "ift/common/data_file_resolver.h"
-#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/load_codepoints.h"
@@ -35,13 +35,13 @@
 #include "ift/freq/unigram_probability_calculator.h"
 #include "util/auto_config_flags.h"
 
+using ift::common::BazelDataFileResolver;
+using ift::common::DataFileResolver;
 using ift::config::CLOSURE_ONLY;
 using ift::config::PATCH;
 using ift::config::SegmentationPlan;
 using ift::config::SegmenterConfig;
 using ift::freq::ProbabilityCalculator;
-using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 
 /*
  * Given a code point based segmentation creates an appropriate glyph based
@@ -100,18 +100,20 @@ using ift::encoder::MergeStrategy;
 using ift::encoder::Segment;
 using ift::encoder::SegmentationCost;
 using ift::encoder::SubsetDefinition;
+using ift::freq::BigramProbabilityCalculator;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
-using ift::freq::BigramProbabilityCalculator;
 
-static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font, const DataFileResolver& resolver) {
+static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font,
+                                            const DataFileResolver& resolver) {
   if (absl::GetFlag(FLAGS_config) == "auto") {
     std::optional<int> quality_level = std::nullopt;
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
     return AutoSegmenterConfig::GenerateConfig(
-        font, resolver, absl::GetFlag(FLAGS_auto_config_primary_script), quality_level);
+        font, resolver, absl::GetFlag(FLAGS_auto_config_primary_script),
+        quality_level);
   }
 
   FontData config_text =
@@ -133,7 +135,6 @@ static Status Analysis(hb_face_t* font,
                        btree_map<SegmentSet, MergeStrategy>&& merge_groups,
                        const GlyphSegmentation& segmentation,
                        std::shared_ptr<DataFileResolver> resolver) {
-
   std::vector<BigramProbabilityCalculator> calculator_storage;
   calculator_storage.reserve(merge_groups.size());
 
@@ -148,24 +149,29 @@ static Status Analysis(hb_face_t* font,
       continue;
     }
 
-    // Depending on the configuration the encoding may have used unigram probability
-    // calculations. For the purpose of analysis we want to be consistent and so
-    // unigram probability calculator should be upgraded to a bigram
+    // Depending on the configuration the encoding may have used unigram
+    // probability calculations. For the purpose of analysis we want to be
+    // consistent and so unigram probability calculator should be upgraded to a
+    // bigram
     if (UnigramProbabilityCalculator* unigram =
-      dynamic_cast<UnigramProbabilityCalculator*>(strategy.ProbabilityCalculator())) {
+            dynamic_cast<UnigramProbabilityCalculator*>(
+                strategy.ProbabilityCalculator())) {
       calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
       strategy_probability_calculators.push_back(&calculator_storage.back());
     } else {
-      strategy_probability_calculators.push_back(strategy.ProbabilityCalculator());
+      strategy_probability_calculators.push_back(
+          strategy.ProbabilityCalculator());
     }
 
     strategy_group_index.push_back(i - 1);
   }
 
   ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver);
-  auto costs = TRY(segmenter.TotalCosts(font, segmentation, strategy_probability_calculators));
+  auto costs = TRY(segmenter.TotalCosts(font, segmentation,
+                                        strategy_probability_calculators));
 
-  std::cerr << "number_of_codepoints = " << FontHelper::ToCodepointsSet(font).size() << std::endl;
+  std::cerr << "number_of_codepoints = "
+            << FontHelper::ToCodepointsSet(font).size() << std::endl;
 
   double ift_init_cost = 0.0;
   double non_ift_total_cost = 0.0;
@@ -186,7 +192,6 @@ static Status Analysis(hb_face_t* font,
     ift_patch_cost += cost.ift_patch_cost;
     ideal_patch_cost += cost.ideal_patch_cost;
 
-
     std::cerr << "ift_cost_bytes[" << group_index
               << "] = " << (uint64_t)cost.ift_patch_cost << std::endl;
     std::cerr << "ideal_cost_bytes[" << group_index
@@ -196,9 +201,12 @@ static Status Analysis(hb_face_t* font,
     group_index++;
   }
 
-  std::cerr << "non_ift_total_cost = " << (uint64_t) non_ift_total_cost << std::endl;
-  std::cerr << "ift_total_cost = " << (uint64_t) (ift_init_cost + ift_patch_cost) << std::endl;
-  std::cerr << "ideal_total_cost = " << (uint64_t) (ideal_init_cost + ideal_patch_cost) << std::endl;
+  std::cerr << "non_ift_total_cost = " << (uint64_t)non_ift_total_cost
+            << std::endl;
+  std::cerr << "ift_total_cost = " << (uint64_t)(ift_init_cost + ift_patch_cost)
+            << std::endl;
+  std::cerr << "ideal_total_cost = "
+            << (uint64_t)(ideal_init_cost + ideal_patch_cost) << std::endl;
 
   return absl::OkStatus();
 }
@@ -280,7 +288,8 @@ static Status Main(const std::vector<char*> args) {
   }
 
   std::cerr << ">> Analysis" << std::endl;
-  return Analysis(font.get(), std::move(result.merge_groups), segmentation, resolver);
+  return Analysis(font.get(), std::move(result.merge_groups), segmentation,
+                  resolver);
 }
 
 int main(int argc, char** argv) {

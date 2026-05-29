@@ -1,22 +1,22 @@
 #include "ift/encoder/requested_segmentation_information.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::config::PATCH;
-using ift::common::CodepointSet;
-using ift::common::SegmentSet;
-using ift::common::FontData;
-using ift::common::DataFileResolver;
 using ift::common::BazelDataFileResolver;
+using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
+using ift::common::FontData;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
+using ift::common::SegmentSet;
+using ift::config::PATCH;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -44,7 +44,8 @@ class RequestedSegmentationInformationTest : public ::testing::Test {
 };
 
 TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},
@@ -66,7 +67,8 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a'}, ProbabilityBound::Zero()},
       {{'b'}, ProbabilityBound::Zero()},
@@ -92,7 +94,8 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
 }
 
 TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
-  std::unique_ptr<GlyphClosureCache> cache = *GlyphClosureCache::Create(roboto.get(), *resolver);
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
       {{'a', 'b'}, ProbabilityBound::Zero()},
       {{'b', 'c'}, ProbabilityBound::Zero()},
@@ -107,7 +110,8 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
   EXPECT_EQ(info->SegmentsForCodepoints({'b'}), (SegmentSet{0, 1}));
   EXPECT_EQ(info->SegmentsForCodepoints({'c'}), (SegmentSet{1}));
 
-  // Reassign init subset to include 'b'. This should remove 'b' from all segments.
+  // Reassign init subset to include 'b'. This should remove 'b' from all
+  // segments.
   SubsetDefinition new_init;
   new_init.codepoints = {'b'};
   ASSERT_TRUE(info->ReassignInitSubset(*cache, new_init).ok());

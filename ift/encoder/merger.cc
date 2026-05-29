@@ -651,7 +651,9 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryMergingACompositeCondition(
 
   std::vector<ActivationCondition> sorted_conditions;
   sorted_conditions.reserve(candidate_conditions.size());
-  sorted_conditions.insert(sorted_conditions.end(), candidate_conditions.begin(), candidate_conditions.end());
+  sorted_conditions.insert(sorted_conditions.end(),
+                           candidate_conditions.begin(),
+                           candidate_conditions.end());
   std::sort(sorted_conditions.begin(), sorted_conditions.end());
 
   for (ActivationCondition next_condition : sorted_conditions) {

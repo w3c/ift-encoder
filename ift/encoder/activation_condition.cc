@@ -28,11 +28,11 @@ using absl::StatusOr;
 using absl::StrCat;
 using ift::common::IntSet;
 using ift::common::SegmentSet;
+using ift::freq::ProbabilityBound;
 using ift::freq::ProbabilityCalculator;
 using ift::proto::GLYPH_KEYED;
 using ift::proto::PatchEncoding;
 using ift::proto::PatchMap;
-using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
 
@@ -93,7 +93,8 @@ ActivationCondition ActivationCondition::composite_condition(
   return conditions;
 }
 
-ActivationCondition ActivationCondition::clear_exclusive(ActivationCondition&& condition) {
+ActivationCondition ActivationCondition::clear_exclusive(
+    ActivationCondition&& condition) {
   ActivationCondition updated(std::move(condition));
   updated.is_exclusive_ = false;
   return updated;
@@ -194,13 +195,13 @@ ActivationCondition ActivationCondition::ReplaceSegments(
   return new_condition;
 }
 
-ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(const SegmentSet& segments) const {
+ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(
+    const SegmentSet& segments) const {
   ActivationCondition new_condition = ActivationCondition::True(0);
   new_condition.activated_ = activated_;
   new_condition.encoding_ = encoding_;
   new_condition.is_fallback_ = is_fallback_;
   new_condition.is_exclusive_ = is_exclusive_;
-
 
   for (const auto& condition_group : conditions_) {
     if (!condition_group.intersects(segments)) {
@@ -208,8 +209,8 @@ ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(const Segme
     }
   }
 
-  // Simplify is not needed as the existing condition will already be simplified and removing
-  // sub-groups does not affect simplification.
+  // Simplify is not needed as the existing condition will already be simplified
+  // and removing sub-groups does not affect simplification.
   return new_condition;
 }
 
@@ -377,20 +378,18 @@ StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
 }
 
 StatusOr<double> ActivationCondition::MergedProbability(
-    Span<const Segment> segments,
-    segment_index_t merged_segment_index,
+    Span<const Segment> segments, segment_index_t merged_segment_index,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
-  return TRY(MergedProbabilityBound(segments, merged_segment_index, merged_segment, calculator)).Average();
+  return TRY(MergedProbabilityBound(segments, merged_segment_index,
+                                    merged_segment, calculator))
+      .Average();
 }
 
-
 StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
-    Span<const Segment> segments,
-    segment_index_t merged_segment_index,
+    Span<const Segment> segments, segment_index_t merged_segment_index,
     const Segment& merged_segment,
     const ProbabilityCalculator& calculator) const {
-
   if (conditions_.empty()) {
     return freq::ProbabilityBound(1.0, 1.0);
   }
@@ -412,7 +411,7 @@ StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
         }
       }
       set_bound = calculator.ComputeMergedProbability(union_segments);
-    } else if (*segment_set.min() ==  merged_segment_index) {
+    } else if (*segment_set.min() == merged_segment_index) {
       set_bound = merged_segment.ProbabilityBound();
     } else {
       set_bound = segments[*segment_set.min()].ProbabilityBound();

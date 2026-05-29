@@ -1,13 +1,14 @@
 #ifndef IFT_ENCODER_GLYPH_CLOSURE_CACHE_H_
 #define IFT_ENCODER_GLYPH_CLOSURE_CACHE_H_
 
+#include <memory>
+
 #include "absl/status/status.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
-#include "ift/common/data_file_resolver.h"
-#include <memory>
-#include "ift/encoder/subset_definition.h"
 #include "ift/dep_graph/unicode_edges.h"
+#include "ift/encoder/subset_definition.h"
 
 namespace ift::encoder {
 
@@ -18,13 +19,13 @@ class RequestedSegmentationInformation;
  */
 class GlyphClosureCache {
  public:
-  static absl::StatusOr<std::unique_ptr<GlyphClosureCache>> Create(hb_face_t* face, const ift::common::DataFileResolver& resolver);
+  static absl::StatusOr<std::unique_ptr<GlyphClosureCache>> Create(
+      hb_face_t* face, const ift::common::DataFileResolver& resolver);
 
  private:
-  GlyphClosureCache(
-    hb_face_t* original_face,
-    common::hb_face_unique_ptr preprocessed_face,
-    dep_graph::UnicodeEdges unicode_edges);
+  GlyphClosureCache(hb_face_t* original_face,
+                    common::hb_face_unique_ptr preprocessed_face,
+                    dep_graph::UnicodeEdges unicode_edges);
 
  public:
   absl::StatusOr<ift::common::GlyphSet> GlyphClosure(
@@ -34,7 +35,8 @@ class GlyphClosureCache {
       const RequestedSegmentationInformation* segmentation_info,
       const ift::common::SegmentSet& segments);
 
-  common::CodepointSet CodepointsForGlyphs(const common::GlyphSet& glyphs) const;
+  common::CodepointSet CodepointsForGlyphs(
+      const common::GlyphSet& glyphs) const;
 
   // Checks if a disjunction accross segments satisifies the closure require for
   // glyphs, returns true if there are potential additional conditions beyond
@@ -65,7 +67,8 @@ class GlyphClosureCache {
   hb_face_t* Face() { return preprocessed_face_.get(); }
 
  private:
-  common::CodepointSet UnicodeClosure(const common::CodepointSet& unicodes) const;
+  common::CodepointSet UnicodeClosure(
+      const common::CodepointSet& unicodes) const;
 
   ift::common::hb_face_unique_ptr original_face_;
   ift::common::hb_face_unique_ptr preprocessed_face_;

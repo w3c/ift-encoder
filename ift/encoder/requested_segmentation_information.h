@@ -52,7 +52,6 @@ class RequestedSegmentationInformation {
 
   absl::Status ReassignInitSubset(GlyphClosureCache& closure_cache,
                                   const SubsetDefinition& new_def) {
-
     // TODO XXXXX Can we avoid aggressively expanding the init closure?
     // ie. run the init subsetting/closure operation purely in glyph form.
     init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
@@ -62,7 +61,8 @@ class RequestedSegmentationInformation {
       auto closure = closure_cache.GlyphClosure(full_definition_);
       if (closure.ok()) {
         full_closure_ = std::move(*closure);
-        full_codepoint_closure_ = closure_cache.CodepointsForGlyphs(full_closure_);
+        full_codepoint_closure_ =
+            closure_cache.CodepointsForGlyphs(full_closure_);
       }
     }
 
@@ -110,7 +110,9 @@ class RequestedSegmentationInformation {
   }
 
   const ift::common::GlyphSet& FullClosure() const { return full_closure_; }
-  const ift::common::CodepointSet& FullCodepointClosure() const { return full_codepoint_closure_; }
+  const ift::common::CodepointSet& FullCodepointClosure() const {
+    return full_codepoint_closure_;
+  }
 
   const SubsetDefinition& FullDefinition() const { return full_definition_; }
 

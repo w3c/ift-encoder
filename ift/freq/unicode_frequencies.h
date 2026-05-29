@@ -38,8 +38,7 @@ class UnicodeFrequencies {
   // Returns the probability of codepoint pair (cp1, cp2) occurring.
   // P1 and P2 are the pre-calculated unigram probabilities for cp1 and cp2
   // respectively.
-  double ProbabilityFor(uint32_t cp1, uint32_t cp2, double p1,
-                        double p2) const;
+  double ProbabilityFor(uint32_t cp1, uint32_t cp2, double p1, double p2) const;
 
   // Returns the probability of layout tag occurring.
   double ProbabilityForLayoutTag(hb_tag_t tag) const {

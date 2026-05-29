@@ -59,8 +59,8 @@ class ActivationCondition {
       bool is_fallback = false);
 
   /*
-   * Constructs a new condition equal to 'condition' except with the is exclusive flag
-   * cleared.
+   * Constructs a new condition equal to 'condition' except with the is
+   * exclusive flag cleared.
    */
   static ActivationCondition clear_exclusive(ActivationCondition&& condition);
 
@@ -126,7 +126,8 @@ class ActivationCondition {
 
   // Generate a new condition which is a copy of this one but with all
   // sub grups that contain segments removed.
-  ActivationCondition RemoveIntersectingSubgroups(const common::SegmentSet& segments) const;
+  ActivationCondition RemoveIntersectingSubgroups(
+      const common::SegmentSet& segments) const;
 
   /*
    * Returns a human readable string representation of this condition.
@@ -186,14 +187,12 @@ class ActivationCondition {
   // it is modified to merge all segments in "merged_segments" into a single
   // segment with "merged_probability".
   absl::StatusOr<freq::ProbabilityBound> MergedProbabilityBound(
-      absl::Span<const Segment> segments,
-      segment_index_t merged_segment_index,
+      absl::Span<const Segment> segments, segment_index_t merged_segment_index,
       const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
   absl::StatusOr<double> MergedProbability(
-      absl::Span<const Segment> segments,
-      segment_index_t merged_segment_index,
+      absl::Span<const Segment> segments, segment_index_t merged_segment_index,
       const Segment& merged_segment,
       const ift::freq::ProbabilityCalculator& calculator) const;
 

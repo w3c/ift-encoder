@@ -3,11 +3,11 @@
 
 #include <optional>
 #include <string>
-#include "ift/common/data_file_resolver.h"
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "hb.h"
+#include "ift/common/data_file_resolver.h"
 #include "ift/config/segmenter_config.pb.h"
 
 namespace ift::config {
@@ -26,8 +26,7 @@ class AutoSegmenterConfig {
   //                times, high values have longer segmenting times but
   //                typically results in better segmentation quality.
   static absl::StatusOr<SegmenterConfig> GenerateConfig(
-      hb_face_t* face,
-      const ift::common::DataFileResolver& resolver,
+      hb_face_t* face, const ift::common::DataFileResolver& resolver,
       std::optional<std::string> primary_script = std::nullopt,
       std::optional<int> quality_level = std::nullopt);
 

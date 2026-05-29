@@ -1,32 +1,32 @@
 #include "ift/dep_graph/unicode_edges.h"
 
 #include <fstream>
-#include "absl/strings/str_cat.h"
+
 #include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "ift/common/data_file_resolver.h"
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
+#include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
-#include "ift/common/font_data.h"
-#include "ift/common/hb_set_unique_ptr.h"
 
 using absl::flat_hash_map;
 using absl::Status;
 using absl::StatusOr;
 using ift::common::CodepointSet;
-using ift::common::FontHelper;
-using ift::common::make_hb_set;
-using ift::common::make_hb_font;
-using ift::common::hb_set_unique_ptr;
-using ift::common::hb_font_unique_ptr;
 using ift::common::DataFileResolver;
+using ift::common::FontHelper;
+using ift::common::hb_font_unique_ptr;
+using ift::common::hb_set_unique_ptr;
+using ift::common::make_hb_font;
+using ift::common::make_hb_set;
 
 namespace ift::dep_graph {
 
 absl::Status ParseDerivedNormalizationProps(
-    const std::string& path,
-    CodepointSet& full_composition_exclusions) {
+    const std::string& path, CodepointSet& full_composition_exclusions) {
   std::ifstream props_file(path);
   if (!props_file.is_open()) {
     return absl::NotFoundError(absl::StrCat("Failed to open ", path));
@@ -67,15 +67,17 @@ absl::Status ParseDerivedNormalizationProps(
       hb_codepoint_t start = 0, end = 0;
       if (!absl::SimpleHexAtoi(range.substr(0, dotdot), &start) ||
           !absl::SimpleHexAtoi(range.substr(dotdot + 2), &end)) {
-        return absl::InternalError(
-          absl::StrCat(
-          "Failed to parse unicode range in DerivedNormalizationProps.txt: ", range));
+        return absl::InternalError(absl::StrCat(
+            "Failed to parse unicode range in DerivedNormalizationProps.txt: ",
+            range));
       }
       full_composition_exclusions.insert_range(start, end);
     } else {
       hb_codepoint_t u = 0;
       if (!absl::SimpleHexAtoi(range, &u)) {
-        return absl::InternalError(absl::StrCat("Failed to parse unicode value in DerivedNormalizationProps.txt: ", range));
+        return absl::InternalError(absl::StrCat(
+            "Failed to parse unicode value in DerivedNormalizationProps.txt: ",
+            range));
       }
       full_composition_exclusions.insert(u);
     }
@@ -83,12 +85,9 @@ absl::Status ParseDerivedNormalizationProps(
   return absl::OkStatus();
 }
 
-Status ParseUnicodeData(
-    const std::string& path,
-    const CodepointSet& unicodes,
-    const CodepointSet& full_composition_exclusions,
-    UnicodeEdges& result) {
-
+Status ParseUnicodeData(const std::string& path, const CodepointSet& unicodes,
+                        const CodepointSet& full_composition_exclusions,
+                        UnicodeEdges& result) {
   std::ifstream data_file(path);
   if (!data_file.is_open()) {
     return absl::NotFoundError(absl::StrCat("Failed to open ", path));
@@ -119,7 +118,8 @@ Status ParseUnicodeData(
 
     hb_codepoint_t base = 0;
     if (!absl::SimpleHexAtoi(fields[0], &base)) {
-      return absl::InternalError(absl::StrCat("Failed to parse unicode value in UnicodeData.txt: ", fields[0]));
+      return absl::InternalError(absl::StrCat(
+          "Failed to parse unicode value in UnicodeData.txt: ", fields[0]));
     }
     if (!unicodes.contains(base)) {
       continue;
@@ -142,7 +142,8 @@ Status ParseUnicodeData(
       }
       hb_codepoint_t u = 0;
       if (!absl::SimpleHexAtoi(next, &u)) {
-        return absl::InternalError(absl::StrCat("Failed to parse unicode value in UnicodeData.txt: ", next));
+        return absl::InternalError(absl::StrCat(
+            "Failed to parse unicode value in UnicodeData.txt: ", next));
       }
       if (!unicodes.contains(u)) {
         keep = false;
@@ -161,7 +162,8 @@ Status ParseUnicodeData(
 
     result.decomposition[base].union_set(decomp_chars);
 
-    if (decomp_chars.size() == 2 && !full_composition_exclusions.contains(base)) {
+    if (decomp_chars.size() == 2 &&
+        !full_composition_exclusions.contains(base)) {
       hb_codepoint_t d0 = *decomp_chars.begin();
       hb_codepoint_t d1 = *(++decomp_chars.begin());
       result.composition[d0].push_back(UnicodeConjunctiveEdge{d1, base});
@@ -186,7 +188,10 @@ flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> UnicodeEdges::UnicodeToGid(
   return out;
 }
 
-void UnicodeEdges::ComputeUVSEdges(hb_face_t* face, const flat_hash_map<hb_codepoint_t, encoder::glyph_id_t>& unicode_to_gid, UnicodeEdges& result) {
+void UnicodeEdges::ComputeUVSEdges(
+    hb_face_t* face,
+    const flat_hash_map<hb_codepoint_t, encoder::glyph_id_t>& unicode_to_gid,
+    UnicodeEdges& result) {
   hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
   hb_face_collect_variation_selectors(face, vs_unicodes_hb.get());
   CodepointSet vs_unicodes(vs_unicodes_hb.get());
@@ -219,17 +224,18 @@ void UnicodeEdges::ComputeUVSEdges(hb_face_t* face, const flat_hash_map<hb_codep
 }
 
 StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
-  hb_face_t* face,
-  const DataFileResolver& resolver) {
-
+    hb_face_t* face, const DataFileResolver& resolver) {
   std::string unicode_data_path = TRY(resolver.GetUnicodeDataPath());
-  std::string derived_props_path = TRY(resolver.GetDerivedNormalizationPropsPath());
+  std::string derived_props_path =
+      TRY(resolver.GetDerivedNormalizationPropsPath());
 
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   UnicodeEdges result;
   CodepointSet full_composition_exclusions;
-  TRYV(ParseDerivedNormalizationProps(derived_props_path, full_composition_exclusions));
-  TRYV(ParseUnicodeData(unicode_data_path, unicodes, full_composition_exclusions, result));
+  TRYV(ParseDerivedNormalizationProps(derived_props_path,
+                                      full_composition_exclusions));
+  TRYV(ParseUnicodeData(unicode_data_path, unicodes,
+                        full_composition_exclusions, result));
 
   // Compute UVS edges
   result.unicode_to_gid = UnicodeToGid(face);

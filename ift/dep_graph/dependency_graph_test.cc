@@ -1,10 +1,10 @@
 #include "ift/dep_graph/dependency_graph.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
@@ -21,13 +21,13 @@ using ift::config::PATCH;
 
 using absl::btree_set;
 using absl::flat_hash_map;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
+using ift::common::DataFileResolver;
 using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
-using ift::common::BazelDataFileResolver;
-using ift::common::DataFileResolver;
 using ift::encoder::glyph_id_t;
 using ift::encoder::GlyphClosureCache;
 using ift::encoder::RequestedSegmentationInformation;
@@ -44,14 +44,17 @@ class DependencyGraphTest : public ::testing::Test {
   DependencyGraphTest()
       : face(from_file("ift/common/testdata/Roboto-Regular.ttf")),
         resolver(*BazelDataFileResolver::CreateForTest()),
-        closure_cache(std::move(*GlyphClosureCache::Create(face.get(), *resolver))),
+        closure_cache(
+            std::move(*GlyphClosureCache::Create(face.get(), *resolver))),
         noto_sans_jp(from_file("ift/common/testdata/NotoSansJP-Regular.ttf")),
         noto_sans_jp_vf(
             from_file("ift/common/testdata/NotoSansJP-VF.cmap14.ttf")),
-        noto_sans_kr(from_file("ift/common/testdata/NotoSansKR[wght].subset.ttf")),
+        noto_sans_kr(
+            from_file("ift/common/testdata/NotoSansKR[wght].subset.ttf")),
         segmentation_info(*RequestedSegmentationInformation::Create(
             segments, WithDefaultFeatures({}), *closure_cache, PATCH)),
-        graph(*DependencyGraph::Create(segmentation_info.get(), face.get(), *resolver)) {}
+        graph(*DependencyGraph::Create(segmentation_info.get(), face.get(),
+                                       *resolver)) {}
 
   static hb_face_unique_ptr from_file(const char* filename) {
     hb_blob_t* blob = hb_blob_create_from_file_or_fail(filename);
@@ -73,7 +76,8 @@ class DependencyGraphTest : public ::testing::Test {
                    std::vector<Segment> new_segments) {
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    graph = *DependencyGraph::Create(segmentation_info.get(), face.get(), *resolver);
+    graph = *DependencyGraph::Create(segmentation_info.get(), face.get(),
+                                     *resolver);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
@@ -81,7 +85,8 @@ class DependencyGraphTest : public ::testing::Test {
     closure_cache = std::move(*GlyphClosureCache::Create(new_face, *resolver));
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    graph = *DependencyGraph::Create(segmentation_info.get(), new_face, *resolver);
+    graph =
+        *DependencyGraph::Create(segmentation_info.get(), new_face, *resolver);
   }
 
  private:
@@ -139,27 +144,30 @@ TEST_F(DependencyGraphTest, ClosureTraversal_RecordsInputNodes) {
   GlyphSet all_g = GlyphSet::all();
   CodepointSet all_u = CodepointSet::all();
 
-  Node glyph_node = Node::Glyph(74); // 'f'
+  Node glyph_node = Node::Glyph(74);  // 'f'
   Node unicode_node = Node::Unicode('a');
   Node feature_node = Node::Feature(HB_TAG('l', 'i', 'g', 'a'));
 
-  auto r = graph.ClosureTraversal({glyph_node, unicode_node, feature_node}, &all_g, &all_u);
+  auto r = graph.ClosureTraversal({glyph_node, unicode_node, feature_node},
+                                  &all_g, &all_u);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
   EXPECT_TRUE(traversal.ReachedGlyphs().contains(74));
   EXPECT_TRUE(traversal.ReachedCodepoints().contains('a'));
-  EXPECT_TRUE(traversal.ReachedLayoutFeatures().contains(HB_TAG('l', 'i', 'g', 'a')));
+  EXPECT_TRUE(
+      traversal.ReachedLayoutFeatures().contains(HB_TAG('l', 'i', 'g', 'a')));
 }
 
 TEST_F(DependencyGraphTest, ClosureTraversal_FiltersInputNodes) {
   GlyphSet empty_g;
   CodepointSet empty_u;
 
-  Node glyph_node = Node::Glyph(74); // 'f'
+  Node glyph_node = Node::Glyph(74);  // 'f'
   Node unicode_node = Node::Unicode('a');
 
-  auto r = graph.ClosureTraversal({glyph_node, unicode_node}, &empty_g, &empty_u);
+  auto r =
+      graph.ClosureTraversal({glyph_node, unicode_node}, &empty_g, &empty_u);
   ASSERT_TRUE(r.ok()) << r.status();
   const auto& traversal = *r;
 
@@ -170,76 +178,76 @@ TEST_F(DependencyGraphTest, ClosureTraversal_FiltersInputNodes) {
 TEST_F(DependencyGraphTest, ClosureTraversal_FiltersNotInFont) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xD4DB}, ProbabilityBound::Zero()}, // korean codepoint not in Roboto
+                  {{0xD4DB},
+                   ProbabilityBound::Zero()},  // korean codepoint not in Roboto
               });
 
   auto r = graph.ClosureTraversal({Node::Unicode(0xD4DB)});
   ASSERT_TRUE(r.ok()) << r.status();
   // Decompositions should not be present
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{}));
 }
-
 
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_Traversal) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xe1}, ProbabilityBound::Zero()}, // á
-                  {{0x61}, ProbabilityBound::Zero()}, // a
-                  {{0x301}, ProbabilityBound::Zero()}, // combining acute
+                  {{0xe1}, ProbabilityBound::Zero()},   // á
+                  {{0x61}, ProbabilityBound::Zero()},   // a
+                  {{0x301}, ProbabilityBound::Zero()},  // combining acute
               });
 
   auto r = graph.ClosureTraversal({Node::Unicode(0xe1)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0xe1, 0x61, 0x301}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0xe1, 0x61, 0x301}));
 
   r = graph.ClosureTraversal({Node::Unicode(0x61), Node::Unicode(0x301)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0xe1, 0x61, 0x301}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0xe1, 0x61, 0x301}));
 }
 
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_IncludesNonSegmentCodepoints) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xe1}, ProbabilityBound::Zero()}, // á
-                  {{0x61}, ProbabilityBound::Zero()}, // a
+                  {{0xe1}, ProbabilityBound::Zero()},  // á
+                  {{0x61}, ProbabilityBound::Zero()},  // a
               });
 
-
-  // Even though 0x301 is not in a segment's definition closure traversal will still
-  // pass through it.
+  // Even though 0x301 is not in a segment's definition closure traversal will
+  // still pass through it.
   auto r = graph.ClosureTraversal({Node::Unicode(0xe1)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0xe1, 0x61, 0x301}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0xe1, 0x61, 0x301}));
 
-  // Because 0x301 isn't in scope, the composition and decomposition edges can't be traversed.
+  // Because 0x301 isn't in scope, the composition and decomposition edges can't
+  // be traversed.
   r = graph.ClosureTraversal({Node::Unicode(0x61)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0x61}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x61}));
 }
 
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_CompositionExclusion) {
   // U+2126 (OHM SIGN) decomposes to U+03A9 (GREEK CAPITAL LETTER OMEGA)
   // and is in the Full_Composition_Exclusion list.
-  Reconfigure(WithDefaultFeatures({}),
-              {
-                  {{0x2126}, ProbabilityBound::Zero()},
-                  {{0x3a9}, ProbabilityBound::Zero()},
-              });
+  Reconfigure(WithDefaultFeatures({}), {
+                                           {{0x2126}, ProbabilityBound::Zero()},
+                                           {{0x3a9}, ProbabilityBound::Zero()},
+                                       });
 
   // Only composition is excluded so decomposition should still work.
   auto r = graph.ClosureTraversal({Node::Unicode(0x2126)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0x3a9, 0x2126}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x3a9, 0x2126}));
 
   // The reverse should not work
   r = graph.ClosureTraversal({Node::Unicode(0x03A9)});
   ASSERT_TRUE(r.ok()) << r.status();
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0x3a9}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x3a9}));
 }
 
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_HangulExclusionTraversal) {
   // U+0xD4DB decomposes to U+1111, U+1171, U+11B6
-  // (from: https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/#G24646)
+  // (from:
+  // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/#G24646)
   Reconfigure(noto_sans_kr.get(), WithDefaultFeatures({}),
               {
                   {{0xD4DB}, ProbabilityBound::Zero()},
@@ -251,12 +259,13 @@ TEST_F(DependencyGraphTest, UnicodeCompDecomp_HangulExclusionTraversal) {
   auto r = graph.ClosureTraversal({Node::Unicode(0xD4DB)});
   ASSERT_TRUE(r.ok()) << r.status();
   // Decompositions should not be present
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0xD4DB}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0xD4DB}));
 
-  r = graph.ClosureTraversal({Node::Unicode(0x1111), Node::Unicode(0x1171), Node::Unicode(0x11B6)});
+  r = graph.ClosureTraversal(
+      {Node::Unicode(0x1111), Node::Unicode(0x1171), Node::Unicode(0x11B6)});
   ASSERT_TRUE(r.ok()) << r.status();
   // Composition should not be present
-  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet {0x1111, 0x1171, 0x11B6}));
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x1111, 0x1171, 0x11B6}));
 }
 
 TEST_F(DependencyGraphTest, ContextGlyphs) {
@@ -616,8 +625,7 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting) {
                   Node::Segment(3), Node::Unicode('a'), Node::Unicode('f'),
                   Node::Unicode('i'), Node::Glyph(gid_a), Node::Glyph(gid_f),
                   Node::Glyph(gid_i), Node::Glyph(gid_fi), Node::Glyph(gid_ffi),
-                  Node::Unicode(0xfb01), Node::Unicode(0xfb03),
-                  liga_node));
+                  Node::Unicode(0xfb01), Node::Unicode(0xfb03), liga_node));
 
   // Now check relative ordering of the elements
   int s0 = GetIndex(topo_order, Node::Segment(0));
@@ -835,10 +843,11 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
       {Node::Glyph(gid_f)},
       {Node::Glyph(gid_i)},
       {Node::Feature(HB_TAG('l', 'i', 'g', 'a'))},
-    };
-  EXPECT_EQ(fi_edges, (btree_set<EdgeConditionsCnf>{
-    expected_fi_edge,
-    EdgeConditionsCnf {{Node::Unicode(0xfb01)},}}));
+  };
+  EXPECT_EQ(fi_edges, (btree_set<EdgeConditionsCnf>{expected_fi_edge,
+                                                    EdgeConditionsCnf{
+                                                        {Node::Unicode(0xfb01)},
+                                                    }}));
 
   // 'f' requires 'f' (Unicode)
   auto f_edges_it = edges.find(Node::Glyph(gid_f));

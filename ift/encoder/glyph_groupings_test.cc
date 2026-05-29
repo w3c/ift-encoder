@@ -1,10 +1,10 @@
 #include "ift/encoder/glyph_groupings.h"
-#include "ift/common/bazel_data_file_resolver.h"
 
 #include <memory>
 
 #include "absl/container/flat_hash_map.h"
 #include "gtest/gtest.h"
+#include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
@@ -27,9 +27,9 @@ namespace ift::encoder {
 using absl::btree_map;
 using absl::flat_hash_map;
 using freq::ProbabilityBound;
+using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
-using ift::common::BazelDataFileResolver;
 using ift::common::FontData;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
@@ -75,7 +75,8 @@ class GlyphGroupingsTest : public ::testing::Test {
     AddInitSubsetDefaults(init_font_segment);
 
     resolver = *BazelDataFileResolver::CreateForTest();
-    closure_cache_ = std::move(*GlyphClosureCache::Create(roboto_.get(), *resolver));
+    closure_cache_ =
+        std::move(*GlyphClosureCache::Create(roboto_.get(), *resolver));
     requested_segmentation_info_ = *RequestedSegmentationInformation::Create(
         segments_, init_font_segment, *closure_cache_, PATCH);
 
