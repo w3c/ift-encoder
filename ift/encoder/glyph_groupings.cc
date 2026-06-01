@@ -72,11 +72,10 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
 
 void GlyphGroupings::RemoveAllCombinedConditions() {
   combined_patches_dirty_ = true;
-  for (const auto& [segments, _] : combined_or_glyph_groups_) {
-    RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
-                             false);
+  for (const auto& condition : combined_conditions_) {
+    RemoveConditionAndGlyphs(condition, false);
   }
-  combined_or_glyph_groups_.clear();
+  combined_conditions_.clear();
   combined_exclusive_segments_.clear();
 }
 
@@ -388,131 +387,72 @@ Status GlyphGroupings::FindFallbackGlyphConditions(
 }
 
 Status GlyphGroupings::RecomputeCombinedConditions() {
-  // TODO XXXXX now that we can arbitrarily combine activation conditions,
-  // we should be able to support patch merging on arbitrary conditions
-  // including conjunctive and/or mixed ones. Rework this to not be limited just
-  // to exclusive and purely disjunctive cases.
-  //
-  // Will also need to update the merger/candidate_merge code that selects patch
-  // merges to consider all cases.
-
-  // To minimize the amount of work we need to do we first detect which segments
-  // are potentially affected by the patch combination mechanism and then limit
-  // processing just to those.
-  SegmentSet exclusive_segments;
-  btree_set<SegmentSet> or_conditions;
-  TRYV(ConditionsAffectedByCombination(exclusive_segments, or_conditions));
-
-  flat_hash_map<glyph_id_t, SegmentSet> merged_conditions;
-  flat_hash_map<glyph_id_t, GlyphSet> merged_glyphs;
-  TRYV(ComputeConditionExpansionMap(exclusive_segments, or_conditions,
-                                    merged_conditions, merged_glyphs));
-
-  for (const auto& [rep, segments] : merged_conditions) {
-    const GlyphSet& gids = merged_glyphs.at(rep);
-    ActivationCondition condition =
-        ActivationCondition::or_segments(segments, 0);
-    if (segments.size() == 1 && exclusive_segments.contains(*segments.min())) {
-      // This is actually an exclusive condition, and is not expanded.
-      condition = ActivationCondition::exclusive_segment(*segments.min(), 0);
-    } else {
-      SegmentSet segments_copy = segments;
-      combined_or_glyph_groups_[segments_copy] = gids;
-    }
-
-    TRYV(AddConditionAndGlyphs(condition, gids, false));
-  }
-
-  combined_patches_dirty_ = false;
-  return absl::OkStatus();
-}
-
-Status GlyphGroupings::ConditionsAffectedByCombination(
-    SegmentSet& exclusive_segments,
-    btree_set<SegmentSet>& or_conditions) const {
+  // Find all conditions that are affected by combined_patches_.
+  btree_set<ActivationCondition> affected_conditions;
   for (const GlyphSet& gids : TRY(combined_patches_.NonIdentityGroups())) {
     for (glyph_id_t gid : gids) {
-      const auto& cond =
-          conditions_and_glyphs_pre_combination_.GlyphToCondition().at(gid);
-      if (cond.IsExclusive()) {
-        exclusive_segments.insert(*cond.TriggeringSegments().begin());
-      } else if (cond.conditions().size() == 1) {
-        or_conditions.insert(cond.TriggeringSegments());
+      auto it = conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
+      if (it != conditions_and_glyphs_pre_combination_.GlyphToCondition().end()) {
+        affected_conditions.insert(it->second);
       }
     }
   }
-  return absl::OkStatus();
-}
 
-Status GlyphGroupings::ComputeConditionExpansionMap(
-    const SegmentSet& exclusive_segments,
-    const btree_set<SegmentSet>& or_conditions,
-    flat_hash_map<glyph_id_t, SegmentSet>& merged_conditions,
-    flat_hash_map<glyph_id_t, GlyphSet>& merged_glyphs) {
+  if (affected_conditions.empty()) {
+    combined_patches_dirty_ = false;
+    return absl::OkStatus();
+  }
+
   // Form the complete partition incorporating combined_patches_ across all of
   // the affected groups. This complete partition specifies how groups will be
   // merged together.
   GlyphPartition partition = combined_patches_;
-  for (segment_index_t s : exclusive_segments) {
-    TRYV(partition.Union(exclusive_glyph_groups_.at(s)));
+  for (const auto& cond : affected_conditions) {
+    const GlyphSet& gids =
+        conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().at(cond);
+    TRYV(partition.Union(gids));
   }
 
-  for (const auto& segments : or_conditions) {
-    TRYV(partition.Union(or_glyph_groups_.at(segments)));
-  }
+  // Map representative to combined condition and glyphs.
+  flat_hash_map<glyph_id_t, ActivationCondition> merged_conditions;
+  flat_hash_map<glyph_id_t, GlyphSet> merged_glyphs;
 
-  // Each group can be mapped to a representative, where there is one
-  // representative for each combined grouping. We can then collect up all of
-  // the combined segments and and glyphs to each representative.
-  //
-  // During this processing we remove/add conditions as need. Where a existing
-  // group will be combined, the uncombined condition is removed. Where a
-  // condition is not going to be combined then the condition is added back.
-  // Adding back is needed in rare cases where a condition was previously
-  // combined, but due to changes it no longer is. If the condition is already
-  // present then addition is a noop.
-  for (segment_index_t s : exclusive_segments) {
-    const GlyphSet& gids = exclusive_glyph_groups_.at(s);
+  for (const auto& cond : affected_conditions) {
+    const GlyphSet& gids =
+        conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().at(cond);
     std::optional<glyph_id_t> first = gids.min();
     if (!first.has_value()) {
       continue;
     }
 
     glyph_id_t rep = TRY(partition.Find(*first));
+
     if (gids != TRY(partition.GlyphsFor(rep))) {
-      // Only record cases where merges happen, if the glyph set is unmodifed
-      // then there will be no merge.
-      merged_conditions[rep].insert(s);
+      // Only record cases where merges happen.
+      RemoveConditionAndGlyphs(cond, false);
+
+      if (cond.IsExclusive()) {
+        combined_exclusive_segments_.insert(*cond.TriggeringSegments().begin());
+      }
+
+      auto [it, inserted] = merged_conditions.insert({rep, cond});
+      if (!inserted) {
+        it->second = ActivationCondition::Or(it->second, cond);
+      }
       merged_glyphs[rep].union_set(gids);
-      RemoveConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0),
-                               false);
-      // Record s as having been removed via combination.
-      combined_exclusive_segments_.insert(s);
     } else {
-      TRYV(AddConditionAndGlyphs(ActivationCondition::exclusive_segment(s, 0),
-                                 gids, false));
+      TRYV(AddConditionAndGlyphs(cond, gids, false));
     }
   }
 
-  for (const auto& segments : or_conditions) {
-    const GlyphSet& gids = or_glyph_groups_.at(segments);
-    std::optional<glyph_id_t> first = gids.min();
-    if (!first.has_value()) {
-      continue;
-    }
-
-    glyph_id_t rep = TRY(partition.Find(*first));
-    if (gids != TRY(partition.GlyphsFor(rep))) {
-      merged_conditions[rep].union_set(segments);
-      merged_glyphs[rep].union_set(gids);
-      RemoveConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
-                               false);
-    } else {
-      TRYV(AddConditionAndGlyphs(ActivationCondition::or_segments(segments, 0),
-                                 gids, false));
-    }
+  // Add the new combined conditions.
+  for (const auto& [rep, condition] : merged_conditions) {
+    const GlyphSet& gids = merged_glyphs.at(rep);
+    TRYV(AddConditionAndGlyphs(condition, gids, false));
+    combined_conditions_.insert(condition);
   }
 
+  combined_patches_dirty_ = false;
   return absl::OkStatus();
 }
 
