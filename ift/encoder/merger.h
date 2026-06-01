@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "ift/common/int_set.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
@@ -104,6 +105,9 @@ class Merger {
         inscope_segments_(inscope_segments),
         candidate_segments_(
             ComputeCandidateSegments(*context_, strategy_, inscope_segments_)),
+        candidate_patch_merge_glyphs_(ComputeCandidatePatchMergeGlyphs(
+            *context_, strategy_, candidate_segments_, inscope_segments,
+            optimization_cutoff_segment)),
         inscope_segments_for_init_move_(inscope_segments_for_init_move),
         optimization_cutoff_segment_(optimization_cutoff_segment) {}
 
@@ -111,11 +115,23 @@ class Merger {
       SegmentationContext& context, const MergeStrategy& strategy,
       const ift::common::SegmentSet& inscope_segments);
 
+  static ift::common::GlyphSet ComputeCandidatePatchMergeGlyphs(
+      SegmentationContext& context, const MergeStrategy& strategy,
+      const ift::common::SegmentSet& candidate_segments,
+      const ift::common::SegmentSet& inscope_segments,
+      segment_index_t optimization_cutoff_segment
+    );
+
+  absl::StatusOr<std::optional<InvalidationSet>> TryNextPatchMerge();
+
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
   absl::StatusOr<std::optional<InvalidationSet>> MergeSegmentWithCosts(
       uint32_t base_segment_index);
+
+  absl::StatusOr<std::optional<InvalidationSet>> PatchMergeWithCosts(
+    const ActivationCondition& base, const std::vector<std::pair<ActivationCondition, double>>& ordered_candidates);
 
   absl::Status CollectExclusiveCandidateMerges(
       uint32_t base_segment_index,
@@ -179,6 +195,7 @@ class Merger {
   // The current set of segments under consideration for being merged.
   const ift::common::SegmentSet inscope_segments_;
   ift::common::SegmentSet candidate_segments_;
+  ift::common::GlyphSet candidate_patch_merge_glyphs_;
 
   // This is the set of segments under consideration for being merged into the
   // init font. Typically contains segments that were removed from
