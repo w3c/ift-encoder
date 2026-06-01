@@ -106,6 +106,7 @@ base_cost_config {
   network_overhead_cost: 200
   min_group_size: 4
   optimization_cutoff_fraction: 0.005
+  experimental_use_patch_merges: true
 }
 ungrouped_config {
   min_patch_size: 2500

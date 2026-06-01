@@ -1176,12 +1176,10 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid117, gid169, gid700 }
+p0: { gid117, gid169, gid640, gid700 }
 p1: { gid37, gid39 }
-p2: { gid640 }
 if (s2) then p0
 if ((s0 OR s1 OR s2)) then p1
-if (s0 AND s2) then p2
 )");
 }
 

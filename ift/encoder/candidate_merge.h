@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <optional>
+#include "ift/encoder/activation_condition.h"
 
 #include "absl/status/statusor.h"
 #include "ift/common/int_set.h"
@@ -26,6 +27,10 @@ struct CandidateMerge {
   // The set of segments to be merged into the base_segment_index.
   ift::common::SegmentSet segments_to_merge_;
 
+  // The conditions of the patch to be merged into the base segment patch.
+  // Only used for patch merges (when merged_segment_ is not present).
+  std::optional<std::pair<ActivationCondition, ActivationCondition>> patch_merge_target_conditions_;
+
   // The result of merge the above segments. If it's not present then
   // that implies this merge is only a merge of the base segment patch
   // and the disjunctive patch with the condition segments_to_merge_.
@@ -45,19 +50,12 @@ struct CandidateMerge {
   // merge is applied.
   ift::common::GlyphSet invalidated_glyphs_;
 
-  // Inert probability threshold computation cache
-  double base_size_ = 0.0;
-  double base_probability_ = 0.0;
-  double network_overhead_ = 0.0;
-
   CandidateMerge(Segment merged_segment) : merged_segment_(merged_segment) {}
   CandidateMerge() : merged_segment_(std::nullopt) {}
 
  public:
   static CandidateMerge BaselineCandidate(uint32_t base_segment_index,
-                                          double cost_delta, double base_size,
-                                          double base_probability,
-                                          double network_overhead) {
+                                          double cost_delta) {
     CandidateMerge merge(Segment({}, freq::ProbabilityBound::Zero()));
     merge.base_segment_index_ = base_segment_index;
     merge.segments_to_merge_ = {base_segment_index};
@@ -65,9 +63,6 @@ struct CandidateMerge {
     merge.new_patch_size_ = 0;
     merge.cost_delta_ = cost_delta;
     merge.invalidated_glyphs_ = {};
-    merge.base_size_ = base_size;
-    merge.base_probability_ = base_probability;
-    merge.network_overhead_ = network_overhead;
     return merge;
   }
 
@@ -118,17 +113,18 @@ struct CandidateMerge {
       const ift::common::SegmentSet& segments_to_merge_,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
-  // Assess the resutl of merging together exactly two patches:
+  // Assess the result of merging together exactly two patches:
   // 1. The exclusive patch for base_segment_index.
-  // 2. The patch associated with the disjunctive segments_to_merge_ condition.
+  // 2. The patch associated with target_condition.
   //
   // If the merge is not better than best_merge_candidate or not possible
   // then nullopt will be returned.
   //
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessPatchMerge(
-      Merger& context, segment_index_t base_segment_index,
-      const ift::common::SegmentSet& segments_to_merge_,
+      Merger& context,
+      const ActivationCondition& condition_a,
+      const ActivationCondition& condition_b,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
   // Computes the estimated size of the patch for a segment and returns true if
@@ -168,10 +164,11 @@ struct CandidateMerge {
       const ift::common::GlyphSet& moved_glyphs);
 
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
-      const Merger& context, segment_index_t base_segment,
-      const ift::common::GlyphSet& base_glyphs,
-      const ift::common::SegmentSet& target_segments,
-      const ift::common::GlyphSet& target_glyphs,
+      const Merger& context,
+      const ActivationCondition& condition_a,
+      const ift::common::GlyphSet& glyphs_a,
+      const ActivationCondition& condition_b,
+      const ift::common::GlyphSet& glyphs_b,
       const ift::common::GlyphSet& merged_glyphs);
 
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
