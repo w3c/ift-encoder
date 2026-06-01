@@ -376,11 +376,8 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
-    unsigned base_size =
-        TRY(context_->patch_size_cache->GetPatchSize(base_segment_glyphs));
     smallest_candidate_merge = CandidateMerge::BaselineCandidate(
-        base_segment_index, 0.0, base_size, base_segment.Probability(),
-        strategy_.NetworkOverheadCost());
+        base_segment_index, 0.0);
   }
 
   // TODO(garretrieger): On each iteration we should consider all merge pairs
@@ -563,13 +560,14 @@ Status Merger::CollectCompositeCandidateMerges(
       smallest_candidate_merge = *candidate_merge;
     }
 
-    if (strategy_.UsePatchMerges() && next_condition.conditions().size() == 1) {
-      // For disjunctive composite patches, also consider merging just the
-      // patches together (if enabled).
+    if (strategy_.UsePatchMerges()) {
+      // Also consider merging just the patches together (if enabled).
       auto candidate_merge = TRY(CandidateMerge::AssessPatchMerge(
-          *this, base_segment_index, triggering_segments,
+          *this, ActivationCondition::exclusive_segment(base_segment_index, 0), next_condition,
           smallest_candidate_merge));
-      if (candidate_merge.has_value()) {
+      if (candidate_merge.has_value() && candidate_merge->CostDelta() < 0) {
+        // For patch merges we only ever use them if they have negative cost delta.
+        // This prevents using patch merges soley to meet minimum group sizes.
         smallest_candidate_merge = *candidate_merge;
       }
     }

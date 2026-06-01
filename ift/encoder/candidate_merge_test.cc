@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 #include "ift/encoder/closure_glyph_segmenter.h"
@@ -28,6 +29,7 @@ using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
 using ift::common::FontData;
+using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::common::IntSet;
@@ -218,7 +220,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   auto r = CandidateMerge::AssessSegmentMerge(
       merger, 0, {1},
       CandidateMerge::BaselineCandidate(
-          4, 0.0, base_size, 0.95, merger.Strategy().NetworkOverheadCost()));
+          4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -229,7 +231,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessSegmentMerge(
       merger, 0, {1},
       CandidateMerge::BaselineCandidate(
-          4, -500.0, base_size, 0.95, merger.Strategy().NetworkOverheadCost()));
+          4, -500.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -240,7 +242,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessSegmentMerge(
       merger, 0, {3},
       CandidateMerge::BaselineCandidate(
-          4, 0.0, base_size, 0.95, merger.Strategy().NetworkOverheadCost()));
+          4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -250,7 +252,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   r = CandidateMerge::AssessSegmentMerge(
       merger, 3, {0},
       CandidateMerge::BaselineCandidate(
-          4, 0.0, base_size, 0.01, merger.Strategy().NetworkOverheadCost()));
+          4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 }
@@ -422,7 +424,7 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
       all);
 
   // Try merging the patch for {0} and {1 OR 4}.
-  auto r = CandidateMerge::AssessPatchMerge(merger, 0, {1, 4}, std::nullopt);
+  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({1, 4}, 0), std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -432,7 +434,7 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
   ASSERT_LT(merge.CostDelta(), 0);
 
   // Try merging the patch for {0} and {2 OR 3}.
-  r = CandidateMerge::AssessPatchMerge(merger, 0, {2, 3}, std::nullopt);
+  r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({2, 3}, 0), std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
@@ -475,16 +477,85 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
       all);
 
   // Try merging the patch for {0} and {1}.
-  auto r = CandidateMerge::AssessPatchMerge(merger, 0, {1}, std::nullopt);
-  ASSERT_TRUE(r.ok()) << r.status();
+  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({1}, 0), std::nullopt);
   // segment 1 has no patch associated with it, so no merge is possible.
-  ASSERT_FALSE(r->has_value());
+  ASSERT_TRUE(absl::IsInternal(r.status())) << r.status();
 
   // Try merging the patch for {0} and {0 or 1}.
-  r = CandidateMerge::AssessPatchMerge(merger, 0, {0, 1}, std::nullopt);
-  ASSERT_TRUE(r.ok()) << r.status();
+  r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({0, 1}, 0), std::nullopt);
   // {0 or 1} has no patch associated with it, so no merge is possible.
-  ASSERT_FALSE(r->has_value());
+  ASSERT_TRUE(absl::IsInternal(r.status())) << r.status();
+}
+
+TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
+  std::vector<Segment> segments =  {
+      {{'A'}, ProbabilityBound{0.95, 0.95}},
+      {{'B'}, ProbabilityBound{0.85, 0.85}},
+      {{'C'}, ProbabilityBound{0.75, 0.75}},
+  };
+  std::vector<Segment> segments_with_merges = segments;
+  segments_with_merges.push_back({{'A', 'B'}, ProbabilityBound{0.90, 0.90}});
+  segments_with_merges.push_back({{'A', 'C'}, ProbabilityBound{0.92, 0.92}});
+
+  auto probability_calculator =
+      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
+      all);
+
+  glyph_id_t gid_B = *FontHelper::GetNominalGlyph(roboto.get(), 'B');
+  size_cache->SetPatchSize({gid_B}, 200);
+
+  // Manually set up a conjunctive condition for gid_d: s1 AND s2.
+  context->glyph_condition_set.AddAndCondition(gid_B, 1);
+  context->glyph_condition_set.AddAndCondition(gid_B, 2);
+
+  ActivationCondition conj_cond = ActivationCondition::and_segments({1, 2}, 0);
+
+  // We also need a base patch to exist.
+  glyph_id_t gid_A = *FontHelper::GetNominalGlyph(roboto.get(), 'A');
+  size_cache->SetPatchSize({gid_A}, 100);
+  size_cache->SetPatchSize({gid_A, gid_B}, 250);
+  context->glyph_condition_set.AddAndCondition(gid_A, 0);
+
+  // Update glyph groupings.
+  auto sc = context->glyph_groupings.GroupGlyphs(
+      context->SegmentationInfo(), context->glyph_condition_set,
+      *context->glyph_closure_cache, std::nullopt, {gid_A, gid_B}, {0, 1, 2}, false);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  for (const auto& [c, g] : context->glyph_groupings.ConditionsAndGlyphs()) {
+    std::cerr << c.ToString() << " => "  << g.ToString() << std::endl;
+  }
+
+  context->patch_size_cache.reset(size_cache);
+
+  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), conj_cond, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+
+  // Delta =
+  // - (s0) * (size(gid_A) + 75)
+  // - (s1 AND s2) * (size(gid_B) + 75)
+  // + (s0 OR s1) and (s0 OR s2)) * (size(gid_A, gid_b) + 75)
+  ASSERT_EQ((*r)->CostDelta(),
+    - 0.95 * (100 + 75)
+    - (0.85 * 0.75) * (200 + 75)
+    + (0.90 * 0.92) * (250 + 75));
+
+  CandidateMerge merge = **r;
+  ASSERT_EQ(merge.SegmentsToMerge(), SegmentSet({0, 1, 2}));
 }
 
 TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
