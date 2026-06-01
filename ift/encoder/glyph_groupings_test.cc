@@ -448,7 +448,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_Noop) {
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
 }
 
-TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
+TEST_F(GlyphGroupingsTest, CombinePatches_AffectsConjunction) {
   auto sc = glyph_groupings_.CombinePatches(ToGlyphs({'d'}), ToGlyphs({'e'}));
   ASSERT_TRUE(sc.ok()) << sc;
 
@@ -457,20 +457,21 @@ TEST_F(GlyphGroupingsTest, CombinePatches_DoesntAffectConjunction) {
                                     std::nullopt, glyphs_to_group_, {});
   ASSERT_TRUE(sc.ok()) << sc;
 
-  // Condition map:
-  // s0 -> {a, b}
-  // s1 -> {c, d}
-  // s3 -> {k}
-  // s2 AND s3 -> {e, f}
-  // s2 OR s3 -> {j}
-  // s3 OR s4 -> {g, h}
+  // Condition map after merging 'd' and 'e':
+  // 'd' is in s1.
+  // 'e' is in s2 AND s3.
+  // Resulting condition: (s1 OR s2) AND (s1 OR s3).
+  // Glyphs: {c, d} U {e, f} = {c, d, e, f}.
+  
+  ActivationCondition merged_cond = ActivationCondition::composite_condition(
+      {SegmentSet({1, 2}), SegmentSet({1, 3})}, 0);
+
   flat_hash_map<ActivationCondition, GlyphSet> expected = {
       {ActivationCondition::exclusive_segment(0, 0), ToGlyphs({'a', 'b'})},
-      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
       {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k', 'k'})},
-      {ActivationCondition::and_segments({2, 3}, 0), ToGlyphs({'e', 'f'})},
       {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
       {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+      {merged_cond, ToGlyphs({'c', 'd', 'e', 'f'})},
   };
 
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
