@@ -721,6 +721,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   return cost_delta;
 }
 
+template<bool best_case>
 StatusOr<double> CandidateMerge::ComputePatchMergeCostDelta(
     const Merger& merger,
     const ActivationCondition& condition_a,
@@ -738,13 +739,11 @@ StatusOr<double> CandidateMerge::ComputePatchMergeCostDelta(
   double network_overhead = merger.Strategy().NetworkOverheadCost();
 
   double size_a = TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_a));
-  size_a += network_overhead;
   double probability_a = TRY(condition_a.Probability(
       merger.Context().SegmentationInfo().Segments(),
       *merger.Strategy().ProbabilityCalculator()));
 
   double size_b = TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_b));
-  size_b += network_overhead;
   double probability_b = TRY(condition_b.Probability(
       merger.Context().SegmentationInfo().Segments(),
       *merger.Strategy().ProbabilityCalculator()));
@@ -752,9 +751,23 @@ StatusOr<double> CandidateMerge::ComputePatchMergeCostDelta(
   ActivationCondition merged_condition =
       ActivationCondition::Or(condition_a, condition_b);
 
-  double merged_patch_size =
+  double merged_patch_size = 0.0;
+  if (best_case) {
+    double best_case_reduction_fraction =
+      merger.Strategy().BestCaseSizeReductionFraction();
+    uint32_t extra = std::min(size_a, size_b);
+    extra = std::max((uint32_t)(extra * best_case_reduction_fraction),
+                       Merger::BEST_CASE_MERGE_SIZE_DELTA);
+    merged_patch_size = std::max(size_a, size_b) + extra;
+  } else {
+    merged_patch_size =
       TRY(merger.Context().patch_size_cache->GetPatchSize(merged_glyphs));
+  }
+
+  size_a += network_overhead;
+  size_b += network_overhead;
   merged_patch_size += network_overhead;
+
   double merged_probability = TRY(merged_condition.Probability(
       merger.Context().SegmentationInfo().Segments(),
       *merger.Strategy().ProbabilityCalculator()));
@@ -931,6 +944,15 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
   GlyphSet combined_glyphs = glyphs_a;
   combined_glyphs.union_set(glyphs_b);
 
+  if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
+    // Pre-filter, if possible, with a best case computation to avoid computing the merged patch size.
+    double cost_delta = TRY(ComputePatchMergeCostDelta<true>(merger, condition_a, glyphs_a,
+                                                condition_b, glyphs_b, combined_glyphs));
+    if (cost_delta >= best_merge_candidate->CostDelta()) {
+      return std::nullopt;
+    }
+  }
+
   uint32_t new_patch_size =
       TRY(merger.Context().patch_size_cache->GetPatchSize(combined_glyphs));
 
@@ -942,7 +964,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
   double cost_delta = 0.0;
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
-    cost_delta = TRY(ComputePatchMergeCostDelta(merger, condition_a, glyphs_a,
+    cost_delta = TRY(ComputePatchMergeCostDelta<false>(merger, condition_a, glyphs_a,
                                                 condition_b, glyphs_b, combined_glyphs));
   }
 

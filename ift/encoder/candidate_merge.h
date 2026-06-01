@@ -163,6 +163,7 @@ struct CandidateMerge {
       Merger& merger, uint32_t existing_init_font_size,
       const ift::common::GlyphSet& moved_glyphs);
 
+  template<bool best_case>
   static absl::StatusOr<double> ComputePatchMergeCostDelta(
       const Merger& context,
       const ActivationCondition& condition_a,

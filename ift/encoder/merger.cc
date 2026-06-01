@@ -62,6 +62,47 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
     strategy_.ProbabilityCalculator()->ResetCache();
   }
 
+  // No more base merges remain, so we can start trying patch to patch merging
+  // of non-exclusive patches.
+  return TryNextPatchMerge();
+}
+
+StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
+
+  if (!strategy_.UsePatchMerges()) {
+    return std::nullopt;
+  }
+
+  // Work through the candidate composite conditions in order of descending probability.
+  std::vector<std::pair<ActivationCondition, double>> ordered_candidates;
+  for (const auto& [condition, glyphs] : Context().glyph_groupings.ConditionsAndGlyphs()) {
+    if (!glyphs.intersects(candidate_patch_merge_glyphs_)) {
+      continue;
+    }
+    ordered_candidates.emplace_back(condition, TRY(condition.Probability(Context().SegmentationInfo().Segments(), *strategy_.ProbabilityCalculator())));
+  }
+  std::sort(ordered_candidates.begin(), ordered_candidates.end(), [](const auto& a, const auto& b) {
+    return a.second > b.second;
+  });
+
+  while (true) {
+    if (ordered_candidates.empty()) {
+      break;
+    }
+
+    ActivationCondition base = ordered_candidates.begin()->first;
+    GlyphSet base_glyphs = Context().glyph_groupings.ConditionsAndGlyphs().at(base);
+
+    auto invalidation = TRY(PatchMergeWithCosts(base, ordered_candidates));
+    if (!invalidation.has_value()) {
+      // No merges left for this base, remove it from the candidate list.
+      ordered_candidates.erase(ordered_candidates.begin());
+      candidate_patch_merge_glyphs_.subtract(base_glyphs);
+    } else {
+      return invalidation;
+    }
+  }
+
   return std::nullopt;
 }
 
@@ -408,6 +449,32 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
   return smallest_candidate_merge->Apply(*this);
 }
 
+StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const ActivationCondition& base, const std::vector<std::pair<ActivationCondition, double>>& ordered_candidates) {
+  if (!strategy_.UsePatchMerges()) {
+    return absl::InternalError("Patch merging is disabled.");
+  }
+
+  std::optional<CandidateMerge> smallest_candidate_merge = CandidateMerge::BaselineCandidate(0, 0.0);
+
+  for (const auto& [next, probability] : ordered_candidates) {
+    if (next == base) {
+      continue;
+    }
+
+    auto candidate = TRY(CandidateMerge::AssessPatchMerge(*this, base, next, smallest_candidate_merge));
+    if (candidate.has_value()) {
+      smallest_candidate_merge = *candidate;
+    }
+  }
+
+  if (smallest_candidate_merge->SegmentsToMerge() == SegmentSet {0}) {
+    // baseline was not beat, so don't apply.
+    return std::nullopt;
+  }
+
+  return smallest_candidate_merge->Apply(*this);
+}
+
 double Merger::BestCaseInertProbabilityThreshold(
     uint32_t base_patch_size, double base_probability,
     double lowest_cost_delta) const {
@@ -559,20 +626,49 @@ Status Merger::CollectCompositeCandidateMerges(
     if (candidate_merge.has_value()) {
       smallest_candidate_merge = *candidate_merge;
     }
-
-    if (strategy_.UsePatchMerges()) {
-      // Also consider merging just the patches together (if enabled).
-      auto candidate_merge = TRY(CandidateMerge::AssessPatchMerge(
-          *this, ActivationCondition::exclusive_segment(base_segment_index, 0), next_condition,
-          smallest_candidate_merge));
-      if (candidate_merge.has_value() && candidate_merge->CostDelta() < 0) {
-        // For patch merges we only ever use them if they have negative cost delta.
-        // This prevents using patch merges soley to meet minimum group sizes.
-        smallest_candidate_merge = *candidate_merge;
-      }
-    }
   }
   return absl::OkStatus();
+}
+
+GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
+      SegmentationContext& context, const MergeStrategy& strategy,
+      const SegmentSet& candidate_segments,
+      const SegmentSet& inscope_segments,
+      segment_index_t optimization_cutoff_segment) {
+
+  GlyphSet out;
+
+  ActivationCondition last_exclusive =
+    ActivationCondition::exclusive_segment(UINT32_MAX, 0);
+  for (auto it = context.glyph_groupings.OrderedConditions().lower_bound(
+           last_exclusive);
+       it != context.glyph_groupings.OrderedConditions().end(); it++) {
+    const auto& condition = *it;
+
+    if (condition.IsFallback() || condition.IsExclusive()) {
+      continue;
+    }
+
+    SegmentSet triggering_segments = condition.TriggeringSegments();
+
+    std::optional<unsigned> min = triggering_segments.min();
+    if (min.has_value() && min >= optimization_cutoff_segment) {
+      // Don't consider merges where all triggering segment are cutoff
+      // the probability of these is too low to significantly impact overall
+      // cost
+      continue;
+    }
+
+    if (!triggering_segments.intersects(candidate_segments) ||
+        !triggering_segments.is_subset_of(inscope_segments)) {
+      // all triggering segments must be inscope otherwise this merge crosses
+      // merge group boundaries.
+      continue;
+    }
+
+    out.union_set(context.glyph_groupings.ConditionsAndGlyphs().at(condition));
+  }
+  return out;
 }
 
 StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithHeuristic(
