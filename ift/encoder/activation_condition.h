@@ -1,6 +1,7 @@
 #ifndef IFT_ENCODER_ACTIVATION_CONDITION_H_
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
+#include <cstdint>
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
@@ -167,6 +168,16 @@ class ActivationCondition {
     }
 
     return true;
+  }
+
+  uint32_t EffectiveGroupSize() const {
+    uint32_t min = UINT32_MAX;
+    for (const auto& sub_group : conditions_) {
+      if (sub_group.size() < min) {
+        min = sub_group.size();
+      }
+    }
+    return min;
   }
 
   // Compute and return the probability that this condition will be activated

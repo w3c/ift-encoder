@@ -977,8 +977,11 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
     const ActivationCondition& condition_b,
     const std::optional<CandidateMerge>& best_merge_candidate) {
 
-  PatchMergeDetails details = TRY(ComputePatchMergeDetails(merger, condition_a, condition_b));
+  if (condition_a == condition_b) {
+    return absl::InternalError("Can't merge condition with itself");
+  }
 
+  PatchMergeDetails details = TRY(ComputePatchMergeDetails(merger, condition_a, condition_b));
 
   if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
     // Pre-filter, if possible, with a best case computation to avoid computing the merged patch size.
@@ -1006,6 +1009,17 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
       cost_delta >= best_merge_candidate->CostDelta()) {
     // Our delta is not smaller, don't bother returning a candidate.
     return std::nullopt;
+  }
+
+  if (cost_delta >= 0) {
+    // Only accept a non-negative delta if the merge would also increase group size of at least one
+    // of the inputs
+    uint32_t merged_group_size = details.merged_condition.EffectiveGroupSize();
+    uint32_t a_group_size = details.condition_a.EffectiveGroupSize();
+    uint32_t b_group_size = details.condition_b.EffectiveGroupSize();
+    if (merged_group_size <= a_group_size && merged_group_size <= b_group_size) {
+      return std::nullopt;
+    }
   }
 
   CandidateMerge candidate;
