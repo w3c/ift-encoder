@@ -30,6 +30,7 @@ struct CandidateMerge {
   // The conditions of the patch to be merged into the base segment patch.
   // Only used for patch merges (when merged_segment_ is not present).
   std::optional<std::pair<ActivationCondition, ActivationCondition>> patch_merge_target_conditions_;
+  std::optional<common::GlyphSet> patch_merge_glyphs_;
 
   // The result of merge the above segments. If it's not present then
   // that implies this merge is only a merge of the base segment patch
@@ -163,14 +164,25 @@ struct CandidateMerge {
       Merger& merger, uint32_t existing_init_font_size,
       const ift::common::GlyphSet& moved_glyphs);
 
-  template<bool best_case>
-  static absl::StatusOr<double> ComputePatchMergeCostDelta(
-      const Merger& context,
-      const ActivationCondition& condition_a,
-      const ift::common::GlyphSet& glyphs_a,
-      const ActivationCondition& condition_b,
-      const ift::common::GlyphSet& glyphs_b,
-      const ift::common::GlyphSet& merged_glyphs);
+  struct PatchMergeDetails {
+    ActivationCondition condition_a;
+    ActivationCondition condition_b;
+    ActivationCondition merged_condition;
+
+    common::GlyphSet glyphs_a;
+    common::GlyphSet glyphs_b;
+    common::GlyphSet glyphs_existing;
+    common::GlyphSet glyphs_merged;
+
+    template<bool best_case>
+    absl::StatusOr<double> ComputePatchMergeCostDelta(const Merger& merger) const;
+  };
+
+  static absl::StatusOr<PatchMergeDetails> ComputePatchMergeDetails(
+    const Merger& merger,
+    const ActivationCondition& condition_a,
+    const ActivationCondition& condition_b
+  );
 
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,

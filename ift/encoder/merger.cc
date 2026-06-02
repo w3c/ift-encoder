@@ -69,7 +69,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
 
 StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
 
-  if (!strategy_.UsePatchMerges()) {
+  if (!strategy_.UsePatchMerges() || !strategy_.UseCosts()) {
     return std::nullopt;
   }
 
@@ -454,6 +454,9 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const Activ
     return absl::InternalError("Patch merging is disabled.");
   }
 
+  // TODO XXXXX only use 0 baseline once min group size is met.
+  //            non-negative merges are only allowed when group size would increase as a result of the
+  //            merge.
   std::optional<CandidateMerge> smallest_candidate_merge = CandidateMerge::BaselineCandidate(0, 0.0);
 
   for (const auto& [next, probability] : ordered_candidates) {

@@ -293,6 +293,7 @@ cc_test(
         "//ift/common:data_file_resolver",
         "//ift/common",
         "//ift/common:test_font_loader",
+        "//ift/freq:mock_probability_calculator",
         "@googletest//:gtest_main",
     ],
 )
