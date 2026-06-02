@@ -137,6 +137,10 @@ class MergeStrategy {
     return probability_calculator_.get();
   }
 
+  void SetMinimumGroupSize(uint32_t value) {
+    min_group_size_ = value;
+  }
+
   // Configures the threshold for when to stop optimizing segments.
   //
   // For the set of segments which account for less than this fraction of the

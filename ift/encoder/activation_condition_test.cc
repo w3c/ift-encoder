@@ -516,4 +516,11 @@ TEST(ActivationConditionTest, Intersects) {
   EXPECT_FALSE(b.Intersects({1}));
 }
 
+TEST(ActivationConditionTest, EffectiveGroupSize) {
+  EXPECT_EQ(ActivationCondition::exclusive_segment(5, 0).EffectiveGroupSize(), 1);
+  EXPECT_EQ(ActivationCondition::and_segments({1, 2, 3}, 0).EffectiveGroupSize(), 1);
+  EXPECT_EQ(ActivationCondition::or_segments({1, 2, 3}, 0).EffectiveGroupSize(), 3);
+  EXPECT_EQ(ActivationCondition::composite_condition({{1, 2, 3}, {4, 5, 6, 7}, {7, 8}},  0).EffectiveGroupSize(), 2);
+}
+
 }  // namespace ift::encoder

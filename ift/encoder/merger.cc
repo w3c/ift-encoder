@@ -454,10 +454,11 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const Activ
     return absl::InternalError("Patch merging is disabled.");
   }
 
-  // TODO XXXXX only use 0 baseline once min group size is met.
-  //            non-negative merges are only allowed when group size would increase as a result of the
-  //            merge.
-  std::optional<CandidateMerge> smallest_candidate_merge = CandidateMerge::BaselineCandidate(0, 0.0);
+  std::optional<CandidateMerge> smallest_candidate_merge = std::nullopt;
+  if (base.EffectiveGroupSize() >= strategy_.MinimumGroupSize()) {
+    // If minimum group size is met then we can filter non-negative candidates.
+    smallest_candidate_merge = CandidateMerge::BaselineCandidate(0, 0.0);
+  }
 
   for (const auto& [next, probability] : ordered_candidates) {
     if (next == base) {
@@ -470,7 +471,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const Activ
     }
   }
 
-  if (smallest_candidate_merge->SegmentsToMerge() == SegmentSet {0}) {
+  if (!smallest_candidate_merge.has_value() || smallest_candidate_merge->SegmentsToMerge() == SegmentSet {0}) {
     // baseline was not beat, so don't apply.
     return std::nullopt;
   }
