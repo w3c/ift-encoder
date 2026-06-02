@@ -258,22 +258,24 @@ message CostConfiguration {
   // By default merges under cost strategy are made by joining segments together, if this setting is
   // enabled than an alternate merge type, patch merge, will be considered by the merger. In a patch
   // merge glyphs from two patches are merged together along with the conditions for those patches.
+  // For example if there are two patches:
   //
-  // WARNING: This is currently defaulted off since there are some known issues with this approach
-  // where shapers can make glyph substitutions that are not encoded in GSUB. When patch merges are
-  // used it's possible to have a glyph included a patch, but under some subset definitions the glyph
-  // is not actually reachable. Because it's not reachable it's dependencies may not have been loaded since
-  // they aren't technically needed. However, in some cases such glyphs can be reached in practice by shaper
-  // substitutions which the glyph closure doesn't take into acount (relevant harfbuzz issue:
-  // https://github.com/harfbuzz/harfbuzz/issues/2283).
+  // if (A) -> glyph 1, 2, 3
+  // if (B) -> glyph 7, 8, 9
   //
-  // Segment merges don't run into this issue since they will only ever include reachable glyphs
-  // which means dependencies are always fully satisified. The shaper won't do substitutions if the appropriate
-  // glyph isn't present.
+  // Then a patch merge will generate a new patch wich replaces these with:
   //
-  // Work is planned to fix this issue (either in the harfbuzz closure or with a workaround in the segmenter),
-  // until then it's recommended to not used this except for testing (or if appropriate care has been taken
-  // in producing the input segments to avoid this issue).
+  // if (A or B) -> glyph 1, 2, 3, 7, 8, 9
+  //
+  // Without modifying any segement definitions.
+  //
+  // Patch merges are checked between pairs of non-exclusive patches (those with more than one segment
+  // in their activation condition). Where total cost is reduced patches will be merged. Additionally,
+  // if minimum group sizes are configured then patch merges can be used to raise the effective group
+  // sizes for non-exclusive patches.
+  //
+  // Enabling patch merging will typically result in lower overall costs, but will increase the total
+  // segmentation time due to larger number of patch comparisons made.
   bool experimental_use_patch_merges = 10 [default = false];
 }
 
