@@ -119,8 +119,7 @@ class Merger {
       SegmentationContext& context, const MergeStrategy& strategy,
       const ift::common::SegmentSet& candidate_segments,
       const ift::common::SegmentSet& inscope_segments,
-      segment_index_t optimization_cutoff_segment
-    );
+      segment_index_t optimization_cutoff_segment);
 
   absl::StatusOr<std::optional<InvalidationSet>> TryNextPatchMerge();
 
@@ -131,7 +130,9 @@ class Merger {
       uint32_t base_segment_index);
 
   absl::StatusOr<std::optional<InvalidationSet>> PatchMergeWithCosts(
-    const ActivationCondition& base, const std::vector<std::pair<ActivationCondition, double>>& ordered_candidates);
+      const ActivationCondition& base,
+      const std::vector<std::pair<ActivationCondition, double>>&
+          ordered_candidates);
 
   absl::Status CollectExclusiveCandidateMerges(
       uint32_t base_segment_index,

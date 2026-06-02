@@ -462,7 +462,7 @@ TEST_F(GlyphGroupingsTest, CombinePatches_AffectsConjunction) {
   // 'e' is in s2 AND s3.
   // Resulting condition: (s1 OR s2) AND (s1 OR s3).
   // Glyphs: {c, d} U {e, f} = {c, d, e, f}.
-  
+
   ActivationCondition merged_cond = ActivationCondition::composite_condition(
       {SegmentSet({1, 2}), SegmentSet({1, 3})}, 0);
 

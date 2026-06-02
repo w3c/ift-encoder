@@ -3,10 +3,10 @@
 
 #include <cstdint>
 #include <optional>
-#include "ift/encoder/activation_condition.h"
 
 #include "absl/status/statusor.h"
 #include "ift/common/int_set.h"
+#include "ift/encoder/activation_condition.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
@@ -29,7 +29,8 @@ struct CandidateMerge {
 
   // The conditions of the patch to be merged into the base segment patch.
   // Only used for patch merges (when merged_segment_ is not present).
-  std::optional<std::pair<ActivationCondition, ActivationCondition>> patch_merge_target_conditions_;
+  std::optional<std::pair<ActivationCondition, ActivationCondition>>
+      patch_merge_target_conditions_;
   std::optional<common::GlyphSet> patch_merge_glyphs_;
 
   // The result of merge the above segments. If it's not present then
@@ -123,8 +124,7 @@ struct CandidateMerge {
   //
   // Returns a candidate merge object which stores information on the merge.
   static absl::StatusOr<std::optional<CandidateMerge>> AssessPatchMerge(
-      Merger& context,
-      const ActivationCondition& condition_a,
+      Merger& context, const ActivationCondition& condition_a,
       const ActivationCondition& condition_b,
       const std::optional<CandidateMerge>& best_merge_candidate);
 
@@ -174,15 +174,14 @@ struct CandidateMerge {
     common::GlyphSet glyphs_existing;
     common::GlyphSet glyphs_merged;
 
-    template<bool best_case>
-    absl::StatusOr<double> ComputePatchMergeCostDelta(const Merger& merger) const;
+    template <bool best_case>
+    absl::StatusOr<double> ComputePatchMergeCostDelta(
+        const Merger& merger) const;
   };
 
   static absl::StatusOr<PatchMergeDetails> ComputePatchMergeDetails(
-    const Merger& merger,
-    const ActivationCondition& condition_a,
-    const ActivationCondition& condition_b
-  );
+      const Merger& merger, const ActivationCondition& condition_a,
+      const ActivationCondition& condition_b);
 
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,

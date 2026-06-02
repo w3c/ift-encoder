@@ -218,9 +218,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   // Case 1: merge high frequency segments {0, 1}. Best current merge is set at
   // 0, assess merge should return a better candidate.
   auto r = CandidateMerge::AssessSegmentMerge(
-      merger, 0, {1},
-      CandidateMerge::BaselineCandidate(
-          4, 0.0));
+      merger, 0, {1}, CandidateMerge::BaselineCandidate(4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -229,9 +227,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   // Case 2: merge high frequency segments {0, 1}. Best current merge is set at
   // -500, assess merge should not return a better candidate.
   r = CandidateMerge::AssessSegmentMerge(
-      merger, 0, {1},
-      CandidateMerge::BaselineCandidate(
-          4, -500.0));
+      merger, 0, {1}, CandidateMerge::BaselineCandidate(4, -500.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -240,9 +236,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   // network overhead cost reduction. Overall cost should be positive. Baseline
   // is set at 0 so no candidate is expected from the return.
   r = CandidateMerge::AssessSegmentMerge(
-      merger, 0, {3},
-      CandidateMerge::BaselineCandidate(
-          4, 0.0));
+      merger, 0, {3}, CandidateMerge::BaselineCandidate(4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 
@@ -250,9 +244,7 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   base_size =
       *context->patch_size_cache->GetPatchSize({'s', 't', 'u', 'v', 'w', 'x'});
   r = CandidateMerge::AssessSegmentMerge(
-      merger, 3, {0},
-      CandidateMerge::BaselineCandidate(
-          4, 0.0));
+      merger, 3, {0}, CandidateMerge::BaselineCandidate(4, 0.0));
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_FALSE(r->has_value());
 }
@@ -424,7 +416,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
       all);
 
   // Try merging the patch for {0} and {1 OR 4}.
-  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({1, 4}, 0), std::nullopt);
+  auto r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0),
+      ActivationCondition::or_segments({1, 4}, 0), std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   CandidateMerge merge = **r;
@@ -434,7 +428,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
   ASSERT_LT(merge.CostDelta(), 0);
 
   // Try merging the patch for {0} and {2 OR 3}.
-  r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({2, 3}, 0), std::nullopt);
+  r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0),
+      ActivationCondition::or_segments({2, 3}, 0), std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
   merge = **r;
@@ -477,18 +473,22 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
       all);
 
   // Try merging the patch for {0} and {1}.
-  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({1}, 0), std::nullopt);
+  auto r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0),
+      ActivationCondition::or_segments({1}, 0), std::nullopt);
   // segment 1 has no patch associated with it, so no merge is possible.
   ASSERT_TRUE(absl::IsInternal(r.status())) << r.status();
 
   // Try merging the patch for {0} and {0 or 1}.
-  r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), ActivationCondition::or_segments({0, 1}, 0), std::nullopt);
+  r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0),
+      ActivationCondition::or_segments({0, 1}, 0), std::nullopt);
   // {0 or 1} has no patch associated with it, so no merge is possible.
   ASSERT_TRUE(absl::IsInternal(r.status())) << r.status();
 }
 
 TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
-  std::vector<Segment> segments =  {
+  std::vector<Segment> segments = {
       {{'A'}, ProbabilityBound{0.95, 0.95}},
       {{'B'}, ProbabilityBound{0.85, 0.85}},
       {{'C'}, ProbabilityBound{0.75, 0.75}},
@@ -532,16 +532,19 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
   // Update glyph groupings.
   auto sc = context->glyph_groupings.GroupGlyphs(
       context->SegmentationInfo(), context->glyph_condition_set,
-      *context->glyph_closure_cache, std::nullopt, {gid_A, gid_B}, {0, 1, 2}, false);
+      *context->glyph_closure_cache, std::nullopt, {gid_A, gid_B}, {0, 1, 2},
+      false);
   ASSERT_TRUE(sc.ok()) << sc;
 
   for (const auto& [c, g] : context->glyph_groupings.ConditionsAndGlyphs()) {
-    std::cerr << c.ToString() << " => "  << g.ToString() << std::endl;
+    std::cerr << c.ToString() << " => " << g.ToString() << std::endl;
   }
 
   context->patch_size_cache.reset(size_cache);
 
-  auto r = CandidateMerge::AssessPatchMerge(merger, ActivationCondition::exclusive_segment(0, 0), conj_cond, std::nullopt);
+  auto r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0), conj_cond,
+      std::nullopt);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_TRUE(r->has_value());
 
@@ -549,10 +552,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
   // - (s0) * (size(gid_A) + 75)
   // - (s1 AND s2) * (size(gid_B) + 75)
   // + (s0 OR s1) and (s0 OR s2)) * (size(gid_A, gid_b) + 75)
-  ASSERT_EQ((*r)->CostDelta(),
-    - 0.95 * (100 + 75)
-    - (0.85 * 0.75) * (200 + 75)
-    + (0.90 * 0.92) * (250 + 75));
+  ASSERT_EQ((*r)->CostDelta(), -0.95 * (100 + 75) - (0.85 * 0.75) * (200 + 75) +
+                                   (0.90 * 0.92) * (250 + 75));
 
   CandidateMerge merge = **r;
   ASSERT_EQ(merge.SegmentsToMerge(), SegmentSet({0, 1, 2}));

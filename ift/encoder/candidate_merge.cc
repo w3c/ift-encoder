@@ -128,21 +128,24 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
 }
 
 Status CandidateMerge::ApplyPatchMerge(Merger& merger) {
-  if (!patch_merge_target_conditions_.has_value() || !patch_merge_glyphs_.has_value()) {
-    return absl::InternalError("patch_merge_target_conditions_/patch_merge_glyphs_ is not set for patch merge");
+  if (!patch_merge_target_conditions_.has_value() ||
+      !patch_merge_glyphs_.has_value()) {
+    return absl::InternalError(
+        "patch_merge_target_conditions_/patch_merge_glyphs_ is not set for "
+        "patch merge");
   }
 
   VLOG(0) << "  Merged patches from "
-          << patch_merge_target_conditions_->first.ToString()
-          << " with "
-          << patch_merge_target_conditions_->second.ToString()
-          << " up to " << patch_merge_glyphs_->size() << " glyphs." << std::endl
+          << patch_merge_target_conditions_->first.ToString() << " with "
+          << patch_merge_target_conditions_->second.ToString() << " up to "
+          << patch_merge_glyphs_->size() << " glyphs." << std::endl
           << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
           << "  Cost delta is " << cost_delta_ << ".";
 
   // CombinePatches() will do invalidation as needed, so nothing else needs to
   // be done to apply this merge.
-  return merger.Context().glyph_groupings.CombinePatches(*patch_merge_glyphs_, {});
+  return merger.Context().glyph_groupings.CombinePatches(*patch_merge_glyphs_,
+                                                         {});
 }
 
 static bool WouldMixFeaturesAndCodepoints(
@@ -360,8 +363,7 @@ static StatusOr<double> CostFor(Merger& merger,
 StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     Merger& merger, uint32_t existing_init_font_size,
     const GlyphSet& moved_glyphs,
-    flat_hash_map<ift::common::GlyphSet, uint32_t>&
-        smallest_size_increases) {
+    flat_hash_map<ift::common::GlyphSet, uint32_t>& smallest_size_increases) {
   // Brotli compression results can be a bit noisy and it's common to see very
   // different size increase (in both directions) for adding the same glyphs as
   // the base changes. So to help control some of this noise we use
@@ -715,27 +717,30 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   return cost_delta;
 }
 
-StatusOr<CandidateMerge::PatchMergeDetails> CandidateMerge::ComputePatchMergeDetails(
-  const Merger& merger,
-  const ActivationCondition &condition_a,
-  const ActivationCondition &condition_b) {
-  const auto& condition_and_glyphs = merger.Context().glyph_groupings.ConditionsAndGlyphs();
+StatusOr<CandidateMerge::PatchMergeDetails>
+CandidateMerge::ComputePatchMergeDetails(
+    const Merger& merger, const ActivationCondition& condition_a,
+    const ActivationCondition& condition_b) {
+  const auto& condition_and_glyphs =
+      merger.Context().glyph_groupings.ConditionsAndGlyphs();
 
   auto glyphs_a_it = condition_and_glyphs.find(condition_a);
   auto glyphs_b_it = condition_and_glyphs.find(condition_b);
 
   if (glyphs_a_it == condition_and_glyphs.end() ||
       glyphs_b_it == condition_and_glyphs.end()) {
-    return absl::InternalError(absl::StrCat("Unable to find glyphs for conditions: ",
-      condition_a.ToString(), ", ", condition_b.ToString()));
+    return absl::InternalError(absl::StrCat(
+        "Unable to find glyphs for conditions: ", condition_a.ToString(), ", ",
+        condition_b.ToString()));
   }
 
   const GlyphSet& glyphs_a = glyphs_a_it->second;
   const GlyphSet& glyphs_b = glyphs_b_it->second;
 
   if (glyphs_a.empty() || glyphs_b.empty()) {
-    return absl::InternalError(absl::StrCat("Unexpected empty glyph sets for conditions: ",
-      condition_a.ToString(), ", ", condition_b.ToString()));
+    return absl::InternalError(absl::StrCat(
+        "Unexpected empty glyph sets for conditions: ", condition_a.ToString(),
+        ", ", condition_b.ToString()));
   }
 
   GlyphSet merged_glyphs = glyphs_a;
@@ -745,32 +750,34 @@ StatusOr<CandidateMerge::PatchMergeDetails> CandidateMerge::ComputePatchMergeDet
       ActivationCondition::Or(condition_a, condition_b);
 
   GlyphSet existing_glyphs;
-  auto existing_condition = merger.Context().glyph_groupings.ConditionsAndGlyphs().find(merged_condition);
-  if (existing_condition != merger.Context().glyph_groupings.ConditionsAndGlyphs().end()) {
+  auto existing_condition =
+      merger.Context().glyph_groupings.ConditionsAndGlyphs().find(
+          merged_condition);
+  if (existing_condition !=
+      merger.Context().glyph_groupings.ConditionsAndGlyphs().end()) {
     existing_glyphs = existing_condition->second;
     merged_glyphs.union_set(existing_condition->second);
   }
 
-  // It's possible for the new condition to be equal to one of the input conditions,
-  // in this case we don't want to record glyphs_existing since that would cause double
-  // counting of the patches removal in cost assessment.
+  // It's possible for the new condition to be equal to one of the input
+  // conditions, in this case we don't want to record glyphs_existing since that
+  // would cause double counting of the patches removal in cost assessment.
   if (condition_a == merged_condition || condition_b == merged_condition) {
     existing_glyphs.clear();
   }
 
-  return PatchMergeDetails {
-    .condition_a = condition_a,
-    .condition_b = condition_b,
-    .merged_condition = merged_condition,
-    .glyphs_a = glyphs_a,
-    .glyphs_b = glyphs_b,
-    .glyphs_existing = existing_glyphs,
-    .glyphs_merged = merged_glyphs
-  };
+  return PatchMergeDetails{.condition_a = condition_a,
+                           .condition_b = condition_b,
+                           .merged_condition = merged_condition,
+                           .glyphs_a = glyphs_a,
+                           .glyphs_b = glyphs_b,
+                           .glyphs_existing = existing_glyphs,
+                           .glyphs_merged = merged_glyphs};
 }
 
-template<bool best_case>
-StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(const Merger& merger) const {
+template <bool best_case>
+StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
+    const Merger& merger) const {
   // For a patch merge only three things are affected:
   // 1. Remove the patch with condition equal to condition_a.
   // 2. Remove the patch with condition equal to condition_b.
@@ -780,34 +787,37 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(c
 
   double network_overhead = merger.Strategy().NetworkOverheadCost();
 
-  double size_a = TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_a));
-  double probability_a = TRY(condition_a.Probability(
-      merger.Context().SegmentationInfo().Segments(),
-      *merger.Strategy().ProbabilityCalculator()));
+  double size_a =
+      TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_a));
+  double probability_a = TRY(
+      condition_a.Probability(merger.Context().SegmentationInfo().Segments(),
+                              *merger.Strategy().ProbabilityCalculator()));
 
-  double size_b = TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_b));
-  double probability_b = TRY(condition_b.Probability(
-      merger.Context().SegmentationInfo().Segments(),
-      *merger.Strategy().ProbabilityCalculator()));
+  double size_b =
+      TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_b));
+  double probability_b = TRY(
+      condition_b.Probability(merger.Context().SegmentationInfo().Segments(),
+                              *merger.Strategy().ProbabilityCalculator()));
 
   double size_existing = 0.0;
   if (!glyphs_existing.empty()) {
-    size_existing = TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_existing));
+    size_existing =
+        TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_existing));
   }
 
   double merged_patch_size = 0.0;
   if (best_case) {
     double best_case_reduction_fraction =
-      merger.Strategy().BestCaseSizeReductionFraction();
+        merger.Strategy().BestCaseSizeReductionFraction();
     uint32_t total_size = size_a + size_b + size_existing;
     uint32_t max_size = std::max(std::max(size_a, size_b), size_existing);
     uint32_t extra = total_size - max_size;
     extra = std::max((uint32_t)(extra * best_case_reduction_fraction),
-                       Merger::BEST_CASE_MERGE_SIZE_DELTA);
+                     Merger::BEST_CASE_MERGE_SIZE_DELTA);
     merged_patch_size = max_size + extra;
   } else {
     merged_patch_size =
-      TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_merged));
+        TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_merged));
   }
 
   size_a += network_overhead;
@@ -819,8 +829,8 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(c
       merger.Context().SegmentationInfo().Segments(),
       *merger.Strategy().ProbabilityCalculator()));
 
-  VLOG(1) << "cost_delta for patch merge of " << condition_a.ToString() << " with "
-          << condition_b.ToString() << " =";
+  VLOG(1) << "cost_delta for patch merge of " << condition_a.ToString()
+          << " with " << condition_b.ToString() << " =";
   double cost_delta = 0.0;
 
   double d = merged_probability * merged_patch_size;
@@ -832,18 +842,18 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(c
     d = merged_probability * size_existing;
     cost_delta -= d;
     VLOG(1) << "    - (" << merged_probability << " * " << size_existing
-          << ") -> " << d << " [removed existing patch]";
+            << ") -> " << d << " [removed existing patch]";
   }
 
   d = probability_a * size_a;
   cost_delta -= d;
-  VLOG(1) << "    - (" << probability_a << " * " << size_a
-          << ") -> " << d << " [removed patch A]";
+  VLOG(1) << "    - (" << probability_a << " * " << size_a << ") -> " << d
+          << " [removed patch A]";
 
   d = probability_b * size_b;
   cost_delta -= d;
-  VLOG(1) << "    - (" << probability_b << " * " << size_b
-          << ") -> " << d << " [removed patch B]";
+  VLOG(1) << "    - (" << probability_b << " * " << size_b << ") -> " << d
+          << " [removed patch B]";
 
   VLOG(1) << "    = " << cost_delta;
   return cost_delta;
@@ -972,27 +982,27 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
 }
 
 StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
-    Merger& merger,
-    const ActivationCondition& condition_a,
+    Merger& merger, const ActivationCondition& condition_a,
     const ActivationCondition& condition_b,
     const std::optional<CandidateMerge>& best_merge_candidate) {
-
   if (condition_a == condition_b) {
     return absl::InternalError("Can't merge condition with itself");
   }
 
-  PatchMergeDetails details = TRY(ComputePatchMergeDetails(merger, condition_a, condition_b));
+  PatchMergeDetails details =
+      TRY(ComputePatchMergeDetails(merger, condition_a, condition_b));
 
   if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
-    // Pre-filter, if possible, with a best case computation to avoid computing the merged patch size.
+    // Pre-filter, if possible, with a best case computation to avoid computing
+    // the merged patch size.
     double cost_delta = TRY(details.ComputePatchMergeCostDelta<true>(merger));
     if (cost_delta >= best_merge_candidate->CostDelta()) {
       return std::nullopt;
     }
   }
 
-  uint32_t new_patch_size =
-      TRY(merger.Context().patch_size_cache->GetPatchSize(details.glyphs_merged));
+  uint32_t new_patch_size = TRY(
+      merger.Context().patch_size_cache->GetPatchSize(details.glyphs_merged));
 
   if (!merger.Strategy().UseCosts() &&
       new_patch_size > merger.Strategy().PatchSizeMaxBytes()) {
@@ -1012,21 +1022,23 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
   }
 
   if (cost_delta >= 0) {
-    // Only accept a non-negative delta if the merge would also increase group size of at least one
-    // of the inputs
+    // Only accept a non-negative delta if the merge would also increase group
+    // size of at least one of the inputs
     uint32_t merged_group_size = details.merged_condition.EffectiveGroupSize();
     uint32_t a_group_size = details.condition_a.EffectiveGroupSize();
     uint32_t b_group_size = details.condition_b.EffectiveGroupSize();
-    if (merged_group_size <= a_group_size && merged_group_size <= b_group_size) {
+    if (merged_group_size <= a_group_size &&
+        merged_group_size <= b_group_size) {
       return std::nullopt;
     }
   }
 
   CandidateMerge candidate;
-  candidate.base_segment_index_ = 0; // Dummy value, not used for patch merges.
+  candidate.base_segment_index_ = 0;  // Dummy value, not used for patch merges.
   candidate.segments_to_merge_ = condition_a.TriggeringSegments();
   candidate.segments_to_merge_.union_set(condition_b.TriggeringSegments());
-  candidate.patch_merge_target_conditions_ = std::make_pair(std::move(details.condition_a), std::move(details.condition_b));
+  candidate.patch_merge_target_conditions_ = std::make_pair(
+      std::move(details.condition_a), std::move(details.condition_b));
   candidate.patch_merge_glyphs_ = details.glyphs_merged;
   candidate.input_segments_are_inert_ = false;
   candidate.new_patch_size_ = new_patch_size;
