@@ -473,6 +473,14 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(
       continue;
     }
 
+    std::optional<segment_index_t> min = next.TriggeringSegments().min();
+    if (smallest_candidate_merge.has_value() && min.has_value() &&
+        min >= optimization_cutoff_segment_) {
+      // This condition is below the optimization cutoff, so we won't evaluate
+      // it unless we still need to select at least one candidate.
+      continue;
+    }
+
     auto candidate = TRY(CandidateMerge::AssessPatchMerge(
         *this, base, next, smallest_candidate_merge));
     if (candidate.has_value()) {
@@ -662,17 +670,6 @@ GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
     }
 
     SegmentSet triggering_segments = condition.TriggeringSegments();
-
-    // TODO XXXX optimization cutoff should filter the "B" patch (once min group size is met), all
-    // inscope patches need to be considered as the "A" patch for minimum group
-    // size merging.
-    std::optional<unsigned> min = triggering_segments.min();
-    if (min.has_value() && min >= optimization_cutoff_segment) {
-      // Don't consider merges where all triggering segment are cutoff
-      // the probability of these is too low to significantly impact overall
-      // cost
-      continue;
-    }
 
     if (!triggering_segments.intersects(candidate_segments) ||
         !triggering_segments.is_subset_of(inscope_segments)) {
