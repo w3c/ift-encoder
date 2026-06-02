@@ -86,7 +86,12 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
                                   *strategy_.ProbabilityCalculator())));
   }
   std::sort(ordered_candidates.begin(), ordered_candidates.end(),
-            [](const auto& a, const auto& b) { return a.second > b.second; });
+            [](const auto& a, const auto& b) {
+              if (a.second != b.second) {
+                return a.second > b.second;
+              }
+              return a.first < b.first;
+            });
 
   while (!ordered_candidates.empty()) {
     ActivationCondition base = ordered_candidates.begin()->first;
@@ -658,6 +663,9 @@ GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
 
     SegmentSet triggering_segments = condition.TriggeringSegments();
 
+    // TODO XXXX optimization cutoff should filter the "B" patch (once min group size is met), all
+    // inscope patches need to be considered as the "A" patch for minimum group
+    // size merging.
     std::optional<unsigned> min = triggering_segments.min();
     if (min.has_value() && min >= optimization_cutoff_segment) {
       // Don't consider merges where all triggering segment are cutoff
