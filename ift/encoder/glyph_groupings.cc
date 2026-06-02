@@ -391,8 +391,10 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
   btree_set<ActivationCondition> affected_conditions;
   for (const GlyphSet& gids : TRY(combined_patches_.NonIdentityGroups())) {
     for (glyph_id_t gid : gids) {
-      auto it = conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
-      if (it != conditions_and_glyphs_pre_combination_.GlyphToCondition().end()) {
+      auto it =
+          conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
+      if (it !=
+          conditions_and_glyphs_pre_combination_.GlyphToCondition().end()) {
         affected_conditions.insert(it->second);
       }
     }

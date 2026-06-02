@@ -68,30 +68,30 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
 }
 
 StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
-
   if (!strategy_.UsePatchMerges() || !strategy_.UseCosts()) {
     return std::nullopt;
   }
 
-  // Work through the candidate composite conditions in order of descending probability.
+  // Work through the candidate composite conditions in order of descending
+  // probability.
   std::vector<std::pair<ActivationCondition, double>> ordered_candidates;
-  for (const auto& [condition, glyphs] : Context().glyph_groupings.ConditionsAndGlyphs()) {
+  for (const auto& [condition, glyphs] :
+       Context().glyph_groupings.ConditionsAndGlyphs()) {
     if (!glyphs.intersects(candidate_patch_merge_glyphs_)) {
       continue;
     }
-    ordered_candidates.emplace_back(condition, TRY(condition.Probability(Context().SegmentationInfo().Segments(), *strategy_.ProbabilityCalculator())));
+    ordered_candidates.emplace_back(
+        condition,
+        TRY(condition.Probability(Context().SegmentationInfo().Segments(),
+                                  *strategy_.ProbabilityCalculator())));
   }
-  std::sort(ordered_candidates.begin(), ordered_candidates.end(), [](const auto& a, const auto& b) {
-    return a.second > b.second;
-  });
+  std::sort(ordered_candidates.begin(), ordered_candidates.end(),
+            [](const auto& a, const auto& b) { return a.second > b.second; });
 
-  while (true) {
-    if (ordered_candidates.empty()) {
-      break;
-    }
-
+  while (!ordered_candidates.empty()) {
     ActivationCondition base = ordered_candidates.begin()->first;
-    GlyphSet base_glyphs = Context().glyph_groupings.ConditionsAndGlyphs().at(base);
+    GlyphSet base_glyphs =
+        Context().glyph_groupings.ConditionsAndGlyphs().at(base);
 
     auto invalidation = TRY(PatchMergeWithCosts(base, ordered_candidates));
     if (!invalidation.has_value()) {
@@ -417,8 +417,8 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
-    smallest_candidate_merge = CandidateMerge::BaselineCandidate(
-        base_segment_index, 0.0);
+    smallest_candidate_merge =
+        CandidateMerge::BaselineCandidate(base_segment_index, 0.0);
   }
 
   // TODO(garretrieger): On each iteration we should consider all merge pairs
@@ -449,7 +449,10 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
   return smallest_candidate_merge->Apply(*this);
 }
 
-StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const ActivationCondition& base, const std::vector<std::pair<ActivationCondition, double>>& ordered_candidates) {
+StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(
+    const ActivationCondition& base,
+    const std::vector<std::pair<ActivationCondition, double>>&
+        ordered_candidates) {
   if (!strategy_.UsePatchMerges()) {
     return absl::InternalError("Patch merging is disabled.");
   }
@@ -465,13 +468,15 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(const Activ
       continue;
     }
 
-    auto candidate = TRY(CandidateMerge::AssessPatchMerge(*this, base, next, smallest_candidate_merge));
+    auto candidate = TRY(CandidateMerge::AssessPatchMerge(
+        *this, base, next, smallest_candidate_merge));
     if (candidate.has_value()) {
       smallest_candidate_merge = *candidate;
     }
   }
 
-  if (!smallest_candidate_merge.has_value() || smallest_candidate_merge->SegmentsToMerge() == SegmentSet {0}) {
+  if (!smallest_candidate_merge.has_value() ||
+      smallest_candidate_merge->SegmentsToMerge() == SegmentSet{0}) {
     // baseline was not beat, so don't apply.
     return std::nullopt;
   }
@@ -635,15 +640,13 @@ Status Merger::CollectCompositeCandidateMerges(
 }
 
 GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
-      SegmentationContext& context, const MergeStrategy& strategy,
-      const SegmentSet& candidate_segments,
-      const SegmentSet& inscope_segments,
-      segment_index_t optimization_cutoff_segment) {
-
+    SegmentationContext& context, const MergeStrategy& strategy,
+    const SegmentSet& candidate_segments, const SegmentSet& inscope_segments,
+    segment_index_t optimization_cutoff_segment) {
   GlyphSet out;
 
   ActivationCondition last_exclusive =
-    ActivationCondition::exclusive_segment(UINT32_MAX, 0);
+      ActivationCondition::exclusive_segment(UINT32_MAX, 0);
   for (auto it = context.glyph_groupings.OrderedConditions().lower_bound(
            last_exclusive);
        it != context.glyph_groupings.OrderedConditions().end(); it++) {

@@ -13,9 +13,9 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
-#include "ift/freq/mock_probability_calculator.h"
 
 using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
 using ift::config::CLOSURE_ONLY;
@@ -35,10 +35,10 @@ using ift::common::hb_face_unique_ptr;
 using ift::common::IntSet;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
+using ift::freq::MockProbabilityCalculator;
 using ift::freq::ProbabilityBound;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
-using ift::freq::MockProbabilityCalculator;
 
 namespace ift::encoder {
 
@@ -919,7 +919,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   UnicodeFrequencies frequencies{
       {{'A', 'A'}, 1000},
       {{'C', 'C'}, 1000},
-      {{0xC1, 0xC1}, 1}, /* Aacute */
+      {{0xC1, 0xC1}, 1},   /* Aacute */
       {{0x106, 0x106}, 1}, /* Cacute */
   };
 
@@ -928,15 +928,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation =
-        segmenter_dep_graph_only.CodepointToGlyphSegments(
-            roboto.get(), {}, {
-                {'A'},
-                {'C'},
-                {0xC1}, /* Aacute */
-                {0x106}, /* Cacute */
-            },
-            strategy);
+  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {
+          {'A'},
+          {'C'},
+          {0xC1},  /* Aacute */
+          {0x106}, /* Cacute */
+      },
+      strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -957,10 +957,10 @@ if ((s0 OR s1 OR s2 OR s3)) then p1
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
-    UnicodeFrequencies frequencies{
+  UnicodeFrequencies frequencies{
       {{'A', 'A'}, 1000},
       {{'C', 'C'}, 1000},
-      {{0xC1, 0xC1}, 1}, /* Aacute */
+      {{0xC1, 0xC1}, 1},   /* Aacute */
       {{0x106, 0x106}, 1}, /* Cacute */
   };
 
@@ -969,15 +969,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(false);
 
-  auto segmentation =
-        segmenter_dep_graph_only.CodepointToGlyphSegments(
-            roboto.get(), {}, {
-                {'A'},
-                {'C'},
-                {0xC1}, /* Aacute */
-                {0x106}, /* Cacute */
-            },
-            strategy);
+  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {
+          {'A'},
+          {'C'},
+          {0xC1},  /* Aacute */
+          {0x106}, /* Cacute */
+      },
+      strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1005,11 +1005,9 @@ if ((s1 OR s3) AND (s2 OR s3)) then p4
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
   UnicodeFrequencies frequencies{
-      {{' ', ' '}, 1000},
-      {{'A', 'A'}, 1},
-      {{'C', 'C'}, 1},
-      {{0xC1, 0xC1}, 1}, /* Aacute */
-      {{0x106, 0x106}, 1}, /* Cacute */
+      {{' ', ' '}, 1000},  {{'A', 'A'}, 1},
+      {{'C', 'C'}, 1},     {{0xC1, 0xC1}, 1}, /* Aacute */
+      {{0x106, 0x106}, 1},                    /* Cacute */
   };
 
   MergeStrategy strategy =
@@ -1017,15 +1015,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation =
-        segmenter_dep_graph_only.CodepointToGlyphSegments(
-            roboto.get(), {}, {
-                {'A'},
-                {'C'},
-                {0xC1}, /* Aacute */
-                {0x106}, /* Cacute */
-            },
-            strategy);
+  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {
+          {'A'},
+          {'C'},
+          {0xC1},  /* Aacute */
+          {0x106}, /* Cacute */
+      },
+      strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1036,8 +1034,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-  // When min group size is 2, there's no merging done since merges are unfavourable
-  // and the minimum is met.
+  // When min group size is 2, there's no merging done since merges are
+  // unfavourable and the minimum is met.
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37 }
@@ -1054,15 +1052,15 @@ if ((s1 OR s3) AND (s2 OR s3)) then p4
 
   // Now with min group size larger merges will be done to reach min group size
   strategy.SetMinimumGroupSize(3);
-  segmentation =
-        segmenter_dep_graph_only.CodepointToGlyphSegments(
-            roboto.get(), {}, {
-                {'A'},
-                {'C'},
-                {0xC1}, /* Aacute */
-                {0x106}, /* Cacute */
-            },
-            strategy);
+  segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+      roboto.get(), {},
+      {
+          {'A'},
+          {'C'},
+          {0xC1},  /* Aacute */
+          {0x106}, /* Cacute */
+      },
+      strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
   ASSERT_EQ(segmentation->Segments(), expected_segments);
   // Group size minimum is met for everything other than the last condition

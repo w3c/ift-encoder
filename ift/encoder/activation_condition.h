@@ -2,6 +2,7 @@
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
 #include <cstdint>
+
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
