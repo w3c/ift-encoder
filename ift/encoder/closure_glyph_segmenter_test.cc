@@ -947,6 +947,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
+#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid117, gid169, gid640, gid700 }
@@ -954,6 +955,15 @@ p1: { gid37, gid39 }
 if ((s2 OR s3)) then p0
 if ((s0 OR s1 OR s2 OR s3)) then p1
 )");
+#else
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid117, gid169 }
+p1: { gid37, gid39, gid640, gid700 }
+if ((s2 OR s3)) then p0
+if ((s0 OR s1 OR s2 OR s3)) then p1
+)");
+#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
@@ -988,6 +998,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
+#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37 }
@@ -1001,6 +1012,19 @@ if ((s2 OR s3)) then p2
 if ((s0 OR s2) AND (s2 OR s3)) then p3
 if ((s1 OR s3) AND (s2 OR s3)) then p4
 )");
+#else
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid37 }
+p1: { gid39 }
+p2: { gid117, gid169 }
+p3: { gid640, gid700 }
+if ((s0 OR s2)) then p0
+if ((s1 OR s3)) then p1
+if ((s2 OR s3)) then p2
+if ((s0 OR s1 OR s2 OR s3)) then p3
+)");
+#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
@@ -1036,6 +1060,7 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
 
   // When min group size is 2, there's no merging done since merges are
   // unfavourable and the minimum is met.
+#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37 }
@@ -1049,6 +1074,19 @@ if ((s2 OR s3)) then p2
 if ((s0 OR s2) AND (s2 OR s3)) then p3
 if ((s1 OR s3) AND (s2 OR s3)) then p4
 )");
+#else
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid37 }
+p1: { gid39 }
+p2: { gid117, gid169 }
+p3: { gid640, gid700 }
+if ((s0 OR s2)) then p0
+if ((s1 OR s3)) then p1
+if ((s2 OR s3)) then p2
+if ((s0 OR s1 OR s2 OR s3)) then p3
+)");
+#endif
 
   // Now with min group size larger merges will be done to reach min group size
   strategy.SetMinimumGroupSize(3);
@@ -1065,6 +1103,7 @@ if ((s1 OR s3) AND (s2 OR s3)) then p4
   ASSERT_EQ(segmentation->Segments(), expected_segments);
   // Group size minimum is met for everything other than the last condition
   // which has no other candidates to merge with.
+#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37, gid117, gid169 }
@@ -1074,6 +1113,17 @@ if ((s0 OR s2 OR s3)) then p0
 if ((s1 OR s2 OR s3)) then p1
 if ((s1 OR s3) AND (s2 OR s3)) then p2
 )");
+#else
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid39 }
+p1: { gid37, gid117, gid169 }
+p2: { gid640, gid700 }
+if ((s1 OR s3)) then p0
+if ((s0 OR s2 OR s3)) then p1
+if ((s0 OR s1 OR s2 OR s3)) then p2
+)");
+#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoCostCutoff) {
