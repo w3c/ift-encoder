@@ -6,6 +6,9 @@ Updated: Dec 17, 2025
 
 ## Introduction
 
+*Note: the approach in this document is obsolete and has been replaced by
+ [dependency graph condition analysis](../dependency_graph_condition_extract.md).*
+
 A key part of encoding an [IFT](https://w3c.github.io/IFT/Overview.html) font is splitting the
 outline (eg. glyf, gvar) data into a set of patches which are loaded by the client as needed. Each
 patch contains the data associated with one or more glyph ids. Patch loads are triggered by a client

@@ -5,18 +5,13 @@ This code repository contains an implementation of an
 
 ## Status
 
-This implementation is still in the early stages and as at the moment is work in progress.
-We aim to keep it updated and consistent with the current IFT specification working draft
-found [here](https://w3c.github.io/IFT/Overview.html).
+This implementation is still a work in progress. We aim to keep it updated and consistent with the
+current IFT specification working draft found [here](https://w3c.github.io/IFT/Overview.html).
+The current implementation is capable of producing a spec-compliant and optimized encodings
 
-The current implementation is capable of producing a spec-compliant encoding, but does not
-yet fully support all aspects of the specification. Notably:
-
-*  Not all encoder config options are supported yet. These are marked as unimplemented in the schema.
-
-Additionally, the produced encodings may not be fully optimized for minimal size yet.
-
-See this repos issue tracker for a more complete list of missing functionality.
+However, there is still remaining work to do on the encoder that will increase performance and
+produce even more optimized encodings. See this repos issue tracker for a more complete list of missing
+functionality.
 
 ## Building and Testing
 
@@ -43,11 +38,9 @@ There are two main phases to producing an IFT font:
   patches to maximize performance.
 * Compilation: takes the font and the segmentation and produces the IFT font and patch files.
 
-For more information see the documents under [docs/experimental](docs/experimental). Of note:
-* [compiler.md](docs/experimental/compiler.md)
-* [closure_glyph_segmentation.md](docs/experimental/closure_glyph_segmentation.md)
-* [closure_glyph_segmentation_merging.md](docs/experimental/closure_glyph_segmentation_merging.md)
-* [closure_glyph_segmentation_complex_conditions.md](docs/experimental/closure_glyph_segmentation_complex_conditions.md)
+For more information see the documents under [docs/](docs/). Of note:
+* [segmenter.md](docs/segmenter.md)
+* [compiler.md](docs/compiler.md)
 
 ### font2ift with Auto Config
 

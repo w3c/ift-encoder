@@ -201,7 +201,7 @@ void Compiler::AddDesignSpaceSegment(const design_space_t& space) {
 }
 
 StatusOr<Compiler::Encoding> Compiler::Compile() const {
-  // See ../../docs/experimental/compiler.md for a detailed discussion of
+  // See ../../docs/compiler.md for a detailed discussion of
   // how this implementation works.
   if (!face_) {
     return absl::FailedPreconditionError("Encoder must have a face set.");
@@ -523,7 +523,7 @@ Status Compiler::PopulateTableKeyedPatchMap(
 StatusOr<Compiler::CompileResult> Compiler::Compile(
     ProcessingContext& context, const SubsetDefinition& node_subset,
     bool is_root) const {
-  // See ../../docs/experimental/compiler.md for a detailed discussion of
+  // See ../../docs/compiler.md for a detailed discussion of
   // how this implementation works.
   auto it = context.built_subsets_.find(node_subset);
   if (it != context.built_subsets_.end()) {

@@ -6,6 +6,9 @@ Date: Dec 17, 2025
 
 ## Introduction
 
+*Note: the approach in this document is obsolete and has been replaced by
+ [dependency graph condition analysis](../dependency_graph_condition_extract.md).*
+
 Before reading this document is recommended to first review the
 [closure glyph segmentation](./closure_glyph_segmentation.md) document. This document borrows concepts and terms from it.
 

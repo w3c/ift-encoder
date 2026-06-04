@@ -31,15 +31,8 @@ struct SegmentationCost {
 
 /*
  * This generates a glyph segmentation of a font which satisifies the closure
- * requirement by utilizing a a font subsetter closure function to detect glyph
- * dependencies in the font.
- *
- * This is highly experimental and work in progress code that aims to explore
- * and validate the approach of using a subsetter closure function to generate
- * glyph segmentations.
- *
- * More details about this specific approach can be found in:
- * ../../docs/experimental/closure_glyph_segmentation.md.
+ * requirement. More details about this specific approach can be found in:
+ * ../../docs/segmenter.md.
  */
 class ClosureGlyphSegmenter {
  public:

@@ -1,47 +1,114 @@
-
-# Merging in the Closure Glyph Keyed Segmenter
+# Glyph Keyed Patch Segmentations during IFT Encoding
 
 Author: Garret Rieger  
-Date: Oct 27, 2025
-   
+Date: Aug 5th, 2026  
+Updated: Aug 5th, 2026
+
 ## Introduction
 
-Merging is a sub-problem of the overall [glyph segmentation problem](closure_glyph_segmentation.md).
-The goal of merging is to take a fine grained glyph segmentation (eg. with one segment per
-codepoint) and improve it's overall performance by merging segments and/or patches
-together. Merging, if performed carefully, can improve performance by reducing the total number of
-patches needed by end users and thereby reduce per patch network and format overhead, and increase
-compression efficiency. However, if not done carefully it can make the overall performance of a
-segmentation worse. For example if a low frequency segment is merged together with a high frequency
-one this will cause the data for the low frequency segment to be loaded much more often then prior
-to the merge.
+A key part of encoding an [IFT](https://w3c.github.io/IFT/Overview.html) font is splitting the
+outline (eg. glyf, gvar) data into a set of patches which are loaded by the client as needed. Each
+patch contains the data associated with one or more glyph ids. Patch loads are triggered by a client
+based on which code points and layout features are being rendered.
 
-The merging process takes a valid glyph segmentation, analyzes it to find merging opportunities and
-then performs the merges to produce a new more performant segmentation that still respects the
-closure requirement.
+Fonts can contain complex substitution rules that can swap the glyphs in use depending on the
+specifics of the text. Thus when generating a segmentation for glyphs across patches it must be done
+in a way that ensures the correct glyphs for the client's text are available.
 
-This document provides a detailed description of the specific merger implementation that is used
-as part of the [closure glyph segmenter](closure_glyph_segmentation.md).
+In an IFT font each patch has an associated activation condition which is a boolean expression using
+conjunction and disjunction on the presence of Unicode code points and layout features.
+(eg. $(a ∨ b ∨ c) ∧ (d ∨ e ∨ f)$ ). Note: this implementation has chosen to represent conditions
+throughout using [conjunctive normal](https://en.wikipedia.org/wiki/Conjunctive_normal_form) form.
 
-## Implementation Status
+To illustrate the problem here's a common example: let's say we have a Latin font which contains a
+ligature which replaces the individual glyphs for `f` and `i` with the `fi` ligature glyph. We decide
+to place the `f` glyph in one patch and the `i` glyph in another. When the client is rendering text with
+both an `f` and `i` character it will load both patches, however this makes it possible for the `fi` glyph
+to be used. Thus we need to make the `fi` glyph available in this case. One way to do that is to
+form a third patch containing the ligature glyph and assign the activation condition (`f and i`).
 
-The current merging implementation is far enough along to produce working and performant segmentations.
-The IFT fonts used in [IFT Demo](https://garretrieger.github.io/ift-demo/) are produced using
-codepoint frequency data and the current merger implementation without utilizing hand tuned subsets
-like prior versions of the demo.
+Because the IFT font will use Unicode code points in the activation conditions, it will be typical
+to express a desired segmentation of the original font using Unicode code points. The remainder of
+this document describes a procedure generating a code point segmentation and the corresponding set
+of glyph patches with load conditions described in terms of those Unicode code points.
 
-However, there are still some major areas that are unimplemented. The biggest missing piece is support
-for doing merging with multiple overlapping scripts. This will be needed to produce segmentations
-that support more than one CJK scripts simultaneously.
+The code that implements the procedures in this document can be found in
+[closure_glyph_segmenter.cc](../../ift/encoder/closure_glyph_segmenter.cc)
 
-Additionally, the merger requires some manual configuration (via segmenter_config.proto) to produce good
-results. Configuration involves selecting the sets of frequency data to utilize and configuring various
-thresholds that trade off analysis speed vs segmentation quality. The eventual goal is to have merger
-configuration selected automatically based on the input font.
+There is also a command line utility to generate segmentations:
+[util/gen_ift_segmentation_plan.cc](../../util/gen_ift_segmentation_plan.cc)
 
-A more complete list of future areas for development can be found in the last section of this document.
+## Concepts
 
-## Segmentation Cost
+*Segment*: a segment is the fundamental unit that the font is extended by. Each segment is defined by a set
+of code points and layout features. When a font is extended to support a particular segment
+then all glyphs needed to render any text which is a subset of that segments (and any previously loaded ones)
+will be loaded into the font.
+
+*Initial Font*: An IFT font can choose to include zero or more glyphs in the font that is initially loaded by
+the client. These glyphs are then always available and don't need to be patched in. This is useful for glyphs
+that are needed with near 100% probability as it eliminates all of the overhead associated with having them
+separately in a patch.
+
+*Segmentation Plan*: the output of the segmenter. It is composed of three main things:
+
+1. Initial font definition: the set of glyphs to be included in the initial font.
+
+2. Segment definitions: a list of one or more segments and the codepoints/layout feature sets that they are composed
+   of.
+
+3. Patches: each patch is defined by a set of glyph ids and the activation condition for when the patch is needed.
+   The condition is a conjunctive normal form boolean expression in terms of segments.
+
+For this particular segmenter implementation a segmentation plan's segment and patch definitions are always
+disjoint. As a result each glyph is only found in exactly one patch. Segmentation plans can be encoded
+in protobuf format using [segmentation_plan.proto](../ift/config/segmentation_plan.proto)
+
+*Closure Requirement*: segmentation plans produced by the segmenter must meet the "closure requirement":
+The set of glyphs contained in patches loaded for a font subset definition (a set of Unicode
+code points and a set of layout feature tags) through the patch map tables must be a superset of
+those in the glyph closure of the font subset definition.
+
+## Segmenting Algorithm Overview
+
+The high level segmenting algorithm works as follows:
+
+1. Start with each Unicode code point and layout feature support by a font as an individual segment.
+2. Analyze glyph conditions with respect to the starting segments. This generates per glyph
+   an activation condition in terms of segments.
+3. Group glyphs which have identical activation conditions, this forms the initial patch set.
+4. Iteratively merge patches into the initial font (guided by a cost function).
+4. Iteratively merge segments and/or patches (guided by a cost function) to improve the segmentation
+   and reduces overhead.
+
+In the proceeding sections each of these steps will be discussed in more details.
+
+## Condition Analysis
+
+Detecting the conditions under which a glyph is needed can be done in a couple of different
+ways. The segmentation implementation currently has two main approaches:
+
+1. Infer glyph conditions via [font subsetting closure](experimental/closure_glyph_segmentation.md).
+2. Infer glyph conditions via a [glyph dependency graph](dependency_graph.md) and [dependency graph condition extraction](dependency_graph_condition_extract.md).
+
+Both approaches ultimately aim to detect conditions that each glyph is needed which will satisfy the glyph closure
+requirement. The dependency graph is the default and recommended method for finding conditions. It's generally faster
+and produces more detailed conditions.
+
+## Merging
+
+Merging is a sub-problem of the overall segmentation problem.  The goal of merging is to take a fine grained glyph
+segmentation (eg. with one segment per codepoint) and improve it's overall performance by merging segments and/or
+patches together. Merging, if performed carefully, can improve performance by reducing the total number of patches
+needed by end users and thereby reduce per patch network and format overhead, and increase compression
+efficiency. However, if not done carefully it can make the overall performance of a segmentation worse. For example if a
+low frequency segment is merged together with a high frequency one this will cause the data for the low frequency
+segment to be loaded much more often then prior to the merge.
+
+The merging process starts with a valid glyph segmentation, analyzes it to find merging opportunities and then performs
+the merges to produce a new more performant segmentation that still respects the closure requirement.
+
+### Segmentation Cost Function
 
 In order to assess the impact of merges we need a way to quantify the performance of a candidate
 segmentation. A straightforward metric is to calculate the expected number of bytes transferred
@@ -58,52 +125,26 @@ Where:
   sections discuss different approaches for estimating these probabilities.
 * $\text{size} (p_i)$ is the size of the glyph keyed patch in bytes (post Brotli compression).
 * $k$ is the fixed overhead cost of a network request in bytes. It's a tunable parameter, by default
-  set to 75 bytes.
+  set to 200 bytes.
 
-## Algorithm Overview
+### Segment Merging
 
-At a high level the merging algorithm works like this:
+A segment merge joins two or more segments together via union to produce a single new segment. The glyph segmentation is
+recomputed with respect to this segment. This typically results in the patches related to the merged segments becoming
+one single patch. For example consider a case where there are two segments one with the `f` codepoint and the other with
+`i`. In the glyph segmentation there are three patches. One with the `f` glyph, one with the `i` glyph, and one with the
+`fi` ligature glyph.  Joining {f} and {i} input segments into {f, i} would result in the glyph segmentation containing
+only one patch with all three glyphs.
 
-1. Given a codepoint segmentation, the segmenter generates an initial glyph segmentation.
-2. The initial glyph segmentation is analyzed to see if any patches should be moved into the initial
-   font.  If good candidates are found the glyphs are moved and the glyph segmentation is
-   recalculated.
-3. Each pair of patches is analyzed to see if merging them would lower the overall cost.
-4. The pair which reduces the cost by the largest amount is selected and merged.
-5. The glyph segmentation is updated to reflect the merge.
-6. Step 3, 4, and 5 are repeated until no merges remain that would reduce overall cost.
+### Patch Merging
 
-The remaining sections discuss the various pieces in more detail.
-
-## The Details
-
-### Merge Types
-
-There are two distinct type of merges that the merger can choose to make:
-
-* Segment Merge: a segment merge joins two or more input segments (codepoint/feature based)
-  together via union to produce a single new input segment. The glyph segmentation is recomputed
-  with respect to this new input segment. This typically results in the patches related to the
-  merged input segments becoming one single patch. For example consider a case where there are two
-  input segments one with the 'f' codepoint and the other with 'i'. In the glyph segmentation there
-  are three patches. One with the f glyph, one with the i glyph, and one with the fi ligature glyph.
-  Joining {f} and {i} input segments into {f, i} would result in the glyph segmentation containing
-  only one patch with all three glyphs.
-  
-* Patch Merge: a patch merge is a more targeted merge that joins together two or more specific
-  patches.  Only the patches being merged are joined, all other patches are unaffected. A patch
-  merge is executed by removing the patches to be merged and producing a new patch which has the
-  union of their glyphs.  The new patch is assigned an activation condition which is the union of
-  the merged patches conditions.  In the example from segment merge, the patch with the f glyph
-  could be merged with the patch with the i glyph to produce a new patch containing both glyphs and
-  an activation condition of (f OR i). The patch with the fi ligature glyph would be left
-  untouched. Patch merges are useful in situations where a segment merge would pull together (via
-  closure) too many unrelated/low frequency patches.
-
-For patch pairs involving only exclusive patches the merger will use only a segment merge. For patch
-pairs that involve at least one non-exclusive patch (those with two or more segments in the activation
-condition) the merger evaluates the cost reduction of performing either merge type and utilizes the
-merge type which reduces cost the most.
+A patch merge is a more targeted merge that joins together two or more specific patches.  Only the patches being merged
+are joined, all other patches are unaffected. A patch merge is executed by removing the patches to be merged and
+producing a new patch which has the union of their glyphs. The new patch is assigned an activation condition which is
+the union of the merged patches conditions.  In the example from segment merge, the patch with the f glyph could be
+merged with the patch with the i glyph to produce a new patch containing both glyphs and an activation condition of (f
+OR i). The patch with the `fi` ligature glyph would be left untouched. Patch merges are useful in situations where a
+segment merge would pull together (via closure) too many unrelated/low frequency patches.
 
 ### Initial Font Merging
 
@@ -116,9 +157,6 @@ having them always loaded.
 Before the more general merging procedure all patches in the initial glyph segmentation are analyzed
 to see what the expected cost reduction is to move the glyphs of that patch into the initial font.
 Any patches where the reduction is significant (configurable threshold) are moved to the initial font.
-
-Additionally the merger may be configured to also move the fallback glyphs into the initial font as
-these by definition are always needed.
 
 ### Assessing Cost Deltas
 
@@ -139,12 +177,6 @@ associated with the modified versions.  Lastly add the cost associated with any 
 locate affected patches we utilize the current activation condition list to find other patches which
 have conditions interacting with the segments to be merged.
 
-Since this relies on the discovered activation conditions this approach fails to capture changes
-where glyphs in the fallback segment become part of a discoverable activation conditions as a result
-of the merge.  In these cases the cost deltas will be overestimated (less cost reduction). More work
-is needed to improve the accuracy of the cost delta calculation for this case. In practice this
-affects very few patch pairs so doesn't have a large impact on quality.
-
 Patch sizes used in the delta computation are computed by actually forming the glyph keyed patches
 including applying brotli compression. Using real compression to get patch sizes allows the merger
 to account for cases where particular glyphs have redundant data which brotli compression can
@@ -156,13 +188,12 @@ increases by to the delta value.
 ### Estimating Activation Condition Probabilities
 
 To compute costs we also need to have an estimate for the probability of an activation condition being activated.
-An activation condition is a boolean condition involving the presence of one or more codepoints or features. See
-the [closure glyph segmentation document](closure_glyph_segmentation.md) for more details.
+An activation condition is a boolean condition involving the presence of one or more codepoints or features.
 
 If we know the probabilities that codepoints are present on web pages we can use standard probability
 conjunction/disjunction rules to estimate the probability of an overall condition matching. This approach
 requires data on the frequency of codepoint occurrence across the web. The merger utilizes the data set
-in https://github.com/w3c/ift-encoder-data.
+in [w3c/ift-encoder-data](https://github.com/w3c/ift-encoder-data).
 
 Two different approaches are utilized for estimating probabilities:
 
@@ -174,19 +205,19 @@ Two different approaches are utilized for estimating probabilities:
    is simple, fast, and only requires a data set with individual codepoint frequencies. However, due
    to the not entirely valid assumption of independence it has no guarantees of generating the actual correct
    probabilities.
-   
+
 2. Frequency bigrams: this is a more sophisticated approach which utilizes code point pair
    probabilities (ie. $P(a \cap b)$, the probability that a page has both codepoints 'a' and 'b'
    present) to produce a more rigorous probability estimate. Unlike the unigram approach this does
    not make an assumption of independence. Since it only utilizes bigrams, and not trigrams (and so on)
    we are limited to producing a probability bound instead of a single probability value. For disjunctions
    across multiple codepoints we use formula (3) and (4) from
-   [Bounds for the Probability of a Union, with Applications](https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full) 
+   [Bounds for the Probability of a Union, with Applications](https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full)
    to generate the upper and lower bounds. For segment conjunctions a simpler approach is used since
    we don't have pairwise segment probabilities: $\sum P(s_i) - (n - 1) \leq P(intersection) \leq min(P(s_i))$.
    The downside to the bigram approach is that it is significantly more computationally costly then the unigram
    approach.
-   
+
 The merger has both methods implemented and allows the approach to be selected via configuration
 depending on the specific needs of a particular segmentation run.
 
@@ -196,10 +227,10 @@ There are three straightforward choices:
 2. Use the upper bound.
 3. Use the average of lower and upper.
 
-Currently in the implementation option (1) is used, but this remains an open question which needs more research
+Currently in the implementation option (3) is used, but this remains an open question which needs more research
 of which of 1, 2, or 3 tends to produce the best results.
 
-### Multiple Frequency Data Sets and Merge Groups
+## Multiple Frequency Data Sets and Merge Groups
 
 Code point frequency data is typically collected within the scope of a particular language and/or
 writing script. When doing merge optimization for a font that supports multiple languages/scripts,
@@ -211,14 +242,14 @@ There are two primary challenges that arise when more than one codepoint frequen
    information for pairings with codepoints in other frequency data sets. For example if we have
    frequency data for latin codepoints and cyrillic codepoints, we would be missing frequencies for
    pairs involving 1 latin and 1 cyrillic codepoint.
-   
+
 2. For codepoints which occur in multiple frequency data sets we now have multiple available
    frequency values and need a way to determine how to select one and/or aggregate them. For example
    say we had a font which supports both Japanese and Chinese and we'd like to produce a
    segmentation which works equally well for each. Both languages utilize many shared codepoints
    (see [han unification](https://en.wikipedia.org/wiki/Han_unification)) but they occur with vastly
    different frequencies depending on the language.
-   
+
 When producing segmentations we aim to treat each language with equal importance. For example we
 could solve some of the above two issues by normalizing the frequency data sets with each other
 using language prevalence data, but that would unfairly optimize segmentations for high use
@@ -258,12 +289,12 @@ frequency codepoints moved into the initial font as this will cause them to be a
 regardless of the language currently in use. To deal with this the configuration for the merging
 process has a setting to opt-in a frequency data for initial merging. This allows specific languages
 to be prioritized for placement into the initial font depending on the intended use case for the
-specific font. Eventually we want to find a way to automate this.
+specific font.
 
-## Practical Matters
+### Merging Practical Matters
 
 This section describes some of the practical implementation concerns and optimization techniques used
-in the current merger implementation.
+in the current segmenter implementation.
 
 Brotli compression for determining the sizes of patches resulting from merges is currently where the
 vast majority of time is spent by the merging algorithm. If the high level algorithm described above
@@ -273,28 +304,39 @@ performed. Where $n$ is the number of patches in the initial segmentation.
 As a result the focus of most optimization implemented so far are around reducing the total number
 of Brotli operations needed.
 
-### Inert Segments
+#### Quality Levels
+
+Many of the optimizations described in the proceeding sections are configurable to allow performance/quality trade offs
+to be made. To help ease the configuration of the segmenter we define a set of quality levels (like is typical in
+compression libraries) that automatically configure the various optimization settings.  Where lower quality levels
+result in faster segmentation, but produce less optimized results.  Additionally, the auto configuration module is also
+capable of automatically selecting a reasonable quality level based on the number of codepoints found in the input font.
+
+More details about the specific quality level definitions can be found in
+(auto_segmenter_config.cc)[../ift/config/auto_segmenter_config.cc]
+
+#### Inert Segments
 
 In a segmentation it's common that there are segments which are inert. Inert segments, for the
 purpose of glyph closure, don't interact with any other segments. If two inert segments are merged,
 then the glyph closure of the new segment will always be exactly the union of the exclusive glyphs from
 the two segments.
 
-Inert segments are detected during closure analysis by looking for segments that have only exclusive
-glyphs and do not show up in any other AND or OR conditions.
+Inert segments are detected during condition analysis by looking for segments that have interact with
+only their base segment.
 
 We can exploit the inertness of segments to make optimizations to the merger. In particular
 when merging two or more segments that are all inert, we know the new merged segment will
-also be likely inert. This can be exploited to simplify various operations involved in assessing
+also be inert. This can be exploited to simplify various operations involved in assessing costs
 and applying merges.
 
 For example: because we know inert segments don't interact we can accumulate multiple inert
 candidate merges in a single pass and apply the merges as a batch. This is possible because merging
 two inert segments will have little to no impact on the cost delta associated with a merge of two
 different inert segments. This is currently used to great effect during the initial font merging
-phase, and I plan to explore utilizing the same technique during candidate merge selection.
+phase.
 
-### Best Case Probability Threshold
+#### Best Case Probability Threshold
 
 When assessing a particular merge, there are cases where it's pretty obvious that the merge is not
 going to produce a reduction in cost. If we can identify these cases then we can reject them early
@@ -314,20 +356,17 @@ Given the best case merged size, we can then compute the best possible cost delt
 realized for a candidate merge. From there we can prune candidates which can't possibly result in a
 negative cost delta.
 
-Currently for ease of calculations we limit this optimization to apply only to merges involving
-inert segments; however, the approach should be expanded to cover all patches.
-
-### Low Impact Cutoff
+#### Low Impact Cutoff
 
 Many scripts have a long tail of code points that are very infrequently needed. Patches that
 are conditional on those low frequency code points have a very low probability of being used.
-Since the cost contribution of a patch is Probability * Size, patches with near zero
+Since the cost contribution of a patch is `Probability * Size`, patches with near zero
 probabilities contribute almost nothing to the total cost. Therefore as an optimization we
 should avoid spending excessive effort in optimizing patches that contribute little to
 the overall cost.
 
 The merger implementation has a configurable optimization cutoff where the set of patches
-whose total contribution to the overall cost is less than the threshold are ignored 
+whose total contribution to the overall cost is less than the threshold are ignored
 when looking for merge candidates. These patches are only considered for merging when
 minimum group sizes need to be reached (discussed in a later section). When merging is needed
 for low impact patches the merge selection picks the next available patch to merge instead
@@ -335,68 +374,47 @@ of searching for the lowest delta pairing.
 
 This cutoff effectively reduces the size of $n$ in the $O(n^2)$ brotli operation count.
 
-### Brotli Quality
+#### Brotli Quality
 
 Since Brotli is a performance bottleneck the merger allows the quality level used to be
 configured. Running at a lower quality of 8 or 9 can significantly speed up run times
-versus using quality 11. However, this comes with the downside that it makes the 
+versus using quality 11. However, this comes with the downside that it makes the
 cost deltas less accurate. This can in turn impact the overall quality of the segmentation.
 Lower qualities will typically overestimate patch sizes resulting in less merging than
 when run with a higher quality.
 
-### Incremental Closure Updates
+When more substantial speedups are needed brotli compression can be completely disabled
+and instead estimated using an expected compression ratio. The expected compression ratio
+is calculated by looking at the average compression ratio for glyph data in the input font.
+The biggest downside of this approach is that it will completely miss cases where redundant
+glyph data is present.
 
-When non-inert merges are made the closure analysis needs to be repeated to reflect the effects of
-the merges. Fortunately we can utilize the current closure analysis results to identify which
+#### Incremental Updates
+
+When non-inert merges are made the condition analysis needs to be repeated to reflect the effects of
+the merges. Fortunately we can utilize the current condition analysis results to identify which
 patches and glyphs will be affected by the merge.
 
-The current implementation allows for a closure analysis to be partially invalidated on a set of
-glyphs and segments and then only recompute the closure analysis for those.  This significantly
+The current implementation allows for a condition analysis to be partially invalidated on a set of
+glyphs and segments and then only recompute the condition analysis for those.  This significantly
 reduces the cost of closure analysis on each iteration of the merging algorithm.
 
-### Avoid the 'Except Segment' in Closure
+#### Merging with No Frequency Data
 
-While closure analysis is currently dwarfed by brotli compression times, it is still costly overall
-and there are some additional improvements that could be made. The technique described in this
-section is not yet implemented, but is a planned improvement.
-
-During closure analysis the most costly part is evaluating the glyph closure of the 'except
-segment'. The except segment is the union of all segments except for the one being analyzed. The
-except segment closure is primarily needed to locate glyphs needed via conjunctive conditions.
-
-In harfbuzz glyph closure there are currently only two sources for conjunctive conditions: GSUB and
-cmap 14. Any glyphs which do not appear in anyway in either of these two tables cannot have any
-conjunctive conditions. Furthermore since the GSUB and cmap14 closure stages happen prior to
-composite glyph, MATH, and COLR glyph expansions, we can identify codepoints which will not be
-subject to conjunctive conditions by checking if the glyphs they map are present in the non
-GSUB/cmap14 glyph set. Finally we can then identify input segments which won't have conjunctive
-conditions, and skip the except segment portion of the closure analysis for them. Some additional
-changes are needed as well to identify disjunctive conditions without the except segment, but that
-is doable since since disjunctive glyphs will always appear in the closure of a segment.
-
-More work is needed to validate if the approach described here will work in practice and if the
-claims are valid with respect to the harfbuzz glyph closure implementation. Once we're confident in
-the validity implementation will be needed. We can currently locate the set of glyphs that are
-present in a GSUB table using the harfbuzz
-[hb_ot_layout_lookup_collect_glyphs](https://github.com/harfbuzz/harfbuzz/blob/4d1ce4a6554af5219f2ccf85a0a67c552122b46b/src/hb-ot-layout.h#L343)
-method. New harfbuzz functionality may be needed to find the set of glyphs in the cmap14 sub table.
-
-### Merging with No Frequency Data
-
-For a particular font when segmenting and merging there may be codepoints in the font that are not covered by the
+When segmenting and merging there may be codepoints in the font that are not covered by the
 supplied frequency data. We'd still like to merge these, but don't have frequency data to guide
 the merging process. For these an alternative heuristic based merging strategy is used instead.
 For now the heuristic is pretty straightforward:
 
 1. We have a configured minimum patch and maximum patch size.
-2. The merger tries to increase the size of any patches below this size.
+2. The merger tries to increase the size of any patches that are below this size and not covered by frequency data.
 3. Candidates for merging are pairs of exclusive patches, or the list of segments involved
    in composite activation conditions.
 4. Since we don't have frequency info we don't have much to distinguish the candidates, so
    the first encountered candidate is tried and used as long as it doesn't raise patch
    size beyond a configured maximum.
 
-### Minimum Group Sizes
+#### Minimum Group Sizes
 
 The IFT specification recommends a [minimum group
 size](https://w3c.github.io/IFT/Overview.html#encoding-privacy) for patch activation conditions to
@@ -406,39 +424,16 @@ delta. When a minimum group size is configured then the merger will accept posit
 merges for patches that do not meet the configured minimum group size. When merging to meet minimum
 group sizes the merger will still seek out the lowest, least positive, cost delta candidate.
 
-Minimum group sizes are currently only assessed for exclusive patches, more work is needed to assess
-if patches with composite activation conditions meet minimum group sizes. This is straightforward
-for disjunctive conditions, but a little more complicated for conjunctive conditions.
-
-### Caching
+#### Caching
 
 Caching is used throughout the merger implementation to accelerate slow operations. The
 following caches are used:
 * Patch size cache: caches a mapping from glyph set to associated patch size. Helps reduce calls to brotli.
 * Glyph closure cache: caches a mapping from subset definition to glyph set from computing glyph closure
   on the subset definition.
-* Activation Probabilities: are cached with on the Segment objects. We may also want to consider caching
-  activation condition probabilities.
+* Activation Probabilities: are cached on the Segment objects and disjunctive segment sub-group probabilities
+  are stored in a dedicated cache.
 
-## Areas for Further Development
+## Future Work
 
-Two main areas of focus remain for further development of the merger implementation:
-
-1. Continue to improve performance, particularly for CJK fonts which suffer the most from the $O(n^2)$
-   brotli operations runtime. This will mostly entails finding more ways to prune out patch size estimation
-   operations from the analysis. Some promising avenues are more aggressive use of inertness and more 
-   aggressive best case threshold pruning. An additional avenue for improving performance is introducing
-   parallelization to the implementation which is currently single threaded. The algorithm
-   should be relatively amenable to parallelization, though I'd like to leave parallelization as a last
-   resort since it would add significant complexity.
-   
-2. Implementing missing functionality and improving the quality of produced segmentations:
-   * Support for merging scripts that overlap.
-   * Better minimum group size handling.
-   * Explore the best approach to utilizing probability bounds in cost computations.
-   * Better support for layout features: segments with layout features are currently supported, but
-     we do not yet have support for integrating frequency data for layout features. As a result
-     merging of segments with layout features are handled exclusively by the heuristic merger.
-   * Automatic configuration: implement analysis of the input font to generate the segmenter configuration
-     automatically.
-   * More accurate cost delta assessment, particularly including interactions with the fallback patch.
+See this projects [https://github.com/w3c/ift-encoder/issues](issue tracker) for planned future work.

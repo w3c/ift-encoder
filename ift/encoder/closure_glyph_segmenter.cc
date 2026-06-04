@@ -69,7 +69,7 @@ using ift::freq::ProbabilityCalculator;
 namespace ift::encoder {
 
 // An indepth description of how this segmentation implementation works can
-// be found in ../../docs/closure_glyph_segmentation.md.
+// be found in ../../docs/segmenter.md.
 
 Status CheckForDisjointCodepoints(
     const std::vector<SubsetDefinition>& subset_definitions,
@@ -591,8 +591,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
-  // See ../../docs/experimental/closure_glyph_segmentation_merging.md for more
-  // details on how merging works.
+  // See ../../docs/segmenter.md for more details on how merging works.
   size_t merger_index = 0;
   std::string merger_name = std::to_string(merger_index);
   if (mergers[merger_index].Strategy().Name().has_value()) {
