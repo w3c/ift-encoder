@@ -249,4 +249,20 @@ TEST(BigramProbabilityCalculatorTest, ComputeConjunctiveProbabilityNoSegments) {
   ASSERT_DOUBLE_EQ(result.Max(), 1.0);
 }
 
+TEST(BigramProbabilityCalculatorTest, ComputeProbability_LruEviction) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
+      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies), 2);
+
+  calc.ComputeProbability({'a'});
+  calc.ComputeProbability({'b'});
+  // Third entry will cause evicition
+  calc.ComputeProbability({'c'});
+  // Recompute evicted entry
+  ASSERT_EQ(calc.ComputeProbability({'a'}), (ProbabilityBound{0.7, 0.7}));
+}
+
 }  // namespace ift::freq

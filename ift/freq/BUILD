@@ -17,6 +17,7 @@ cc_library(
         "bigram_probability_calculator.cc",
         "unicode_frequencies.cc",
         "unigram_probability_calculator.cc",
+        "lru_cache.h",
     ],
     hdrs = [
         "bigram_probability_calculator.h",
@@ -30,6 +31,7 @@ cc_library(
         ":common",
         "//ift/encoder:common",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/hash",
         "@harfbuzz",
     ],
 )
@@ -72,5 +74,14 @@ cc_library(
     deps = [
         ":freq",
         "//ift/encoder:common",
+    ],
+)
+
+cc_test(
+    name = "lru_cache_test",
+    srcs = ["lru_cache_test.cc"],
+    deps = [
+        ":freq",
+        "@googletest//:gtest_main",
     ],
 )

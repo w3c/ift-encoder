@@ -14,19 +14,17 @@ using ift::encoder::SubsetDefinition;
 namespace ift::freq {
 
 BigramProbabilityCalculator::BigramProbabilityCalculator(
-    UnicodeFrequencies frequencies)
-    : frequencies_(std::move(frequencies)) {}
+    UnicodeFrequencies frequencies, size_t max_cache_size)
+    : frequencies_(std::move(frequencies)),
+      cache_("bigram probability", max_cache_size) {}
 
 ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
     const CodepointSet& codepoints, double best_lower) const {
-  auto it = cache_.find(codepoints);
-  if (it != cache_.end()) {
-    cache_hit_++;
-    double lower = std::max(it->second.Min(), best_lower);
-    double upper = std::max(it->second.Max(), lower);
+  std::optional<ProbabilityBound>& cached_bound = cache_[codepoints];
+  if (cached_bound.has_value()) {
+    double lower = std::max(cached_bound->Min(), best_lower);
+    double upper = std::max(cached_bound->Max(), lower);
     return ProbabilityBound(lower, upper);
-  } else {
-    cache_miss_++;
   }
 
   unsigned n = codepoints.size();
@@ -50,7 +48,7 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
   if (max_single_bound >= 1.0) {
     // Bounds can't be lower than [1, 1] stop checking.
     ProbabilityBound bound(1.0, 1.0);
-    cache_.emplace(codepoints, bound);
+    cached_bound = bound;
     return bound;
   }
 
@@ -67,7 +65,7 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
       if (max_pair_bound >= 1.0) {
         // Bounds can't be lower than [1, 1] stop checking.
         ProbabilityBound bound(1.0, 1.0);
-        cache_.emplace(codepoints, bound);
+        cached_bound = bound;
         return bound;
       }
     }
@@ -97,7 +95,7 @@ ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
       std::min(unigram_total - max_partial_bigram_total, 1.0), raw_lower);
 
   ProbabilityBound raw_bound(raw_lower, raw_upper);
-  cache_.emplace(codepoints, raw_bound);
+  cached_bound = raw_bound;
 
   double final_lower = std::max(raw_lower, best_lower);
   double final_upper = std::max(raw_upper, final_lower);
