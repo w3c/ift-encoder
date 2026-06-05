@@ -36,6 +36,10 @@ using ift::proto::PatchMap;
 
 namespace ift::encoder {
 
+void PrintTo(const ActivationCondition& c, std::ostream* os) {
+  *os << c.ToString();
+}
+
 static void Simplify(std::vector<SegmentSet>& conditions);
 
 ActivationCondition ActivationCondition::True(patch_id_t activated) {
