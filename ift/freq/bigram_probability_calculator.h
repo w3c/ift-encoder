@@ -1,14 +1,17 @@
 #ifndef IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/log/log.h"
+#include <optional>
+
 #include "ift/common/int_set.h"
+#include "ift/freq/lru_cache.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::freq {
+
+constexpr size_t BIGRAM_PROBABILITY_CACHE_SIZE = 300000;
 
 // The BigramProbabilityCalculator uses unigram and bigram codepoint frequency
 // data to compute probability bounds for codepoint sets. Unlike the unigram
@@ -18,7 +21,9 @@ namespace ift::freq {
 // to compute the true probability.
 class BigramProbabilityCalculator : public ProbabilityCalculator {
  public:
-  explicit BigramProbabilityCalculator(UnicodeFrequencies frequencies);
+  explicit BigramProbabilityCalculator(
+      UnicodeFrequencies frequencies,
+      size_t max_cache_size = BIGRAM_PROBABILITY_CACHE_SIZE);
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
@@ -28,17 +33,6 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
 
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const override;
-
-  void ResetCache() const override {
-    if (cache_hit_ || cache_miss_) {
-      VLOG(1) << "bigram prob cache hit % = "
-              << ((double)cache_hit_ / (double)(cache_hit_ + cache_miss_)) *
-                     100.0;
-    }
-    cache_hit_ = 0;
-    cache_miss_ = 0;
-    cache_.clear();
-  }
 
  private:
   ProbabilityBound BigramProbabilityBound(
@@ -50,10 +44,8 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
       double best_lower) const;
 
   UnicodeFrequencies frequencies_;
-  mutable absl::flat_hash_map<ift::common::CodepointSet, ProbabilityBound>
+  mutable LruCache<ift::common::CodepointSet, std::optional<ProbabilityBound>>
       cache_;
-  mutable uint64_t cache_hit_ = 0;
-  mutable uint64_t cache_miss_ = 0;
 };
 
 }  // namespace ift::freq

@@ -31,10 +31,6 @@ class ProbabilityCalculator {
   // to speed up the computation.
   virtual ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const = 0;
-
-  // Signal that if there is internal cached data future calls are unlikely
-  // to hit it again and it can be cleared.
-  virtual void ResetCache() const {}
 };
 
 }  // namespace ift::freq

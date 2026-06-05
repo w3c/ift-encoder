@@ -13,6 +13,7 @@ struct ProbabilityBound {
   static ProbabilityBound Zero() { return ProbabilityBound{0.0, 0.0}; }
 
   // TODO(garretrieger): XXXXX automatically clamp the min, max values?
+  ProbabilityBound() : min_(0.0), max_(0.0) {}
   ProbabilityBound(double min, double max) : min_(min), max_(max) {}
 
   double Min() const { return min_; }
