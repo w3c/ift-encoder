@@ -71,9 +71,9 @@ http_archive(
 http_archive(
     name = "ift_spec",
     build_file = "//third_party:ift_spec.BUILD",
-    sha256 = "cc5efce7af25f9b659244ffd0425edd2a769a81175cb38f525a40175f7e11b4f",
-    strip_prefix = "IFT-8f53e86cb43bed877f74dfe8ac2172b5edfff521",
-    urls = ["https://github.com/w3c/IFT/archive/8f53e86cb43bed877f74dfe8ac2172b5edfff521.zip"],
+    sha256 = "6c634d76b49ff3a66bd908f81a892517b83c6c356be0bdf2977e66acd51f8498",
+    strip_prefix = "IFT-1bb61e0e69860143ffc7f4daa8e9f109fac746dd",
+    urls = ["https://github.com/w3c/IFT/archive/1bb61e0e69860143ffc7f4daa8e9f109fac746dd.zip"],
 )
 
 # Fontations
