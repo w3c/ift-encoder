@@ -4,6 +4,7 @@
 #include <ostream>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/log.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/types.h"
@@ -27,8 +28,12 @@ class GlyphConditions {
     return condition_ == other.condition_;
   }
 
-  void RemoveSegments(const common::SegmentSet& segments) {
-    bool is_exclusive = condition_.IsExclusive();
+  // Returns the list of segments which were actually removed, may
+  // contain more than the input due to simplification.
+  common::SegmentSet RemoveSegments(const common::SegmentSet& segments) {
+    common::SegmentSet removed_segments = condition_.TriggeringSegments();
+    bool was_disjunctive = condition_.IsPurelyDisjunctive();
+
     std::vector<common::SegmentSet> new_conditions;
     for (const auto& sub_group : condition_.conditions()) {
       common::SegmentSet modified = sub_group;
@@ -38,15 +43,22 @@ class GlyphConditions {
       }
     }
 
+    bool new_is_unitary =
+        new_conditions.size() == 1 && new_conditions.begin()->size() == 1;
+
     if (new_conditions.empty()) {
       condition_ = ActivationCondition::True(0);
-    } else if (is_exclusive && new_conditions.size() == 1 &&
-               new_conditions.begin()->size() == 1) {
+    } else if (!was_disjunctive && new_is_unitary) {
       condition_ = ActivationCondition::exclusive_segment(
           *new_conditions.begin()->min(), 0);
+    } else if (was_disjunctive) {
+      condition_ = ActivationCondition::or_segments(*new_conditions.begin(), 0);
     } else {
       condition_ = ActivationCondition::composite_condition(new_conditions, 0);
     }
+
+    removed_segments.subtract(condition_.TriggeringSegments());
+    return removed_segments;
   }
 
  private:
@@ -65,6 +77,27 @@ class GlyphConditionSet {
 
   const GlyphConditions& ConditionsFor(glyph_id_t gid) const {
     return gid_conditions_[gid];
+  }
+
+  // Used in testing to ensure the forward and reverse condition mappings are
+  // in sync.
+  absl::Status Validate() const {
+    for (const auto& [s, glyphs] : segment_to_gid_conditions_) {
+      for (glyph_id_t g : glyphs) {
+        bool correct =
+            gid_conditions_.at(g).condition_.TriggeringSegments().contains(s);
+        if (!correct) {
+          LOG(ERROR) << "glyph condition set state is inconsisent: g" << g
+                     << " condition does not have s" << s;
+          LOG(ERROR) << "  g" << g << " condition: "
+                     << gid_conditions_.at(g).condition_.ToString();
+          LOG(ERROR) << "  s" << s << " glyphs: " << glyphs.ToString();
+          return absl::InternalError(
+              "glyph condition set state is inconsisent.");
+        }
+      }
+    }
+    return absl::OkStatus();
   }
 
   void AddAndCondition(glyph_id_t gid, segment_index_t segment) {
@@ -90,6 +123,10 @@ class GlyphConditionSet {
   }
 
   void SetCondition(glyph_id_t gid, ActivationCondition condition) {
+    for (segment_index_t s :
+         gid_conditions_[gid].condition_.TriggeringSegments()) {
+      segment_to_gid_conditions_[s].erase(gid);
+    }
     common::SegmentSet segments = condition.TriggeringSegments();
     gid_conditions_[gid].condition_ = std::move(condition);
     for (segment_index_t s : segments) {
@@ -132,18 +169,14 @@ class GlyphConditionSet {
     }
 
     for (uint32_t gid : touched) {
-      gid_conditions_[gid].RemoveSegments(segments);
+      RemoveSegmentsFromGlyph(gid, segments);
     }
   }
 
   void InvalidateGlyphInformation(const ift::common::GlyphSet& glyphs,
                                   const ift::common::SegmentSet& segments) {
     for (uint32_t gid : glyphs) {
-      gid_conditions_[gid].RemoveSegments(segments);
-    }
-
-    for (uint32_t segment_index : segments) {
-      segment_to_gid_conditions_[segment_index].subtract(glyphs);
+      RemoveSegmentsFromGlyph(gid, segments);
     }
   }
 
@@ -157,6 +190,16 @@ class GlyphConditionSet {
   }
 
  private:
+  void RemoveSegmentsFromGlyph(glyph_id_t gid,
+                               const ift::common::SegmentSet& segments) {
+    // Remove segments from a gid condition may remove additional segments
+    // not in the input due to simplifcation. So check the old and new segment
+    // set to see exactly what got removed.
+    common::SegmentSet removed = gid_conditions_[gid].RemoveSegments(segments);
+    for (segment_index_t s : removed) {
+      segment_to_gid_conditions_[s].erase(gid);
+    }
+  }
   // Index in this vector is the glyph id associated with the condition at that
   // index.
   std::vector<GlyphConditions> gid_conditions_;

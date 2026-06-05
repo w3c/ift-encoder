@@ -445,3 +445,16 @@ cc_test(
         "@protobuf//:protobuf",
     ],
 )
+
+cc_test(
+    name = "glyph_condition_set_test",
+    size = "small",
+    srcs = [
+        "glyph_condition_set_test.cc",
+    ],
+    deps = [
+        ":segmentation_context",
+        "//ift/common",
+        "@googletest//:gtest_main",
+    ],
+)

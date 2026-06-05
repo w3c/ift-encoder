@@ -25,6 +25,8 @@ namespace ift::encoder {
  */
 class ActivationCondition {
  public:
+  friend void PrintTo(const ActivationCondition& c, std::ostream* os);
+
   /*
    * Constructs a condition that always activates.
    */
