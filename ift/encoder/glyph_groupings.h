@@ -3,7 +3,6 @@
 
 #include <cstdint>
 
-#include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 #include "ift/common/int_set.h"
@@ -24,12 +23,13 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(uint32_t glyph_count) : combined_patches_(glyph_count) {}
+  GlyphGroupings(uint32_t glyph_count, bool simplify_combined = false) : combined_patches_(glyph_count), simplify_combined_(simplify_combined) {}
 
   bool operator==(const GlyphGroupings& other) {
     return or_glyph_groups_ == other.or_glyph_groups_ &&
            exclusive_glyph_groups_ == other.exclusive_glyph_groups_ &&
            combined_conditions_ == other.combined_conditions_ &&
+           simplify_combined_ == other.simplify_combined_ &&
            conditions_and_glyphs_ == other.conditions_and_glyphs_ &&
            conditions_and_glyphs_pre_combination_ ==
                other.conditions_and_glyphs_pre_combination_ &&
@@ -255,6 +255,7 @@ class GlyphGroupings {
   // can't be joined together in the same fashion.
   GlyphPartition combined_patches_;
   bool combined_patches_dirty_ = false;
+  bool simplify_combined_;
 
   absl::flat_hash_map<ift::common::SegmentSet, ift::common::GlyphSet>
       or_glyph_groups_;

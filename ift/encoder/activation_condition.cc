@@ -218,6 +218,72 @@ ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(
   return new_condition;
 }
 
+ActivationCondition ActivationCondition::NonCompositeSuperset() const {
+  // With a mixed condition (sub group 1) AND (sub group 2) AND ...
+  // we can freely drop any number of the sub groups and remain a superset
+  // since AND always further restricts activation.
+  //
+  // Given that, we use a heuristic to pick a super set that is either all conjunctive
+  // or disjunctive and roughly minimizes the activation probability of the new
+  // condition.
+  //
+  // If the original condition has one or more sub groups with only one segment then
+  // the return a conjunctive superset of just those subgroups.
+  //
+  // Otherwise select one subgroup to keep which has the largest min segment index
+  // (since segments are ordered by decreasing probability), break ties by selecting
+  // the smaller subgroup.
+
+  if (IsPurelyConjunctive() || IsPurelyDisjunctive() || IsAlwaysTrue()) {
+    return *this;
+  }
+
+  SegmentSet conjunctive;
+  segment_index_t highest_s = 0;
+  const SegmentSet* keep = nullptr;
+
+  for (const auto& sub_group : conditions_) {
+    if (sub_group.size() == 1) {
+      conjunctive.insert(*sub_group.min());
+      continue;
+    }
+
+    if (!conjunctive.empty() || sub_group.empty()) {
+      continue;
+    }
+
+    segment_index_t min = *sub_group.min();
+    if (!keep || min > highest_s || (min == highest_s && sub_group.size() < keep->size())) {
+      highest_s = min;
+      keep = &sub_group;
+    }
+  }
+
+  ActivationCondition out;
+  out.is_fallback_ = is_fallback_;
+  out.is_exclusive_ = is_exclusive_;
+  out.conditions_ = {};
+  out.activated_ = activated_;
+  out.encoding_ = encoding_;
+
+  if (!conjunctive.empty()) {
+    for (segment_index_t s : conjunctive) {
+      out.conditions_.push_back(SegmentSet {s});
+    }
+    if (out.conditions_.size() == 1) {
+      out.is_exclusive_ = true;
+    }
+    return out;
+  }
+
+  if (!keep) {
+    return out;
+  }
+
+  out.conditions_ = {*keep};
+  return out;
+}
+
 std::string ActivationCondition::ToString() const {
   std::stringstream out;
   out << "if (";
