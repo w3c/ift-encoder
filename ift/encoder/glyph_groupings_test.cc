@@ -62,6 +62,7 @@ class GlyphGroupingsTest : public ::testing::Test {
         }),
 
         glyph_groupings_(hb_face_get_glyph_count(roboto_.get())),
+        glyph_groupings_simplification_(hb_face_get_glyph_count(roboto_.get()), true),
         segments_complex_({
             Segment({0x54}, ProbabilityBound::Zero()),    // s0
             Segment({0x6C}, ProbabilityBound::Zero()),    // s1
@@ -175,6 +176,7 @@ class GlyphGroupingsTest : public ::testing::Test {
   std::vector<Segment> segments_;
   std::unique_ptr<GlyphConditionSet> glyph_conditions_;
   GlyphGroupings glyph_groupings_;
+  GlyphGroupings glyph_groupings_simplification_;
   GlyphSet glyphs_to_group_;
   flat_hash_map<hb_codepoint_t, glyph_id_t> cp_to_gid_;
 
@@ -295,6 +297,35 @@ TEST_F(GlyphGroupingsTest, CombinePatches) {
   };
 
   ASSERT_EQ(expected, glyph_groupings_.ConditionsAndGlyphs());
+}
+
+TEST_F(GlyphGroupingsTest, CombinePatches_WithSimpfliciation) {
+  auto sc = glyph_groupings_simplification_.CombinePatches(ToGlyphs({'e'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_simplification_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Starting Condition map:
+  // ...
+  // if (s0) -> {a, b}
+  // if (s2 AND s3) -> {e, f}
+  // ...
+  //
+  // When combined with simplification it forms the disjunctive superset:
+  //
+  // if ((s0 OR s2) AND (s0 OR s3)) =simplifies=> if (s0 OR s2)
+  flat_hash_map<ActivationCondition, GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k'})},
+      {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+      {ActivationCondition::or_segments({0, 2}, 0), ToGlyphs({'a', 'b', 'e', 'f'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_simplification_.ConditionsAndGlyphs());
 }
 
 TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {

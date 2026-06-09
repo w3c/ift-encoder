@@ -16,7 +16,6 @@
 using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
 using ift::config::CLOSURE_ONLY;
 using ift::config::ConditionAnalysisMode;
-using ift::config::DEP_GRAPH_ONLY;
 using ift::config::UnmappedGlyphHandling;
 
 using absl::Status;
@@ -83,7 +82,7 @@ Status SegmentationContext::ValidateSegmentation(
 Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
   segment_index_t last_merged_segment_index = modified.base_segment;
 
-  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+  if (!IsPureDepGraphAnalysisMode()) {
     if (!InertSegments().contains(last_merged_segment_index)) {
       VLOG(1) << "Re-analyzing segment " << last_merged_segment_index
               << " due to merge.";
@@ -107,7 +106,7 @@ Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
 }
 
 Status SegmentationContext::ReprocessAll() {
-  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+  if (!IsPureDepGraphAnalysisMode()) {
     for (segment_index_t segment_index = 0;
          segment_index < SegmentationInfo().Segments().size();
          segment_index++) {
@@ -225,7 +224,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   inert_segments_.subtract(segments_to_reprocess);
 
   // Then reprocess segments:
-  if (condition_analysis_mode_ != DEP_GRAPH_ONLY) {
+  if (!IsPureDepGraphAnalysisMode()) {
     for (segment_index_t segment_index : segments_to_reprocess) {
       TRY(ReprocessSegment(segment_index));
     }
@@ -369,6 +368,16 @@ void SegmentationContext::TransferDependencyGraphGlyphConditions(
     if (condition.IsUnitary()) {
       condition = ActivationCondition::exclusive_segment(
           *condition.TriggeringSegments().begin(), 0);
+    } else if (condition_analysis_mode_ == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION &&
+      !condition.IsPurelyConjunctive() &&
+      !condition.IsPurelyDisjunctive()
+    ) {
+      // In DEP_GRAPH_ONLY_WITH_SIMPLIFICATION mode mixed conditions are simplified into
+      // a disjunctive superset.
+      // TODO(garretrieger): it may be better to do this conversion during dep graph
+      // construction, since it could it some cases reduce the cost of dep graph construction
+      // signficantly.
+      condition = condition.NonCompositeSuperset();
     }
     glyph_condition_set.SetCondition(g, condition);
   }

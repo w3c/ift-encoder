@@ -440,6 +440,9 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
       auto [it, inserted] = merged_conditions.insert({rep, cond});
       if (!inserted) {
         it->second = ActivationCondition::Or(it->second, cond);
+        if (simplify_combined_) {
+          it->second = it->second.NonCompositeSuperset();
+        }
       }
       merged_glyphs[rep].union_set(gids);
     } else {

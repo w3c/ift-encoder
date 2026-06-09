@@ -748,6 +748,10 @@ CandidateMerge::ComputePatchMergeDetails(
 
   ActivationCondition merged_condition =
       ActivationCondition::Or(condition_a, condition_b);
+  if (merger.Context().GetConditionAnalysisMode() == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {
+    // Merged condition will be simplified, so do the same here.
+    merged_condition = merged_condition.NonCompositeSuperset();
+  }
 
   GlyphSet existing_glyphs;
   auto existing_condition =
@@ -928,7 +932,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   uint32_t new_patch_size = 0;
   std::optional<GlyphSet> exclusive_gids;
   if (!merger.Strategy().UseCosts() ||
-      merger.Context().GetConditionAnalysisMode() != config::DEP_GRAPH_ONLY) {
+      !merger.Context().IsPureDepGraphAnalysisMode()) {
     if (!segments_to_merge_are_inert) {
       // When we're not in pure depgraph mode then glyph conditions are
       // incomplete. To help improve accuracy run a closure to find the new set

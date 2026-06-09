@@ -33,6 +33,12 @@ enum ConditionAnalysisMode {
   //
   // This is currently the recommended analysis mode.
   DEP_GRAPH_ONLY = 3;
+
+  // Same as DEP_GRAPH_ONLY however composite conditions (those with conjunction and
+  // disjunction) will be simplified down to purely disjunctive superset conditions.
+  // This is useful for fonts that have extremely complex conditions which are too
+  // slow to analyze using the true conditions.
+  DEP_GRAPH_ONLY_WITH_SIMPLIFICATION = 4;
 }
 
 // This messages provides the configuration details for util/gen_ift_segmentation_plan.cc

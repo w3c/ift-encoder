@@ -133,6 +133,13 @@ class ActivationCondition {
   ActivationCondition RemoveIntersectingSubgroups(
       const common::SegmentSet& segments) const;
 
+  // Returns a condition which is a superset of this one and contains
+  // purely disjunction or conjunction (and not a mix of the two)
+  //
+  // Superset means the condition will activate at least whenever the original
+  // one would have.
+  ActivationCondition NonCompositeSuperset() const;
+
   /*
    * Returns a human readable string representation of this condition.
    */
