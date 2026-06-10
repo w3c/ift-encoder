@@ -28,15 +28,14 @@ static constexpr uint32_t kMinimumGroupSize = 4;
 
 // clang-format off
 // Quality Table:
-// Quality | bigrams | init font merging | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging | preprocess threshold
-// 1       | No      | No                | 0           | 0               | na                        | 5%          | Yes                | 5%
-// 2       | Yes     | No                | 0           | 0               | na                        | 4%          | Yes                | 4%
-// 3       | Yes     | Yes               | 0           | 0               | 60%                       | 3%          | Yes                | 3%
-// 4       | Yes     | Yes               | 0           | 9               | 50%                       | 2%          | Yes                | 2%
-// 5       | Yes     | Yes               | 9           | 9               | 40%                       | 1%          | Yes                | 1%
-// 6       | Yes     | Yes               | 9           | 11              | 30%                       | 0.5%        | Yes                | 0.5%
-// 7       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | Yes                | 0.05%
-// 8       | Yes     | Yes               | 11          | 11              | 25%                       | 0.5%        | No                 | na
+// Quality | bigrams | simplificiation | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging threshold
+// 1       | No      | Yes             | 0           | 0               | 60%                       | 5%          | 5%
+// 2       | No      | No              | 0           | 0               | 54%                       | 4%          | 4%
+// 3       | Yes     | No              | 0           | 0               | 48%                       | 3%          | 3%
+// 4       | Yes     | No              | 0           | 9               | 42%                       | 2%          | 2%
+// 5       | Yes     | No              | 9           | 9               | 36%                       | 1%          | 1%
+// 6       | Yes     | No              | 9           | 11              | 30%                       | 0.5%        | 0.5%
+// 7       | Yes     | No              | 11          | 11              | 25%                       | 0.5%        | 0.05%
 // clang-format on
 enum Quality {
   MIN = 1,  // Alias for ONE
@@ -47,8 +46,7 @@ enum Quality {
   FIVE = 5,
   SIX = 6,
   SEVEN = 7,
-  EIGHT = 8,
-  MAX = 8,  // Alias for EIGHT
+  MAX = 7,  // Alias for SEVEN
 };
 
 // TODO(garretrieger): do something analagous to brotli quality levels
@@ -89,7 +87,8 @@ enum Quality {
 //     size.
 //
 // - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available,
-// otherwise CLOSURE_ONLY.
+// otherwise CLOSURE_ONLY. DEP_GRAPH_ONLY_WITH_SIMPLIFICATION can significantly speed up
+// cases with high condition complexity, at the cost of less specific final conditions.
 //
 // Merge group settings:
 //
@@ -502,7 +501,7 @@ static void ApplyQualityLevelTo(Quality quality,
 static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
   config.set_min_group_size(kMinimumGroupSize);
 
-  if (quality == ONE) {
+  if (quality == ONE || quality == TWO) {
     config.set_use_bigrams(false);
   } else {
     config.set_use_bigrams(true);
@@ -526,7 +525,6 @@ static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
       break;
     case SIX:
     case SEVEN:
-    case EIGHT:
     default:
       config.set_optimization_cutoff_fraction(0.005);
       break;
@@ -535,15 +533,7 @@ static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
 
 static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
   if (merge_group.has_cost_config()) {
-    if (quality == ONE || quality == TWO) {
-      merge_group.mutable_cost_config()->clear_initial_font_merge_threshold();
-    }
-
-    if (quality >= ONE && quality <= SEVEN) {
-      merge_group.set_preprocess_merging_group_size(kMinimumGroupSize);
-    } else {
-      merge_group.set_preprocess_merging_group_size(1);
-    }
+    merge_group.set_preprocess_merging_group_size(kMinimumGroupSize);
 
     switch (quality) {
       case ONE:
@@ -565,34 +555,38 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
         merge_group.set_preprocess_merging_probability_threshold(0.005);
         break;
       case SEVEN:
-        merge_group.set_preprocess_merging_probability_threshold(0.0005);
-        break;
-      case EIGHT:
       default:
-        merge_group.clear_preprocess_merging_probability_threshold();
+        merge_group.set_preprocess_merging_probability_threshold(0.0005);
         break;
     }
 
     if (merge_group.mutable_cost_config()->has_initial_font_merge_threshold()) {
       switch (quality) {
-        case THREE:
+        case ONE:
           merge_group.mutable_cost_config()
               ->set_initial_font_merge_probability_threshold(0.60);
           break;
+        case TWO:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.54);
+          break;
+        case THREE:
+          merge_group.mutable_cost_config()
+              ->set_initial_font_merge_probability_threshold(0.48);
+          break;
         case FOUR:
           merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.50);
+              ->set_initial_font_merge_probability_threshold(0.42);
           break;
         case FIVE:
           merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.40);
+              ->set_initial_font_merge_probability_threshold(0.36);
           break;
         case SIX:
           merge_group.mutable_cost_config()
               ->set_initial_font_merge_probability_threshold(0.30);
           break;
         case SEVEN:
-        case EIGHT:
         default:
           merge_group.mutable_cost_config()
               ->set_initial_font_merge_probability_threshold(0.25);
@@ -607,6 +601,16 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 
   config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
 
+#ifdef HB_DEPEND_API
+  if (quality == ONE) {
+    config.set_condition_analysis_mode(DEP_GRAPH_ONLY_WITH_SIMPLIFICATION);
+  } else {
+    config.set_condition_analysis_mode(DEP_GRAPH_ONLY);
+  }
+#else
+  config.set_condition_analysis_mode(CLOSURE_ONLY);
+#endif
+
   switch (quality) {
     case ONE:
     case TWO:
@@ -619,7 +623,6 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
       break;
     case SIX:
     case SEVEN:
-    case EIGHT:
     default:
       config.set_brotli_quality(11);
       break;
@@ -637,7 +640,6 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
       config.set_brotli_quality_for_initial_font_merging(9);
       break;
     case SEVEN:
-    case EIGHT:
     default:
       config.set_brotli_quality_for_initial_font_merging(11);
       break;
@@ -665,11 +667,6 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   SegmenterConfig config;
   config.set_generate_table_keyed_segments(true);
   config.set_generate_feature_segments(true);
-#ifdef HB_DEPEND_API
-  config.set_condition_analysis_mode(DEP_GRAPH_ONLY);
-#else
-  config.set_condition_analysis_mode(CLOSURE_ONLY);
-#endif
 
   auto* base_plan = config.mutable_base_segmentation_plan();
   base_plan->set_jump_ahead(2);
@@ -683,6 +680,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // TODO(garretrieger): more sophisticated scheme for auto picking quality
   // level. roughly we want to estimate the expected cost of each quality level
   // and pick based on that.
+
+  // TODO XXXXX redo this based on latest batch results, including using quality
+  // 1 for extreme cases (high condition complexity)
   Quality quality = THREE;
   if (cp_count <= 1000) {
     quality = MAX;

@@ -114,21 +114,24 @@ ungrouped_config {
 preprocess_merging_group_size_for_ungrouped: 12
 merge_groups {
   name: "Cyrillic"
-  preprocess_merging_group_size: 1
+  preprocess_merging_group_size: 4
+  preprocess_merging_probability_threshold: 0.0005
   cost_config {
     built_in_freq_data_name: "Script_cyrillic.riegeli"
   }
 }
 merge_groups {
   name: "Greek"
-  preprocess_merging_group_size: 1
+  preprocess_merging_group_size: 4
+  preprocess_merging_probability_threshold: 0.0005
   cost_config {
     built_in_freq_data_name: "Script_greek.riegeli"
   }
 }
 merge_groups {
   name: "Latin"
-  preprocess_merging_group_size: 1
+  preprocess_merging_group_size: 4
+  preprocess_merging_probability_threshold: 0.0005
   cost_config {
     built_in_freq_data_name: "Script_latin.riegeli"
     initial_font_merge_threshold: -160
@@ -137,14 +140,16 @@ merge_groups {
 }
 merge_groups {
   name: "Symbols"
-  preprocess_merging_group_size: 1
+  preprocess_merging_group_size: 4
+  preprocess_merging_probability_threshold: 0.0005
   cost_config {
     built_in_freq_data_name: "Script_symbols.riegeli"
   }
 }
 merge_groups {
   name: "Fallback"
-  preprocess_merging_group_size: 1
+  preprocess_merging_group_size: 4
+  preprocess_merging_probability_threshold: 0.0005
   cost_config {
     built_in_freq_data_name: "fallback.riegeli"
   }
