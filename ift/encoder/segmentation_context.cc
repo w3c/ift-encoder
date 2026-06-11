@@ -368,15 +368,15 @@ void SegmentationContext::TransferDependencyGraphGlyphConditions(
     if (condition.IsUnitary()) {
       condition = ActivationCondition::exclusive_segment(
           *condition.TriggeringSegments().begin(), 0);
-    } else if (condition_analysis_mode_ == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION &&
-      !condition.IsPurelyConjunctive() &&
-      !condition.IsPurelyDisjunctive()
-    ) {
-      // In DEP_GRAPH_ONLY_WITH_SIMPLIFICATION mode mixed conditions are simplified into
-      // a disjunctive superset.
-      // TODO(garretrieger): it may be better to do this conversion during dep graph
-      // construction, since it could it some cases reduce the cost of dep graph construction
-      // signficantly.
+    } else if (condition_analysis_mode_ ==
+                   config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION &&
+               !condition.IsPurelyConjunctive() &&
+               !condition.IsPurelyDisjunctive()) {
+      // In DEP_GRAPH_ONLY_WITH_SIMPLIFICATION mode mixed conditions are
+      // simplified into a disjunctive superset.
+      // TODO(garretrieger): it may be better to do this conversion during dep
+      // graph construction, since it could it some cases reduce the cost of dep
+      // graph construction signficantly.
       condition = condition.NonCompositeSuperset();
     }
     glyph_condition_set.SetCondition(g, condition);

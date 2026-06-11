@@ -23,7 +23,8 @@ namespace ift::encoder {
  */
 class GlyphGroupings {
  public:
-  GlyphGroupings(uint32_t glyph_count, bool simplify_combined = false) : combined_patches_(glyph_count), simplify_combined_(simplify_combined) {}
+  GlyphGroupings(uint32_t glyph_count, bool simplify_combined = false)
+      : combined_patches_(glyph_count), simplify_combined_(simplify_combined) {}
 
   bool operator==(const GlyphGroupings& other) {
     return or_glyph_groups_ == other.or_glyph_groups_ &&
@@ -160,8 +161,10 @@ class GlyphGroupings {
     return it->second;
   }
 
-  std::optional<ActivationCondition> GlyphToConditionPrecombination(glyph_id_t gid) const {
-    auto it = conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
+  std::optional<ActivationCondition> GlyphToConditionPrecombination(
+      glyph_id_t gid) const {
+    auto it =
+        conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
     if (it == conditions_and_glyphs_pre_combination_.GlyphToCondition().end()) {
       return std::nullopt;
     }

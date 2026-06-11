@@ -124,7 +124,9 @@ class SegmentationContext {
         segmentation_info_(std::move(segmentation_info)),
         dependency_closure_(std::nullopt),
         glyph_condition_set(hb_face_get_glyph_count(face)),
-        glyph_groupings(hb_face_get_glyph_count(face), condition_analysis_mode == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION),
+        glyph_groupings(hb_face_get_glyph_count(face),
+                        condition_analysis_mode ==
+                            config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION),
         brotli_quality_(brotli_quality),
         init_font_brotli_quality_(init_font_brotli_quality),
         condition_analysis_mode_(condition_analysis_mode),
@@ -200,23 +202,23 @@ class SegmentationContext {
 
   bool IsPureDepGraphAnalysisMode() const {
     switch (condition_analysis_mode_) {
-    case config::DEP_GRAPH_ONLY:
-    case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
-      return true;
-    default:
-      return false;
+      case config::DEP_GRAPH_ONLY:
+      case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
+        return true;
+      default:
+        return false;
     }
   }
 
   bool UsingDepGraph() const {
     switch (condition_analysis_mode_) {
-    case config::CLOSURE_AND_DEP_GRAPH:
-    case config::CLOSURE_AND_VALIDATE_DEP_GRAPH:
-    case config::DEP_GRAPH_ONLY:
-    case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
-      return true;
-    default:
-      return false;
+      case config::CLOSURE_AND_DEP_GRAPH:
+      case config::CLOSURE_AND_VALIDATE_DEP_GRAPH:
+      case config::DEP_GRAPH_ONLY:
+      case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -290,10 +292,10 @@ class SegmentationContext {
     if (dependency_closure_.has_value()) {
       maybe_dep_closure = (*dependency_closure_).get();
     }
-    return glyph_groupings.GroupGlyphs(
-        *segmentation_info_, glyph_condition_set, *glyph_closure_cache,
-        maybe_dep_closure, glyphs, modified_segments,
-        !IsPureDepGraphAnalysisMode());
+    return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
+                                       *glyph_closure_cache, maybe_dep_closure,
+                                       glyphs, modified_segments,
+                                       !IsPureDepGraphAnalysisMode());
   }
 
   void TransferDependencyGraphGlyphConditions(const common::GlyphSet& gids);
