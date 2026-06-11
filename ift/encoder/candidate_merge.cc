@@ -721,7 +721,6 @@ StatusOr<CandidateMerge::PatchMergeDetails>
 CandidateMerge::ComputePatchMergeDetails(
     const Merger& merger, const ActivationCondition& condition_a,
     const ActivationCondition& condition_b) {
-
   const auto& glyph_groupings = merger.Context().glyph_groupings;
   const auto& condition_and_glyphs = glyph_groupings.ConditionsAndGlyphs();
 
@@ -747,20 +746,24 @@ CandidateMerge::ComputePatchMergeDetails(
   GlyphSet merged_glyphs = glyphs_a;
   merged_glyphs.union_set(glyphs_b);
 
-  // When computing the new merged condition utilize the original pre-combination conditions.
-  // Doing it this way avoids applying simplification multiple times which could result in
-  // a different merged condition (since condition_a and condition_b may already be merged + simplified).
+  // When computing the new merged condition utilize the original
+  // pre-combination conditions. Doing it this way avoids applying
+  // simplification multiple times which could result in a different merged
+  // condition (since condition_a and condition_b may already be merged +
+  // simplified).
   flat_hash_set<ActivationCondition> original_conditions;
   for (glyph_id_t g : merged_glyphs) {
     auto condition = glyph_groupings.GlyphToConditionPrecombination(g);
     if (!condition.has_value()) {
-      return absl::InternalError(absl::StrCat("Cannot find precombination condition for g", g));
+      return absl::InternalError(
+          absl::StrCat("Cannot find precombination condition for g", g));
     }
     original_conditions.insert(*condition);
   }
 
   if (original_conditions.empty()) {
-    return absl::InternalError(absl::StrCat("Unexpected empty original conditions."));
+    return absl::InternalError(
+        absl::StrCat("Unexpected empty original conditions."));
   }
 
   auto it = original_conditions.begin();
@@ -770,7 +773,8 @@ CandidateMerge::ComputePatchMergeDetails(
     it++;
   }
 
-  if (merger.Context().GetConditionAnalysisMode() == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {
+  if (merger.Context().GetConditionAnalysisMode() ==
+      config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {
     // Merged condition will be simplified, so do the same here.
     merged_condition = merged_condition.NonCompositeSuperset();
   }
@@ -843,8 +847,8 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
   } else {
     GlyphSet merged_patch_glyphs = glyphs_merged;
     merged_patch_glyphs.union_set(glyphs_existing);
-    merged_patch_size =
-        TRY(merger.Context().patch_size_cache->GetPatchSize(merged_patch_glyphs));
+    merged_patch_size = TRY(
+        merger.Context().patch_size_cache->GetPatchSize(merged_patch_glyphs));
   }
 
   size_a += network_overhead;
@@ -1030,8 +1034,8 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessPatchMerge(
 
   GlyphSet new_patch_glyphs = details.glyphs_merged;
   new_patch_glyphs.union_set(details.glyphs_existing);
-  uint32_t new_patch_size = TRY(
-      merger.Context().patch_size_cache->GetPatchSize(new_patch_glyphs));
+  uint32_t new_patch_size =
+      TRY(merger.Context().patch_size_cache->GetPatchSize(new_patch_glyphs));
 
   if (!merger.Strategy().UseCosts() &&
       new_patch_size > merger.Strategy().PatchSizeMaxBytes()) {

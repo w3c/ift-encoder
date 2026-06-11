@@ -572,7 +572,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
-  ClosureGlyphSegmenter segmenter(8, 8, PATCH, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver);
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH,
+                                  DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
       roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
       segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
@@ -608,7 +609,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
 
   context->patch_size_cache.reset(size_cache);
 
-  // s0 merge with (s1 AND s2) => (s0 OR s1) AND (s0 OR s2) =simplifies=> (s0 or s1)
+  // s0 merge with (s1 AND s2) => (s0 OR s1) AND (s0 OR s2) =simplifies=> (s0 or
+  // s1)
   auto r = CandidateMerge::AssessPatchMerge(
       merger, ActivationCondition::exclusive_segment(0, 0), conj_cond,
       std::nullopt);
@@ -629,9 +631,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
   ASSERT_TRUE(s.ok()) << s.status();
 
   // gid A and gid B should now be in the same partition.
-  ASSERT_EQ(
-    *context->glyph_groupings.CombinedPatches().Find(gid_A),
-    *context->glyph_groupings.CombinedPatches().Find(gid_B));
+  ASSERT_EQ(*context->glyph_groupings.CombinedPatches().Find(gid_A),
+            *context->glyph_groupings.CombinedPatches().Find(gid_B));
 }
 #endif
 

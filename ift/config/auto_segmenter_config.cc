@@ -87,8 +87,9 @@ enum Quality {
 //     size.
 //
 // - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available,
-// otherwise CLOSURE_ONLY. DEP_GRAPH_ONLY_WITH_SIMPLIFICATION can significantly speed up
-// cases with high condition complexity, at the cost of less specific final conditions.
+// otherwise CLOSURE_ONLY. DEP_GRAPH_ONLY_WITH_SIMPLIFICATION can significantly
+// speed up cases with high condition complexity, at the cost of less specific
+// final conditions.
 //
 // Merge group settings:
 //

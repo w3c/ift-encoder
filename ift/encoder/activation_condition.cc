@@ -223,16 +223,16 @@ ActivationCondition ActivationCondition::NonCompositeSuperset() const {
   // we can freely drop any number of the sub groups and remain a superset
   // since AND always further restricts activation.
   //
-  // Given that, we use a heuristic to pick a super set that is either all conjunctive
-  // or disjunctive and roughly minimizes the activation probability of the new
-  // condition.
+  // Given that, we use a heuristic to pick a super set that is either all
+  // conjunctive or disjunctive and roughly minimizes the activation probability
+  // of the new condition.
   //
-  // If the original condition has one or more sub groups with only one segment then
-  // the return a conjunctive superset of just those subgroups.
+  // If the original condition has one or more sub groups with only one segment
+  // then the return a conjunctive superset of just those subgroups.
   //
-  // Otherwise select one subgroup to keep which has the largest min segment index
-  // (since segments are ordered by decreasing probability), break ties by selecting
-  // the smaller subgroup.
+  // Otherwise select one subgroup to keep which has the largest min segment
+  // index (since segments are ordered by decreasing probability), break ties by
+  // selecting the smaller subgroup.
 
   if (IsPurelyConjunctive() || IsPurelyDisjunctive() || IsAlwaysTrue()) {
     return *this;
@@ -253,7 +253,8 @@ ActivationCondition ActivationCondition::NonCompositeSuperset() const {
     }
 
     segment_index_t min = *sub_group.min();
-    if (!keep || min > highest_s || (min == highest_s && sub_group.size() < keep->size())) {
+    if (!keep || min > highest_s ||
+        (min == highest_s && sub_group.size() < keep->size())) {
       highest_s = min;
       keep = &sub_group;
     }
@@ -268,7 +269,7 @@ ActivationCondition ActivationCondition::NonCompositeSuperset() const {
 
   if (!conjunctive.empty()) {
     for (segment_index_t s : conjunctive) {
-      out.conditions_.push_back(SegmentSet {s});
+      out.conditions_.push_back(SegmentSet{s});
     }
     if (out.conditions_.size() == 1) {
       out.is_exclusive_ = true;

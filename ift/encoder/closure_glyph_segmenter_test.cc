@@ -60,7 +60,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH,
                             resolver),
         segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY, resolver),
-        segmenter_dep_graph_only_with_simplification(8, 8, PATCH, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver),
+        segmenter_dep_graph_only_with_simplification(
+            8, 8, PATCH, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver),
         segmenter_find_conditions_dep_graph(
             8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
         segmenter_move_to_init_font_dep_graph(
@@ -68,7 +69,8 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
 #else
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY, resolver),
         segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_dep_graph_only_with_simplification(8, 8, PATCH, CLOSURE_ONLY, resolver),
+        segmenter_dep_graph_only_with_simplification(8, 8, PATCH, CLOSURE_ONLY,
+                                                     resolver),
         segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_ONLY,
                                             resolver),
         segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
@@ -687,9 +689,10 @@ if ((s1 OR s2) AND (s3 OR s4)) then p9
 }
 
 TEST_F(ClosureGlyphSegmenterTest, DepGraphOnly_WithSimplification) {
-  auto segmentation = segmenter_dep_graph_only_with_simplification.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {},
-      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}});
+  auto segmentation =
+      segmenter_dep_graph_only_with_simplification.CodepointToGlyphSegments(
+          noto_nastaliq_urdu.get(), {},
+          {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
@@ -1174,9 +1177,12 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
   strategy.SetUsePatchMerges(true);
 
   auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}}, strategy);
-  auto segmentation_with_simplification = segmenter_dep_graph_only_with_simplification.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}}, strategy);
+      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
+      strategy);
+  auto segmentation_with_simplification =
+      segmenter_dep_graph_only_with_simplification.CodepointToGlyphSegments(
+          noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
+          strategy);
 
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
@@ -1214,7 +1220,6 @@ if (s3) then p3
 if ((s2 OR s3)) then p4
 if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
-
 }
 #endif
 

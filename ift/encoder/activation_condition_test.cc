@@ -530,42 +530,45 @@ TEST(ActivationConditionTest, EffectiveGroupSize) {
 }
 
 TEST(ActivationConditionTest, NonCompositeSuperset) {
-  EXPECT_EQ(
-    ActivationCondition::True(12).NonCompositeSuperset(),
-    ActivationCondition::True(12));
+  EXPECT_EQ(ActivationCondition::True(12).NonCompositeSuperset(),
+            ActivationCondition::True(12));
 
   EXPECT_EQ(
-    ActivationCondition::exclusive_segment(12, 14).NonCompositeSuperset(),
-    ActivationCondition::exclusive_segment(12, 14));
+      ActivationCondition::exclusive_segment(12, 14).NonCompositeSuperset(),
+      ActivationCondition::exclusive_segment(12, 14));
 
   EXPECT_EQ(
-    ActivationCondition::or_segments({2, 8, 21}, 12).NonCompositeSuperset(),
-    ActivationCondition::or_segments({2, 8, 21}, 12));
+      ActivationCondition::or_segments({2, 8, 21}, 12).NonCompositeSuperset(),
+      ActivationCondition::or_segments({2, 8, 21}, 12));
 
   EXPECT_EQ(
-    ActivationCondition::and_segments({2, 8, 21}, 12).NonCompositeSuperset(),
-    ActivationCondition::and_segments({2, 8, 21}, 12));
+      ActivationCondition::and_segments({2, 8, 21}, 12).NonCompositeSuperset(),
+      ActivationCondition::and_segments({2, 8, 21}, 12));
 
   // Picks the single segment subgroups
+  EXPECT_EQ(ActivationCondition::composite_condition({{0, 1}, {1, 7}, {3}}, 12)
+                .NonCompositeSuperset(),
+            ActivationCondition::exclusive_segment(3, 12));
   EXPECT_EQ(
-    ActivationCondition::composite_condition({{0, 1}, {1, 7}, {3}}, 12).NonCompositeSuperset(),
-    ActivationCondition::exclusive_segment(3, 12));
-  EXPECT_EQ(
-    ActivationCondition::composite_condition({{0, 1}, {1, 7}, {3}, {8}}, 12).NonCompositeSuperset(),
-    ActivationCondition::and_segments({3, 8}, 12));
+      ActivationCondition::composite_condition({{0, 1}, {1, 7}, {3}, {8}}, 12)
+          .NonCompositeSuperset(),
+      ActivationCondition::and_segments({3, 8}, 12));
 
   // Picks one subgroup (largest min segment and smallest size)
-  EXPECT_EQ(
-    ActivationCondition::composite_condition({{0, 1}, {3, 100}, {8, 9}, {2, 1}}, 12).NonCompositeSuperset(),
-    ActivationCondition::or_segments({8, 9}, 12));
+  EXPECT_EQ(ActivationCondition::composite_condition(
+                {{0, 1}, {3, 100}, {8, 9}, {2, 1}}, 12)
+                .NonCompositeSuperset(),
+            ActivationCondition::or_segments({8, 9}, 12));
 
   // if min segment is tied then the smaller group is prefered
-  EXPECT_EQ(
-    ActivationCondition::composite_condition({{0, 1}, {3, 4, 5}, {3, 100}}, 12).NonCompositeSuperset(),
-    ActivationCondition::or_segments({3, 100}, 12));
-  EXPECT_EQ(
-    ActivationCondition::composite_condition({{3, 100}, {0, 1}, {3, 4, 5}}, 12).NonCompositeSuperset(),
-    ActivationCondition::or_segments({3, 100}, 12));
+  EXPECT_EQ(ActivationCondition::composite_condition(
+                {{0, 1}, {3, 4, 5}, {3, 100}}, 12)
+                .NonCompositeSuperset(),
+            ActivationCondition::or_segments({3, 100}, 12));
+  EXPECT_EQ(ActivationCondition::composite_condition(
+                {{3, 100}, {0, 1}, {3, 4, 5}}, 12)
+                .NonCompositeSuperset(),
+            ActivationCondition::or_segments({3, 100}, 12));
 }
 
 }  // namespace ift::encoder
