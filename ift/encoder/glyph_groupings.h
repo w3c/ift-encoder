@@ -43,6 +43,11 @@ class GlyphGroupings {
     return conditions_and_glyphs_.ConditionsAndGlyphs();
   }
 
+  const absl::flat_hash_map<ActivationCondition, ift::common::GlyphSet>&
+  ConditionsAndGlyphsPreCombination() const {
+    return conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs();
+  }
+
   const absl::btree_set<ActivationCondition>& OrderedConditions() const {
     return conditions_and_glyphs_.OrderedConditions();
   }
@@ -155,6 +160,15 @@ class GlyphGroupings {
     return it->second;
   }
 
+  std::optional<ActivationCondition> GlyphToConditionPrecombination(glyph_id_t gid) const {
+    auto it = conditions_and_glyphs_pre_combination_.GlyphToCondition().find(gid);
+    if (it == conditions_and_glyphs_pre_combination_.GlyphToCondition().end()) {
+      return std::nullopt;
+    }
+
+    return it->second;
+  }
+
  private:
   void CollectSegments(glyph_id_t gid, ift::common::SegmentSet& segments);
 
@@ -223,14 +237,17 @@ class GlyphGroupings {
     if (pre_combination) {
       TRYV(conditions_and_glyphs_pre_combination_.Add(condition, glyphs));
     }
-
     return absl::OkStatus();
   }
 
   absl::Status UnionConditionAndGlyphs(ActivationCondition condition,
-                                       ift::common::GlyphSet glyphs) {
+                                       ift::common::GlyphSet glyphs,
+                                       bool pre_combination = true) {
     TRYV(conditions_and_glyphs_.Union(condition, glyphs));
-    return conditions_and_glyphs_pre_combination_.Union(condition, glyphs);
+    if (pre_combination) {
+      TRYV(conditions_and_glyphs_pre_combination_.Union(condition, glyphs));
+    }
+    return absl::OkStatus();
   }
 
   void RemoveConditionAndGlyphs(ActivationCondition condition,

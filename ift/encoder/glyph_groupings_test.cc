@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 #include "ift/encoder/activation_condition.h"
@@ -36,6 +37,7 @@ using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
+using ift::common::FontHelper;
 
 void PrintTo(const flat_hash_map<ActivationCondition, GlyphSet>& conditions,
              std::ostream* os) {
@@ -326,6 +328,56 @@ TEST_F(GlyphGroupingsTest, CombinePatches_WithSimpfliciation) {
   };
 
   ASSERT_EQ(expected, glyph_groupings_simplification_.ConditionsAndGlyphs());
+}
+
+TEST_F(GlyphGroupingsTest, CombinePatches_SimplificationCollision) {
+  glyph_id_t gid_l = *FontHelper::GetNominalGlyph(roboto_.get(), 'l');
+  cp_to_gid_['l'] = gid_l;
+
+  glyphs_to_group_.insert(gid_l);
+  glyph_conditions_->AddOrCondition(gid_l, 0);
+  glyph_conditions_->AddOrCondition(gid_l, 2);
+
+  auto sc = glyph_groupings_simplification_.CombinePatches(ToGlyphs({'e'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_simplification_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  flat_hash_map<ActivationCondition, GlyphSet> expected = {
+      {ActivationCondition::exclusive_segment(1, 0), ToGlyphs({'c', 'd'})},
+      {ActivationCondition::exclusive_segment(3, 0), ToGlyphs({'k'})},
+      {ActivationCondition::or_segments({3, 4}, 0), ToGlyphs({'g', 'h'})},
+      {ActivationCondition::or_segments({0, 2}, 0), ToGlyphs({'a', 'b', 'e', 'f', 'l'})},
+      {ActivationCondition::or_segments({2, 3}, 0), ToGlyphs({'j'})},
+  };
+
+  ASSERT_EQ(expected, glyph_groupings_simplification_.ConditionsAndGlyphs());
+}
+
+TEST_F(GlyphGroupingsTest, CombinePatches_SimplificationCollisionInvalidation) {
+  glyph_id_t gid_l = *FontHelper::GetNominalGlyph(roboto_.get(), 'l');
+  cp_to_gid_['l'] = gid_l;
+
+  glyphs_to_group_.insert(gid_l);
+  glyph_conditions_->AddOrCondition(gid_l, 0);
+  glyph_conditions_->AddOrCondition(gid_l, 2);
+
+  auto sc = glyph_groupings_simplification_.CombinePatches(ToGlyphs({'e'}), ToGlyphs({'b'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  sc = glyph_groupings_simplification_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Invalidate 'l' by calling GroupGlyphs with 'l' in the glyphs set.
+  sc = glyph_groupings_simplification_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, ToGlyphs({'l'}), {});
+  ASSERT_TRUE(sc.ok()) << sc;
 }
 
 TEST_F(GlyphGroupingsTest, CombinePatches_WithInertSpecialCase) {

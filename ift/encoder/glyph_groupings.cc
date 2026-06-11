@@ -30,9 +30,15 @@ void GlyphGroupings::InvalidateGlyphInformation(uint32_t gid) {
   unmapped_glyphs_.erase(gid);
   found_condition_glyphs_.erase(gid);
 
-  conditions_and_glyphs_.Invalidate(gid);
+  std::optional<ActivationCondition> post_combination_condition_or =
+      conditions_and_glyphs_.Invalidate(gid);
   std::optional<ActivationCondition> pre_combination_condition_or =
       conditions_and_glyphs_pre_combination_.Invalidate(gid);
+
+  if (post_combination_condition_or.has_value() &&
+      combined_conditions_.contains(*post_combination_condition_or)) {
+    RemoveAllCombinedConditions();
+  }
 
   if (!pre_combination_condition_or.has_value()) {
     return;
@@ -440,9 +446,6 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
       auto [it, inserted] = merged_conditions.insert({rep, cond});
       if (!inserted) {
         it->second = ActivationCondition::Or(it->second, cond);
-        if (simplify_combined_) {
-          it->second = it->second.NonCompositeSuperset();
-        }
       }
       merged_glyphs[rep].union_set(gids);
     } else {
@@ -450,10 +453,18 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
     }
   }
 
+  if (simplify_combined_) {
+    for (auto& cond : merged_conditions) {
+      cond.second = cond.second.NonCompositeSuperset();
+    }
+  }
+
   // Add the new combined conditions.
   for (const auto& [rep, condition] : merged_conditions) {
     const GlyphSet& gids = merged_glyphs.at(rep);
-    TRYV(AddConditionAndGlyphs(condition, gids, false));
+    // Union is used here because the merged condition may collide
+    // with an existing patch that has the same condition.
+    TRYV(UnionConditionAndGlyphs(condition, gids, false));
     combined_conditions_.insert(condition);
   }
 
