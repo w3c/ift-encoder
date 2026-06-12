@@ -466,6 +466,18 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
     // with an existing patch that has the same condition.
     TRYV(UnionConditionAndGlyphs(condition, gids, false));
     combined_conditions_.insert(condition);
+
+    // There may be precombination conditions that happen to have the same
+    // condition as this merged conditions. We need to also pull those glyphs
+    // into the final combined condition mapping as well if they are not,
+    // yet included via the combination analysis.
+    auto it = conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().find(
+        condition);
+    if (it !=
+        conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().end() &&
+        !affected_conditions.contains(condition)) {
+      TRYV(UnionConditionAndGlyphs(condition, it->second, false));
+    }
   }
 
   combined_patches_dirty_ = false;
