@@ -912,4 +912,53 @@ TEST_F(GlyphGroupingsTest, IncrementalExclusiveConflict) {
                 {expected, {ToGlyph('a'), ToGlyph('b')}}}));
 }
 
+TEST_F(GlyphGroupingsTest,
+       CombinePatches_PreservesMatchingPrecombinationCondition) {
+  // Add a new glyph 'z' with pre-combination condition s0 OR s1
+  hb_font_t* font = hb_font_create(roboto_.get());
+  glyph_id_t gid_z;
+  hb_font_get_nominal_glyph(font, 'z', &gid_z);
+  hb_font_destroy(font);
+
+  glyphs_to_group_.insert(gid_z);
+  glyph_conditions_->AddOrCondition(gid_z, 0);
+  glyph_conditions_->AddOrCondition(gid_z, 1);
+
+  // Initial grouping
+  auto sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                         *glyph_conditions_, *closure_cache_,
+                                         std::nullopt, glyphs_to_group_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Merge s0 and s1. This will create combined condition s0 OR s1.
+  sc = glyph_groupings_.CombinePatches(ToGlyphs({'a'}), ToGlyphs({'c'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Apply the merge.
+  sc = glyph_groupings_.GroupGlyphs(*requested_segmentation_info_,
+                                    *glyph_conditions_, *closure_cache_,
+                                    std::nullopt, glyphs_to_group_, {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Trigger another merge that does NOT involve s0 or s1, which will cause
+  // recomputation of combined patches.
+  sc = glyph_groupings_.CombinePatches(ToGlyphs({'g'}), ToGlyphs({'j'}));
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Apply the second merge. Only pass affected glyphs.
+  sc = glyph_groupings_.GroupGlyphs(
+      *requested_segmentation_info_, *glyph_conditions_, *closure_cache_,
+      std::nullopt, ToGlyphs({'g', 'h', 'j'}), {});
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Check if 'z' is still in s0 OR s1.
+  auto condition = glyph_groupings_.GlyphToCondition(gid_z);
+  ASSERT_TRUE(condition.has_value());
+  EXPECT_EQ(*condition, ActivationCondition::or_segments({0, 1}, 0));
+
+  auto it = glyph_groupings_.ConditionsAndGlyphs().find(*condition);
+  ASSERT_TRUE(it != glyph_groupings_.ConditionsAndGlyphs().end());
+  EXPECT_TRUE(it->second.contains(gid_z));
+}
+
 }  // namespace ift::encoder

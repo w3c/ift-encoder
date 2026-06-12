@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "absl/container/btree_set.h"
+#include "absl/strings/str_cat.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/types.h"
@@ -84,7 +85,10 @@ class ConditionToGlyphsIndex {
           glyph_to_condition_.insert(std::pair(gid, condition));
       if (!did_insert && it->second != condition) {
         return absl::InternalError(
-            "glyph_to_condition mapping does not match existing one.");
+            absl::StrCat("glyph_to_condition mapping for g", gid,
+                         " does not match existing one. New condition = ",
+                         condition.ToString(),
+                         ", existing condition = ", it->second.ToString()));
       }
     }
 
