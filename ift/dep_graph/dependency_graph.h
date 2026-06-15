@@ -245,6 +245,8 @@ class DependencyGraph {
   absl::flat_hash_map<encoder::glyph_id_t, std::vector<LayoutFeatureEdge>>
   ComputeContextGlyphEdges() const;
 
+  std::vector<Node> AllNodes(uint32_t node_type_filter) const;
+
   absl::flat_hash_map<hb_tag_t, std::vector<LayoutFeatureEdge>>
       layout_feature_implied_edges_;
 
