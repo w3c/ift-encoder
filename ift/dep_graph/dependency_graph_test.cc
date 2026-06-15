@@ -844,9 +844,11 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
       {Node::Feature(HB_TAG('l', 'i', 'g', 'a'))},
   };
   EXPECT_EQ(fi_edges, (std::vector<EdgeConditionsCnf>{
-                                                    EdgeConditionsCnf{
-                                                        {Node::Unicode(0xfb01)},
-                                                    }, expected_fi_edge,}));
+                          EdgeConditionsCnf{
+                              {Node::Unicode(0xfb01)},
+                          },
+                          expected_fi_edge,
+                      }));
 
   // 'f' requires 'f' (Unicode)
   auto f_edges_it = edges.find(Node::Glyph(gid_f));

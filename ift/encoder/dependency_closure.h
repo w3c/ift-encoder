@@ -142,7 +142,7 @@ class DependencyClosure {
   // conditions versus real subsetting closure due to reliance on the dependency
   // graph.
   absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
-  ExtractAllNodeConditions() const;
+  ExtractAllNodeConditions();
 
   ift::common::SegmentSet ComputeInertSegments(
       const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
@@ -211,6 +211,13 @@ class DependencyClosure {
       node_condition_cache_;
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
       node_conditions_with_segment_;
+
+  // Cache for CollectIncomingEdges results for non-cmap phases.
+  absl::flat_hash_map<
+      uint32_t,
+      std::optional<absl::flat_hash_map<
+          dep_graph::Node, std::vector<dep_graph::EdgeConditionsCnf>>>>
+      incoming_edges_cache_;
 
 #endif
 

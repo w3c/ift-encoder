@@ -25,9 +25,9 @@
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
+using absl::Span;
 using absl::Status;
 using absl::StatusOr;
-using absl::Span;
 using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
@@ -490,8 +490,7 @@ bool DependencyGraph::ClosureState::Reached(Node node) {
   return true;
 }
 
-void DependencyGraph::ClosureState::SetStartNodes(
-    Span<const Node> start) {
+void DependencyGraph::ClosureState::SetStartNodes(Span<const Node> start) {
   for (Node node : start) {
     Reached(node);
   }
@@ -874,7 +873,6 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 Status DependencyGraph::ClosureSubTraversal(
     const TraversalContext<ClosureState>* base_context, uint32_t phase_index,
     Traversal& traversal_full) const {
-
   // TODO XXXX vector instead
   std::vector<Node> start_nodes;
 
@@ -1288,7 +1286,8 @@ DependencyGraph::CollectIncomingEdges(
     const flat_hash_set<hb_tag_t>& table_filter,
     uint32_t node_type_filter) const {
   struct IncomingEdgeCollector {
-    flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>>* incoming_edges = nullptr;
+    flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>>* incoming_edges =
+        nullptr;
     const DependencyGraph* graph = nullptr;
     Status had_error = absl::OkStatus();
 
@@ -1365,7 +1364,7 @@ std::vector<Node> DependencyGraph::AllNodes(uint32_t node_type_filter) const {
   }
   if (node_type_filter & Node::SEGMENT) {
     for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
-     all_nodes.push_back(Node::Segment(s));
+      all_nodes.push_back(Node::Segment(s));
     }
   }
   if (node_type_filter & Node::UNICODE) {

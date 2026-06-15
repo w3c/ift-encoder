@@ -473,8 +473,8 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
     // yet included via the combination analysis.
     auto it = conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().find(
         condition);
-    if (it !=
-        conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs().end() &&
+    if (it != conditions_and_glyphs_pre_combination_.ConditionsAndGlyphs()
+                  .end() &&
         !affected_conditions.contains(condition)) {
       TRYV(UnionConditionAndGlyphs(condition, it->second, false));
     }
