@@ -686,6 +686,17 @@ TEST_F(FontHelperTest, GetNominalGlyph) {
   EXPECT_TRUE(absl::IsNotFound(g_invalid.status()));
 }
 
+TEST_F(FontHelperTest, ToCodepointsSet_IncludesVariationSelectors) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/NotoSansJP-VF.cmap14.ttf").value();
+
+  CodepointSet codepoints = FontHelper::ToCodepointsSet(face.get());
+
+  EXPECT_EQ(codepoints, (CodepointSet{0x6406, 0x640F, 0x6717, 0x7891, 0x798F,
+                                       0xFE00, 0xE0100}));
+}
+
 // TODO test BuildFont...
 
 }  // namespace ift::common
