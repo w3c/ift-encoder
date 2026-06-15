@@ -694,7 +694,7 @@ TEST_F(FontHelperTest, ToCodepointsSet_IncludesVariationSelectors) {
   CodepointSet codepoints = FontHelper::ToCodepointsSet(face.get());
 
   EXPECT_EQ(codepoints, (CodepointSet{0x6406, 0x640F, 0x6717, 0x7891, 0x798F,
-                                       0xFE00, 0xE0100}));
+                                      0xFE00, 0xE0100}));
 }
 
 // TODO test BuildFont...

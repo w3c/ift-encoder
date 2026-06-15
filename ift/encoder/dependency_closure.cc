@@ -532,7 +532,7 @@ Status DependencyClosure::PropagateConditions(
 }
 
 StatusOr<flat_hash_map<Node, ActivationCondition>>
-DependencyClosure::ExtractAllNodeConditions() const {
+DependencyClosure::ExtractAllNodeConditions() {
   auto conditions = InitializeConditions();
 
   flat_hash_set<hb_tag_t> table_tags =
@@ -541,14 +541,35 @@ DependencyClosure::ExtractAllNodeConditions() const {
   for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases;
        phase++) {
     hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
-    if (table_tags.contains(table)) {
-      auto sccs = TRY(graph_.StronglyConnectedComponents(
-          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
-      auto incoming_edges = TRY(graph_.CollectIncomingEdges(
-          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
-
-      TRYV(PropagateConditions(incoming_edges, sccs, conditions));
+    if (!table_tags.contains(table)) {
+      continue;
     }
+
+    auto sccs = TRY(graph_.StronglyConnectedComponents(
+        {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+
+    const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>* incoming_edges =
+        nullptr;
+
+    // cmap is always recomputed because init font changes affect edges
+    // in the cmap portion of the graph.
+    flat_hash_map<Node, std::vector<EdgeConditionsCnf>> cmap_incoming_edges;
+
+    if (table == common::FontHelper::kCmap) {
+      cmap_incoming_edges = TRY(graph_.CollectIncomingEdges(
+          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      incoming_edges = &cmap_incoming_edges;
+    } else {
+      // Other phases can cache the incoming edges since init font changes
+      // don't affect glyph -> glyph edges.
+      auto& phase_edges = incoming_edges_cache_[phase];
+      if (!phase_edges.has_value()) {
+        phase_edges = TRY(graph_.CollectIncomingEdges(
+            {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
+      }
+      incoming_edges = &(*phase_edges);
+    }
+    TRYV(PropagateConditions(*incoming_edges, sccs, conditions));
   }
 
   return conditions;

@@ -1128,6 +1128,41 @@ TEST_F(DependencyClosureTest, SegmentsToAffected) {
                                         Node::Glyph(446)}));
 }
 
+TEST_F(DependencyClosureTest, InitFontChanged_Caching) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+              });
+
+  auto conditions1 = dependency_closure->AllGlyphConditions();
+  ASSERT_EQ(conditions1.at(74 /* f */).ToString(), "if (s1) then p0");
+
+  // Change init font to include 'f'
+  Status s = segmentation_info->ReassignInitSubset(*closure_cache, {'f'});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto conditions2 = dependency_closure->AllGlyphConditions();
+  // 'f' should now be in init font, so not in conditions
+  ASSERT_FALSE(conditions2.contains(74 /* f */));
+  ASSERT_EQ(conditions2.at(77 /* i */).ToString(), "if (s2) then p0");
+
+  // Change init font again to include 'i'
+  s = segmentation_info->ReassignInitSubset(*closure_cache, {'i'});
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto conditions3 = dependency_closure->AllGlyphConditions();
+  ASSERT_FALSE(conditions3.contains(77 /* i */));
+  ASSERT_EQ(conditions3.at(69 /* a */).ToString(), "if (s0) then p0");
+}
+
 }  // namespace ift::encoder
 
 // TODO(garretrieger): missing tests
