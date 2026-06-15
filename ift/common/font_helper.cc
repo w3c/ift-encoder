@@ -278,6 +278,7 @@ flat_hash_map<uint32_t, CodepointSet> FontHelper::GidToUnicodeMap(
 CodepointSet FontHelper::ToCodepointsSet(hb_face_t* face) {
   hb_set_unique_ptr codepoints = make_hb_set();
   hb_face_collect_unicodes(face, codepoints.get());
+  hb_face_collect_variation_selectors(face, codepoints.get());
   return CodepointSet(codepoints);
 }
 
