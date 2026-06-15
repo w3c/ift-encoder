@@ -457,7 +457,7 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 }
 
 Status DependencyClosure::PropagateConditions(
-    const flat_hash_map<Node, btree_set<EdgeConditionsCnf>>& incoming_edges,
+    const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
     flat_hash_map<Node, ActivationCondition>& node_conditions) const {
   for (const std::vector<Node>& scc : sccs) {

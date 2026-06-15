@@ -843,10 +843,10 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
       {Node::Glyph(gid_i)},
       {Node::Feature(HB_TAG('l', 'i', 'g', 'a'))},
   };
-  EXPECT_EQ(fi_edges, (btree_set<EdgeConditionsCnf>{expected_fi_edge,
+  EXPECT_EQ(fi_edges, (std::vector<EdgeConditionsCnf>{
                                                     EdgeConditionsCnf{
                                                         {Node::Unicode(0xfb01)},
-                                                    }}));
+                                                    }, expected_fi_edge,}));
 
   // 'f' requires 'f' (Unicode)
   auto f_edges_it = edges.find(Node::Glyph(gid_f));
@@ -854,7 +854,7 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
   const auto& f_edges = f_edges_it->second;
 
   EdgeConditionsCnf expected_f_edge = {{Node::Unicode('f')}};
-  EXPECT_EQ(f_edges, (btree_set<EdgeConditionsCnf>{expected_f_edge}));
+  EXPECT_EQ(f_edges, (std::vector<EdgeConditionsCnf>{expected_f_edge}));
 }
 
 // TODO(garretrieger):

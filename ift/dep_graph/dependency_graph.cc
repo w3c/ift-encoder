@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -26,6 +27,7 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
+using absl::Span;
 using bazel::tools::cpp::runfiles::Runfiles;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
@@ -182,7 +184,7 @@ class TraversalContext {
   }
 
   // Sets the nodes from which traversal starts.
-  void SetReached(const btree_set<Node>& start) {
+  void SetReached(Span<const Node> start) {
     for (Node node : start) {
       Reached(node);
     }
@@ -489,7 +491,7 @@ bool DependencyGraph::ClosureState::Reached(Node node) {
 }
 
 void DependencyGraph::ClosureState::SetStartNodes(
-    const btree_set<Node>& start) {
+    Span<const Node> start) {
   for (Node node : start) {
     Reached(node);
   }
@@ -833,7 +835,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   // TraverseGraph(...) only records things reached via edges and not the
   // starting nodes. So explicitly mark starting nodes as reached (if they are
   // not filtered).
-  btree_set<Node> filtered_nodes;
+  std::vector<Node> filtered_nodes;
   for (const auto& node : nodes) {
     if (node.IsGlyph() && !base_context.glyph_filter->contains(node.Id())) {
       continue;
@@ -844,7 +846,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     if (node.IsFeature() && !base_context.feature_filter->contains(node.Id())) {
       continue;
     }
-    filtered_nodes.insert(node);
+    filtered_nodes.push_back(node);
     traversal_full.Visit(node);
   }
 
@@ -874,19 +876,19 @@ Status DependencyGraph::ClosureSubTraversal(
     Traversal& traversal_full) const {
 
   // TODO XXXX vector instead
-  btree_set<Node> start_nodes;
+  std::vector<Node> start_nodes;
 
   if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
       Node::NodeType::GLYPH) {
     for (glyph_id_t gid : traversal_full.ReachedGlyphs()) {
-      start_nodes.insert(Node::Glyph(gid));
+      start_nodes.push_back(Node::Glyph(gid));
     }
   }
 
   if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
       Node::NodeType::FEATURE) {
     for (hb_tag_t feature : traversal_full.ReachedLayoutFeatures()) {
-      start_nodes.insert(Node::Feature(feature));
+      start_nodes.push_back(Node::Feature(feature));
     }
   }
 
@@ -1281,13 +1283,12 @@ DependencyGraph::ComputeFeatureEdges() const {
   return out;
 }
 
-StatusOr<flat_hash_map<Node, btree_set<EdgeConditionsCnf>>>
+StatusOr<flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
 DependencyGraph::CollectIncomingEdges(
     const flat_hash_set<hb_tag_t>& table_filter,
     uint32_t node_type_filter) const {
   struct IncomingEdgeCollector {
-    // TODO XXXX vector instead of btree_set?
-    flat_hash_map<Node, btree_set<EdgeConditionsCnf>>* incoming_edges = nullptr;
+    flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>>* incoming_edges = nullptr;
     const DependencyGraph* graph = nullptr;
     Status had_error = absl::OkStatus();
 
@@ -1307,7 +1308,7 @@ DependencyGraph::CollectIncomingEdges(
   };
 
   // flat_hash_set instead of btree, return sorted vector at the end
-  flat_hash_map<Node, btree_set<EdgeConditionsCnf>> incoming_edges;
+  flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>> incoming_edges;
   TraversalContext<IncomingEdgeCollector> context;
   context.depend = dependency_graph_.get();
   context.full_closure = &segmentation_info_->FullClosure();
@@ -1320,16 +1321,23 @@ DependencyGraph::CollectIncomingEdges(
   context.callback.incoming_edges = &incoming_edges;
   context.callback.graph = this;
 
-  // TODO(garretrieger): we have a few places iterating all nodes now, consider
-  // adding a function to generate the all nodes set or an all nodes iterator.
-
   std::vector<Node> all_nodes = AllNodes(node_type_filter);
   for (Node n : all_nodes) {
     TRYV(HandleOutgoingEdges(n, &context));
     TRYV(context.callback.had_error);
   }
 
-  return incoming_edges;
+  flat_hash_map<Node, std::vector<EdgeConditionsCnf>> out;
+  out.reserve(incoming_edges.size());
+  for (const auto& [n, edges] : incoming_edges) {
+    std::vector<EdgeConditionsCnf> edges_sorted;
+    edges_sorted.reserve(edges.size());
+    std::copy(edges.begin(), edges.end(), std::back_inserter(edges_sorted));
+    std::sort(edges_sorted.begin(), edges_sorted.end());
+    out[n] = std::move(edges_sorted);
+  }
+
+  return out;
 }
 
 std::vector<Node> DependencyGraph::AllNodes(uint32_t node_type_filter) const {
