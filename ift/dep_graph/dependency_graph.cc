@@ -49,7 +49,6 @@ StatusOr<DependencyGraph> DependencyGraph::Create(
     const RequestedSegmentationInformation* segmentation_info, hb_face_t* face,
     const DataFileResolver& resolver) {
   auto full_feature_set = TRY(FullFeatureSet(segmentation_info, face));
-  auto init_font_feature_set = TRY(InitFeatureSet(segmentation_info, face));
   hb_depend_t* depend = hb_depend_from_face_or_fail(face);
   if (!depend) {
     return absl::InternalError("Call to hb_depend_from_face_or_fail() failed.");
@@ -698,31 +697,39 @@ DependencyGraph::StronglyConnectedComponents(
   };
 
   /* ### Run strongconnect for every possible, non init font node. #### */
-  for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
-    Node n = Node::Segment(s);
-    if (!node_meta.contains(n)) {
-      TRYV(strongconnect(n));
+  if (node_type_filter & Node::SEGMENT) {
+    for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
+      Node n = Node::Segment(s);
+      if (!node_meta.contains(n)) {
+        TRYV(strongconnect(n));
+      }
     }
   }
 
-  for (hb_codepoint_t u : non_init_font_codepoints) {
-    Node n = Node::Unicode(u);
-    if (!node_meta.contains(n)) {
-      TRYV(strongconnect(n));
+  if (node_type_filter & Node::UNICODE) {
+    for (hb_codepoint_t u : non_init_font_codepoints) {
+      Node n = Node::Unicode(u);
+      if (!node_meta.contains(n)) {
+        TRYV(strongconnect(n));
+      }
     }
   }
 
-  for (hb_tag_t tag : non_init_font_features) {
-    Node n = Node::Feature(tag);
-    if (!node_meta.contains(n)) {
-      TRYV(strongconnect(n));
+  if (node_type_filter & Node::FEATURE) {
+    for (hb_tag_t tag : non_init_font_features) {
+      Node n = Node::Feature(tag);
+      if (!node_meta.contains(n)) {
+        TRYV(strongconnect(n));
+      }
     }
   }
 
-  for (glyph_id_t gid : non_init_font_glyphs) {
-    Node n = Node::Glyph(gid);
-    if (!node_meta.contains(n)) {
-      TRYV(strongconnect(n));
+  if (node_type_filter & Node::GLYPH) {
+    for (glyph_id_t gid : non_init_font_glyphs) {
+      Node n = Node::Glyph(gid);
+      if (!node_meta.contains(n)) {
+        TRYV(strongconnect(n));
+      }
     }
   }
 
@@ -865,6 +872,8 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 Status DependencyGraph::ClosureSubTraversal(
     const TraversalContext<ClosureState>* base_context, uint32_t phase_index,
     Traversal& traversal_full) const {
+
+  // TODO XXXX vector instead
   btree_set<Node> start_nodes;
 
   if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
@@ -1277,6 +1286,7 @@ DependencyGraph::CollectIncomingEdges(
     const flat_hash_set<hb_tag_t>& table_filter,
     uint32_t node_type_filter) const {
   struct IncomingEdgeCollector {
+    // TODO XXXX vector instead of btree_set?
     flat_hash_map<Node, btree_set<EdgeConditionsCnf>>* incoming_edges = nullptr;
     const DependencyGraph* graph = nullptr;
     Status had_error = absl::OkStatus();
@@ -1296,6 +1306,7 @@ DependencyGraph::CollectIncomingEdges(
     }
   };
 
+  // flat_hash_set instead of btree, return sorted vector at the end
   flat_hash_map<Node, btree_set<EdgeConditionsCnf>> incoming_edges;
   TraversalContext<IncomingEdgeCollector> context;
   context.depend = dependency_graph_.get();
@@ -1311,27 +1322,60 @@ DependencyGraph::CollectIncomingEdges(
 
   // TODO(garretrieger): we have a few places iterating all nodes now, consider
   // adding a function to generate the all nodes set or an all nodes iterator.
-  btree_set<Node> all_nodes;
-  all_nodes.insert(Node::InitFont());
-  for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
-    all_nodes.insert(Node::Segment(s));
-  }
-  for (hb_codepoint_t u : segmentation_info_->FullCodepointClosure()) {
-    all_nodes.insert(Node::Unicode(u));
-  }
-  for (hb_tag_t f : full_feature_set_) {
-    all_nodes.insert(Node::Feature(f));
-  }
-  for (glyph_id_t g : segmentation_info_->FullClosure()) {
-    all_nodes.insert(Node::Glyph(g));
-  }
 
+  std::vector<Node> all_nodes = AllNodes(node_type_filter);
   for (Node n : all_nodes) {
     TRYV(HandleOutgoingEdges(n, &context));
     TRYV(context.callback.had_error);
   }
 
   return incoming_edges;
+}
+
+std::vector<Node> DependencyGraph::AllNodes(uint32_t node_type_filter) const {
+  size_t expected_size = 0;
+  if (node_type_filter & Node::INIT_FONT) {
+    expected_size++;
+  }
+  if (node_type_filter & Node::SEGMENT) {
+    expected_size += segmentation_info_->NonEmptySegments().size();
+  }
+  if (node_type_filter & Node::UNICODE) {
+    expected_size += segmentation_info_->FullCodepointClosure().size();
+  }
+  if (node_type_filter & Node::FEATURE) {
+    expected_size += full_feature_set_.size();
+  }
+  if (node_type_filter & Node::GLYPH) {
+    expected_size += segmentation_info_->FullClosure().size();
+  }
+
+  std::vector<Node> all_nodes;
+  all_nodes.reserve(expected_size);
+  if (node_type_filter & Node::INIT_FONT) {
+    all_nodes.push_back(Node::InitFont());
+  }
+  if (node_type_filter & Node::SEGMENT) {
+    for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
+     all_nodes.push_back(Node::Segment(s));
+    }
+  }
+  if (node_type_filter & Node::UNICODE) {
+    for (hb_codepoint_t u : segmentation_info_->FullCodepointClosure()) {
+      all_nodes.push_back(Node::Unicode(u));
+    }
+  }
+  if (node_type_filter & Node::FEATURE) {
+    for (hb_tag_t f : full_feature_set_) {
+      all_nodes.push_back(Node::Feature(f));
+    }
+  }
+  if (node_type_filter & Node::GLYPH) {
+    for (glyph_id_t g : segmentation_info_->FullClosure()) {
+      all_nodes.push_back(Node::Glyph(g));
+    }
+  }
+  return all_nodes;
 }
 
 void PrintTo(const Node& node, std::ostream* os) { *os << node.ToString(); }
