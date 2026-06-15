@@ -159,7 +159,7 @@ class DependencyClosure {
 
   absl::Status PropagateConditions(
       const absl::flat_hash_map<dep_graph::Node,
-                                absl::btree_set<dep_graph::EdgeConditionsCnf>>&
+                                std::vector<dep_graph::EdgeConditionsCnf>>&
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions)

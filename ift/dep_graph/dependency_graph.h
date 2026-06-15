@@ -120,7 +120,7 @@ class DependencyGraph {
   //
   // The return value is a map from each node to each unique edge requirement.
   // Edge requirements are represented as a CNF expression over other nodes.
-  absl::StatusOr<absl::flat_hash_map<Node, absl::btree_set<EdgeConditionsCnf>>>
+  absl::StatusOr<absl::flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
   CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter,
                        uint32_t node_type_filter) const;
 
@@ -145,7 +145,7 @@ class DependencyGraph {
 
     std::optional<Node> GetNext();
     bool Reached(Node node);
-    void SetStartNodes(const absl::btree_set<Node>& start);
+    void SetStartNodes(absl::Span<const Node> start);
   };
 
   absl::StatusOr<Traversal> TraverseGraph(
