@@ -39,6 +39,11 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
 
   TRYV(InitNodeConditionsCache(segments));
 
+  if (!context_glyphs_.has_value() || !init_font_context_glyphs_.has_value()) {
+    // Context glyphs aren't need for this instance, so skip generating them.
+    return absl::OkStatus();
+  }
+
   SegmentSet start_segments;
   for (segment_index_t s = 0; s < segmentation_info_->Segments().size(); s++) {
     if (segmentation_info_->Segments().at(s).Definition().Empty()) {
@@ -53,14 +58,14 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   // The init font may have reachable glyphs which are not in the init font
   // closure, we need to record the context glyphs from these as they are
   // potential interaction points.
-  init_font_context_glyphs_.clear();
+  init_font_context_glyphs_ = GlyphSet {};
   Traversal init_font_traversal = TRY(graph_.ClosureTraversal(
       {Node::InitFont()}, &segmentation_info_->FullClosure(),
       &segmentation_info_->FullDefinition().codepoints, false));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
     if (segmentation_info_->NonInitFontGlyphs().contains(g)) {
-      context_glyphs_.union_set(context);
-      init_font_context_glyphs_.union_set(context);
+      context_glyphs_->union_set(context);
+      init_font_context_glyphs_->union_set(context);
     }
   }
 
@@ -241,8 +246,8 @@ DependencyClosure::AnalyzeSegmentInternal(
   }
   result.reached_glyphs = inscope_glyphs;
 
-  if (inscope_glyphs.intersects(context_glyphs_) ||
-      inscope_glyphs.intersects(init_font_context_glyphs_)) {
+  if ((context_glyphs_.has_value() && inscope_glyphs.intersects(*context_glyphs_)) ||
+      (init_font_context_glyphs_.has_value() && inscope_glyphs.intersects(*init_font_context_glyphs_))) {
     // For now don't return results for anything that involves contextual lookup
     // glyphs.
     result.accuracy = INACCURATE;
