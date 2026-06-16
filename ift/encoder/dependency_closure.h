@@ -2,8 +2,8 @@
 #define IFT_ENCODER_DEPENDENCY_CLOSURE_H_
 
 #include <memory>
+#include <optional>
 
-#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "hb.h"
@@ -32,9 +32,13 @@ class RequestedSegmentationInformation;
  */
 class DependencyClosure {
  public:
+  // If allow_context_glyph_analysis is true then AnalyzeSegment() will not
+  // report INNACCURATE for cases that involve context glyphs.
   static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face, const ift::common::DataFileResolver& resolver) {
+      hb_face_t* face, const ift::common::DataFileResolver& resolver,
+      bool allow_context_glyph_analysis = false
+    ) {
 #ifndef HB_DEPEND_API
     return std::unique_ptr<DependencyClosure>(new DependencyClosure());
 #else
@@ -42,6 +46,11 @@ class DependencyClosure {
         dep_graph::DependencyGraph::Create(segmentation_info, face, resolver));
     auto result = std::unique_ptr<DependencyClosure>(
         new DependencyClosure(std::move(graph), segmentation_info, face));
+
+    if (!allow_context_glyph_analysis) {
+      result->context_glyphs_ = common::GlyphSet {};
+      result->init_font_context_glyphs_ = common::GlyphSet {};
+    }
     TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
 
     return result;
@@ -211,8 +220,8 @@ class DependencyClosure {
   ift::common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
 
-  ift::common::GlyphSet context_glyphs_;
-  ift::common::GlyphSet init_font_context_glyphs_;
+  std::optional<ift::common::GlyphSet> context_glyphs_ = std::nullopt;
+  std::optional<ift::common::GlyphSet> init_font_context_glyphs_ = std::nullopt;
 
   // Inert segments are segments that:
   // - Appear only in a single unitary condition, that is
