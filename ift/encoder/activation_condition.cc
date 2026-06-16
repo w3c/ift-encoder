@@ -160,20 +160,73 @@ ActivationCondition ActivationCondition::And(const ActivationCondition& a,
 
 ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
                                             const ActivationCondition& b) {
-  ActivationCondition condition = a;
-  condition.conditions_.clear();
-  condition.conditions_.reserve(a.conditions().size() * b.conditions().size());
+  ActivationCondition condition;
+  condition.is_fallback_ = a.is_fallback_;
+  condition.is_exclusive_ = false;
+  condition.activated_ = a.activated_;
+  condition.encoding_ = a.encoding_;
 
-  for (const auto& a_group : a.conditions()) {
-    for (const auto& b_group : b.conditions()) {
-      SegmentSet combined_group = a_group;
-      combined_group.union_set(b_group);
-      condition.conditions_.push_back(std::move(combined_group));
+  // The general approach to doing Or combination is to create a cross product
+  // of the sub groups from a and b. However, for any sub groups of a and b that
+  // are identical as an optimization we can exclude them from the cross product
+  // since:  (I AND A) or (I AND B) = I AND (A OR B)
+  //
+  // The (I or B), (I or A) subgroups get eliminated as supersets of I.
+  //
+  // So first pull out identical subgroups shared between a and b,
+  // we can do this in a single pass since activation conditions always store
+  // their conditions sorted internally.
+
+  std::vector<const SegmentSet*> a_unique;
+  a_unique.reserve(a.conditions_.size());
+  std::vector<const SegmentSet*> b_unique;
+  b_unique.reserve(b.conditions_.size());
+
+  auto a_it = a.conditions().begin();
+  auto b_it = b.conditions().begin();
+
+  while (a_it != a.conditions().end() && b_it != b.conditions().end()) {
+    if (*a_it < *b_it) {
+      a_unique.push_back(&*a_it);
+      a_it++;
+    } else if (*b_it < *a_it) {
+      b_unique.push_back(&*b_it);
+      b_it++;
+    } else {
+      condition.conditions_.push_back(*a_it);
+      a_it++;
+      b_it++;
     }
   }
 
+  while (a_it != a.conditions().end()) {
+    a_unique.push_back(&*a_it);
+    a_it++;
+  }
+  while (b_it != b.conditions().end()) {
+    b_unique.push_back(&*b_it);
+    b_it++;
+  }
+
+  if (a_unique.empty() || b_unique.empty()) {
+    // If either of the unique sets are empty then the cross product will be
+    // empty. We can skip cross product calc and simplification since the
+    // identical clauses are pulled only from a and b which both are already
+    // simplified.
+    return condition;
+  }
+
+  condition.conditions_.reserve(condition.conditions_.size() +
+                                a_unique.size() * b_unique.size());
+  for (const auto* a_group : a_unique) {
+    for (const auto* b_group : b_unique) {
+      SegmentSet combined_group = *a_group;
+      combined_group.union_set(*b_group);
+      condition.conditions_.push_back(std::move(combined_group));
+    }
+  }
   Simplify(condition.conditions_);
-  condition.is_exclusive_ = false;
+
   return condition;
 }
 

@@ -477,6 +477,23 @@ TEST(ActivationConditionTest, Or_Simplification) {
   EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
 }
 
+TEST(ActivationConditionTest, Or_CommonClauses) {
+  auto a = ActivationCondition::composite_condition({{1, 2}, {3}, {4}}, 10);
+  auto b = ActivationCondition::composite_condition({{1, 2}, {3}, {5}}, 10);
+
+  auto combined = ActivationCondition::Or(a, b);
+  EXPECT_EQ(combined.ToString(),
+            "if ((s1 OR s2) AND s3 AND (s4 OR s5)) then p10");
+}
+
+TEST(ActivationConditionTest, Or_Subsumption) {
+  auto a = ActivationCondition::and_segments({1, 2}, 10);
+  auto b = ActivationCondition::and_segments({1}, 10);
+
+  auto combined = ActivationCondition::Or(a, b);
+  EXPECT_EQ(combined.ToString(), "if (s1) then p10");
+}
+
 TEST(ActivationConditionTest, ReplaceSegments) {
   // (s1 OR s2) AND (s3 OR s4) AND s5
   auto a = ActivationCondition::composite_condition({{1, 2}, {3, 4}, {5}}, 10);
