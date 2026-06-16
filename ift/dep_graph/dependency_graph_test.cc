@@ -21,6 +21,7 @@ using ift::config::PATCH;
 
 using absl::btree_set;
 using absl::flat_hash_map;
+using absl::flat_hash_set;
 using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
@@ -36,6 +37,7 @@ using ift::encoder::SubsetDefinition;
 using ift::freq::ProbabilityBound;
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
+using ::testing::ElementsAre;
 
 #include "ift/common/test_font_loader.h"
 
@@ -857,6 +859,77 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
 
   EdgeConditionsCnf expected_f_edge = {{Node::Unicode('f')}};
   EXPECT_EQ(f_edges, (std::vector<EdgeConditionsCnf>{expected_f_edge}));
+}
+
+TEST_F(DependencyGraphTest, StronglyConnectedComponents_NodeInclusionFilter) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+  Reconfigure({}, {
+                      {{'a'}, ProbabilityBound::Zero()},
+                      {{'f'}, ProbabilityBound::Zero()},
+                      {{'i'}, ProbabilityBound::Zero()},
+                      {liga, ProbabilityBound::Zero()},
+                  });
+
+  glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
+  flat_hash_set<Node> filter = {
+      Node::Segment(1),
+      Node::Unicode('f'),
+      Node::Glyph(gid_f),
+  };
+
+  auto sccs_or = graph.StronglyConnectedComponents(
+      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF,
+      &filter);
+  ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
+  const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
+
+  ASSERT_THAT(topo_order,
+              ElementsAre(Node::Segment(1), Node::Unicode('f'),
+                                   Node::Glyph(gid_f)));
+}
+
+TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeInclusionFilter) {
+  SubsetDefinition liga;
+  liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
+
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
+                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 2 */ {liga, ProbabilityBound::Zero()},
+              });
+
+  glyph_id_t gid_fi = *FontHelper::GetNominalGlyph(face.get(), 0xfb01);
+  glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
+  glyph_id_t gid_i = *FontHelper::GetNominalGlyph(face.get(), 'i');
+
+  flat_hash_set<Node> filter = {
+      Node::Glyph(gid_fi),
+  };
+
+  auto edges_or = graph.CollectIncomingEdges(
+      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF, &filter);
+  ASSERT_TRUE(edges_or.ok()) << edges_or.status();
+  const auto& edges = *edges_or;
+
+  // Only gid_fi should have collected edges
+  EXPECT_EQ(edges.size(), 1);
+  auto fi_edges_it = edges.find(Node::Glyph(gid_fi));
+  ASSERT_NE(fi_edges_it, edges.end());
+  const auto& fi_edges = fi_edges_it->second;
+
+  EdgeConditionsCnf expected_fi_edge = {
+      {Node::Glyph(gid_f)},
+      {Node::Glyph(gid_i)},
+      {Node::Feature(HB_TAG('l', 'i', 'g', 'a'))},
+  };
+  EXPECT_EQ(fi_edges, (std::vector<EdgeConditionsCnf>{
+                          EdgeConditionsCnf{
+                              {Node::Unicode(0xfb01)},
+                          },
+                          expected_fi_edge,
+                      }));
 }
 
 // TODO(garretrieger):

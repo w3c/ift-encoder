@@ -146,6 +146,9 @@ class TraversalContext {
   // reached).
   bool enforce_context = false;
 
+  // If non-null, only nodes present in this set will be traversed / explored.
+  const flat_hash_set<Node>* node_inclusion_filter = nullptr;
+
   // Informed of the results of traversal
   CallbackT callback;
 
@@ -175,6 +178,7 @@ class TraversalContext {
     feature_filter = other.feature_filter;
     node_type_filter = other.node_type_filter;
     enforce_context = other.enforce_context;
+    node_inclusion_filter = other.node_inclusion_filter;
     callback = other.callback;
 
     pending_edges_ = other.pending_edges_;
@@ -421,6 +425,10 @@ class TraversalContext {
 
   bool ShouldFollow(Node node, std::optional<hb_tag_t> table_tag,
                     std::optional<hb_tag_t> layout_feature) const {
+    if (node_inclusion_filter != nullptr && !node_inclusion_filter->contains(node)) {
+      return false;
+    }
+
     if (!node.Matches(node_type_filter)) {
       return false;
     }
@@ -580,7 +588,8 @@ absl::Status DependencyGraph::HandleOutgoingEdges(
 StatusOr<std::vector<std::vector<Node>>>
 DependencyGraph::StronglyConnectedComponents(
     const flat_hash_set<hb_tag_t>& table_filter,
-    uint32_t node_type_filter) const {
+    uint32_t node_type_filter,
+    const absl::flat_hash_set<Node>* node_inclusion_filter) const {
   struct Callback {
     std::vector<Node> edges;
     void Visit(Node) {}
@@ -611,6 +620,7 @@ DependencyGraph::StronglyConnectedComponents(
   context.feature_filter = &full_feature_set_;
   context.table_filter = table_filter;
   context.node_type_filter = node_type_filter;
+  context.node_inclusion_filter = node_inclusion_filter;
 
   // Implementation based on
   // https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
@@ -701,6 +711,7 @@ DependencyGraph::StronglyConnectedComponents(
   if (node_type_filter & Node::SEGMENT) {
     for (segment_index_t s : segmentation_info_->NonEmptySegments()) {
       Node n = Node::Segment(s);
+      if (node_inclusion_filter && !node_inclusion_filter->contains(n)) continue;
       if (!node_meta.contains(n)) {
         TRYV(strongconnect(n));
       }
@@ -710,6 +721,7 @@ DependencyGraph::StronglyConnectedComponents(
   if (node_type_filter & Node::UNICODE) {
     for (hb_codepoint_t u : non_init_font_codepoints) {
       Node n = Node::Unicode(u);
+      if (node_inclusion_filter && !node_inclusion_filter->contains(n)) continue;
       if (!node_meta.contains(n)) {
         TRYV(strongconnect(n));
       }
@@ -719,6 +731,7 @@ DependencyGraph::StronglyConnectedComponents(
   if (node_type_filter & Node::FEATURE) {
     for (hb_tag_t tag : non_init_font_features) {
       Node n = Node::Feature(tag);
+      if (node_inclusion_filter && !node_inclusion_filter->contains(n)) continue;
       if (!node_meta.contains(n)) {
         TRYV(strongconnect(n));
       }
@@ -728,6 +741,7 @@ DependencyGraph::StronglyConnectedComponents(
   if (node_type_filter & Node::GLYPH) {
     for (glyph_id_t gid : non_init_font_glyphs) {
       Node n = Node::Glyph(gid);
+      if (node_inclusion_filter && !node_inclusion_filter->contains(n)) continue;
       if (!node_meta.contains(n)) {
         TRYV(strongconnect(n));
       }
@@ -1284,7 +1298,8 @@ DependencyGraph::ComputeFeatureEdges() const {
 StatusOr<flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
 DependencyGraph::CollectIncomingEdges(
     const flat_hash_set<hb_tag_t>& table_filter,
-    uint32_t node_type_filter) const {
+    uint32_t node_type_filter,
+    const absl::flat_hash_set<Node>* node_inclusion_filter) const {
   struct IncomingEdgeCollector {
     flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>>* incoming_edges =
         nullptr;
@@ -1317,6 +1332,7 @@ DependencyGraph::CollectIncomingEdges(
   context.enforce_context = false;
   context.table_filter = table_filter;
   context.node_type_filter = node_type_filter;
+  context.node_inclusion_filter = node_inclusion_filter;
   context.callback.incoming_edges = &incoming_edges;
   context.callback.graph = this;
 

@@ -141,15 +141,27 @@ class DependencyClosure {
   // graph) for all graph nodes. In some cases may overestimate activation
   // conditions versus real subsetting closure due to reliance on the dependency
   // graph.
-  absl::StatusOr<absl::flat_hash_map<dep_graph::Node, ActivationCondition>>
-  ExtractAllNodeConditions();
+  absl::Status UpdateAllNodeConditions(
+      const common::SegmentSet& changed_segments);
+
+  absl::StatusOr<absl::flat_hash_set<dep_graph::Node>>
+  ReachableNonInitFontNodes(
+      const common::SegmentSet& changed_segments,
+      const absl::flat_hash_set<dep_graph::Node>& new_init_nodes) const;
+
+  absl::StatusOr<absl::flat_hash_set<dep_graph::Node>> InitFontNodes(
+    const absl::flat_hash_set<dep_graph::Node>& previous_init_font_nodes,
+    absl::flat_hash_set<dep_graph::Node>& new_nodes) const;
 
   ift::common::SegmentSet ComputeInertSegments(
       const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
       const;
 
-  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
-  InitializeConditions() const;
+  absl::Status InitializeConditions(
+    absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+    const common::SegmentSet& changed_segments,
+    const absl::flat_hash_set<dep_graph::Node>& new_init_font_nodes
+  ) const;
 
   static absl::StatusOr<std::optional<ActivationCondition>>
   EdgeConditionsToActivationCondition(
@@ -190,7 +202,8 @@ class DependencyClosure {
   absl::StatusOr<common::SegmentSet> FilterSegments(
       const common::SegmentSet& segments) const;
 
-  absl::Status InitNodeConditionsCache();
+  absl::Status InitNodeConditionsCache(
+      const common::SegmentSet& changed_segments);
   void UpdateNodeConditionsCache(segment_index_t base_segment,
                                  const common::SegmentSet& segments);
 
@@ -218,6 +231,10 @@ class DependencyClosure {
       std::optional<absl::flat_hash_map<
           dep_graph::Node, std::vector<dep_graph::EdgeConditionsCnf>>>>
       incoming_edges_cache_;
+
+  // Cache of previously processed InitFont nodes, used to determine newly added
+  // init items.
+  absl::flat_hash_set<dep_graph::Node> init_font_nodes_;
 
 #endif
 

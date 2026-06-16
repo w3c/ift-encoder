@@ -96,6 +96,20 @@ class Traversal {
     return reached_codepoints_;
   }
 
+  const absl::flat_hash_set<Node> ReachedNodes() {
+    absl::flat_hash_set<Node> reached;
+    for (encoder::glyph_id_t g : ReachedGlyphs()) {
+      reached.insert(Node::Glyph(g));
+    }
+    for (hb_codepoint_t c : ReachedCodepoints()) {
+      reached.insert(Node::Unicode(c));
+    }
+    for (hb_tag_t f : ReachedLayoutFeatures()) {
+      reached.insert(Node::Feature(f));
+    }
+    return reached;
+  }
+
   const ift::common::GlyphSet& ContextGlyphs() const { return context_glyphs_; }
 
   // Map containing the context glyphs relevant to each reachable glyph.

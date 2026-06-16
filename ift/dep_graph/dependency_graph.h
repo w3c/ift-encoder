@@ -113,7 +113,8 @@ class DependencyGraph {
   // in topological order.
   absl::StatusOr<std::vector<std::vector<Node>>> StronglyConnectedComponents(
       const absl::flat_hash_set<hb_tag_t>& table_filter,
-      uint32_t node_type_filter) const;
+      uint32_t node_type_filter,
+      const absl::flat_hash_set<Node>* node_inclusion_filter = nullptr) const;
 
   // Computes the incoming edges for every node in the dependency graph, taking
   // into account all context requirements and implicit dependencies.
@@ -121,8 +122,10 @@ class DependencyGraph {
   // The return value is a map from each node to each unique edge requirement.
   // Edge requirements are represented as a CNF expression over other nodes.
   absl::StatusOr<absl::flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
-  CollectIncomingEdges(const absl::flat_hash_set<hb_tag_t>& table_filter,
-                       uint32_t node_type_filter) const;
+  CollectIncomingEdges(
+      const absl::flat_hash_set<hb_tag_t>& table_filter,
+      uint32_t node_type_filter,
+      const absl::flat_hash_set<Node>* node_inclusion_filter = nullptr) const;
 
  private:
   DependencyGraph(
