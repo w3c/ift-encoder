@@ -394,8 +394,8 @@ DependencyClosure::InitializeConditions(
 
     Node n = Node::Segment(s);
     if (!segmentation_info_->Segments().at(s).Definition().Empty()) {
-      conditions.insert(
-        {Node::Segment(s), ActivationCondition::exclusive_segment(s, 0)});
+      conditions.insert_or_assign(
+        Node::Segment(s), ActivationCondition::exclusive_segment(s, 0));
     } else {
       conditions.erase(n);
     }
@@ -457,7 +457,9 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 Status DependencyClosure::PropagateConditions(
     const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
-    flat_hash_map<Node, ActivationCondition>& node_conditions) const {
+    flat_hash_map<Node, ActivationCondition>& node_conditions,
+    flat_hash_set<Node>& modified
+  ) const {
   for (const std::vector<Node>& scc : sccs) {
     // strongly connect components have cycles so we need to iteratively
     // propagate conditions through the cycle until they stop changing.
@@ -507,6 +509,7 @@ Status DependencyClosure::PropagateConditions(
         auto it_existing = node_conditions.find(n);
         if (it_existing == node_conditions.end()) {
           node_conditions.insert({n, *complete_condition});
+          modified.insert(n);
           changed = true;
         } else {
           ActivationCondition combined =
@@ -595,28 +598,49 @@ StatusOr<flat_hash_set<Node>> DependencyClosure::InitFontNodes(
   return init_font_nodes;
 }
 
+static IntSet ActiveClosurePhases(hb_face_t* face) {
+  IntSet out;
+  flat_hash_set<hb_tag_t> table_tags = FontHelper::GetTags(face);
+  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases;
+       phase++) {
+    hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
+    if (table_tags.contains(table)) {
+      out.insert(phase);
+    }
+  }
+  return out;
+}
+
 Status DependencyClosure::UpdateAllNodeConditions(
     const SegmentSet& changed_segments) {
-  flat_hash_map<Node, ActivationCondition>& conditions = node_condition_cache_;
+
+  IntSet phases = ActiveClosurePhases(original_face_.get());
 
   flat_hash_set<Node> new_init_nodes;
   init_font_nodes_ = TRY(InitFontNodes(init_font_nodes_, new_init_nodes));
 
-  // This sets up the conditions for all init font and segment nodes, works with either
-  // existing or new condition calculations.
-  TRYV(InitializeConditions(conditions, changed_segments, new_init_nodes));
-
+  // Find all possibly affected nodes, reset their conditions.
   flat_hash_set<Node> reachable =
       TRY(ReachableNonInitFontNodes(changed_segments, new_init_nodes));
-
-  flat_hash_set<hb_tag_t> table_tags =
-      FontHelper::GetTags(original_face_.get());
-  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases;
-       phase++) {
-    hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
-    if (!table_tags.contains(table)) {
-      continue;
+  for (const auto& n: reachable) {
+    node_condition_cache_.erase(n);
+    for (uint32_t phase : phases) {
+      phase_node_condition_cache_[phase].erase(n);
     }
+  }
+
+  // This sets up the conditions for all init font and segment nodes, works with either
+  // existing or new condition calculations.
+  TRYV(InitializeConditions(node_condition_cache_, changed_segments, new_init_nodes));
+  for (uint32_t phase : phases) {
+    TRYV(InitializeConditions(phase_node_condition_cache_[phase], changed_segments, new_init_nodes));
+  }
+
+  flat_hash_set<Node> modified;
+  for (uint32_t phase : phases) {
+    hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
+    auto next_phase = phases.lower_bound(phase);
+    next_phase++;
 
     auto sccs = TRY(graph_.StronglyConnectedComponents(
         {table}, DependencyGraph::kClosurePhaseNodeFilter[phase], &reachable));
@@ -638,7 +662,16 @@ Status DependencyClosure::UpdateAllNodeConditions(
       incoming_edges = &(*phase_edges);
     }
 
-    TRYV(PropagateConditions(*incoming_edges, sccs, conditions));
+    TRYV(PropagateConditions(*incoming_edges, sccs, phase_node_condition_cache_[phase], modified));
+
+    // Transfer the modified conditions forward to the next phase (or final output)
+    flat_hash_map<dep_graph::Node, ActivationCondition>* next_phase_conditions = &node_condition_cache_;
+    if (next_phase != phases.end()) {
+      next_phase_conditions = &phase_node_condition_cache_[*next_phase];
+    }
+    for (const auto& n : modified) {
+      next_phase_conditions->insert_or_assign<>(n, phase_node_condition_cache_[phase].at(n));
+    }
   }
 
   return absl::OkStatus();
