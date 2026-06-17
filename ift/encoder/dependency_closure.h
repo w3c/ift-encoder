@@ -183,8 +183,9 @@ class DependencyClosure {
                                 std::vector<dep_graph::EdgeConditionsCnf>>&
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
-      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions)
-      const;
+      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+      absl::flat_hash_set<dep_graph::Node>& modified
+    ) const;
 #endif
 
 #ifndef HB_DEPEND_API
@@ -233,6 +234,9 @@ class DependencyClosure {
       node_condition_cache_;
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
       node_conditions_with_segment_;
+
+  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
+      phase_node_condition_cache_[dep_graph::DependencyGraph::kNumberOfClosurePhases];
 
   // Cache for CollectIncomingEdges results for non-cmap phases.
   absl::flat_hash_map<
