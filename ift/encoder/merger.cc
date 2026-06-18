@@ -692,6 +692,14 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithHeuristic(
     return std::nullopt;
   }
 
+  const auto& base_segment = context_->SegmentationInfo().Segments().at(base_segment_index);
+  if (base_segment.Definition().codepoints.empty() && !base_segment.Definition().feature_tags.empty()) {
+    // Don't heuristic merge feature only segments, these can sometimes have exclusive glyphs
+    // but since they have significant interactions outside of their exclusive glyphs it
+    // typically has poor outcomes to try and merge these without cost analysis.
+    return std::nullopt;
+  }
+
   auto modified = TRY(TryMergingACompositeCondition(base_segment_index));
   if (modified.has_value()) {
     // Return to the parent method so it can reanalyze and reform groups
