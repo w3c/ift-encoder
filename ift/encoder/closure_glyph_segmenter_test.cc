@@ -427,6 +427,35 @@ if (s0 AND s2) then p2
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures_DontMergeFeatureToFeature) {
+  SubsetDefinition c2sc;
+  c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
+  SubsetDefinition dlig;
+  dlig.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
+
+  auto segmentation =
+      CodepointToGlyphSegments(roboto.get(), {'f', 'F'}, {{'s'}, {'t'}, {'S'}, c2sc, dlig},
+                               MergeStrategy::Heuristic(10000));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'s', 't', 'S'}, {}, {}, c2sc, dlig};
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid42, gid74 }
+p0: { gid55, gid87, gid88 }
+p1: { gid486 }
+p2: { gid443 }
+p3: { gid473 }
+p4: { gid449 }
+if (s0) then p0
+if (s3) then p1
+if (s4) then p2
+if (s0 AND s3) then p3
+if (s0 AND s4) then p4
+)");
+}
+
 TEST_F(ClosureGlyphSegmenterTest, AndCondition) {
   auto segmentation =
       CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}});
