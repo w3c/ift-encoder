@@ -71,10 +71,11 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
   SegmentSet segments_to_merge_with_base = segments_to_merge_;
   segments_to_merge_with_base.insert(base_segment_index_);
   bool new_segment_is_inert = false;
-  if (input_segments_are_inert_ && !merger.Context().IsPureDepGraphAnalysisMode()) {
-    // Only need to compute the new segment inertness in non pure dep graph mode.
-    // In pure dep graph mode this will be recomputed directly from the graph
-    // after the merge is applied.
+  if (input_segments_are_inert_ &&
+      !merger.Context().IsPureDepGraphAnalysisMode()) {
+    // Only need to compute the new segment inertness in non pure dep graph
+    // mode. In pure dep graph mode this will be recomputed directly from the
+    // graph after the merge is applied.
     GlyphSet and_gids, or_gids, exclusive_gids;
     TRYV(merger.Context().AnalyzeSegment(segments_to_merge_with_base, and_gids,
                                          or_gids, exclusive_gids));

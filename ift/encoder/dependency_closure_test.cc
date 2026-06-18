@@ -85,14 +85,13 @@ class DependencyClosureTest : public ::testing::Test {
       /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
   };
 
-  void Reconfigure(SubsetDefinition new_init,
-                   std::vector<Segment> new_segments,
-                   bool context_analysis_allowed = false
-                  ) {
+  void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments,
+                   bool context_analysis_allowed = false) {
     segmentation_info = *RequestedSegmentationInformation::Create(
         new_segments, new_init, *closure_cache, PATCH);
-    dependency_closure = *DependencyClosure::Create(segmentation_info.get(),
-                                                    face.get(), *resolver, context_analysis_allowed);
+    dependency_closure =
+        *DependencyClosure::Create(segmentation_info.get(), face.get(),
+                                   *resolver, context_analysis_allowed);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
@@ -627,10 +626,12 @@ TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
 }
 
 TEST_F(DependencyClosureTest, Allowed_LookAheadGlyphs) {
-  Reconfigure(WithDefaultFeatures({}), {
-                                           {{'i'}, ProbabilityBound::Zero()},
-                                           {{0x485}, ProbabilityBound::Zero()},
-                                       }, true);
+  Reconfigure(WithDefaultFeatures({}),
+              {
+                  {{'i'}, ProbabilityBound::Zero()},
+                  {{0x485}, ProbabilityBound::Zero()},
+              },
+              true);
 
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;

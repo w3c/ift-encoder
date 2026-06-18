@@ -58,7 +58,7 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   // The init font may have reachable glyphs which are not in the init font
   // closure, we need to record the context glyphs from these as they are
   // potential interaction points.
-  init_font_context_glyphs_ = GlyphSet {};
+  init_font_context_glyphs_ = GlyphSet{};
   Traversal init_font_traversal = TRY(graph_.ClosureTraversal(
       {Node::InitFont()}, &segmentation_info_->FullClosure(),
       &segmentation_info_->FullDefinition().codepoints, false));
@@ -246,8 +246,10 @@ DependencyClosure::AnalyzeSegmentInternal(
   }
   result.reached_glyphs = inscope_glyphs;
 
-  if ((context_glyphs_.has_value() && inscope_glyphs.intersects(*context_glyphs_)) ||
-      (init_font_context_glyphs_.has_value() && inscope_glyphs.intersects(*init_font_context_glyphs_))) {
+  if ((context_glyphs_.has_value() &&
+       inscope_glyphs.intersects(*context_glyphs_)) ||
+      (init_font_context_glyphs_.has_value() &&
+       inscope_glyphs.intersects(*init_font_context_glyphs_))) {
     // For now don't return results for anything that involves contextual lookup
     // glyphs.
     result.accuracy = INACCURATE;
@@ -377,12 +379,10 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
   return out;
 }
 
-Status
-DependencyClosure::InitializeConditions(
-  flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
-  const SegmentSet& changed_segments,
-  const flat_hash_set<Node>& new_init_font_nodes
-) const {
+Status DependencyClosure::InitializeConditions(
+    flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+    const SegmentSet& changed_segments,
+    const flat_hash_set<Node>& new_init_font_nodes) const {
   for (const auto& n : new_init_font_nodes) {
     conditions.insert_or_assign(n, ActivationCondition::True(0));
   }
@@ -394,8 +394,8 @@ DependencyClosure::InitializeConditions(
 
     Node n = Node::Segment(s);
     if (!segmentation_info_->Segments().at(s).Definition().Empty()) {
-      conditions.insert_or_assign(
-        Node::Segment(s), ActivationCondition::exclusive_segment(s, 0));
+      conditions.insert_or_assign(Node::Segment(s),
+                                  ActivationCondition::exclusive_segment(s, 0));
     } else {
       conditions.erase(n);
     }
@@ -458,8 +458,7 @@ Status DependencyClosure::PropagateConditions(
     const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
     flat_hash_map<Node, ActivationCondition>& node_conditions,
-    flat_hash_set<Node>& modified
-  ) const {
+    flat_hash_set<Node>& modified) const {
   for (const std::vector<Node>& scc : sccs) {
     // strongly connect components have cycles so we need to iteratively
     // propagate conditions through the cycle until they stop changing.
@@ -555,8 +554,9 @@ StatusOr<flat_hash_set<Node>> DependencyClosure::ReachableNonInitFontNodes(
   flat_hash_set<Node> reachable = traversal.ReachedNodes();
   reachable.insert(start_nodes.begin(), start_nodes.end());
 
-  // While we want to traverse through init font nodes for reachability, we don't actually
-  // want init font nodes in the final output, so remove them before returning.
+  // While we want to traverse through init font nodes for reachability, we
+  // don't actually want init font nodes in the final output, so remove them
+  // before returning.
   reachable.erase(Node::InitFont());
 
   for (glyph_id_t g : segmentation_info_->InitFontGlyphs()) {
@@ -613,12 +613,12 @@ static IntSet ActiveClosurePhases(hb_face_t* face) {
 
 Status DependencyClosure::UpdateAllNodeConditions(
     const SegmentSet& changed_segments) {
-
-  // In rare cases the full closure can grow after an init font definition change,
-  // if that happens we need to recompute all incoming edges to capture new edges
-  // from the change.
-  bool full_closure_changed = last_seen_full_closure_size_.has_value() &&
-    *last_seen_full_closure_size_ != segmentation_info_->FullClosure().size();
+  // In rare cases the full closure can grow after an init font definition
+  // change, if that happens we need to recompute all incoming edges to capture
+  // new edges from the change.
+  bool full_closure_changed =
+      last_seen_full_closure_size_.has_value() &&
+      *last_seen_full_closure_size_ != segmentation_info_->FullClosure().size();
   last_seen_full_closure_size_ = segmentation_info_->FullClosure().size();
 
   IntSet phases = ActiveClosurePhases(original_face_.get());
@@ -629,18 +629,20 @@ Status DependencyClosure::UpdateAllNodeConditions(
   // Find all possibly affected nodes, reset their conditions.
   flat_hash_set<Node> reachable =
       TRY(ReachableNonInitFontNodes(changed_segments, new_init_nodes));
-  for (const auto& n: reachable) {
+  for (const auto& n : reachable) {
     node_condition_cache_.erase(n);
     for (uint32_t phase : phases) {
       phase_node_condition_cache_[phase].erase(n);
     }
   }
 
-  // This sets up the conditions for all init font and segment nodes, works with either
-  // existing or new condition calculations.
-  TRYV(InitializeConditions(node_condition_cache_, changed_segments, new_init_nodes));
+  // This sets up the conditions for all init font and segment nodes, works with
+  // either existing or new condition calculations.
+  TRYV(InitializeConditions(node_condition_cache_, changed_segments,
+                            new_init_nodes));
   for (uint32_t phase : phases) {
-    TRYV(InitializeConditions(phase_node_condition_cache_[phase], changed_segments, new_init_nodes));
+    TRYV(InitializeConditions(phase_node_condition_cache_[phase],
+                              changed_segments, new_init_nodes));
   }
 
   flat_hash_set<Node> modified;
@@ -658,7 +660,8 @@ Status DependencyClosure::UpdateAllNodeConditions(
 
     if (table == common::FontHelper::kCmap) {
       cmap_incoming_edges = TRY(graph_.CollectIncomingEdges(
-          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase], &reachable));
+          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase],
+          &reachable));
       incoming_edges = &cmap_incoming_edges;
     } else {
       auto& phase_edges = incoming_edges_cache_[phase];
@@ -669,15 +672,19 @@ Status DependencyClosure::UpdateAllNodeConditions(
       incoming_edges = &(*phase_edges);
     }
 
-    TRYV(PropagateConditions(*incoming_edges, sccs, phase_node_condition_cache_[phase], modified));
+    TRYV(PropagateConditions(*incoming_edges, sccs,
+                             phase_node_condition_cache_[phase], modified));
 
-    // Transfer the modified conditions forward to the next phase (or final output)
-    flat_hash_map<dep_graph::Node, ActivationCondition>* next_phase_conditions = &node_condition_cache_;
+    // Transfer the modified conditions forward to the next phase (or final
+    // output)
+    flat_hash_map<dep_graph::Node, ActivationCondition>* next_phase_conditions =
+        &node_condition_cache_;
     if (next_phase != phases.end()) {
       next_phase_conditions = &phase_node_condition_cache_[*next_phase];
     }
     for (const auto& n : modified) {
-      next_phase_conditions->insert_or_assign<>(n, phase_node_condition_cache_[phase].at(n));
+      next_phase_conditions->insert_or_assign<>(
+          n, phase_node_condition_cache_[phase].at(n));
     }
   }
 

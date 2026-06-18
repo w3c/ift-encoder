@@ -37,8 +37,7 @@ class DependencyClosure {
   static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face, const ift::common::DataFileResolver& resolver,
-      bool allow_context_glyph_analysis = false
-    ) {
+      bool allow_context_glyph_analysis = false) {
 #ifndef HB_DEPEND_API
     return std::unique_ptr<DependencyClosure>(new DependencyClosure());
 #else
@@ -48,8 +47,8 @@ class DependencyClosure {
         new DependencyClosure(std::move(graph), segmentation_info, face));
 
     if (!allow_context_glyph_analysis) {
-      result->context_glyphs_ = common::GlyphSet {};
-      result->init_font_context_glyphs_ = common::GlyphSet {};
+      result->context_glyphs_ = common::GlyphSet{};
+      result->init_font_context_glyphs_ = common::GlyphSet{};
     }
     TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
 
@@ -159,18 +158,17 @@ class DependencyClosure {
       const absl::flat_hash_set<dep_graph::Node>& new_init_nodes) const;
 
   absl::StatusOr<absl::flat_hash_set<dep_graph::Node>> InitFontNodes(
-    const absl::flat_hash_set<dep_graph::Node>& previous_init_font_nodes,
-    absl::flat_hash_set<dep_graph::Node>& new_nodes) const;
+      const absl::flat_hash_set<dep_graph::Node>& previous_init_font_nodes,
+      absl::flat_hash_set<dep_graph::Node>& new_nodes) const;
 
   ift::common::SegmentSet ComputeInertSegments(
       const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
       const;
 
   absl::Status InitializeConditions(
-    absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
-    const common::SegmentSet& changed_segments,
-    const absl::flat_hash_set<dep_graph::Node>& new_init_font_nodes
-  ) const;
+      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+      const common::SegmentSet& changed_segments,
+      const absl::flat_hash_set<dep_graph::Node>& new_init_font_nodes) const;
 
   static absl::StatusOr<std::optional<ActivationCondition>>
   EdgeConditionsToActivationCondition(
@@ -184,8 +182,7 @@ class DependencyClosure {
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
-      absl::flat_hash_set<dep_graph::Node>& modified
-    ) const;
+      absl::flat_hash_set<dep_graph::Node>& modified) const;
 #endif
 
 #ifndef HB_DEPEND_API
@@ -236,7 +233,8 @@ class DependencyClosure {
       node_conditions_with_segment_;
 
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
-      phase_node_condition_cache_[dep_graph::DependencyGraph::kNumberOfClosurePhases];
+      phase_node_condition_cache_
+          [dep_graph::DependencyGraph::kNumberOfClosurePhases];
 
   // Cache for CollectIncomingEdges results for non-cmap phases.
   std::optional<uint32_t> last_seen_full_closure_size_ = std::nullopt;
