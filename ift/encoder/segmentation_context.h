@@ -135,7 +135,8 @@ class SegmentationContext {
   absl::Status InitDependencyClosure() {
     if (UsingDepGraph()) {
       dependency_closure_ = TRY(DependencyClosure::Create(
-          segmentation_info_.get(), original_face.get(), *resolver_, IsPureDepGraphAnalysisMode()));
+          segmentation_info_.get(), original_face.get(), *resolver_,
+          IsPureDepGraphAnalysisMode()));
     }
     return absl::OkStatus();
   }

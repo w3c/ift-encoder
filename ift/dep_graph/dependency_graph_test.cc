@@ -35,9 +35,9 @@ using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::freq::ProbabilityBound;
+using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
-using ::testing::ElementsAre;
 
 #include "ift/common/test_font_loader.h"
 
@@ -884,9 +884,8 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_NodeInclusionFilter) {
   ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
   const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
-  ASSERT_THAT(topo_order,
-              ElementsAre(Node::Segment(1), Node::Unicode('f'),
-                                   Node::Glyph(gid_f)));
+  ASSERT_THAT(topo_order, ElementsAre(Node::Segment(1), Node::Unicode('f'),
+                                      Node::Glyph(gid_f)));
 }
 
 TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeInclusionFilter) {

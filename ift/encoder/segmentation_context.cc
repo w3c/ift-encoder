@@ -279,7 +279,7 @@ Status SegmentationContext::AnalyzeSegment(const SegmentSet& segment_ids,
   if (dependency_closure_.has_value()) {
     auto accuracy = TRY((*dependency_closure_)
                             ->AnalyzeSegment(segment_ids, dep_and_gids,
-                                               dep_or_gids, dep_exclusive_gids));
+                                             dep_or_gids, dep_exclusive_gids));
     if (accuracy == DependencyClosure::INACCURATE) {
       effective_mode = CLOSURE_ONLY;
     }
