@@ -239,6 +239,7 @@ class DependencyClosure {
       phase_node_condition_cache_[dep_graph::DependencyGraph::kNumberOfClosurePhases];
 
   // Cache for CollectIncomingEdges results for non-cmap phases.
+  std::optional<uint32_t> last_seen_full_closure_size_ = std::nullopt;
   absl::flat_hash_map<
       uint32_t,
       std::optional<absl::flat_hash_map<
