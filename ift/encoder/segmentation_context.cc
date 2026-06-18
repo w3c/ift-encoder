@@ -212,7 +212,9 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   TRYV(segmentation_info_->ReassignInitSubset(*glyph_closure_cache, new_def));
 
   if (dependency_closure_.has_value()) {
-    TRYV((*dependency_closure_)->InitFontChanged(segments_to_reprocess));
+    // Dep closure doesn't need the expanded affected set, as it will traverse
+    // from the input segments to find the affected subgraph.
+    TRYV((*dependency_closure_)->InitFontChanged(segments_with_changed_defs));
   }
 
   // All segments depend on the init subset def, so we must reprocess
