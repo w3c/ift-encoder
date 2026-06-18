@@ -614,6 +614,13 @@ static IntSet ActiveClosurePhases(hb_face_t* face) {
 Status DependencyClosure::UpdateAllNodeConditions(
     const SegmentSet& changed_segments) {
 
+  // In rare cases the full closure can grow after an init font definition change,
+  // if that happens we need to recompute all incoming edges to capture new edges
+  // from the change.
+  bool full_closure_changed = last_seen_full_closure_size_.has_value() &&
+    *last_seen_full_closure_size_ != segmentation_info_->FullClosure().size();
+  last_seen_full_closure_size_ = segmentation_info_->FullClosure().size();
+
   IntSet phases = ActiveClosurePhases(original_face_.get());
 
   flat_hash_set<Node> new_init_nodes;
@@ -655,7 +662,7 @@ Status DependencyClosure::UpdateAllNodeConditions(
       incoming_edges = &cmap_incoming_edges;
     } else {
       auto& phase_edges = incoming_edges_cache_[phase];
-      if (!phase_edges.has_value()) {
+      if (!phase_edges.has_value() || full_closure_changed) {
         phase_edges = TRY(graph_.CollectIncomingEdges(
             {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
       }
