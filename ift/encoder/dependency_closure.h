@@ -117,7 +117,11 @@ class DependencyClosure {
   // This structure caches information derived from the segmentation info
   // segments. These two function signal that segmentation info segments have
   // changed and recomputes the internal cached information.
+  //
+  // segments is the set of segments whose definition's have been modified
+  // by the change in init font definition.
   absl::Status InitFontChanged(const ift::common::SegmentSet& segments);
+
   absl::Status SegmentsMerged(segment_index_t base_segment,
                               const ift::common::SegmentSet& segments);
 
