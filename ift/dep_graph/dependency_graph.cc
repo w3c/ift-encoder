@@ -425,16 +425,16 @@ class TraversalContext {
 
   bool ShouldFollow(Node node, std::optional<hb_tag_t> table_tag,
                     std::optional<hb_tag_t> layout_feature) const {
-    if (node_inclusion_filter != nullptr &&
-        !node_inclusion_filter->contains(node)) {
-      return false;
-    }
-
     if (!node.Matches(node_type_filter)) {
       return false;
     }
 
     if (table_tag.has_value() && !table_filter.contains(*table_tag)) {
+      return false;
+    }
+
+    if (node_inclusion_filter != nullptr &&
+        !node_inclusion_filter->contains(node)) {
       return false;
     }
 
@@ -974,6 +974,12 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
   while (hb_depend_get_glyph_entry(
       dependency_graph_.get(), gid, index++, &table_tag, &dep_gid, &layout_tag,
       &ligature_set, &context_set, nullptr /* flags */)) {
+    // Pre-filter to avoid doing extra work if not needed
+    // TODO XXXX we're filtering twice once here, and once in TravserseEdgeTo
+    // can we only filter once?
+    if (!context->table_filter.contains(table_tag)) {
+      continue;
+    }
     if (context->glyph_filter != nullptr &&
         !context->glyph_filter->contains(dep_gid)) {
       continue;
@@ -1300,7 +1306,8 @@ DependencyGraph::ComputeFeatureEdges() const {
 
 StatusOr<flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
 DependencyGraph::CollectIncomingEdges(
-    const flat_hash_set<hb_tag_t>& table_filter, uint32_t node_type_filter,
+    const flat_hash_set<hb_tag_t>& table_filter,
+    uint32_t source_node_type_filter, uint32_t dest_node_type_filter,
     const absl::flat_hash_set<Node>* node_inclusion_filter) const {
   struct IncomingEdgeCollector {
     flat_hash_map<Node, flat_hash_set<EdgeConditionsCnf>>* incoming_edges =
@@ -1333,12 +1340,12 @@ DependencyGraph::CollectIncomingEdges(
   context.unicode_filter = &segmentation_info_->FullCodepointClosure();
   context.enforce_context = false;
   context.table_filter = table_filter;
-  context.node_type_filter = node_type_filter;
+  context.node_type_filter = dest_node_type_filter;
   context.node_inclusion_filter = node_inclusion_filter;
   context.callback.incoming_edges = &incoming_edges;
   context.callback.graph = this;
 
-  std::vector<Node> all_nodes = AllNodes(node_type_filter);
+  std::vector<Node> all_nodes = AllNodes(source_node_type_filter);
   for (Node n : all_nodes) {
     TRYV(HandleOutgoingEdges(n, &context));
     TRYV(context.callback.had_error);
