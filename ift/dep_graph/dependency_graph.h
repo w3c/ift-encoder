@@ -71,6 +71,12 @@ class DependencyGraph {
       /* CFF */ Node::NodeType::GLYPH,
   };
 
+  enum TraversalMode {
+    ENFORCE_CONTEXT,
+    COLLECT_CONTEXT,
+    NO_CONTEXT,
+  };
+
   static absl::StatusOr<DependencyGraph> Create(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face, const ift::common::DataFileResolver& resolver);
@@ -85,12 +91,13 @@ class DependencyGraph {
   // If filter is null then the filter defaults to the set of non init font
   // glyphs in segmentation info.
   absl::StatusOr<Traversal> ClosureTraversal(
-      const ift::common::SegmentSet& start, bool enforce_context = true) const;
+      const ift::common::SegmentSet& start, TraversalMode mode = ENFORCE_CONTEXT) const;
   absl::StatusOr<Traversal> ClosureTraversal(
       const absl::btree_set<Node>& nodes,
       const ift::common::GlyphSet* glyph_filter_ptr = nullptr,
       const ift::common::CodepointSet* unicode_filter_ptr = nullptr,
-      bool enforce_context = true) const;
+      TraversalMode mode = ENFORCE_CONTEXT
+    ) const;
 
   const absl::flat_hash_set<hb_tag_t>& FullFeatureSet() const {
     return full_feature_set_;
@@ -137,13 +144,9 @@ class DependencyGraph {
     std::vector<Node> next{};
     absl::flat_hash_set<Node> visited{};
     Traversal traversal;
+    bool collect_context = true;
 
-    void Visit(Node dest);
-    void Visit(Node dest, hb_tag_t table);
-    void VisitGsub(Node dest, hb_tag_t feature);
-    void VisitContextual(Node dest, hb_tag_t feature,
-                         ift::common::GlyphSet context_glyphs);
-    void VisitPending(const PendingEdge& edge) {}
+    absl::Status Visit(const TraversalContext<ClosureState>& context, const PendingEdge& edge);
 
     std::optional<Node> GetNext();
     bool Reached(Node node);
@@ -180,11 +183,11 @@ class DependencyGraph {
       hb_tag_t feature_tag, TraversalContext<CallbackT>* context) const;
 
   template <typename CallbackT>
-  void HandleSegmentOutgoingEdges(encoder::segment_index_t id,
+  absl::Status HandleSegmentOutgoingEdges(encoder::segment_index_t id,
                                   TraversalContext<CallbackT>* context) const;
 
   template <typename CallbackT>
-  void HandleSubsetDefinitionOutgoingEdges(
+  absl::Status HandleSubsetDefinitionOutgoingEdges(
       Node source, const encoder::SubsetDefinition& subset_def,
       TraversalContext<CallbackT>* context) const;
 

@@ -52,7 +52,7 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
     start_segments.insert(s);
   }
 
-  Traversal traversal = TRY(graph_.ClosureTraversal(start_segments, false));
+  Traversal traversal = TRY(graph_.ClosureTraversal(start_segments, DependencyGraph::COLLECT_CONTEXT));
   context_glyphs_ = traversal.ContextGlyphs();
 
   // The init font may have reachable glyphs which are not in the init font
@@ -61,7 +61,7 @@ Status DependencyClosure::InitFontChanged(const SegmentSet& segments) {
   init_font_context_glyphs_ = GlyphSet{};
   Traversal init_font_traversal = TRY(graph_.ClosureTraversal(
       {Node::InitFont()}, &segmentation_info_->FullClosure(),
-      &segmentation_info_->FullDefinition().codepoints, false));
+      &segmentation_info_->FullDefinition().codepoints, DependencyGraph::COLLECT_CONTEXT));
   for (const auto& [g, context] : init_font_traversal.ContextPerGlyph()) {
     if (segmentation_info_->NonInitFontGlyphs().contains(g)) {
       context_glyphs_->union_set(context);
@@ -357,7 +357,7 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
   // Expand to_check to include anything down stream of the input
   // node set.
   auto traversal =
-      TRY(graph_.ClosureTraversal(to_check, nullptr, nullptr, false));
+      TRY(graph_.ClosureTraversal(to_check, nullptr, nullptr, DependencyGraph::NO_CONTEXT));
   for (glyph_id_t g : traversal.ReachedGlyphs()) {
     to_check.insert(Node::Glyph(g));
   }
@@ -549,7 +549,7 @@ StatusOr<flat_hash_set<Node>> DependencyClosure::ReachableNonInitFontNodes(
 
   Traversal traversal = TRY(graph_.ClosureTraversal(
       start_nodes, &segmentation_info_->FullClosure(),
-      &segmentation_info_->FullCodepointClosure(), false));
+      &segmentation_info_->FullCodepointClosure(), DependencyGraph::NO_CONTEXT));
 
   flat_hash_set<Node> reachable = traversal.ReachedNodes();
   reachable.insert(start_nodes.begin(), start_nodes.end());
