@@ -161,6 +161,12 @@ class DependencyClosure {
       const common::SegmentSet& changed_segments,
       const absl::flat_hash_set<dep_graph::Node>& new_init_nodes) const;
 
+  absl::StatusOr<const absl::flat_hash_map<
+      dep_graph::Node, std::vector<dep_graph::EdgeConditionsCnf>>&>
+  IncomingEdgesForClosurePhase(
+      uint32_t phase, bool full_recalc,
+      const absl::flat_hash_set<dep_graph::Node>* node_filter);
+
   absl::StatusOr<absl::flat_hash_set<dep_graph::Node>> InitFontNodes(
       const absl::flat_hash_set<dep_graph::Node>& previous_init_font_nodes,
       absl::flat_hash_set<dep_graph::Node>& new_nodes) const;

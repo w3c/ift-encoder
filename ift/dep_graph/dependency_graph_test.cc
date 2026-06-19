@@ -778,13 +778,15 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_TableFiltering) {
   glyph_id_t gid_smcp_A = 563;
 
   // Without GSUB, smcp sub of A is not reachable.
-  auto edges = graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF);
+  auto edges =
+      graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF, 0xFFFFFFFF);
   ASSERT_TRUE(edges.ok()) << edges.status();
   EXPECT_NE(edges->find(Node::Glyph(gid_A)), edges->end());
   EXPECT_EQ(edges->find(Node::Glyph(gid_smcp_A)), edges->end());
 
   // With GSUB, it should now be reachable
-  edges = graph.CollectIncomingEdges({FontHelper::kGSUB}, 0xFFFFFFFF);
+  edges =
+      graph.CollectIncomingEdges({FontHelper::kGSUB}, 0xFFFFFFFF, 0xFFFFFFFF);
   ASSERT_TRUE(edges.ok()) << edges.status();
   EXPECT_NE(edges->find(Node::Glyph(gid_A)), edges->end());
   EXPECT_NE(edges->find(Node::Glyph(gid_smcp_A)), edges->end());
@@ -805,12 +807,13 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeFiltering) {
 
   // Filter out Glyph nodes. f (glyph) should have no incoming edges.
   auto edges_or = graph.CollectIncomingEdges(
-      {FontHelper::kCmap}, 0xFFFFFFFF & ~Node::NodeType::GLYPH);
+      {FontHelper::kCmap}, 0xFFFFFFFF, 0xFFFFFFFF & ~Node::NodeType::GLYPH);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   EXPECT_EQ(edges_or->find(Node::Glyph(gid_f)), edges_or->end());
 
   // Include Glyph nodes. f should have an incoming edge.
-  edges_or = graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF);
+  edges_or =
+      graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF, 0xFFFFFFFF);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   EXPECT_NE(edges_or->find(Node::Glyph(gid_f)), edges_or->end());
 }
@@ -827,7 +830,7 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
               });
 
   auto edges_or = graph.CollectIncomingEdges(
-      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF);
+      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF, 0xFFFFFFFF);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   const auto& edges = *edges_or;
 
@@ -908,7 +911,7 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeInclusionFilter) {
   };
 
   auto edges_or = graph.CollectIncomingEdges(
-      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF, &filter);
+      {FontHelper::kCmap, FontHelper::kGSUB}, 0xFFFFFFFF, 0xFFFFFFFF, &filter);
   ASSERT_TRUE(edges_or.ok()) << edges_or.status();
   const auto& edges = *edges_or;
 

@@ -1158,7 +1158,8 @@ TEST_F(DependencyClosureTest, InitFontChanged_Caching) {
   ASSERT_EQ(conditions1.at(74 /* f */).ToString(), "if (s1) then p0");
 
   // Change init font to include 'f'
-  Status s = segmentation_info->ReassignInitSubset(*closure_cache, {'f'});
+  Status s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                                   WithDefaultFeatures({'f'}));
   ASSERT_TRUE(s.ok()) << s;
 
   s = dependency_closure->InitFontChanged(SegmentSet::all());
@@ -1169,15 +1170,19 @@ TEST_F(DependencyClosureTest, InitFontChanged_Caching) {
   ASSERT_FALSE(conditions2.contains(74 /* f */));
   ASSERT_EQ(conditions2.at(77 /* i */).ToString(), "if (s2) then p0");
 
-  // Change init font again to include 'i'
-  s = segmentation_info->ReassignInitSubset(*closure_cache, {'i'});
+  // Change init font again to add 'i'
+  s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                            WithDefaultFeatures({'f', 'i'}));
   ASSERT_TRUE(s.ok()) << s;
 
   s = dependency_closure->InitFontChanged(SegmentSet::all());
   ASSERT_TRUE(s.ok()) << s;
 
   auto conditions3 = dependency_closure->AllGlyphConditions();
+  ASSERT_FALSE(conditions3.contains(74 /* f */));
   ASSERT_FALSE(conditions3.contains(77 /* i */));
+  ASSERT_FALSE(conditions3.contains(
+      444 /* fi */));  // now that f, i are in init font so should fi
   ASSERT_EQ(conditions3.at(69 /* a */).ToString(), "if (s0) then p0");
 }
 

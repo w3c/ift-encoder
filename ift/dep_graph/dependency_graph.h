@@ -123,7 +123,7 @@ class DependencyGraph {
   absl::StatusOr<absl::flat_hash_map<Node, std::vector<EdgeConditionsCnf>>>
   CollectIncomingEdges(
       const absl::flat_hash_set<hb_tag_t>& table_filter,
-      uint32_t node_type_filter,
+      uint32_t source_node_type_filter, uint32_t dest_node_type_filter,
       const absl::flat_hash_set<Node>* node_inclusion_filter = nullptr) const;
 
  private:

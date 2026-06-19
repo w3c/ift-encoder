@@ -611,6 +611,50 @@ static IntSet ActiveClosurePhases(hb_face_t* face) {
   return out;
 }
 
+StatusOr<const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>&>
+DependencyClosure::IncomingEdgesForClosurePhase(
+    uint32_t phase, bool full_recalc, const flat_hash_set<Node>* node_filter) {
+  enum UpdateType { None, Partial, Full };
+
+  hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
+  uint32_t source_type_filter = DependencyGraph::kClosurePhaseNodeFilter[phase];
+  uint32_t dest_type_filter = DependencyGraph::kClosurePhaseNodeFilter[phase];
+  auto& prev_incoming_edges = incoming_edges_cache_[phase];
+
+  UpdateType update_type = None;
+  if (full_recalc || !prev_incoming_edges.has_value()) {
+    update_type = Full;
+    node_filter = nullptr;
+  } else if (source_type_filter & Node::SEGMENT) {
+    // Init font changes change the outgoing links on SEGMENT and/or INIT_FONT
+    // nodes so if a phase includes these then a partial update is needed. Only
+    // needs to consider link types in the cmap phase (segment/init font ->
+    // unicode/feature, unicode -> unicode, unicode -> glyph)
+    update_type = Partial;
+    source_type_filter =
+        (Node::SEGMENT | Node::UNICODE | Node::INIT_FONT) & source_type_filter;
+    dest_type_filter =
+        (Node::UNICODE | Node::FEATURE | Node::GLYPH) & dest_type_filter;
+  }
+
+  if (update_type == None) {
+    return *prev_incoming_edges;
+  }
+
+  auto new_incoming_edges = TRY(graph_.CollectIncomingEdges(
+      {table}, source_type_filter, dest_type_filter, node_filter));
+
+  if (update_type == Full) {
+    prev_incoming_edges = std::move(new_incoming_edges);
+  } else {
+    for (const auto& [n, edges] : new_incoming_edges) {
+      prev_incoming_edges->insert_or_assign(n, std::move(edges));
+    }
+  }
+
+  return *prev_incoming_edges;
+}
+
 Status DependencyClosure::UpdateAllNodeConditions(
     const SegmentSet& changed_segments) {
   // In rare cases the full closure can grow after an init font definition
@@ -636,6 +680,11 @@ Status DependencyClosure::UpdateAllNodeConditions(
     }
   }
 
+  flat_hash_set<Node> reachable_with_changed_init_nodes = reachable;
+  reachable_with_changed_init_nodes.insert(Node::InitFont());
+  reachable_with_changed_init_nodes.insert(new_init_nodes.begin(),
+                                           new_init_nodes.end());
+
   // This sets up the conditions for all init font and segment nodes, works with
   // either existing or new condition calculations.
   TRYV(InitializeConditions(node_condition_cache_, changed_segments,
@@ -654,25 +703,10 @@ Status DependencyClosure::UpdateAllNodeConditions(
     auto sccs = TRY(graph_.StronglyConnectedComponents(
         {table}, DependencyGraph::kClosurePhaseNodeFilter[phase], &reachable));
 
-    const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>* incoming_edges =
-        nullptr;
-    flat_hash_map<Node, std::vector<EdgeConditionsCnf>> cmap_incoming_edges;
+    const auto& incoming_edges = TRY(IncomingEdgesForClosurePhase(
+        phase, full_closure_changed, &reachable_with_changed_init_nodes));
 
-    if (table == common::FontHelper::kCmap) {
-      cmap_incoming_edges = TRY(graph_.CollectIncomingEdges(
-          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase],
-          &reachable));
-      incoming_edges = &cmap_incoming_edges;
-    } else {
-      auto& phase_edges = incoming_edges_cache_[phase];
-      if (!phase_edges.has_value() || full_closure_changed) {
-        phase_edges = TRY(graph_.CollectIncomingEdges(
-            {table}, DependencyGraph::kClosurePhaseNodeFilter[phase]));
-      }
-      incoming_edges = &(*phase_edges);
-    }
-
-    TRYV(PropagateConditions(*incoming_edges, sccs,
+    TRYV(PropagateConditions(incoming_edges, sccs,
                              phase_node_condition_cache_[phase], modified));
 
     // Transfer the modified conditions forward to the next phase (or final
