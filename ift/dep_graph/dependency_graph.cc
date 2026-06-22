@@ -1325,12 +1325,14 @@ DependencyGraph::CollectIncomingEdges(
 
   flat_hash_map<Node, std::vector<EdgeConditionsCnf>> out;
   out.reserve(incoming_edges.size());
-  for (const auto& [n, edges] : incoming_edges) {
+  for (auto& [n, edges] : incoming_edges) {
     std::vector<EdgeConditionsCnf> edges_sorted;
     edges_sorted.reserve(edges.size());
-    std::copy(edges.begin(), edges.end(), std::back_inserter(edges_sorted));
+    for (auto& e : edges) {
+      edges_sorted.push_back(std::move(e));
+    }
     std::sort(edges_sorted.begin(), edges_sorted.end());
-    out[n] = std::move(edges_sorted);
+    out.insert_or_assign(n, std::move(edges_sorted));
   }
 
   return out;
