@@ -14,6 +14,7 @@
 #include "ift/common/axis_range.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
+#include "hb-subset.h"
 
 namespace ift::common {
 
@@ -230,6 +231,24 @@ class FontHelper {
           absl::StrCat("No nominal glyph for codepoint: ", codepoint));
     }
     return gid;
+  }
+
+  // Passes face through the subsetter but keeps everything, then reloads it as a new face.
+  static absl::StatusOr<hb_face_unique_ptr> Normalize(hb_face_t* face) {
+    hb_subset_input_t* input = hb_subset_input_create_or_fail();
+    if (!input) {
+      return absl::InternalError("FontHelper::Normalize(): Failed to create subset input.");
+    }
+
+    hb_subset_input_keep_everything(input);
+    hb_face_unique_ptr subset = make_hb_face(hb_subset_or_fail(face, input));
+    hb_subset_input_destroy(input);
+    if (!subset.get()) {
+      return absl::InternalError("FontHelper::Normalize(): Subsetting operation failed.");
+    }
+
+    hb_blob_unique_ptr serialized =  make_hb_blob(hb_face_reference_blob(subset.get()));
+    return make_hb_face(hb_face_create(serialized.get(), 0));
   }
 
  private:

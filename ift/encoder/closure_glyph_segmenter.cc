@@ -533,6 +533,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     }
   }
 
+  hb_face_unique_ptr normalized_face = TRY(FontHelper::Normalize(face));
+  face = normalized_face.get();
+
+
   btree_map<SegmentSet, SegmentSet> with_shared;
   std::vector<Segment> segments =
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
