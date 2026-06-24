@@ -661,6 +661,38 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   }
 }
 
+static Quality AutoPickQuality(uint32_t codepoint_count) {
+  // TODO(garretrieger): more sophisticated scheme for auto picking quality
+  // level. roughly we want to estimate the expected cost of each quality level
+  // and pick based on that. Notably probably want some measure of condition
+  // complexity that feeds into the selection in addition to # of codepoints.
+
+  // These values were picked by looking at segmenter run times by quality level
+  // accross the font collection from https://github.com/google/fonts/.
+  // Roughly they aim to keep the number of segmentations that take >= 10 minutes
+  // for a particular count below 0.5%.
+  //
+  // Bin            Quality   % > 10 minutes
+  // [1,      300]  7         0.3
+  // (300,   1500]  6         0.3
+  // (1500,  3100]  4         0.0
+  // (3100, 30000]  2         0.0
+  // (30000,  inf]  1        28.6
+  if (codepoint_count <= 300) {
+    return SEVEN;
+  }
+  if (codepoint_count <= 1500) {
+    return SIX;
+  }
+  if (codepoint_count <= 3100) {
+    return FOUR;
+  }
+  if (codepoint_count <= 30000) {
+    return TWO;
+  }
+  return ONE;
+}
+
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     hb_face_t* face, const ift::common::DataFileResolver& resolver,
     std::optional<std::string> primary_script,
@@ -676,20 +708,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // Collect codepoints
   auto freq_list = TRY(BuiltInFrequenciesList(resolver));
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
-  uint32_t cp_count = unicodes.size();
+  uint32_t codepoint_count = unicodes.size();
 
-  // TODO(garretrieger): more sophisticated scheme for auto picking quality
-  // level. roughly we want to estimate the expected cost of each quality level
-  // and pick based on that.
-
-  // TODO XXXXX redo this based on latest batch results, including using quality
-  // 1 for extreme cases (high condition complexity)
-  Quality quality = THREE;
-  if (cp_count <= 1000) {
-    quality = MAX;
-  } else if (cp_count <= 3000) {
-    quality = SIX;
-  }
+  Quality quality = AutoPickQuality(codepoint_count);
 
   if (quality_level.has_value() && quality_level.value() >= MIN &&
       quality_level.value() <= MAX) {
