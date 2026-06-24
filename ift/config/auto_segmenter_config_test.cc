@@ -97,7 +97,7 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
   ASSERT_EQ(config_string, R"(unmapped_glyph_handling: MOVE_TO_INIT_FONT
 generate_table_keyed_segments: true
 brotli_quality: 11
-brotli_quality_for_initial_font_merging: 11
+brotli_quality_for_initial_font_merging: 9
 base_heuristic_config {
   min_patch_size: 2500
 }
@@ -115,7 +115,7 @@ preprocess_merging_group_size_for_ungrouped: 12
 merge_groups {
   name: "Cyrillic"
   preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.0005
+  preprocess_merging_probability_threshold: 0.005
   cost_config {
     built_in_freq_data_name: "Script_cyrillic.riegeli"
   }
@@ -123,7 +123,7 @@ merge_groups {
 merge_groups {
   name: "Greek"
   preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.0005
+  preprocess_merging_probability_threshold: 0.005
   cost_config {
     built_in_freq_data_name: "Script_greek.riegeli"
   }
@@ -131,17 +131,17 @@ merge_groups {
 merge_groups {
   name: "Latin"
   preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.0005
+  preprocess_merging_probability_threshold: 0.005
   cost_config {
     built_in_freq_data_name: "Script_latin.riegeli"
     initial_font_merge_threshold: -160
-    initial_font_merge_probability_threshold: 0.25
+    initial_font_merge_probability_threshold: 0.3
   }
 }
 merge_groups {
   name: "Symbols"
   preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.0005
+  preprocess_merging_probability_threshold: 0.005
   cost_config {
     built_in_freq_data_name: "Script_symbols.riegeli"
   }
@@ -149,7 +149,7 @@ merge_groups {
 merge_groups {
   name: "Fallback"
   preprocess_merging_group_size: 4
-  preprocess_merging_probability_threshold: 0.0005
+  preprocess_merging_probability_threshold: 0.005
   cost_config {
     built_in_freq_data_name: "fallback.riegeli"
   }
@@ -306,7 +306,7 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
 
   auto config_or_8 = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
-                                                         std::nullopt, 8);
+                                                         std::nullopt, 7);
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
   EXPECT_EQ(config_or_8->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
