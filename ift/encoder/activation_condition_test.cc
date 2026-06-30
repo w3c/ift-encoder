@@ -508,6 +508,13 @@ TEST(ActivationConditionTest, ReplaceSegments) {
   replaced = a.ReplaceSegments(300, {1, 3});
   EXPECT_EQ(replaced.ToString(),
             "if ((s2 OR s300) AND (s4 OR s300) AND s5) then p10");
+
+  auto b = ActivationCondition::and_segments({{1, 2, 3, 5}}, 10);
+  EXPECT_EQ(b.ReplaceSegments(2, {2, 5}).ToString(),
+            "if (s1 AND s2 AND s3) then p10");
+  EXPECT_EQ(b.ReplaceSegments(4, {2, 5}).ToString(),
+            "if (s1 AND s3 AND s4) then p10");
+  EXPECT_EQ(b.ReplaceSegments(3, {2, 5}).ToString(), "if (s1 AND s3) then p10");
 }
 
 TEST(ActivationConditionTest, ReplaceSegments_True) {
@@ -586,6 +593,22 @@ TEST(ActivationConditionTest, NonCompositeSuperset) {
                 {{3, 100}, {0, 1}, {3, 4, 5}}, 12)
                 .NonCompositeSuperset(),
             ActivationCondition::or_segments({3, 100}, 12));
+}
+
+TEST(ActivationConditionTest, HashCaching) {
+  auto cond = ActivationCondition::or_segments({1, 3}, 5);
+  size_t h1 = cond.Hash();
+  EXPECT_EQ(cond.Hash(), h1);
+
+  // Mutation resets hash
+  cond.SetEncoding(PatchEncoding::TABLE_KEYED_FULL);
+  size_t h2 = cond.Hash();
+  EXPECT_NE(h1, h2);
+
+  // Copy preserves hash
+  auto cond_copy = cond;
+  EXPECT_EQ(cond_copy.Hash(), h2);
+  EXPECT_EQ(cond, cond_copy);
 }
 
 }  // namespace ift::encoder

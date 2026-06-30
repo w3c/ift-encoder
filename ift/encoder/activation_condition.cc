@@ -1,6 +1,7 @@
 #include "ift/encoder/activation_condition.h"
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "absl/container/btree_set.h"
@@ -64,6 +65,7 @@ ActivationCondition ActivationCondition::and_segments(
   ActivationCondition conditions;
   conditions.activated_ = {activated};
 
+  conditions.conditions_.reserve(segments.size());
   for (auto id : segments) {
     conditions.conditions_.push_back(SegmentSet{id});
   }
@@ -101,6 +103,7 @@ ActivationCondition ActivationCondition::clear_exclusive(
     ActivationCondition&& condition) {
   ActivationCondition updated(std::move(condition));
   updated.is_exclusive_ = false;
+  updated.cached_hash_ = std::nullopt;
   return updated;
 }
 
@@ -118,6 +121,11 @@ static void Simplify(std::vector<SegmentSet>& conditions) {
               return a.size() < b.size();
             });
 
+  // TODO(garretrieger): a possibly faster approach is to keep a "minimal sets"
+  // list and check if each condition is a superset of anything in that list.
+  // This could utilize a set trie to speed up the check. We would be able to do
+  // the processing in a single pass and not require the cleanup loop. size() ==
+  // 1 sub groups can be special cased in this approach too.
   std::vector<uint8_t> redundant(conditions.size(), 0);
   for (size_t i = 0; i < conditions.size(); ++i) {
     if (redundant[i]) continue;
@@ -155,6 +163,7 @@ ActivationCondition ActivationCondition::And(const ActivationCondition& a,
                                b.conditions().begin(), b.conditions().end());
   Simplify(condition.conditions_);
   condition.is_exclusive_ = a_exclusive && b_exclusive && condition.IsUnitary();
+  condition.cached_hash_ = std::nullopt;
   return condition;
 }
 
@@ -241,6 +250,40 @@ bool ActivationCondition::Intersects(const common::SegmentSet& segments) const {
 
 ActivationCondition ActivationCondition::ReplaceSegments(
     segment_index_t base_segment, const SegmentSet& segments) const {
+  if (IsPurelyConjunctive()) {
+    // Fast path for doing replace on a purely conjunctive condition, skips
+    // simplify since we can easily gaurantee the new condition is already
+    // simplified.
+    ActivationCondition new_condition;
+    new_condition.conditions_.reserve(conditions_.size());
+    bool has_replace = false;
+    bool base_present = false;
+    for (const auto& sub_group : conditions_) {
+      if (sub_group.intersects(segments)) {
+        has_replace = true;
+        continue;
+      }
+      if (sub_group.contains(base_segment)) {
+        base_present = true;
+      }
+      new_condition.conditions_.push_back(sub_group);
+    }
+    if (has_replace && !base_present) {
+      SegmentSet base{base_segment};
+      // Insert to keep the vector sorted.
+      auto it = std::lower_bound(new_condition.conditions_.begin(),
+                                 new_condition.conditions_.end(), base);
+      new_condition.conditions_.insert(it, std::move(base));
+    }
+
+    new_condition.activated_ = activated_;
+    new_condition.is_fallback_ = is_fallback_;
+    new_condition.is_exclusive_ =
+        is_exclusive_ || new_condition.conditions_.size() == 1;
+    new_condition.encoding_ = encoding_;
+    return new_condition;
+  }
+
   ActivationCondition new_condition = *this;
   for (auto& condition_group : new_condition.conditions_) {
     if (condition_group.intersects(segments)) {
@@ -249,6 +292,7 @@ ActivationCondition ActivationCondition::ReplaceSegments(
     }
   }
   Simplify(new_condition.conditions_);
+  new_condition.cached_hash_ = std::nullopt;
   return new_condition;
 }
 
