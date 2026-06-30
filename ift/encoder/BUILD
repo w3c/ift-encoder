@@ -136,6 +136,7 @@ cc_library(
         ":common",
         "//ift/freq",
         "//ift/proto",
+        "@abseil-cpp//absl/hash",
     ],
     visibility = [
         "//visibility:public",

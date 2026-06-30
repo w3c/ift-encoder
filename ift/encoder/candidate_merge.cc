@@ -200,7 +200,8 @@ static void MergeSegments(const Merger& merger, const SegmentSet& segments,
 
 static Status FindModifiedConditions(
     const Merger& merger, const SegmentSet& merged_segments,
-    flat_hash_map<ActivationCondition, const GlyphSet*>& modified_conditions) {
+    flat_hash_map<const ActivationCondition*, const GlyphSet*>&
+        modified_conditions) {
   const auto& groupings = merger.Context().glyph_groupings;
   const auto& conditions_and_glyphs = groupings.ConditionsAndGlyphs();
 
@@ -211,15 +212,12 @@ static Status FindModifiedConditions(
         continue;
       }
 
-      auto [it, inserted] = modified_conditions.try_emplace(c, nullptr);
-      if (inserted) {
-        auto glyph_it = conditions_and_glyphs.find(c);
-        if (glyph_it == conditions_and_glyphs.end()) {
-          return absl::InternalError(
-              "Condition which should be present wasn't found.");
-        }
-        it->second = &glyph_it->second;
+      auto glyph_it = conditions_and_glyphs.find(c);
+      if (glyph_it == conditions_and_glyphs.end()) {
+        return absl::InternalError(
+            "Condition which should be present wasn't found.");
       }
+      modified_conditions.try_emplace(&glyph_it->first, &glyph_it->second);
     }
   }
 
@@ -591,7 +589,8 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   // are conditions that intersect merged_segments.
   //
   // Map value is the glyphs associated with condition.
-  flat_hash_map<ActivationCondition, const GlyphSet*> modified_conditions;
+  flat_hash_map<const ActivationCondition*, const GlyphSet*>
+      modified_conditions;
 
   TRYV(FindModifiedConditions(merger, merged_segments, modified_conditions));
 
@@ -619,15 +618,15 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] : modified_conditions) {
     uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
-    double p = TRY(condition.Probability(segments, *calculator));
+    double p = TRY(condition->Probability(segments, *calculator));
     double d = p * (patch_size + per_request_overhead);
     cost_delta -= d;
     VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
-            << ") -> " << d << " [removed patch " << condition.ToString()
+            << ") -> " << d << " [removed patch " << condition->ToString()
             << "]";
 
     ActivationCondition updated =
-        condition.ReplaceSegments(base, merged_segments);
+        condition->ReplaceSegments(base, merged_segments);
     if (updated.IsExclusive()) {
       // Clear is exclusive flag so that de-dup happens properly
       updated = ActivationCondition::clear_exclusive(std::move(updated));

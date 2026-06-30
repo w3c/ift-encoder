@@ -2,7 +2,9 @@
 #define IFT_ENCODER_ACTIVATION_CONDITION_H_
 
 #include <cstdint>
+#include <optional>
 
+#include "absl/hash/hash.h"
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
@@ -219,15 +221,26 @@ class ActivationCondition {
 
   ift::config::ActivationConditionProto ToConfigProto() const;
 
+  size_t Hash() const {
+    if (!cached_hash_.has_value()) {
+      cached_hash_ = absl::HashOf(conditions_, activated_, is_fallback_,
+                                  is_exclusive_, encoding_);
+    }
+    return *cached_hash_;
+  }
+
   template <typename H>
   friend H AbslHashValue(H h, const ActivationCondition& c) {
-    return H::combine(std::move(h), c.conditions_, c.activated_, c.is_fallback_,
-                      c.is_exclusive_, c.encoding_);
+    return H::combine(std::move(h), c.Hash());
   }
 
   bool operator<(const ActivationCondition& other) const;
 
   bool operator==(const ActivationCondition& other) const {
+    if (cached_hash_.has_value() && other.cached_hash_.has_value() &&
+        cached_hash_ != other.cached_hash_) {
+      return false;
+    }
     return conditions_ == other.conditions_ && activated_ == other.activated_ &&
            is_fallback_ == other.is_fallback_ &&
            is_exclusive_ == other.is_exclusive_ && encoding_ == other.encoding_;
@@ -237,10 +250,14 @@ class ActivationCondition {
     return !(*this == other);
   }
 
-  void SetEncoding(proto::PatchEncoding encoding) { encoding_ = encoding; }
+  void SetEncoding(proto::PatchEncoding encoding) {
+    encoding_ = encoding;
+    cached_hash_ = std::nullopt;
+  }
 
   void AddPrefetches(absl::Span<const patch_id_t> activated) {
     activated_.insert(activated_.end(), activated.begin(), activated.end());
+    cached_hash_ = std::nullopt;
   }
 
  private:
@@ -254,6 +271,7 @@ class ActivationCondition {
   std::vector<ift::common::SegmentSet> conditions_;
   std::vector<patch_id_t> activated_;
   proto::PatchEncoding encoding_;
+  mutable std::optional<size_t> cached_hash_ = std::nullopt;
 };
 
 }  // namespace ift::encoder
