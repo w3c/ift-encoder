@@ -361,8 +361,7 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   }
 
   if (derived_span.size() > derived_end_offset) {
-    s = out.insert_compressed(derived_span.subspan(
-        derived_end_offset, derived_end_offset - derived_span.size()));
+    s = out.insert_compressed(derived_span.subspan(derived_end_offset));
     if (!s.ok()) {
       return s;
     }
