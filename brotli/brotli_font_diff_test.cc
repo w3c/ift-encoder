@@ -1,4 +1,5 @@
 #include "brotli/brotli_font_diff.h"
+#include "brotli/glyf_differ.h"
 
 #include "absl/types/span.h"
 #include "gtest/gtest.h"
@@ -267,6 +268,24 @@ TEST_F(BrotliFontDiffTest, WithImmutableTables) {
   hb_blob_destroy(derived_blob);
   hb_face_destroy(base_face);
   hb_face_destroy(derived_face);
+}
+
+TEST(GlyfDifferTest, ShortLocaOOB) {
+  std::vector<uint8_t> loca = {0, 0, 0, 10};
+  GlyfDiffer differ(loca, true, true);
+  unsigned base_delta = 0;
+  unsigned derived_delta = 0;
+  differ.Process(1, 1, 1, false, &base_delta, &derived_delta);
+  EXPECT_EQ(derived_delta, 0);
+}
+
+TEST(GlyfDifferTest, LongLocaOOB) {
+  std::vector<uint8_t> loca = {0, 0, 0, 0, 0, 0, 0, 10};
+  GlyfDiffer differ(loca, false, false);
+  unsigned base_delta = 0;
+  unsigned derived_delta = 0;
+  differ.Process(1, 1, 1, false, &base_delta, &derived_delta);
+  EXPECT_EQ(derived_delta, 0);
 }
 
 }  // namespace brotli
