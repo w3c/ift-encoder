@@ -11,6 +11,7 @@
 #include "ift/common/compat_id.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
+#include "ift/common/font_helper_macros.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/proto/ift_table.h"
@@ -37,7 +38,6 @@ using ift::proto::PatchMap;
 namespace ift {
 
 StatusOr<FontData> GlyphKeyedDiff::CreatePatch(const IntSet& gids) const {
-  // TODO(garretrieger): use write macros that check for overflows.
   std::string patch;
   FontHelper::WriteUInt32(HB_TAG('i', 'f', 'g', 'k'), patch);  // Format Tag
   FontHelper::WriteUInt32(0, patch);                           // Reserved.
@@ -75,7 +75,8 @@ StatusOr<FontData> GlyphKeyedDiff::CreatePatch(const IntSet& gids) const {
   }
 
   // Max Uncompressed Length
-  FontHelper::WriteUInt32(uncompressed_data_stream->size(), patch);
+  WRITE_UINT32(uncompressed_data_stream->size(), patch,
+               "Uncompressed data stream size overflow.");
 
   // Compressed Data Stream
   patch += compressed_data_stream.str();
@@ -133,7 +134,8 @@ Status PopulateTableData(const IntSet& gids, uint32_t offset_bias,
       return data.status();
     }
 
-    FontHelper::WriteUInt32(offset_bias + per_glyph_data.size(), offset_data);
+    WRITE_UINT32(offset_bias + per_glyph_data.size(), offset_data,
+                 "Offset overflow in glyph data.");
     per_glyph_data += *data;
   }
   return absl::OkStatus();
@@ -203,25 +205,26 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(const IntSet& gids,
   }
 
   // Add the trailing offset
-  FontHelper::WriteUInt32(header_size + per_glyph_data.size(), offset_data);
+  WRITE_UINT32(header_size + per_glyph_data.size(), offset_data,
+               "Trailing offset overflow in glyph data.");
 
   // Stream Construction
   std::string stream;
-  FontHelper::WriteUInt32(gids.size(), stream);           // glyphCount
-  FontHelper::WriteUInt8(processed_tags.size(), stream);  // tableCount
+  WRITE_UINT32(gids.size(), stream, "Glyph count overflow.");           // glyphCount
+  WRITE_UINT8(processed_tags.size(), stream, "Table count overflow.");  // tableCount
 
   // glyphIds
   for (auto gid : gids) {
     if (u16_gids) {
-      FontHelper::WriteUInt16(gid, stream);
+      WRITE_UINT16(gid, stream, "GID overflow for 16-bit.");
     } else {
-      FontHelper::WriteUInt24(gid, stream);
+      WRITE_UINT24(gid, stream, "GID overflow for 24-bit.");
     }
   }
 
   // tables
   for (auto tag : processed_tags) {
-    FontHelper::WriteUInt32(tag, stream);
+    WRITE_UINT32(tag, stream, "Tag overflow.");
   }
 
   stream += offset_data;
