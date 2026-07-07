@@ -1,10 +1,12 @@
 #include "brotli/brotli_font_diff.h"
 #include "brotli/glyf_differ.h"
 
+#include "absl/strings/match.h"
 #include "absl/types/span.h"
 #include "gtest/gtest.h"
 #include "hb-subset.h"
 #include "ift/common/brotli_binary_patch.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 
@@ -15,6 +17,11 @@ using absl::Status;
 using ift::common::BrotliBinaryPatch;
 using ift::common::FontData;
 using ift::common::IntSet;
+using ift::common::hb_blob_unique_ptr;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_blob;
+using ift::common::make_hb_face;
+using ift::common::make_hb_face_builder;
 
 const std::string kTestDataDir = "ift/common/testdata/";
 
@@ -269,6 +276,48 @@ TEST_F(BrotliFontDiffTest, WithImmutableTables) {
   hb_face_destroy(base_face);
   hb_face_destroy(derived_face);
 }
+
+TEST_F(BrotliFontDiffTest, TruncatedHeadTable) {
+  hb_set_add_range(hb_subset_input_unicode_set(input), 0x41, 0x5A);
+  hb_subset_plan_t* base_plan = hb_subset_plan_create_or_fail(roboto, input);
+  hb_face_unique_ptr base_face = make_hb_face(hb_subset_plan_execute_or_fail(base_plan));
+  SortTables(roboto, base_face.get());
+
+  // Rebuild base with bad head
+  auto ordered_tags = ift::common::FontHelper::GetOrderedTags(base_face.get());
+  hb_face_unique_ptr builder = make_hb_face_builder();
+  for (auto tag : ordered_tags) {
+    std::string data;
+    if (tag == HB_TAG('h', 'e', 'a', 'd')) {
+      data = "shorthead";
+    } else {
+      data = ift::common::FontHelper::TableData(base_face.get(), tag).string();
+    }
+    hb_blob_unique_ptr blob = make_hb_blob(
+        hb_blob_create(data.data(), data.size(), HB_MEMORY_MODE_READONLY, nullptr, nullptr));
+    hb_face_builder_add_table(builder.get(), tag, blob.get());
+  }
+  SortTables(roboto, builder.get());
+  hb_blob_unique_ptr bad_base_blob = make_hb_blob(hb_face_reference_blob(builder.get()));
+
+  // Derived setup
+  hb_set_add_range(hb_subset_input_unicode_set(input), 0x61, 0x7A);
+  hb_subset_plan_t* derived_plan = hb_subset_plan_create_or_fail(roboto, input);
+  hb_face_unique_ptr derived_face = make_hb_face(hb_subset_plan_execute_or_fail(derived_plan));
+  SortTables(roboto, derived_face.get());
+  hb_blob_unique_ptr derived_blob = make_hb_blob(hb_face_reference_blob(derived_face.get()));
+  ASSERT_TRUE(derived_plan);
+
+  BrotliFontDiff differ(immutable_tables, custom_tables);
+  FontData patch;
+  Status status = differ.Diff(base_plan, bad_base_blob.get(), derived_plan, derived_blob.get(), &patch);
+  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_TRUE(absl::StrContains(status.message(), "head table is missing or truncated")) << status.message();
+
+  hb_subset_plan_destroy(base_plan);
+  hb_subset_plan_destroy(derived_plan);
+}
+
 
 TEST(GlyfDifferTest, ShortLocaOOB) {
   std::vector<uint8_t> loca = {0, 0, 0, 10};

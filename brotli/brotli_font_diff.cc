@@ -1,5 +1,6 @@
 #include "brotli/brotli_font_diff.h"
 
+#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "brotli/brotli_stream.h"
 #include "brotli/glyf_differ.h"
@@ -7,11 +8,13 @@
 #include "brotli/loca_differ.h"
 #include "brotli/table_range.h"
 #include "ift/common/int_set.h"
+#include "ift/common/try.h"
 
 namespace brotli {
 
 using absl::Span;
 using absl::Status;
+using absl::StatusOr;
 using ift::common::FontData;
 using ift::common::IntSet;
 
@@ -24,6 +27,19 @@ static bool HasTable(hb_face_t* face, hb_tag_t tag) {
 
 static bool HasTable(hb_face_t* base, hb_face_t* derived, hb_tag_t tag) {
   return HasTable(base, tag) && HasTable(derived, tag);
+}
+
+static StatusOr<bool> IsShortLoca(hb_face_t* face) {
+  hb_blob_t* head = hb_face_reference_table(face, HB_TAG('h', 'e', 'a', 'd'));
+  unsigned int len;
+  const char* head_data = hb_blob_get_data(head, &len);
+  if (len < 52) {
+    hb_blob_destroy(head);
+    return absl::InvalidArgumentError("head table is missing or truncated.");
+  }
+  bool is_short = !head_data[51];
+  hb_blob_destroy(head);
+  return is_short;
 }
 
 /*
@@ -49,22 +65,12 @@ class DiffDriver {
  public:
   DiffDriver(hb_subset_plan_t* base_plan, hb_face_t* base_face,
              hb_subset_plan_t* derived_plan, hb_face_t* derived_face,
+             bool is_base_short_loca, bool is_derived_short_loca,
              const IntSet& custom_diff_tables, BrotliStream& stream)
       : out(stream),
         base_new_to_old(hb_subset_plan_new_to_old_glyph_mapping(base_plan)),
         derived_old_to_new(
             hb_subset_plan_old_to_new_glyph_mapping(derived_plan)) {
-    hb_blob_t* head =
-        hb_face_reference_table(derived_face, HB_TAG('h', 'e', 'a', 'd'));
-    const char* head_data = hb_blob_get_data(head, nullptr);
-    unsigned is_derived_short_loca = !head_data[51];
-    hb_blob_destroy(head);
-
-    head = hb_face_reference_table(base_face, HB_TAG('h', 'e', 'a', 'd'));
-    head_data = hb_blob_get_data(head, nullptr);
-    unsigned is_base_short_loca = !head_data[51];
-    hb_blob_destroy(head);
-
     base_glyph_count = hb_face_get_glyph_count(base_face);
     derived_glyph_count = hb_face_get_glyph_count(derived_face);
 
@@ -283,7 +289,11 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   unsigned base_start_offset = 0;
   unsigned base_end_offset = 0;
 
+  bool is_derived_short_loca = TRY(IsShortLoca(derived_face));
+  bool is_base_short_loca = TRY(IsShortLoca(base_face));
+
   DiffDriver diff_driver(base_plan, base_face, derived_plan, derived_face,
+                         is_base_short_loca, is_derived_short_loca,
                          custom_diff_tables_, out);
 
   const IntSet* tag_sets[] = {&immutable_tables_, &custom_diff_tables_};
