@@ -167,8 +167,8 @@ static std::string ScriptName(absl::string_view script_name) {
     name = name.substr(0, dot_pos);
   }
 
-  if (!name.empty() && std::islower(name[0])) {
-    name[0] = std::toupper(name[0]);
+  if (!name.empty() && std::islower(static_cast<unsigned char>(name[0]))) {
+    name[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(name[0])));
   }
   return name;
 }
