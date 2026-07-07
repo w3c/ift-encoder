@@ -67,7 +67,10 @@ class GlyfDiffer : public TableDiffer {
     const uint8_t* derived_loca = loca_.data();
 
     if (is_derived_short_loca_) {
-      unsigned index = gid * 2;
+      size_t index = (size_t)gid * 2;
+      if (index + 3 >= loca_.size()) {
+        return 0;
+      }
 
       unsigned off_1 = ((derived_loca[index] & 0xFF) << 8) |
                        (derived_loca[index + 1] & 0xFF);
@@ -79,7 +82,10 @@ class GlyfDiffer : public TableDiffer {
       return (off_2 * 2) - (off_1 * 2);
     }
 
-    unsigned index = gid * 4;
+    size_t index = (size_t)gid * 4;
+    if (index + 7 >= loca_.size()) {
+      return 0;
+    }
 
     unsigned off_1 = ((derived_loca[index] & 0xFF) << 24) |
                      ((derived_loca[index + 1] & 0xFF) << 16) |
