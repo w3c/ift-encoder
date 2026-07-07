@@ -81,10 +81,17 @@
 
 // TODO(garretrieger) overflow check limits to 16 bit
 #define WRITE_UINT24(V, O, M)                     \
-  if (FontHelper::WillIntOverflow<uint16_t>(V)) { \
+  if ((uint64_t)(V) >= (1ULL << 24)) {            \
     return absl::InvalidArgumentError(M);         \
   }                                               \
   FontHelper::WriteUInt24(V, O);
+
+#define WRITE_UINT32(V, O, M)                     \
+  if (FontHelper::WillIntOverflow<uint32_t>(V)) { \
+    return absl::InvalidArgumentError(M);         \
+  }                                               \
+  FontHelper::WriteUInt32(V, O);
+
 
 #define WRITE_INT16(V, O, M)                     \
   if (FontHelper::WillIntOverflow<int16_t>(V)) { \
@@ -92,10 +99,10 @@
   }                                              \
   FontHelper::WriteInt16(V, O);
 
-#define WRITE_INT24(V, O, M)                     \
-  if (FontHelper::WillIntOverflow<int16_t>(V)) { \
-    return absl::InvalidArgumentError(M);        \
-  }                                              \
+#define WRITE_INT24(V, O, M)                                     \
+  if ((int64_t)(V) < -(1LL << 23) || (int64_t)(V) >= (1LL << 23)) { \
+    return absl::InvalidArgumentError(M);                         \
+  }                                                               \
   FontHelper::WriteInt24(V, O);
 
 #define WRITE_FIXED(V, O, M)              \
