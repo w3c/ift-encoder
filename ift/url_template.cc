@@ -92,7 +92,7 @@ StatusOr<std::string> URLTemplate::PatchToUrl(Span<const uint8_t> url_template,
   PopulateExpansions(patch_idx, expansions);
 
   std::string out;
-  uint32_t index = 0;
+  size_t index = 0;
   while (index < url_template.size()) {
     uint8_t op_code = url_template[index++];
     if (!(op_code & 0b10000000)) {
