@@ -27,6 +27,7 @@ using ift::common::hb_font_unique_ptr;
 using ift::common::IntSet;
 using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
+using ift::common::make_hb_face_builder;
 using ift::common::make_hb_font;
 using ift::proto::IFTTable;
 
@@ -474,6 +475,80 @@ TEST_F(GlyphKeyedDiffTest, CreatePatch_Glyf_InvalidTable) {
   ASSERT_EQ(patch.status(),
             absl::InvalidArgumentError(
                 "Unsupported table type for glyph keyed diff."));
+}
+
+TEST_F(GlyphKeyedDiffTest, CreatePatch_CffGvar_Ordering) {
+  // Checks that table data ordering matches tag ordering.
+  auto noto_face = noto_sans_jp_cff.face();
+  auto roboto_vf_face = roboto_vf.face();
+
+  auto tags = FontHelper::GetOrderedTags(noto_face.get());
+  hb_face_unique_ptr builder = make_hb_face_builder();
+  for (auto tag : tags) {
+    auto data = FontHelper::TableData(noto_face.get(), tag);
+    hb_blob_unique_ptr blob = data.blob();
+    hb_face_builder_add_table(builder.get(), tag, blob.get());
+  }
+  // Add gvar from roboto_vf
+  auto gvar_table_data = FontHelper::TableData(roboto_vf_face.get(), FontHelper::kGvar);
+  hb_blob_unique_ptr gvar_blob = gvar_table_data.blob();
+  hb_face_builder_add_table(builder.get(), FontHelper::kGvar, gvar_blob.get());
+
+  hb_blob_unique_ptr hybrid_blob = make_hb_blob(hb_face_reference_blob(builder.get()));
+  FontData hybrid_font(std::move(hybrid_blob));
+
+  auto hybrid_face = hybrid_font.face();
+  auto gvar_data = FontHelper::GvarData(hybrid_face.get(), 2);
+  ASSERT_TRUE(gvar_data.ok()) << gvar_data.status();
+  uint32_t gvar_size = gvar_data->size();
+
+  FontData cff_data = FontHelper::CffData(hybrid_face.get(), 2);
+  uint32_t cff_size = cff_data.size();
+  ASSERT_GT(cff_size, 0);
+
+  GlyphKeyedDiff differ(hybrid_font, CompatId(1, 2, 3, 4), {FontHelper::kCFF, FontHelper::kGvar});
+  auto patch = differ.CreatePatch({2});
+  ASSERT_TRUE(patch.ok()) << patch.status();
+
+  FontData empty;
+  FontData compressed_stream(patch->str(29));
+  FontData uncompressed_stream;
+  auto status = unbrotli.Patch(empty, compressed_stream, &uncompressed_stream);
+  ASSERT_TRUE(status.ok()) << status;
+
+  string_view stream = uncompressed_stream.str();
+
+  auto glyph_count = FontHelper::ReadUInt32(stream.substr(0, 4));
+  ASSERT_TRUE(glyph_count.ok());
+  EXPECT_EQ(*glyph_count, 1);
+
+  auto table_count = FontHelper::ReadUInt8(stream.substr(4, 1));
+  ASSERT_TRUE(table_count.ok());
+  EXPECT_EQ(*table_count, 2);
+
+  auto gid = FontHelper::ReadUInt16(stream.substr(5, 2));
+  ASSERT_TRUE(gid.ok());
+  EXPECT_EQ(*gid, 2);
+
+  auto tag1 = FontHelper::ReadUInt32(stream.substr(7, 4));
+  auto tag2 = FontHelper::ReadUInt32(stream.substr(11, 4));
+  ASSERT_TRUE(tag1.ok());
+  ASSERT_TRUE(tag2.ok());
+
+  EXPECT_EQ(*tag1, FontHelper::kCFF);
+  EXPECT_EQ(*tag2, FontHelper::kGvar);
+
+  auto off1 = FontHelper::ReadUInt32(stream.substr(15, 4));
+  auto off2 = FontHelper::ReadUInt32(stream.substr(19, 4));
+  auto trail = FontHelper::ReadUInt32(stream.substr(23, 4));
+  ASSERT_TRUE(off1.ok());
+  ASSERT_TRUE(off2.ok());
+  ASSERT_TRUE(trail.ok());
+
+  EXPECT_EQ(*off1, 27);
+
+  EXPECT_EQ(*off2 - *off1, cff_size);
+  EXPECT_EQ(*trail - *off2, gvar_size);
 }
 
 // TODO(garretrieger): more tests for glyph keyed patch creation:

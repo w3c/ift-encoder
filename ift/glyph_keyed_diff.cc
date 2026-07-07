@@ -178,30 +178,38 @@ StatusOr<FontData> GlyphKeyedDiff::CreateDataStream(const IntSet& gids,
 
   if (include_glyf) {
     processed_tags.insert(FontHelper::kGlyf);
-    GlyfDataOperator data_lookup(face.get());
-    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
-                           offset_data));
   }
 
   if (include_gvar) {
     processed_tags.insert(FontHelper::kGvar);
-    GvarDataOperator data_lookup(face.get());
-    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
-                           offset_data));
   }
 
   if (include_cff) {
     processed_tags.insert(FontHelper::kCFF);
-    CffDataOperator data_lookup(face.get());
-    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
-                           offset_data));
   }
 
   if (include_cff2) {
     processed_tags.insert(FontHelper::kCFF2);
-    Cff2DataOperator data_lookup(face.get());
-    TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
-                           offset_data));
+  }
+
+  for (auto tag : processed_tags) {
+    if (tag == FontHelper::kGlyf) {
+      GlyfDataOperator data_lookup(face.get());
+      TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                             offset_data));
+    } else if (tag == FontHelper::kGvar) {
+      GvarDataOperator data_lookup(face.get());
+      TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                             offset_data));
+    } else if (tag == FontHelper::kCFF) {
+      CffDataOperator data_lookup(face.get());
+      TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                             offset_data));
+    } else if (tag == FontHelper::kCFF2) {
+      Cff2DataOperator data_lookup(face.get());
+      TRYV(PopulateTableData(gids, header_size, data_lookup, per_glyph_data,
+                             offset_data));
+    }
   }
 
   // Add the trailing offset
