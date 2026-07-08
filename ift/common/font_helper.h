@@ -137,7 +137,7 @@ class FontHelper {
     return ReadInt<8, uint8_t>(value);
   }
 
-  static bool HasLongLoca(const hb_face_t* face);
+  static absl::StatusOr<bool> HasLongLoca(const hb_face_t* face);
   static bool HasWideGvar(const hb_face_t* face);
 
   static absl::StatusOr<absl::string_view> GlyfData(const hb_face_t* face,
