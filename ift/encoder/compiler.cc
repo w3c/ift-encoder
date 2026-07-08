@@ -250,7 +250,7 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
   //  now capable of upgrading the offset size as needed. Forcing long loca
   //  is still needed though.
   context.force_long_loca_and_gvar_ =
-      FontHelper::HasLongLoca(expanded_face.get()) ||
+      TRY(FontHelper::HasLongLoca(expanded_face.get())) ||
       FontHelper::HasWideGvar(expanded_face.get());
 
   auto init_font = Compile(context, context.init_subset_, true);

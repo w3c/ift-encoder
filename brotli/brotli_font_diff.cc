@@ -7,6 +7,7 @@
 #include "brotli/hmtx_differ.h"
 #include "brotli/loca_differ.h"
 #include "brotli/table_range.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 
@@ -17,6 +18,7 @@ using absl::Status;
 using absl::StatusOr;
 using ift::common::FontData;
 using ift::common::IntSet;
+using ift::common::FontHelper;
 
 static bool HasTable(hb_face_t* face, hb_tag_t tag) {
   hb_blob_t* table = hb_face_reference_table(face, tag);
@@ -27,19 +29,6 @@ static bool HasTable(hb_face_t* face, hb_tag_t tag) {
 
 static bool HasTable(hb_face_t* base, hb_face_t* derived, hb_tag_t tag) {
   return HasTable(base, tag) && HasTable(derived, tag);
-}
-
-static StatusOr<bool> IsShortLoca(hb_face_t* face) {
-  hb_blob_t* head = hb_face_reference_table(face, HB_TAG('h', 'e', 'a', 'd'));
-  unsigned int len;
-  const char* head_data = hb_blob_get_data(head, &len);
-  if (len < 52) {
-    hb_blob_destroy(head);
-    return absl::InvalidArgumentError("head table is missing or truncated.");
-  }
-  bool is_short = !head_data[51];
-  hb_blob_destroy(head);
-  return is_short;
 }
 
 /*
@@ -289,8 +278,8 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   unsigned base_start_offset = 0;
   unsigned base_end_offset = 0;
 
-  bool is_derived_short_loca = TRY(IsShortLoca(derived_face));
-  bool is_base_short_loca = TRY(IsShortLoca(base_face));
+  bool is_derived_short_loca = !TRY(FontHelper::HasLongLoca(derived_face));
+  bool is_base_short_loca = !TRY(FontHelper::HasLongLoca(base_face));
 
   DiffDriver diff_driver(base_plan, base_face, derived_plan, derived_face,
                          is_base_short_loca, is_derived_short_loca,

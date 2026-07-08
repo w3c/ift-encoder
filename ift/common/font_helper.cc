@@ -26,12 +26,11 @@ using ift::common::FontData;
 
 namespace ift::common {
 
-bool FontHelper::HasLongLoca(const hb_face_t* face) {
+StatusOr<bool> FontHelper::HasLongLoca(const hb_face_t* face) {
   FontData head = TableData(face, kHead);
   if (head.size() < 52) {
-    return false;
+    return absl::InvalidArgumentError("head table is missing or truncated.");
   }
-
   return (bool)head.str()[51];
 }
 
