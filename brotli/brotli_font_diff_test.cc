@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 #include "hb-subset.h"
 #include "ift/common/brotli_binary_patch.h"
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
@@ -22,6 +23,7 @@ using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
 using ift::common::make_hb_face_builder;
+using ift::common::FontHelper;
 
 const std::string kTestDataDir = "ift/common/testdata/";
 
@@ -286,17 +288,16 @@ TEST_F(BrotliFontDiffTest, TruncatedHeadTable) {
   // Rebuild base with bad head
   auto ordered_tags = ift::common::FontHelper::GetOrderedTags(base_face.get());
   hb_face_unique_ptr builder = make_hb_face_builder();
+  std::string head_data = "shorthead";
+
   for (auto tag : ordered_tags) {
-    std::string data;
+    hb_blob_unique_ptr blob = FontHelper::TableData(base_face.get(), tag).blob();
     if (tag == HB_TAG('h', 'e', 'a', 'd')) {
-      data = "shorthead";
-    } else {
-      data = ift::common::FontHelper::TableData(base_face.get(), tag).string();
+      blob = make_hb_blob(hb_blob_create(head_data.data(), head_data.size(), HB_MEMORY_MODE_READONLY, nullptr, nullptr));
     }
-    hb_blob_unique_ptr blob = make_hb_blob(
-        hb_blob_create(data.data(), data.size(), HB_MEMORY_MODE_READONLY, nullptr, nullptr));
     hb_face_builder_add_table(builder.get(), tag, blob.get());
   }
+
   SortTables(roboto, builder.get());
   hb_blob_unique_ptr bad_base_blob = make_hb_blob(hb_face_reference_blob(builder.get()));
 

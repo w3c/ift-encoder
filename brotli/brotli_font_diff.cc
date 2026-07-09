@@ -7,6 +7,7 @@
 #include "brotli/hmtx_differ.h"
 #include "brotli/loca_differ.h"
 #include "brotli/table_range.h"
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
@@ -19,6 +20,8 @@ using absl::StatusOr;
 using ift::common::FontData;
 using ift::common::IntSet;
 using ift::common::FontHelper;
+using ift::common::hb_face_unique_ptr;
+using ift::common::make_hb_face;
 
 static bool HasTable(hb_face_t* face, hb_tag_t tag) {
   hb_blob_t* table = hb_face_reference_table(face, tag);
@@ -266,8 +269,8 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   Span<const uint8_t> derived_span = TableRange::to_span(derived);
 
   // get a 'real' (non facebuilder) face for the faces.
-  hb_face_t* derived_face = hb_face_create(derived, 0);
-  hb_face_t* base_face = hb_face_create(base, 0);
+  hb_face_unique_ptr derived_face = make_hb_face(hb_face_create(derived, 0));
+  hb_face_unique_ptr base_face = make_hb_face(hb_face_create(base, 0));
 
   BrotliStream out(
       BrotliStream::WindowBitsFor(base_span.size(), derived_span.size()),
@@ -278,10 +281,10 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   unsigned base_start_offset = 0;
   unsigned base_end_offset = 0;
 
-  bool is_derived_short_loca = !TRY(FontHelper::HasLongLoca(derived_face));
-  bool is_base_short_loca = !TRY(FontHelper::HasLongLoca(base_face));
+  bool is_derived_short_loca = !TRY(FontHelper::HasLongLoca(derived_face.get()));
+  bool is_base_short_loca = !TRY(FontHelper::HasLongLoca(base_face.get()));
 
-  DiffDriver diff_driver(base_plan, base_face, derived_plan, derived_face,
+  DiffDriver diff_driver(base_plan, base_face.get(), derived_plan, derived_face.get(),
                          is_base_short_loca, is_derived_short_loca,
                          custom_diff_tables_, out);
 
@@ -290,24 +293,24 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   unsigned i = 0;
   for (const IntSet* set : tag_sets) {
     for (hb_tag_t tag : *set) {
-      if (!HasTable(derived_face, tag)) {
+      if (!HasTable(derived_face.get(), tag)) {
         continue;
       }
 
-      if (HasTable(base_face, tag) != HasTable(derived_face, tag)) {
+      if (HasTable(base_face.get(), tag) != HasTable(derived_face.get(), tag)) {
         return absl::InternalError(
             "base and derived must both have the same tables.");
       }
 
       Span<const uint8_t> base_span =
-          TableRange::padded_table_span(TableRange::to_span(base_face, tag));
+          TableRange::padded_table_span(TableRange::to_span(base_face.get(), tag));
       Span<const uint8_t> derived_span =
-          TableRange::padded_table_span(TableRange::to_span(derived_face, tag));
+          TableRange::padded_table_span(TableRange::to_span(derived_face.get(), tag));
 
       base_region_sizes[i] += base_span.size();
 
-      unsigned base_offset = TableRange::table_offset(base_face, tag);
-      unsigned derived_offset = TableRange::table_offset(derived_face, tag);
+      unsigned base_offset = TableRange::table_offset(base_face.get(), tag);
+      unsigned derived_offset = TableRange::table_offset(derived_face.get(), tag);
 
       if (!derived_start_offset) {
         derived_start_offset = derived_offset;
@@ -361,8 +364,6 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   patch->copy((const char*)out.compressed_data().data(),
               out.compressed_data().size());
 
-  hb_face_destroy(base_face);
-  hb_face_destroy(derived_face);
 
   return absl::OkStatus();
 }
