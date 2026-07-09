@@ -494,6 +494,36 @@ TEST_F(FontHelperTest, GetOrderedTags) {
   EXPECT_EQ(s[17], "fpgm");
 }
 
+TEST_F(FontHelperTest, GetOrderedTags_FaceBuilder) {
+  hb_face_unique_ptr face_builder = make_hb_face(hb_face_builder_create());
+
+  FontData foo("foo");
+  hb_blob_unique_ptr foo_blob = foo.blob();
+  FontData bar("bar");
+  hb_blob_unique_ptr bar_blob = bar.blob();
+  FontData baz("baz");
+  hb_blob_unique_ptr baz_blob = baz.blob();
+
+  hb_face_builder_add_table(face_builder.get(), HB_TAG('f', 'o', 'o', ' '), foo_blob.get());
+  hb_face_builder_add_table(face_builder.get(), HB_TAG('b', 'a', 'r', ' '), bar_blob.get());
+  hb_face_builder_add_table(face_builder.get(), HB_TAG('b', 'a', 'z', ' '), baz_blob.get());
+
+  const hb_tag_t ordering[] = {
+    HB_TAG('b', 'a', 'z', ' '),
+    HB_TAG('f', 'o', 'o', ' '),
+    HB_TAG('b', 'a', 'r', ' '),
+    0
+  };
+  hb_face_builder_sort_tables(face_builder.get(), ordering);
+
+  auto s = FontHelper::ToStrings(FontHelper::GetOrderedTags(face_builder.get()));
+  EXPECT_EQ(s, (std::vector<std::string> {
+    "baz ",
+    "foo ",
+    "bar ",
+  }));
+}
+
 TEST_F(FontHelperTest, GetFeatureTags) {
   auto tags = FontHelper::GetFeatureTags(roboto.get());
 

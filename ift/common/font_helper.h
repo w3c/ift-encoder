@@ -19,21 +19,47 @@
 namespace ift::common {
 
 struct CompareTableOffsets {
-  hb_face_t* face;
-  CompareTableOffsets(hb_face_t* f) { face = f; }
+  hb_blob_unique_ptr face_blob;
+  hb_face_unique_ptr face;
+  const uint8_t* start = nullptr;
+  const uint8_t* end = nullptr;
 
-  uint32_t table_offset(hb_tag_t tag) const {
-    hb_blob_t* font = hb_face_reference_blob(face);
-    hb_blob_t* table = hb_face_reference_table(face, tag);
+  CompareTableOffsets(hb_face_t* f) :
+    // f may be a face builder face and as a result not be located
+    // in contiguous memory. So always materialize it to a blob to ensure
+    // it is.
+    face_blob(make_hb_blob(hb_face_reference_blob(f))),
+    face(make_hb_face(hb_face_create_or_fail(face_blob.get(), 0))) {
 
-    const uint8_t* font_ptr = (const uint8_t*)hb_blob_get_data(font, nullptr);
-    const uint8_t* table_ptr = (const uint8_t*)hb_blob_get_data(table, nullptr);
-    uint32_t offset = table_ptr - font_ptr;
+    if (!face.get()) {
+      return;
+    }
 
-    hb_blob_destroy(font);
-    hb_blob_destroy(table);
+    unsigned length = 0;
+    start = reinterpret_cast<const uint8_t*>(hb_blob_get_data(face_blob.get(), &length));
+    end = start + length;
+  }
 
-    return offset;
+  CompareTableOffsets(const CompareTableOffsets& other) :
+    face_blob(make_hb_blob(hb_blob_reference(other.face_blob.get()))),
+    face(make_hb_face(hb_face_reference(other.face.get()))),
+    start(other.start),
+    end(other.end)
+  {}
+
+  size_t table_offset(hb_tag_t tag) const {
+    if (!start || !end) {
+      return 0;
+    }
+
+    hb_blob_unique_ptr table = make_hb_blob(hb_face_reference_table(face.get(), tag));
+    const uint8_t* table_start = reinterpret_cast<const uint8_t*>(hb_blob_get_data(table.get(), nullptr));
+
+    if (table_start < start || table_start >= end) {
+      return 0;
+    }
+
+    return table_start - start;
   }
 
   bool operator()(hb_tag_t a, hb_tag_t b) const {
