@@ -2,6 +2,8 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary")
 
+package(features = ["layering_check"])
+
 # Can be used to generate feature_registry.h when there is an update to the csv.
 genrule(
     name = "generate_feature_registry_h",
@@ -23,6 +25,7 @@ cc_library(
         "feature_registry.h",
     ],
     visibility = [
+        "//ift/config:__pkg__",
         "//ift/encoder:__pkg__",
     ],
     deps = [
@@ -39,6 +42,7 @@ cc_test(
     ],
     deps = [
         ":feature_registry",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
 )

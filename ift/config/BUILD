@@ -3,6 +3,8 @@ load("@protobuf//bazel:proto_library.bzl", "proto_library")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+package(features = ["layering_check"])
+
 proto_library(
     name = "segmentation_plan_proto",
     srcs = ["segmentation_plan.proto"],
@@ -68,19 +70,22 @@ cc_library(
     hdrs = [
         "config_compiler.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":load_codepoints",
         ":segmentation_plan_cc_proto",
         "//ift/common",
+        "//ift/common:try",
         "//ift/encoder",
+        "//ift/encoder:activation_condition",
+        "//ift/encoder:common",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
     ],
-    visibility = [
-        "//visibility:public",
-    ]
 )
 
 cc_library(
@@ -91,17 +96,21 @@ cc_library(
     hdrs = [
         "auto_segmenter_config.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":load_codepoints",
         ":segmenter_config_cc_proto",
-        "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:data_file_resolver",
+        "//ift/common:try",
         "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@harfbuzz",
     ],
-    visibility = [
-        "//visibility:public",
-    ]
 )
 
 cc_library(
@@ -112,10 +121,16 @@ cc_library(
     hdrs = [
         "load_codepoints.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
-        "//ift/common:data_file_resolver",
         "//ift/common",
+        "//ift/common:data_file_resolver",
+        "//ift/common:try",
         "//ift/freq",
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
@@ -124,9 +139,6 @@ cc_library(
         "@riegeli//riegeli/bytes:fd_reader",
         "@riegeli//riegeli/records:record_reader",
     ],
-    visibility = [
-        "//visibility:public",
-    ]
 )
 
 cc_library(
@@ -137,18 +149,27 @@ cc_library(
     hdrs = [
         "segmenter_config_util.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":load_codepoints",
         ":segmentation_plan_cc_proto",
         ":segmenter_config_cc_proto",
         "//ift/common",
+        "//ift/common:data_file_resolver",
+        "//ift/common:try",
         "//ift/encoder",
+        "//ift/encoder:activation_condition",
+        "//ift/encoder:common",
+        "//ift/encoder:merge_strategy",
+        "//ift/feature_registry",
+        "//ift/freq",
+        "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@harfbuzz",
     ],
-    visibility = [
-        "//visibility:public",
-    ]
 )
 
 cc_test(
@@ -159,6 +180,9 @@ cc_test(
     ],
     deps = [
         ":config_compiler",
+        ":segmentation_plan_cc_proto",
+        "//ift/encoder",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
 )
@@ -174,11 +198,15 @@ cc_test(
     ],
     deps = [
         ":auto_segmenter_config",
-        "//ift/common:data_file_resolver",
+        ":load_codepoints",
         "//ift/common",
+        "//ift/common:data_file_resolver",
         "//ift/common:test_font_loader",
+        "@abseil-cpp//absl/strings",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@harfbuzz",
+        "@protobuf",
     ],
 )
 
@@ -194,6 +222,7 @@ cc_test(
     deps = [
         ":load_codepoints",
         "//ift/common:data_file_resolver",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
 )
@@ -209,7 +238,13 @@ cc_test(
     ],
     deps = [
         ":segmenter_config_util",
+        "//ift/common",
         "//ift/common:data_file_resolver",
+        "//ift/encoder:common",
+        "//ift/encoder:merge_strategy",
+        "//ift/freq",
+        "@abseil-cpp//absl/container:btree",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
 )

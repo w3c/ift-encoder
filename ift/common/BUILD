@@ -1,14 +1,14 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+package(features = ["layering_check"])
+
 cc_library(
     name = "common",
     srcs = [
         "axis_range.cc",
         "bit_input_buffer.cc",
-        "bit_input_buffer.h",
         "bit_output_buffer.cc",
-        "bit_output_buffer.h",
         "brotli_binary_diff.cc",
         "brotli_binary_patch.cc",
         "compat_id.cc",
@@ -16,7 +16,6 @@ cc_library(
         "font_data.cc",
         "font_helper.cc",
         "hb_set_unique_ptr.cc",
-        "indexed_data_reader.h",
         "sparse_bit_set.cc",
         "woff2.cc",
     ],
@@ -24,6 +23,8 @@ cc_library(
         "axis_range.h",
         "binary_diff.h",
         "binary_patch.h",
+        "bit_input_buffer.h",
+        "bit_output_buffer.h",
         "branch_factor.h",
         "brotli_binary_diff.h",
         "brotli_binary_patch.h",
@@ -35,6 +36,7 @@ cc_library(
         "font_provider.h",
         "hasher.h",
         "hb_set_unique_ptr.h",
+        "indexed_data_reader.h",
         "int_set.h",
         "sparse_bit_set.h",
         "woff2.h",
@@ -43,24 +45,28 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
+        ":try",
         "//brotli:shared_brotli_encoder",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
+        "@brotli//:brotli_inc",
         "@brotli//:brotlidec",
         "@brotli//:brotlienc",
         "@harfbuzz",
         "@woff2",
-        ":try",
     ],
 )
 
 cc_library(
     name = "try",
     hdrs = ["try.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -69,15 +75,15 @@ cc_library(
         "bazel_data_file_resolver.cc",
     ],
     hdrs = [
-        "data_file_resolver.h",
         "bazel_data_file_resolver.h",
+        "data_file_resolver.h",
         "fixed_data_file_resolver.h",
     ],
     data = [
-        "@unicode_data//file",
         "@derived_normalization_props//file",
-        "@ift_encoder_data//:freq_data",
         "@ift_encoder_data//:data/metadata.binpb",
+        "@ift_encoder_data//:freq_data",
+        "@unicode_data//file",
     ],
     defines = [
         "FREQ_DATA_METADATA=\\\"$(rlocationpath @ift_encoder_data//:data/metadata.binpb)\\\"",
@@ -88,6 +94,7 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@bazel_tools//tools/cpp/runfiles",
@@ -96,16 +103,17 @@ cc_library(
 
 cc_library(
     name = "test_font_loader",
+    testonly = True,
     srcs = ["bazel_test_font_loader.cc"],
     hdrs = [
-        "test_font_loader.h",
         "bazel_test_font_loader.h",
+        "test_font_loader.h",
     ],
     visibility = ["//visibility:public"],
-    testonly = True,
     deps = [
         ":common",
         ":try",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@bazel_tools//tools/cpp/runfiles",
@@ -126,7 +134,6 @@ cc_library(
         "mock_font_provider.h",
     ],
     visibility = [
-
     ],
     deps = [
         ":common",
@@ -138,8 +145,8 @@ filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
     visibility = [
-        "//ift:__subpackages__",
         "//brotli:__pkg__",
+        "//ift:__subpackages__",
         "//util:__pkg__",
     ],
 )
@@ -162,15 +169,23 @@ cc_test(
         "woff2_test.cc",
     ],
     data = [
-        "//ift/common:testdata",
         "//ift:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":common",
         ":mocks",
         ":test_font_loader",
         "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/hash:hash_test",
+        "@abseil-cpp//absl/hash:hash_testing",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
