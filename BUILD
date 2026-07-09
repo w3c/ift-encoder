@@ -1,5 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 
+package(features = ["layering_check"])
+
 bool_flag(
     name = "harfbuzz_dep_graph",
     build_setting_default = True,

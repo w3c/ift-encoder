@@ -1,6 +1,8 @@
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
+package(features = ["layering_check"])
+
 cc_library(
     name = "ift",
     srcs = [
@@ -18,6 +20,7 @@ cc_library(
     ],
     deps = [
         "//ift/common",
+        "//ift/common:try",
         "//ift/proto",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -57,8 +60,8 @@ cc_test(
         "url_template_test.cc",
     ],
     data = [
-        "//ift/common:testdata",
         "//ift:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":ift",
@@ -67,7 +70,11 @@ cc_test(
         "//ift/encoder",
         "//ift/proto",
         "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
@@ -78,18 +85,24 @@ cc_test(
         "integration_test.cc",
     ],
     data = [
-        "//ift/common:testdata",
         "//ift:testdata",
+        "//ift/common:testdata",
     ],
     deps = [
         ":ift",
         ":test_segments",
+        "//ift/client:fontations",
         "//ift/common",
         "//ift/common:test_font_loader",
-        "//ift/client:fontations",
+        "//ift/common:try",
         "//ift/encoder",
+        "//ift/encoder:common",
+        "//ift/proto",
         "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/strings",
+        "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
@@ -97,7 +110,7 @@ filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),
     visibility = [
-        "//ift/common:__subpackages__",
         "//ift:__subpackages__",
+        "//ift/common:__subpackages__",
     ],
 )
