@@ -3,13 +3,21 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <cstdlib>
 #include <sstream>
+#include <string>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "tools/cpp/runfiles/runfiles.h"
 #include "ift/common/axis_range.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/compiler.h"
+#include "ift/common/try.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -21,8 +29,18 @@ using ift::common::IntSet;
 using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
 using ift::encoder::Compiler;
+using bazel::tools::cpp::runfiles::Runfiles;
 
 namespace ift::client {
+
+StatusOr<std::string> ResolvePath(const std::string& runfile_path) {
+  std::string error;
+  std::unique_ptr<Runfiles> runfiles(std::move(Runfiles::CreateForTest(&error)));
+  if (!runfiles) {
+    return absl::InternalError("fontations_client.cc: Failed to init runfiles.");
+  }
+  return runfiles->Rlocation(runfile_path);
+}
 
 Status ToFile(const FontData& data, const char* path) {
   FILE* f = fopen(path, "wb");
@@ -95,20 +113,61 @@ StatusOr<std::string> WriteFontToDisk(const Compiler::Encoding& encoding) {
   return font_path;
 }
 
-StatusOr<std::string> Exec(const char* cmd) {
-  std::array<char, 128> buffer;
+StatusOr<std::string> Exec(const std::vector<std::string>& argv) {
+  if (argv.empty()) {
+    return absl::InvalidArgumentError("Empty argv");
+  }
+
+  int pipefd[2];
+  if (pipe(pipefd) == -1) {
+    return absl::InternalError("pipe failed");
+  }
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return absl::InternalError("fork failed");
+  }
+
+  if (pid == 0) {
+    // Child
+    close(pipefd[0]); // Close read end
+    if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+      _exit(127);
+    }
+    close(pipefd[1]);
+
+    std::vector<char*> c_argv;
+    for (const auto& arg : argv) {
+      c_argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    c_argv.push_back(nullptr);
+
+    execvp(c_argv[0], c_argv.data());
+    _exit(127); // exec failed
+  }
+
+  // Parent
+  close(pipefd[1]); // Close write end
+
   std::string result;
-  FILE* pipe = popen(cmd, "r");
-  if (!pipe) {
-    return absl::InternalError("Unable to start process.");
+  std::array<char, 128> buffer;
+  ssize_t bytes_read;
+  while ((bytes_read = read(pipefd[0], buffer.data(), buffer.size())) > 0) {
+    result.append(buffer.data(), bytes_read);
   }
-  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) !=
-         nullptr) {
-    result += buffer.data();
+  close(pipefd[0]);
+
+  int status;
+  if (waitpid(pid, &status, 0) == -1) {
+    return absl::InternalError("waitpid failed");
   }
-  if (pclose(pipe)) {
-    return absl::InternalError("exec command failed.");
+
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    return absl::InternalError("command failed");
   }
+
   return result;
 }
 
@@ -119,13 +178,14 @@ Status ToGraph(const Compiler::Encoding& encoding, graph& out,
     return font_path.status();
   }
 
-  std::string command = absl::StrCat(
-      "${TEST_SRCDIR}/+_repo_rules+fontations/ift_graph --font=", *font_path);
+  std::vector<std::string> argv = {
+      TRY(ResolvePath(IFT_GRAPH_PATH)),
+      absl::StrCat("--font=", *font_path)};
   if (include_patch_paths) {
-    command = absl::StrCat(command, " --include-patch-paths");
+    argv.push_back("--include-patch-paths");
   }
 
-  auto r = Exec(command.c_str());
+  auto r = Exec(argv);
   if (!r.ok()) {
     return r.status();
   }
@@ -187,13 +247,16 @@ StatusOr<FontData> ExtendWithDesignSpace(
   }
 
   // Run the extension
-  std::string command = absl::StrCat(
-      "${TEST_SRCDIR}/+_repo_rules+fontations/ift_extend --font=",
-      font_path.string(), " --unicodes=\"", unicodes, "\" --design-space=\"",
-      design_space_str, "\" --features=\"", features,
-      "\" --max-round-trips=", max_round_trips, " --max-fetches=", max_fetches,
-      " --output=", output.string());
-  auto r = Exec(command.c_str());
+  std::vector<std::string> argv = {
+      TRY(ResolvePath(IFT_EXTEND_PATH)),
+      absl::StrCat("--font=", font_path.string()),
+      absl::StrCat("--unicodes=", unicodes),
+      absl::StrCat("--design-space=", design_space_str),
+      absl::StrCat("--features=", features),
+      absl::StrCat("--max-round-trips=", max_round_trips),
+      absl::StrCat("--max-fetches=", max_fetches),
+      absl::StrCat("--output=", output.string())};
+  auto r = Exec(argv);
   if (!r.ok()) {
     return r.status();
   }
