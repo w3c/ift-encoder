@@ -26,6 +26,36 @@ using ift::common::FontData;
 
 namespace ift::common {
 
+static StatusOr<uint32_t> OffsetTo(const char* start, size_t length, const char* ptr) {
+  uintptr_t start_val = reinterpret_cast<uintptr_t>(start);
+  uintptr_t ptr_val = reinterpret_cast<uintptr_t>(ptr);
+  uintptr_t end_val = start_val + length;
+
+  if (ptr_val < start_val || ptr_val > end_val) {
+    return absl::InternalError("Pointer is not within the specified block.");
+  }
+  uintptr_t offset = ptr_val - start_val;
+  if (offset > UINT32_MAX) {
+    return absl::InternalError("Offset overflows uint32_t.");
+  }
+  return static_cast<uint32_t>(offset);
+}
+
+size_t CompareTableOffsets::table_offset(hb_tag_t tag) const {
+  if (!start || !length) {
+    return 0;
+  }
+
+  hb_blob_unique_ptr table = make_hb_blob(hb_face_reference_table(face.get(), tag));
+  const char* table_start = reinterpret_cast<const char*>(hb_blob_get_data(table.get(), nullptr));
+
+  auto offset = OffsetTo(reinterpret_cast<const char*>(start), length, table_start);
+  if (!offset.ok()) {
+    return 0;
+  }
+  return *offset;
+}
+
 StatusOr<bool> FontHelper::HasLongLoca(const hb_face_t* face) {
   FontData head = TableData(face, kHead);
   if (head.size() < 52) {
@@ -165,14 +195,7 @@ Status FontHelper::Cff2GetCharstrings(hb_face_t* face,
 
   const char* cff2_start = cff2_data.data();
   const char* charstrings_start = charstrings.data();
-  if (charstrings_start < cff2_start) {
-    return absl::InternalError("CharStrings is not after CFF2 start.");
-  }
-  uint64_t non_charstrings_length = (uint64_t)(charstrings_start - cff2_start);
-  if (non_charstrings_length > cff2_data.size()) {
-    return absl::InternalError("Non CharStrings data is too large.");
-  }
-
+  uint32_t non_charstrings_length = TRY(OffsetTo(cff2_start, cff2_data.size(), charstrings_start));
   hb_blob_unique_ptr non_charstrings_blob = make_hb_blob(
       hb_blob_create_sub_blob(cff2_data_blob.get(), 0, non_charstrings_length));
   non_charstrings.set(non_charstrings_blob.get());
@@ -193,16 +216,7 @@ static StatusOr<std::optional<uint32_t>> CharStringsOffset(
   const char* charstrings_start =
       hb_blob_get_data(charstrings_data, &charstrings_length);
 
-  if (charstrings_start < cff_start) {
-    return absl::InternalError("CharStrings is not after CFF2 start.");
-  }
-
-  uint64_t non_charstrings_length = (uint64_t)(charstrings_start - cff_start);
-  if (non_charstrings_length > all_data_length) {
-    return absl::InternalError("CharStrings offset is too large.");
-  }
-
-  return non_charstrings_length;
+  return TRY(OffsetTo(cff_start, all_data_length, charstrings_start));
 }
 
 StatusOr<std::optional<uint32_t>> FontHelper::CffCharStringsOffset(

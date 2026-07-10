@@ -22,7 +22,7 @@ struct CompareTableOffsets {
   hb_blob_unique_ptr face_blob;
   hb_face_unique_ptr face;
   const uint8_t* start = nullptr;
-  const uint8_t* end = nullptr;
+  size_t length = 0;
 
   CompareTableOffsets(hb_face_t* f) :
     // f may be a face builder face and as a result not be located
@@ -35,32 +35,19 @@ struct CompareTableOffsets {
       return;
     }
 
-    unsigned length = 0;
-    start = reinterpret_cast<const uint8_t*>(hb_blob_get_data(face_blob.get(), &length));
-    end = start + length;
+    unsigned len = 0;
+    start = reinterpret_cast<const uint8_t*>(hb_blob_get_data(face_blob.get(), &len));
+    length = len;
   }
 
   CompareTableOffsets(const CompareTableOffsets& other) :
     face_blob(make_hb_blob(hb_blob_reference(other.face_blob.get()))),
     face(make_hb_face(hb_face_reference(other.face.get()))),
     start(other.start),
-    end(other.end)
+    length(other.length)
   {}
 
-  size_t table_offset(hb_tag_t tag) const {
-    if (!start || !end) {
-      return 0;
-    }
-
-    hb_blob_unique_ptr table = make_hb_blob(hb_face_reference_table(face.get(), tag));
-    const uint8_t* table_start = reinterpret_cast<const uint8_t*>(hb_blob_get_data(table.get(), nullptr));
-
-    if (table_start < start || table_start >= end) {
-      return 0;
-    }
-
-    return table_start - start;
-  }
+  size_t table_offset(hb_tag_t tag) const;
 
   bool operator()(hb_tag_t a, hb_tag_t b) const {
     return table_offset(a) < table_offset(b);
