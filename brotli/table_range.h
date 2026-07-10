@@ -3,7 +3,7 @@
 
 #include "absl/types/span.h"
 #include "brotli/brotli_stream.h"
-#include "hb-subset.h"
+#include "ift/common/font_helper.h"
 
 namespace brotli {
 
@@ -35,15 +35,8 @@ class TableRange {
   }
 
   static unsigned table_offset(hb_face_t* face, hb_tag_t tag) {
-    hb_blob_t* table = hb_face_reference_table(face, tag);
-    hb_blob_t* blob = hb_face_reference_blob(face);
-    unsigned offset =
-        hb_blob_get_data(table, nullptr) - hb_blob_get_data(blob, nullptr);
-
-    hb_blob_destroy(table);
-    hb_blob_destroy(blob);
-
-    return offset;
+    ift::common::CompareTableOffsets comparer(face);
+    return comparer.table_offset(tag);
   }
 
  public:
