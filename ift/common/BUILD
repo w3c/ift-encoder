@@ -179,7 +179,6 @@ cc_test(
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
-        "@abseil-cpp//absl/hash:hash_test",
         "@abseil-cpp//absl/hash:hash_testing",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
