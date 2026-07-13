@@ -3,6 +3,7 @@
 
 #include "absl/types/span.h"
 #include "brotli/table_differ.h"
+#include "ift/common/font_data.h"
 
 namespace brotli {
 
@@ -14,14 +15,14 @@ class GlyfDiffer : public TableDiffer {
     EXISTING_DATA,
   } mode = INIT;
 
-  absl::Span<const uint8_t> loca_;
+  ift::common::FontData loca_;
   bool is_base_short_loca_;
   bool is_derived_short_loca_;
 
  public:
-  GlyfDiffer(absl::Span<const uint8_t> loca, bool is_base_short_loca,
+  GlyfDiffer(ift::common::FontData loca, bool is_base_short_loca,
              bool is_derived_short_loca)
-      : loca_(loca),
+      : loca_(std::move(loca)),
         is_base_short_loca_(is_base_short_loca),
         is_derived_short_loca_(is_derived_short_loca) {}
 
@@ -64,7 +65,7 @@ class GlyfDiffer : public TableDiffer {
  private:
   // Length of glyph (in bytes) found in the derived subset.
   unsigned GlyphLength(unsigned gid) {
-    const uint8_t* derived_loca = loca_.data();
+    const uint8_t* derived_loca = loca_.span().data();
 
     if (is_derived_short_loca_) {
       size_t index = (size_t)gid * 2;

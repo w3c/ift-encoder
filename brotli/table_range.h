@@ -3,46 +3,31 @@
 
 #include "absl/types/span.h"
 #include "brotli/brotli_stream.h"
+#include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 
 namespace brotli {
 
 class TableRange {
  public:
-  static absl::Span<const uint8_t> to_span(hb_face_t* face, hb_tag_t tag) {
-    hb_blob_t* table = hb_face_reference_table(face, tag);
-    absl::Span<const uint8_t> result = to_span(table);
-    hb_blob_destroy(table);
-
-    return result;
-  }
-
-  static absl::Span<const uint8_t> to_span(hb_blob_t* table) {
-    unsigned length;
-    const uint8_t* data =
-        reinterpret_cast<const uint8_t*>(hb_blob_get_data(table, &length));
-
-    return absl::Span<const uint8_t>(data, length);
-  }
-
-  static absl::Span<const uint8_t> padded_table_span(
-      absl::Span<const uint8_t> span) {
-    unsigned new_size = span.size();
-    while (new_size % 4) {
-      new_size++;
-    }
-    return absl::Span<const uint8_t>(span.data(), new_size);
-  }
 
   static unsigned table_offset(hb_face_t* face, hb_tag_t tag) {
     ift::common::CompareTableOffsets comparer(face);
     return comparer.table_offset(tag);
   }
 
+  static size_t padded_table_size(size_t size) {
+    while (size % 4) {
+      size++;
+    }
+    return size;
+  }
+
  public:
   TableRange(hb_face_t* base_face, hb_face_t* derived_face, hb_tag_t tag,
              const BrotliStream& base_stream) {
-    derived_ = to_span(derived_face, tag);
+
+    derived_ = ift::common::FontHelper::TableData(derived_face, tag);
 
     out.reset(new BrotliStream(base_stream.window_bits(),
                                base_stream.dictionary_size(),
@@ -53,7 +38,7 @@ class TableRange {
   }
 
  private:
-  absl::Span<const uint8_t> derived_;
+  ift::common::FontData derived_;
 
   unsigned base_table_offset_;
   unsigned base_offset_ = 0;
@@ -68,7 +53,7 @@ class TableRange {
 
   BrotliStream& stream() { return *out; }
 
-  const uint8_t* data() { return derived_.data(); }
+  const uint8_t* data() { return reinterpret_cast<const uint8_t*>(derived_.data()); }
 
   unsigned length() { return derived_.size(); }
 
@@ -79,7 +64,7 @@ class TableRange {
 
   absl::Status CommitNew() {
     absl::Status s = out->insert_compressed(absl::Span<const uint8_t>(
-        derived_.data() + derived_offset_, derived_length_));
+        data() + derived_offset_, derived_length_));
     if (!s.ok()) {
       return s;
     }
@@ -98,7 +83,7 @@ class TableRange {
                                      derived_length_)) {
       // 1 byte backwards refs must be inserted as literals.
       out->insert_uncompressed(absl::Span<const uint8_t>(
-          derived_.data() + derived_offset_, derived_length_));
+          data() + derived_offset_, derived_length_));
     }
 
     derived_offset_ += derived_length_;
