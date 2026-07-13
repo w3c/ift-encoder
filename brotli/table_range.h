@@ -63,6 +63,10 @@ class TableRange {
   }
 
   absl::Status CommitNew() {
+    if (derived_offset_ > derived_.size() ||
+        derived_length_ > derived_.size() - derived_offset_) {
+      return absl::InvalidArgumentError("Table range out of bounds.");
+    }
     absl::Status s = out->insert_compressed(absl::Span<const uint8_t>(
         data() + derived_offset_, derived_length_));
     if (!s.ok()) {
@@ -78,7 +82,11 @@ class TableRange {
     return absl::OkStatus();
   }
 
-  void CommitExisting() {
+  absl::Status CommitExisting() {
+    if (derived_offset_ > derived_.size() ||
+        derived_length_ > derived_.size() - derived_offset_) {
+      return absl::InvalidArgumentError("Table range out of bounds.");
+    }
     if (!out->insert_from_dictionary(base_table_offset_ + base_offset_,
                                      derived_length_)) {
       // 1 byte backwards refs must be inserted as literals.
@@ -91,6 +99,8 @@ class TableRange {
 
     base_length_ = 0;
     derived_length_ = 0;
+
+    return absl::OkStatus();
   }
 };
 

@@ -167,12 +167,9 @@ class DiffDriver {
 
         if (derived_gid > 0 && was_new_data != differ->IsNewData()) {
           if (was_new_data) {
-            Status s = range.CommitNew();
-            if (!s.ok()) {
-              return s;
-            }
+            TRYV(range.CommitNew());
           } else {
-            range.CommitExisting();
+            TRYV(range.CommitExisting());
           }
         }
 
@@ -195,12 +192,9 @@ class DiffDriver {
       differ->Finalize(&base_length, &derived_length);
       range.Extend(base_length, derived_length);
       if (differ->IsNewData()) {
-        Status s = range.CommitNew();
-        if (!s.ok()) {
-          return s;
-        }
+        TRYV(range.CommitNew());
       } else {
-        range.CommitExisting();
+        TRYV(range.CommitExisting());
       }
       range.stream().four_byte_align_uncompressed();
       out.append(range.stream());
@@ -334,27 +328,18 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
     i++;
   }
 
-  Status s = out.insert_compressed_with_partial_dict(
+  TRYV(out.insert_compressed_with_partial_dict(
       derived_span.span().subspan(0, derived_start_offset),
-      base_span.span().subspan(0, base_start_offset));
-  if (!s.ok()) {
-    return s;
-  }
+      base_span.span().subspan(0, base_start_offset)));
 
   if (!out.insert_from_dictionary(base_start_offset, base_region_sizes[0])) {
     return absl::InternalError("dict insert of immutable tables failed.");
   }
 
-  s = diff_driver.MakeDiff();
-  if (!s.ok()) {
-    return s;
-  }
+  TRYV(diff_driver.MakeDiff());
 
   if (derived_span.size() > derived_end_offset) {
-    s = out.insert_compressed(derived_span.span().subspan(derived_end_offset));
-    if (!s.ok()) {
-      return s;
-    }
+    TRYV(out.insert_compressed(derived_span.span().subspan(derived_end_offset)));
   }
 
   out.end_stream();

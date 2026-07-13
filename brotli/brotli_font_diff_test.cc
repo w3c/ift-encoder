@@ -313,11 +313,49 @@ TEST_F(BrotliFontDiffTest, TruncatedHeadTable) {
   BrotliFontDiff differ(immutable_tables, custom_tables);
   FontData patch;
   Status status = differ.Diff(base_plan, bad_base_blob.get(), derived_plan, derived_blob.get(), &patch);
-  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
-  EXPECT_TRUE(absl::StrContains(status.message(), "head table is missing or truncated")) << status.message();
-
   hb_subset_plan_destroy(base_plan);
   hb_subset_plan_destroy(derived_plan);
+
+  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_TRUE(absl::StrContains(status.message(), "head table is missing or truncated")) << status.message();
+}
+
+TEST_F(BrotliFontDiffTest, TruncatedHmtxTable) {
+  hb_set_add_range(hb_subset_input_unicode_set(input), 0x41, 0x5A);
+  hb_subset_plan_t* base_plan = hb_subset_plan_create_or_fail(roboto, input);
+  hb_face_unique_ptr base_face = make_hb_face(hb_subset_plan_execute_or_fail(base_plan));
+  SortTables(roboto, base_face.get());
+  hb_blob_unique_ptr base_blob = make_hb_blob(hb_face_reference_blob(base_face.get()));
+
+  // Derived setup with bad (truncated) hmtx table
+  hb_set_add_range(hb_subset_input_unicode_set(input), 0x61, 0x7A);
+  hb_subset_plan_t* derived_plan = hb_subset_plan_create_or_fail(roboto, input);
+  hb_face_unique_ptr derived_face = make_hb_face(hb_subset_plan_execute_or_fail(derived_plan));
+  SortTables(roboto, derived_face.get());
+
+  auto ordered_tags = ift::common::FontHelper::GetOrderedTags(derived_face.get());
+  hb_face_unique_ptr builder = make_hb_face_builder();
+  std::string bad_hmtx_data = "short";
+
+  for (auto tag : ordered_tags) {
+    hb_blob_unique_ptr blob = FontHelper::TableData(derived_face.get(), tag).blob();
+    if (tag == HB_TAG('h', 'm', 't', 'x')) {
+      blob = make_hb_blob(hb_blob_create(bad_hmtx_data.data(), bad_hmtx_data.size(), HB_MEMORY_MODE_READONLY, nullptr, nullptr));
+    }
+    hb_face_builder_add_table(builder.get(), tag, blob.get());
+  }
+
+  SortTables(roboto, builder.get());
+  hb_blob_unique_ptr bad_derived_blob = make_hb_blob(hb_face_reference_blob(builder.get()));
+
+  BrotliFontDiff differ(immutable_tables, custom_tables);
+  FontData patch;
+  Status status = differ.Diff(base_plan, base_blob.get(), derived_plan, bad_derived_blob.get(), &patch);
+  hb_subset_plan_destroy(base_plan);
+  hb_subset_plan_destroy(derived_plan);
+
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
 }
 
 
