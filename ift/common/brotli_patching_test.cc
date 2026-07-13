@@ -3,8 +3,7 @@
 #include "gtest/gtest.h"
 #include "ift/common/brotli_binary_diff.h"
 #include "ift/common/brotli_binary_patch.h"
-#include "ift/common/file_font_provider.h"
-#include "ift/common/font_provider.h"
+#include "ift/common/test_font_loader.h"
 
 namespace ift::common {
 
@@ -14,22 +13,20 @@ using absl::Status;
 class BrotliPatchingTest : public ::testing::Test {
  protected:
   BrotliPatchingTest()
-      : font_provider_(new FileFontProvider("ift/common/testdata/")),
+      : loader_(TestFontLoader::Default().value()),
         diff_(new BrotliBinaryDiff()),
         patch_(new BrotliBinaryPatch()) {}
 
   ~BrotliPatchingTest() override {}
 
   void SetUp() override {
-    EXPECT_EQ(font_provider_->GetFont("Roboto-Regular.Meows.ttf", &subset_a_),
-              absl::OkStatus());
-    EXPECT_EQ(font_provider_->GetFont("Roboto-Regular.Awesome.ttf", &subset_b_),
-              absl::OkStatus());
+    subset_a_ = *loader_->LoadFontData("ift/common/testdata/Roboto-Regular.Meows.ttf");
+    subset_b_ = *loader_->LoadFontData("ift/common/testdata/Roboto-Regular.Awesome.ttf");
     EXPECT_GT(subset_a_.size(), 0);
     EXPECT_GT(subset_b_.size(), 0);
   }
 
-  std::unique_ptr<FontProvider> font_provider_;
+  std::unique_ptr<TestFontLoader> loader_;
   std::unique_ptr<BrotliBinaryDiff> diff_;
   std::unique_ptr<BinaryPatch> patch_;
   FontData subset_a_;
