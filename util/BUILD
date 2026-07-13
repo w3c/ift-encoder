@@ -10,6 +10,7 @@ cc_binary(
     ],
     deps = [
         ":auto_config_flags",
+        ":path_util",
         "//ift",
         "//ift/common",
         "//ift/common:data_file_resolver",
@@ -35,6 +36,30 @@ cc_binary(
         "@abseil-cpp//absl/strings",
         "@harfbuzz",
         "@protobuf",
+    ],
+)
+
+cc_library(
+    name = "path_util",
+    srcs = ["path_util.cc"],
+    hdrs = ["path_util.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "path_util_test",
+    size = "small",
+    srcs = ["path_util_test.cc"],
+    deps = [
+        ":path_util",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 

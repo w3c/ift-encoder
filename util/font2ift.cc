@@ -33,6 +33,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/subset_definition.h"
 #include "util/auto_config_flags.h"
+#include "util/path_util.h"
 
 using ift::common::BazelDataFileResolver;
 using ift::common::DataFileResolver;
@@ -40,6 +41,7 @@ using ift::config::ActivationConditionProto;
 using ift::config::ConfigCompiler;
 using ift::config::DesignSpace;
 using ift::config::SegmentationPlan;
+using ift::util::JoinAndValidatePath;
 
 /*
  * Utility that converts a standard font file into an IFT font file optionally
@@ -122,35 +124,27 @@ Status write_file(const std::string& name, const FontData& data) {
   return absl::OkStatus();
 }
 
-void write_patch(const std::string& url, const FontData& patch) {
+Status write_patch(const std::string& url, const FontData& patch) {
   std::string output_path = absl::GetFlag(FLAGS_output_path);
-  std::cerr << "  Writing patch: " << StrCat(output_path, "/", url)
-            << std::endl;
-  auto sc = write_file(StrCat(output_path, "/", url), patch);
-  if (!sc.ok()) {
-    std::cerr << sc.message() << std::endl;
-    exit(-1);
-  }
+  std::string full_path = TRY(JoinAndValidatePath(output_path, url));
+  std::cerr << "  Writing patch: " << full_path << std::endl;
+  return write_file(full_path, patch);
 }
 
-int write_output(const Compiler::Encoding& encoding) {
+Status write_output(const Compiler::Encoding& encoding) {
   std::string output_path = absl::GetFlag(FLAGS_output_path);
   std::string output_font = absl::GetFlag(FLAGS_output_font);
 
-  std::cerr << "  Writing init font: " << StrCat(output_path, "/", output_font)
-            << std::endl;
-  auto sc =
-      write_file(StrCat(output_path, "/", output_font), encoding.init_font);
-  if (!sc.ok()) {
-    std::cerr << sc.message() << std::endl;
-    return -1;
-  }
+  std::string full_path = TRY(JoinAndValidatePath(output_path, output_font));
+
+  std::cerr << "  Writing init font: " << full_path << std::endl;
+  TRYV(write_file(full_path, encoding.init_font));
 
   for (const auto& p : encoding.patches) {
-    write_patch(p.first, p.second);
+    TRYV(write_patch(p.first, p.second));
   }
 
-  return 0;
+  return absl::OkStatus();
 }
 
 StatusOr<SegmentationPlan> CreateSegmentationPlan(
@@ -245,5 +239,11 @@ int main(int argc, char** argv) {
   }
 
   std::cout << ">> generating output patches:" << std::endl;
-  return write_output(*encoding);
+  auto status = write_output(*encoding);
+  if (!status.ok()) {
+    std::cerr << status.message() << std::endl;
+    return -1;
+  }
+
+  return 0;
 }
