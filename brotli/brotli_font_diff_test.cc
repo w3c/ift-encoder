@@ -2,6 +2,7 @@
 #include "brotli/glyf_differ.h"
 
 #include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "gtest/gtest.h"
 #include "hb-subset.h"
@@ -321,8 +322,9 @@ TEST_F(BrotliFontDiffTest, TruncatedHeadTable) {
 
 
 TEST(GlyfDifferTest, ShortLocaOOB) {
-  std::vector<uint8_t> loca = {0, 0, 0, 10};
-  GlyfDiffer differ(loca, true, true);
+  std::vector<char> loca_data = {0, 0, 0, 10};
+  FontData loca(absl::string_view(loca_data.data(), loca_data.size()));
+  GlyfDiffer differ(std::move(loca), true, true);
   unsigned base_delta = 0;
   unsigned derived_delta = 0;
   differ.Process(1, 1, 1, false, &base_delta, &derived_delta);
@@ -330,8 +332,9 @@ TEST(GlyfDifferTest, ShortLocaOOB) {
 }
 
 TEST(GlyfDifferTest, LongLocaOOB) {
-  std::vector<uint8_t> loca = {0, 0, 0, 0, 0, 0, 0, 10};
-  GlyfDiffer differ(loca, false, false);
+  std::vector<char> loca_data = {0, 0, 0, 0, 0, 0, 0, 10};
+  FontData loca(absl::string_view(loca_data.data(), loca_data.size()));
+  GlyfDiffer differ(std::move(loca), false, false);
   unsigned base_delta = 0;
   unsigned derived_delta = 0;
   differ.Process(1, 1, 1, false, &base_delta, &derived_delta);

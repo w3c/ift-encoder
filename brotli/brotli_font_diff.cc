@@ -82,8 +82,8 @@ class DiffDriver {
               HasTable(base_face, derived_face, HHEA)) {
             differs.push_back(RangeAndDiffer(
                 base_face, derived_face, HMTX, stream,
-                new HmtxDiffer(TableRange::to_span(base_face, HHEA),
-                               TableRange::to_span(derived_face, HHEA))));
+                new HmtxDiffer(FontHelper::TableData(base_face, HHEA),
+                               FontHelper::TableData(derived_face, HHEA))));
           }
           break;
 
@@ -92,8 +92,8 @@ class DiffDriver {
               HasTable(base_face, derived_face, VHEA)) {
             differs.push_back(RangeAndDiffer(
                 base_face, derived_face, VMTX, stream,
-                new HmtxDiffer(TableRange::to_span(base_face, VHEA),
-                               TableRange::to_span(derived_face, VHEA))));
+                new HmtxDiffer(FontHelper::TableData(base_face, VHEA),
+                               FontHelper::TableData(derived_face, VHEA))));
           }
           break;
 
@@ -111,7 +111,7 @@ class DiffDriver {
               HasTable(base_face, derived_face, LOCA)) {
             differs.push_back(RangeAndDiffer(
                 base_face, derived_face, GLYF, stream,
-                new GlyfDiffer(TableRange::to_span(derived_face, LOCA),
+                new GlyfDiffer(FontHelper::TableData(derived_face, LOCA),
                                is_base_short_loca, is_derived_short_loca)));
           }
           break;
@@ -265,8 +265,8 @@ void BrotliFontDiff::SortForDiff(const IntSet& immutable_tables,
 Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
                             hb_subset_plan_t* derived_plan, hb_blob_t* derived,
                             FontData* patch) const {
-  Span<const uint8_t> base_span = TableRange::to_span(base);
-  Span<const uint8_t> derived_span = TableRange::to_span(derived);
+  FontData base_span(base);
+  FontData derived_span(derived);
 
   // get a 'real' (non facebuilder) face for the faces.
   hb_face_unique_ptr derived_face = make_hb_face(hb_face_create(derived, 0));
@@ -302,12 +302,10 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
             "base and derived must both have the same tables.");
       }
 
-      Span<const uint8_t> base_span =
-          TableRange::padded_table_span(TableRange::to_span(base_face.get(), tag));
-      Span<const uint8_t> derived_span =
-          TableRange::padded_table_span(TableRange::to_span(derived_face.get(), tag));
+      size_t base_padded_size = TableRange::padded_table_size(FontHelper::TableData(base_face.get(), tag).size());
+      size_t derived_padded_size = TableRange::padded_table_size(FontHelper::TableData(derived_face.get(), tag).size());
 
-      base_region_sizes[i] += base_span.size();
+      base_region_sizes[i] += base_padded_size;
 
       unsigned base_offset = TableRange::table_offset(base_face.get(), tag);
       unsigned derived_offset = TableRange::table_offset(derived_face.get(), tag);
@@ -330,15 +328,15 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
             "custom diff tables in base are not sequential.");
       }
 
-      derived_end_offset = derived_offset + derived_span.size();
-      base_end_offset = base_offset + base_span.size();
+      derived_end_offset = derived_offset + derived_padded_size;
+      base_end_offset = base_offset + base_padded_size;
     }
     i++;
   }
 
   Status s = out.insert_compressed_with_partial_dict(
-      derived_span.subspan(0, derived_start_offset),
-      base_span.subspan(0, base_start_offset));
+      derived_span.span().subspan(0, derived_start_offset),
+      base_span.span().subspan(0, base_start_offset));
   if (!s.ok()) {
     return s;
   }
@@ -353,7 +351,7 @@ Status BrotliFontDiff::Diff(hb_subset_plan_t* base_plan, hb_blob_t* base,
   }
 
   if (derived_span.size() > derived_end_offset) {
-    s = out.insert_compressed(derived_span.subspan(derived_end_offset));
+    s = out.insert_compressed(derived_span.span().subspan(derived_end_offset));
     if (!s.ok()) {
       return s;
     }

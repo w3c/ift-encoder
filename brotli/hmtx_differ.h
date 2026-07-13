@@ -1,8 +1,8 @@
 #ifndef BROTLI_HMTX_DIFFER_H_
 #define BROTLI_HMTX_DIFFER_H_
 
-#include "absl/types/span.h"
 #include "brotli/table_differ.h"
+#include "ift/common/font_data.h"
 
 namespace brotli {
 
@@ -18,8 +18,8 @@ class HmtxDiffer : public TableDiffer {
   unsigned derived_number_of_metrics;
 
  public:
-  HmtxDiffer(absl::Span<const uint8_t> base_hhea,
-             absl::Span<const uint8_t> derived_hhea)
+  HmtxDiffer(ift::common::FontData base_hhea,
+             ift::common::FontData derived_hhea)
       : base_number_of_metrics(GetNumberOfMetrics(base_hhea)),
         derived_number_of_metrics(GetNumberOfMetrics(derived_hhea)) {}
 
@@ -58,14 +58,15 @@ class HmtxDiffer : public TableDiffer {
   bool IsNewData() const override { return mode == NEW_DATA; }
 
  private:
-  static unsigned GetNumberOfMetrics(absl::Span<const uint8_t> hhea) {
+  static unsigned GetNumberOfMetrics(const ift::common::FontData& hhea) {
     constexpr unsigned field_offset = 34;
 
     if (hhea.size() < field_offset + 2) {
       return 0;
     }
 
-    const uint8_t* num_metrics = hhea.data() + field_offset;
+    const uint8_t* num_metrics =
+        hhea.span().data() + field_offset;
     return (num_metrics[0] << 8) | num_metrics[1];
   }
 };
