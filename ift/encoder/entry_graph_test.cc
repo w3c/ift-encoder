@@ -681,4 +681,55 @@ TEST(EntryGraphTest, Optimize_Conjunctive) {
   EXPECT_EQ(root_entry.coverage.child_indices.size(), 1);
 }
 
+TEST(EntryGraphTest, TopologicalSort_ActivationConditionOrdering) {
+  flat_hash_map<segment_index_t, SubsetDefinition> segments = {
+      {1, {'a'}},
+      {2, {'b'}},
+      {3, {'c'}},
+  };
+
+  ActivationCondition cond_a = ActivationCondition::exclusive_segment(1, 10);
+  ActivationCondition cond_b = ActivationCondition::exclusive_segment(2, 20);
+  ActivationCondition cond_c = ActivationCondition::exclusive_segment(3, 30);
+
+  // Case 1: Order [a, b, c]
+  {
+    std::vector<ActivationCondition> conditions = {cond_a, cond_b, cond_c};
+    auto graph = EntryGraph::Create(conditions, segments);
+    ASSERT_TRUE(graph.ok()) << graph.status();
+    auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
+    ASSERT_TRUE(entries.ok()) << entries.status();
+    ASSERT_EQ(entries->size(), 3);
+    EXPECT_EQ(entries->at(0).patch_indices[0], 10);
+    EXPECT_EQ(entries->at(1).patch_indices[0], 20);
+    EXPECT_EQ(entries->at(2).patch_indices[0], 30);
+  }
+
+  // Case 2: Order [c, b, a]
+  {
+    std::vector<ActivationCondition> conditions = {cond_c, cond_b, cond_a};
+    auto graph = EntryGraph::Create(conditions, segments);
+    ASSERT_TRUE(graph.ok()) << graph.status();
+    auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
+    ASSERT_TRUE(entries.ok()) << entries.status();
+    ASSERT_EQ(entries->size(), 3);
+    EXPECT_EQ(entries->at(0).patch_indices[0], 30);
+    EXPECT_EQ(entries->at(1).patch_indices[0], 20);
+    EXPECT_EQ(entries->at(2).patch_indices[0], 10);
+  }
+
+  // Case 3: Order [condB, condA, condC]
+  {
+    std::vector<ActivationCondition> conditions = {cond_b, cond_a, cond_c};
+    auto graph = EntryGraph::Create(conditions, segments);
+    ASSERT_TRUE(graph.ok()) << graph.status();
+    auto entries = graph->ToPatchMapEntries(proto::GLYPH_KEYED);
+    ASSERT_TRUE(entries.ok()) << entries.status();
+    ASSERT_EQ(entries->size(), 3);
+    EXPECT_EQ(entries->at(0).patch_indices[0], 20);
+    EXPECT_EQ(entries->at(1).patch_indices[0], 10);
+    EXPECT_EQ(entries->at(2).patch_indices[0], 30);
+  }
+}
+
 }  // namespace ift::encoder

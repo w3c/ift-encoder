@@ -34,35 +34,35 @@ TEST(ActivationConditionTest, ActivationConditionsToEncoderConditions) {
   };
 
   // Entry generation optimizes the entries, by combining segments
-  // where possible.
+  // where possible. Entry order tries to match input order where possible
   std::vector<PatchMap::Entry> expected;
 
-  // Entry 0: s1 OR s3 -> 5
+  // Entry 0: s2 -> 2
+  {
+    PatchMap::Entry entry({'c'}, 2, PatchEncoding::GLYPH_KEYED);
+    expected.push_back(entry);
+  }
+
+  // Entry 1: s3 -> 4
+  {
+    PatchMap::Entry entry({'d', 'e', 'f'}, 4, PatchEncoding::GLYPH_KEYED);
+    expected.push_back(entry);
+  }
+
+  // Entry 2: s1 OR s3 -> 5
   {
     PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5,
                           PatchEncoding::GLYPH_KEYED);
     expected.push_back(entry);
   }
 
-  // Entry 1: (s1 OR s3) AND (s2 OR s4) -> 6
+  // Entry 3: (s1 OR s3) AND (s2 OR s4) -> 6
   {
     PatchMap::Entry entry;
     entry.coverage.codepoints = {'c', 'g'};
-    entry.coverage.child_indices = {0};
+    entry.coverage.child_indices = {2};
     entry.coverage.conjunctive = true;
     entry.patch_indices = {6};
-    expected.push_back(entry);
-  }
-
-  // Entry 2: s3 -> 4
-  {
-    PatchMap::Entry entry({'d', 'e', 'f'}, 4, PatchEncoding::GLYPH_KEYED);
-    expected.push_back(entry);
-  }
-
-  // Entry 3: s2 -> 2
-  {
-    PatchMap::Entry entry({'c'}, 2, PatchEncoding::GLYPH_KEYED);
     expected.push_back(entry);
   }
 
@@ -98,7 +98,20 @@ TEST(ActivationConditionTest,
 
   std::vector<PatchMap::Entry> expected;
 
-  // Entry 0: s1 OR s3 -> 5
+  // Entry 0: s2 -> 2
+  {
+    PatchMap::Entry entry({'c'}, 2, PatchEncoding::GLYPH_KEYED);
+    expected.push_back(entry);
+  }
+
+  // Entry 1: s3 -> 4
+  {
+    PatchMap::Entry entry({'d', 'e', 'f'}, {4, 13, 12},
+                          proto::PatchEncoding::TABLE_KEYED_FULL);
+    expected.push_back(entry);
+  }
+
+  // Entry 2: s1 OR s3 -> 5
   {
     PatchMap::Entry entry({'a', 'b', 'd', 'e', 'f'}, 5,
                           PatchEncoding::GLYPH_KEYED);
@@ -109,22 +122,9 @@ TEST(ActivationConditionTest,
   {
     PatchMap::Entry entry;
     entry.coverage.codepoints = {'c', 'g'};
-    entry.coverage.child_indices = {0};
+    entry.coverage.child_indices = {2};
     entry.coverage.conjunctive = true;
     entry.patch_indices = {6};
-    expected.push_back(entry);
-  }
-
-  // Entry 2: s3 -> 4
-  {
-    PatchMap::Entry entry({'d', 'e', 'f'}, {4, 13, 12},
-                          proto::PatchEncoding::TABLE_KEYED_FULL);
-    expected.push_back(entry);
-  }
-
-  // Entry 3: s2 -> 2
-  {
-    PatchMap::Entry entry({'c'}, 2, PatchEncoding::GLYPH_KEYED);
     expected.push_back(entry);
   }
 
@@ -153,20 +153,22 @@ TEST(ActivationConditionTest,
 
   std::vector<PatchMap::Entry> expected;
 
-  // Entry 0: dlig (ignored)
+
+
+  // Entry 0: {d, e, f} (ignored)
   {
     PatchMap::Entry condition;
-    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
+    condition.coverage.codepoints = {'d', 'e', 'f'};
     condition.ignored = true;
     condition.patch_indices = {1};
     condition.encoding = PatchEncoding::GLYPH_KEYED;
     expected.push_back(condition);
   }
 
-  // Entry 1: {d, e, f} (ignored)
+  // Entry 1: dlig (ignored)
   {
     PatchMap::Entry condition;
-    condition.coverage.codepoints = {'d', 'e', 'f'};
+    condition.coverage.features = {HB_TAG('d', 'l', 'i', 'g')};
     condition.ignored = true;
     condition.patch_indices = {2};
     condition.encoding = PatchEncoding::GLYPH_KEYED;
