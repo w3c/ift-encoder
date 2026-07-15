@@ -16,9 +16,6 @@ enum ChildMode {
   OR,
 };
 
-// TODO(garretrieger): better optimize patch id encodings by ordering entries by
-// patch ids where possible.
-
 struct EntryNode {
   common::CodepointSet and_codepoints;
   absl::flat_hash_set<hb_tag_t> and_features;
@@ -26,6 +23,7 @@ struct EntryNode {
 
   ChildMode child_mode = NONE;
   common::IntSet children_ids;
+  uint32_t condition_index = 0;
 
   // Generate an estimated encoding cost, ignores the impact of last patch index
   // and the default format selection on final encoding size.
@@ -84,22 +82,26 @@ class EntryGraph {
   // Returns node id. De-dups if possible.
   absl::StatusOr<uint32_t> AddMapping(
       const ActivationCondition& condition,
-      const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments);
+      const absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments,
+      uint32_t condition_index,
+      bool root
+    );
 
   // Returns node id. De-dups if possible.
   absl::StatusOr<uint32_t> AddCodepointsOnly(
-      const common::CodepointSet& codepoints);
+      const common::CodepointSet& codepoints, uint32_t condition_index);
 
   // Returns node id. De-dups if possible.
   absl::StatusOr<uint32_t> AddFeaturesOnly(
-      const absl::btree_set<hb_tag_t>& features);
+      const absl::btree_set<hb_tag_t>& features, uint32_t condition_index);
 
   // Returns node id. De-dups if possible.
   absl::StatusOr<uint32_t> AddDesignSpaceOnly(
       const absl::flat_hash_map<hb_tag_t, ift::common::AxisRange>&
-          design_space);
+          design_space,
+      uint32_t condition_index);
 
-  absl::StatusOr<uint32_t> CreateNode();
+  absl::StatusOr<uint32_t> CreateNode(uint32_t condition_index);
 
   common::IntSet ReachableNodes() const;
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <queue>
 
 #include "absl/strings/str_cat.h"
 #include "ift/common/axis_range.h"
@@ -38,8 +39,9 @@ StatusOr<EntryGraph> EntryGraph::Create(
     Span<const ActivationCondition> conditions,
     const flat_hash_map<segment_index_t, SubsetDefinition>& segments) {
   EntryGraph graph;
-  for (const auto& condition : conditions) {
-    uint32_t _ = TRY(graph.AddMapping(condition, segments));
+  for (uint32_t i = 0; i < conditions.size(); ++i) {
+    const auto& condition = conditions[i];
+    uint32_t _ = TRY(graph.AddMapping(condition, segments, i, true));
     ActivationCondition normalized = Normalize(condition);
 
     std::vector<uint32_t> patches = {condition.activated()};
@@ -142,27 +144,41 @@ StatusOr<std::vector<uint32_t>> EntryGraph::TopologicalSort() const {
     edge_count[it->second]--;
   }
 
-  std::vector<uint32_t> sorted;
-  sorted.reserve(nodes.size());
+  struct NodeComparator {
+    const std::vector<EntryNode>& nodes;
+    bool operator()(uint32_t a, uint32_t b) const {
+      const auto& node_a = nodes[a], node_b = nodes[b];
+      if (node_a.condition_index == node_b.condition_index) {
+        return a < b;
+      }
+      return node_a.condition_index < node_b.condition_index;
+    }
+  };
+
+  std::priority_queue<uint32_t, std::vector<uint32_t>, NodeComparator> queue(NodeComparator{nodes});
+
   for (uint32_t i = 0; i < edge_count.size(); i++) {
     if (edge_count[i] == 0) {
-      sorted.push_back(i);
+      queue.push(i);
     }
   }
 
-  std::sort(sorted.begin(), sorted.end());
+  std::vector<uint32_t> sorted;
+  sorted.reserve(nodes.size());
 
   // Kahn's algorithm (ref: https://en.wikipedia.org/wiki/Topological_sorting)
-  size_t head = 0;
-  while (head < sorted.size()) {
-    uint32_t id = sorted[head++];
+  while (!queue.empty()) {
+    uint32_t id = queue.top();
+    queue.pop();
+    sorted.push_back(id);
+
     for (uint32_t child : nodes[id].children_ids) {
       if (edge_count[child] == 0) {
         return absl::InternalError("Edge count underflow.");
       }
       edge_count[child]--;
       if (edge_count[child] == 0) {
-        sorted.push_back(child);
+        queue.push(child);
       }
     }
   }
@@ -176,11 +192,18 @@ StatusOr<std::vector<uint32_t>> EntryGraph::TopologicalSort() const {
 
 StatusOr<uint32_t> EntryGraph::AddMapping(
     const ActivationCondition& condition,
-    const flat_hash_map<segment_index_t, SubsetDefinition>& segments) {
+    const flat_hash_map<segment_index_t, SubsetDefinition>& segments,
+    uint32_t condition_index,
+    bool root
+  ) {
   ActivationCondition normalized = Normalize(condition);
 
   auto existing = condition_to_node_id.find(normalized);
   if (existing != condition_to_node_id.end()) {
+    // Top level condition indices take precedent.
+    if (root) {
+      nodes[existing->second].condition_index = condition_index;
+    }
     incoming_edge_count[existing->second]++;
     return existing->second;
   }
@@ -189,23 +212,26 @@ StatusOr<uint32_t> EntryGraph::AddMapping(
     const auto& segment = segments.at(*normalized.TriggeringSegments().begin());
     if (!segment.codepoints.empty() && segment.feature_tags.empty() &&
         segment.design_space.empty()) {
-      uint32_t node_id = TRY(AddCodepointsOnly(segment.codepoints));
+      uint32_t node_id =
+          TRY(AddCodepointsOnly(segment.codepoints, condition_index));
       condition_to_node_id[normalized] = node_id;
       return node_id;
     } else if (segment.codepoints.empty() && !segment.feature_tags.empty() &&
                segment.design_space.empty()) {
-      uint32_t node_id = TRY(AddFeaturesOnly(segment.feature_tags));
+      uint32_t node_id =
+          TRY(AddFeaturesOnly(segment.feature_tags, condition_index));
       condition_to_node_id[normalized] = node_id;
       return node_id;
     } else if (segment.codepoints.empty() && segment.feature_tags.empty() &&
                !segment.design_space.empty()) {
-      uint32_t node_id = TRY(AddDesignSpaceOnly(segment.design_space));
+      uint32_t node_id =
+          TRY(AddDesignSpaceOnly(segment.design_space, condition_index));
       condition_to_node_id[normalized] = node_id;
       return node_id;
     }
   }
 
-  uint32_t node_id = TRY(CreateNode());
+  uint32_t node_id = TRY(CreateNode(condition_index));
   incoming_edge_count[node_id]++;
   condition_to_node_id[normalized] = node_id;
 
@@ -215,15 +241,18 @@ StatusOr<uint32_t> EntryGraph::AddMapping(
     // features and one for the codepoints.
     const auto& segment = segments.at(*normalized.TriggeringSegments().begin());
     if (!segment.codepoints.empty()) {
-      uint32_t codepoints_id = TRY(AddCodepointsOnly(segment.codepoints));
+      uint32_t codepoints_id =
+          TRY(AddCodepointsOnly(segment.codepoints, condition_index));
       nodes[node_id].children_ids.insert(codepoints_id);
     }
     if (!segment.feature_tags.empty()) {
-      uint32_t features_id = TRY(AddFeaturesOnly(segment.feature_tags));
+      uint32_t features_id =
+          TRY(AddFeaturesOnly(segment.feature_tags, condition_index));
       nodes[node_id].children_ids.insert(features_id);
     }
     if (!segment.design_space.empty()) {
-      uint32_t design_space_id = TRY(AddDesignSpaceOnly(segment.design_space));
+      uint32_t design_space_id =
+          TRY(AddDesignSpaceOnly(segment.design_space, condition_index));
       nodes[node_id].children_ids.insert(design_space_id);
     }
 
@@ -236,8 +265,8 @@ StatusOr<uint32_t> EntryGraph::AddMapping(
     nodes[node_id].child_mode = OR;
     std::vector<uint32_t> children;
     for (const auto& s : or_segments) {
-      children.push_back(TRY(
-          AddMapping(ActivationCondition::exclusive_segment(s, 0), segments)));
+      children.push_back(TRY(AddMapping(
+          ActivationCondition::exclusive_segment(s, 0), segments, condition_index, false)));
     }
     TRYV(AddChildrenToNode(node_id, OR, children));
     return node_id;
@@ -247,7 +276,7 @@ StatusOr<uint32_t> EntryGraph::AddMapping(
   std::vector<uint32_t> children;
   for (const auto& or_segments : normalized.conditions()) {
     children.push_back(TRY(AddMapping(
-        ActivationCondition::or_segments(or_segments, 0), segments)));
+        ActivationCondition::or_segments(or_segments, 0), segments, condition_index, false)));
   }
   TRYV(AddChildrenToNode(node_id, AND, children));
 
@@ -260,7 +289,7 @@ absl::Status EntryGraph::AddChildrenToNode(uint32_t node_id, ChildMode mode,
     for (size_t i = 0; i < 126; ++i) {
       nodes[node_id].children_ids.insert(children_ids[i]);
     }
-    uint32_t next_node_id = TRY(CreateNode());
+    uint32_t next_node_id = TRY(CreateNode(nodes[node_id].condition_index));
     nodes[next_node_id].child_mode = mode;
     incoming_edge_count[next_node_id]++;
     nodes[node_id].children_ids.insert(next_node_id);
@@ -276,14 +305,14 @@ absl::Status EntryGraph::AddChildrenToNode(uint32_t node_id, ChildMode mode,
 }
 
 StatusOr<uint32_t> EntryGraph::AddCodepointsOnly(
-    const common::CodepointSet& codepoints) {
+    const common::CodepointSet& codepoints, uint32_t condition_index) {
   auto existing = codepoints_to_node_id.find(codepoints);
   if (existing != codepoints_to_node_id.end()) {
     incoming_edge_count[existing->second]++;
     return existing->second;
   }
 
-  uint32_t node_id = TRY(CreateNode());
+  uint32_t node_id = TRY(CreateNode(condition_index));
   incoming_edge_count[node_id]++;
   codepoints_to_node_id[codepoints] = node_id;
   nodes[node_id].and_codepoints = codepoints;
@@ -291,7 +320,7 @@ StatusOr<uint32_t> EntryGraph::AddCodepointsOnly(
 }
 
 StatusOr<uint32_t> EntryGraph::AddFeaturesOnly(
-    const btree_set<hb_tag_t>& features) {
+    const btree_set<hb_tag_t>& features, uint32_t condition_index) {
   flat_hash_set<hb_tag_t> features_set;
   features_set.insert(features.begin(), features.end());
 
@@ -301,7 +330,7 @@ StatusOr<uint32_t> EntryGraph::AddFeaturesOnly(
     return existing->second;
   }
 
-  uint32_t node_id = TRY(CreateNode());
+  uint32_t node_id = TRY(CreateNode(condition_index));
   incoming_edge_count[node_id]++;
   features_to_node_id[features_set] = node_id;
   nodes[node_id].and_features = features_set;
@@ -310,21 +339,22 @@ StatusOr<uint32_t> EntryGraph::AddFeaturesOnly(
 
 // Returns node id. De-dups if possible.
 StatusOr<uint32_t> EntryGraph::AddDesignSpaceOnly(
-    const flat_hash_map<hb_tag_t, AxisRange>& design_space) {
+    const flat_hash_map<hb_tag_t, AxisRange>& design_space,
+    uint32_t condition_index) {
   auto existing = design_space_to_node_id.find(design_space);
   if (existing != design_space_to_node_id.end()) {
     incoming_edge_count[existing->second]++;
     return existing->second;
   }
 
-  uint32_t node_id = TRY(CreateNode());
+  uint32_t node_id = TRY(CreateNode(condition_index));
   incoming_edge_count[node_id]++;
   design_space_to_node_id[design_space] = node_id;
   nodes[node_id].and_design_space = design_space;
   return node_id;
 }
 
-StatusOr<uint32_t> EntryGraph::CreateNode() {
+StatusOr<uint32_t> EntryGraph::CreateNode(uint32_t condition_index) {
   if (nodes.size() > UINT32_MAX) {
     return absl::InternalError("Node ID integer overflow.");
   }
@@ -335,6 +365,7 @@ StatusOr<uint32_t> EntryGraph::CreateNode() {
       .and_design_space = {},
       .child_mode = NONE,
       .children_ids = {},
+      .condition_index = condition_index,
   });
   incoming_edge_count.push_back(0);
   return node_id;
@@ -726,19 +757,19 @@ Status EntryGraph::ActuateSubsumption(uint32_t node_id,
       node.child_mode = OR;
 
       if (result.codepoints) {
-        uint32_t id = TRY(CreateNode());
+        uint32_t id = TRY(CreateNode(node.condition_index));
         nodes[id].and_codepoints = *result.codepoints;
         incoming_edge_count[id]++;
         nodes[node_id].children_ids.insert(id);
       }
       if (result.features) {
-        uint32_t id = TRY(CreateNode());
+        uint32_t id = TRY(CreateNode(node.condition_index));
         nodes[id].and_features = *result.features;
         incoming_edge_count[id]++;
         nodes[node_id].children_ids.insert(id);
       }
       if (result.design_space) {
-        uint32_t id = TRY(CreateNode());
+        uint32_t id = TRY(CreateNode(node.condition_index));
         nodes[id].and_design_space = *result.design_space;
         incoming_edge_count[id]++;
         nodes[node_id].children_ids.insert(id);
