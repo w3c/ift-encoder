@@ -629,24 +629,28 @@ TEST_F(CompilerTest, Encode_ThreeSubsets_Mixed_VF) {
   ASSERT_TRUE(sc.ok()) << sc;
 
   graph expected{
-      {"", {"ABCDEFGH|08.ift_tk", "|wght[200..700]|0C.ift_tk"}},
-      {"ABCDEFGH", {"ABCDEFGH|wght[200..700]|0G.ift_tk"}},
+      {"", {"ABCDEFGH|0G.ift_tk", "|wght[200..700]|0K.ift_tk"}},
+      {"ABCDEFGH", {"ABCDEFGH|wght[200..700]|08.ift_tk"}},
       {"ABCDEFGH|wght[200..700]", {}},
-      {"|wght[200..700]", {"ABCDEFGH|wght[200..700]|0K.ift_tk"}},
+      {"|wght[200..700]", {"ABCDEFGH|wght[200..700]|0C.ift_tk"}},
   };
   ASSERT_EQ(g, expected);
 
   // Patches that don't modify variation space should not modify gvar:
-  auto has_gvar = PatchHasGvar(encoding->patches, "08.ift_tk");
+  auto has_gvar = PatchHasGvar(encoding->patches, "0G.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_FALSE(*has_gvar);
 
-  has_gvar = PatchHasGvar(encoding->patches, "0K.ift_tk");
+  has_gvar = PatchHasGvar(encoding->patches, "0C.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_FALSE(*has_gvar);
 
   // Patches that modify variation space should replace gvar:
-  has_gvar = PatchHasGvar(encoding->patches, "0G.ift_tk");
+  has_gvar = PatchHasGvar(encoding->patches, "08.ift_tk");
+  ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
+  ASSERT_TRUE(*has_gvar);
+
+  has_gvar = PatchHasGvar(encoding->patches, "0K.ift_tk");
   ASSERT_TRUE(has_gvar.ok()) << has_gvar.status();
   ASSERT_TRUE(*has_gvar);
 }

@@ -1441,7 +1441,7 @@ TEST_F(IntegrationTest,
   ASSERT_TRUE(extended.ok()) << extended.status();
   auto extended_face = extended->face();
 
-  auto expected_uris = btree_set<std::string>{"18.ift_tk", "0C.2.ift_gk"};
+  auto expected_uris = btree_set<std::string>{"2K.ift_tk", "0C.2.ift_gk"};
   ASSERT_EQ(fetched_uris, expected_uris);
 
   ASSERT_TRUE(GvarHasLongOffsets(*extended));
@@ -1511,7 +1511,7 @@ TEST_F(IntegrationTest,
   auto extended_face = extended->face();
 
   auto expected_uris =
-      btree_set<std::string>{"0O.ift_tk", "18.ift_tk", "0C.2.ift_gk"};
+      btree_set<std::string>{"1C.ift_tk", "1O.ift_tk", "0C.2.ift_gk"};
   ASSERT_EQ(fetched_uris, expected_uris);
 
   ASSERT_TRUE(GvarHasLongOffsets(*extended));
@@ -1571,7 +1571,7 @@ TEST_F(IntegrationTest, MixedMode_DesignSpaceAugmentation_DropsUnusedPatches) {
                                         &fetched_uris);
 
   // correspond to ids 3, 4, 6, d
-  btree_set<std::string> expected_uris{"0S.ift_tk", "20.ift_tk", "0C.2.ift_gk",
+  btree_set<std::string> expected_uris{"1G.ift_tk", "20.ift_tk", "0C.2.ift_gk",
                                        "0G.2.ift_gk"};
 
   ASSERT_EQ(fetched_uris, expected_uris);
