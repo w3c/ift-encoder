@@ -1,6 +1,7 @@
 #include "ift/encoder/compiler.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <iterator>
@@ -421,19 +422,17 @@ std::vector<ActivationCondition> Compiler::EdgesToActivationConditions(
   return result;
 }
 
-StatusOr<std::vector<Compiler::ConditionWithSize>>
-Compiler::EstimateConditionSizes(
+StatusOr<std::vector<std::pair<size_t, uint64_t>>> Compiler::EstimateEdgeSizes(
     ProcessingContext& context, const SubsetDefinition& base_subset,
     const FontData& base_font_data, const CompatId& table_keyed_compat_id,
     const std::vector<uint8_t>& glyph_keyed_url_template,
-    absl::Span<const ActivationCondition> conditions,
     absl::Span<const Compiler::Edge> edges) const {
-  std::vector<ConditionWithSize> conditions_with_sizes;
-  conditions_with_sizes.reserve(conditions.size());
+  std::vector<std::pair<size_t, uint64_t>> sizes;
+  sizes.reserve(edges.size());
 
-  for (size_t i = 0; i < conditions.size(); ++i) {
-    const auto& edge = edges[i];
-    uint64_t total_tentative_size = 0;
+  size_t index = 0;
+  for (const auto& edge : edges) {
+    uint64_t total_estimated_size = 0;
 
     SubsetDefinition current_subset = base_subset;
     CompileResult current{
@@ -450,30 +449,35 @@ Compiler::EstimateConditionSizes(
 
       auto next_res = TRY(Compile(context, j.end, false));
 
-      bool replace_url_template =
-          IsMixedMode() && (next_res.glyph_keyed_url_template !=
-                            current.glyph_keyed_url_template);
+      uint64_t patch_size = 0;
+      auto cache_it = context.estimated_patch_sizes_.find(j);
+      if (cache_it != context.estimated_patch_sizes_.end()) {
+        patch_size = cache_it->second;
+      } else {
+        bool replace_url_template =
+            IsMixedMode() && (next_res.glyph_keyed_url_template !=
+                              current.glyph_keyed_url_template);
 
-      auto tentative_differ = TRY(GetTentativeDifferFor(
-          current.table_keyed_compat_id, replace_url_template));
+        auto tentative_differ = TRY(GetTentativeDifferFor(
+            current.table_keyed_compat_id, replace_url_template));
 
-      FontData tentative_patch;
-      TRYV(tentative_differ->Diff(current.font_data, next_res.font_data,
-                                  &tentative_patch));
+        FontData tentative_patch;
+        TRYV(tentative_differ->Diff(current.font_data, next_res.font_data,
+                                    &tentative_patch));
+        patch_size = tentative_patch.size();
+        context.estimated_patch_sizes_[j] = patch_size;
+      }
 
-      total_tentative_size += tentative_patch.size();
+      total_estimated_size += patch_size;
 
       current = std::move(next_res);
       current_subset = j.end;
     }
 
-    conditions_with_sizes.push_back({
-        .condition = std::move(conditions[i]),
-        .tentative_size = total_tentative_size,
-    });
+    sizes.push_back(std::make_pair(index++, total_estimated_size));
   }
 
-  return conditions_with_sizes;
+  return sizes;
 }
 
 Status Compiler::PopulateTableKeyedPatchMap(
@@ -485,28 +489,31 @@ Status Compiler::PopulateTableKeyedPatchMap(
   // To create the table keyed patch mappings we use the activation condition
   // compiler. The outgoing edges for this node are converted into an activation
   // condition list and then compiled into mapping entries.
-  flat_hash_map<segment_index_t, SubsetDefinition> segments;
-  auto conditions = EdgesToActivationConditions(context, node_subset, edges,
-                                                encoding, segments);
 
-  std::vector<ConditionWithSize> conditions_with_sizes =
-      TRY(EstimateConditionSizes(context, node_subset, base_font_data,
-                                 table_keyed_compat_id,
-                                 glyph_keyed_url_template, conditions, edges));
+  // The invalidating selection criteria breaks ties to entries that occur
+  // earlier in the patch map. To optimize client behaviour we want to ensure
+  // that patch map entries are ordered from smallest to largest number of
+  // loaded bytes. So ties will break towards the smaller patch set.
+  std::vector<std::pair<size_t, uint64_t>> edge_sizes = TRY(EstimateEdgeSizes(
+      context, node_subset, base_font_data, table_keyed_compat_id,
+      glyph_keyed_url_template, edges));
 
-  std::stable_sort(conditions_with_sizes.begin(), conditions_with_sizes.end(),
-                   [](const ConditionWithSize& a, const ConditionWithSize& b) {
-                     return a.tentative_size < b.tentative_size;
-                   });
-
-  std::vector<ActivationCondition> sorted_conditions;
-  sorted_conditions.reserve(conditions_with_sizes.size());
-  for (auto& cs : conditions_with_sizes) {
-    sorted_conditions.push_back(std::move(cs.condition));
+  std::stable_sort(
+      edge_sizes.begin(), edge_sizes.end(),
+      [](const std::pair<size_t, uint64_t>& a,
+         const std::pair<size_t, uint64_t>& b) { return a.second < b.second; });
+  std::vector<Compiler::Edge> sorted_edges;
+  sorted_edges.reserve(edge_sizes.size());
+  for (const auto& [edge_index, _] : edge_sizes) {
+    sorted_edges.push_back(edges.at(edge_index));
   }
 
+  flat_hash_map<segment_index_t, SubsetDefinition> segments;
+  auto final_conditions = EdgesToActivationConditions(
+      context, node_subset, sorted_edges, encoding, segments);
+
   auto entries = TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
-      sorted_conditions, segments));
+      final_conditions, segments));
   for (auto e : entries) {
     TRYV(table_keyed_patch_map.AddEntry(e));
   }

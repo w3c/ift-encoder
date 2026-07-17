@@ -315,17 +315,11 @@ class Compiler {
       absl::Span<const Compiler::Edge> edges, proto::PatchEncoding encoding,
       absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments) const;
 
-  struct ConditionWithSize {
-    ActivationCondition condition;
-    uint64_t tentative_size;
-  };
-
-  absl::StatusOr<std::vector<ConditionWithSize>> EstimateConditionSizes(
+  absl::StatusOr<std::vector<std::pair<size_t, uint64_t>>> EstimateEdgeSizes(
       ProcessingContext& context, const SubsetDefinition& base_subset,
       const ift::common::FontData& base_font_data,
       const ift::common::CompatId& table_keyed_compat_id,
       const std::vector<uint8_t>& glyph_keyed_url_template,
-      absl::Span<const ActivationCondition> conditions,
       absl::Span<const Compiler::Edge> edges) const;
 
   absl::Status PopulateTableKeyedPatchMap(
@@ -414,6 +408,7 @@ class Compiler {
     absl::flat_hash_map<SubsetDefinition, CompileResult> built_subsets_;
     absl::flat_hash_map<std::string, ift::common::FontData> patches_;
     absl::flat_hash_map<Jump, uint32_t> table_keyed_patch_id_map_;
+    absl::flat_hash_map<Jump, uint64_t> estimated_patch_sizes_;
     ift::common::IntSet built_table_keyed_patches_;
 
     SubsetDefinition init_subset_;
