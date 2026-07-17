@@ -145,7 +145,6 @@ class Compiler {
   static absl::StatusOr<ift::common::FontData> RoundTripWoff2(
       absl::string_view font, bool glyf_transform = true);
 
- public:
   absl::Status SetInitSubsetFromDef(const SubsetDefinition& init_subset) {
     if (!init_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
@@ -239,6 +238,19 @@ class Compiler {
 
  private:
   struct ProcessingContext;
+  struct CompileResult {
+    ift::common::FontData font_data;
+    ift::common::CompatId table_keyed_compat_id;
+    ift::common::CompatId glyph_keyed_compat_id;
+    std::vector<uint8_t> glyph_keyed_url_template;
+
+    void shallow_copy(const CompileResult& other) {
+      font_data.shallow_copy(other.font_data);
+      table_keyed_compat_id = other.table_keyed_compat_id;
+      glyph_keyed_compat_id = other.glyph_keyed_compat_id;
+      glyph_keyed_url_template = other.glyph_keyed_url_template;
+    }
+  };
 
   // Returns the font subset which would be reach if all segments where added to
   // the font.
@@ -280,9 +292,9 @@ class Compiler {
    * Returns: the IFT encoded initial font. Patches() will be populated with the
    * set of associated patch files.
    */
-  absl::StatusOr<ift::common::FontData> Compile(
-      ProcessingContext& context, const SubsetDefinition& base_subset,
-      bool is_root = true) const;
+  absl::StatusOr<CompileResult> Compile(ProcessingContext& context,
+                                        const SubsetDefinition& base_subset,
+                                        bool is_root = true) const;
 
   /*
    * Returns true if this encoding will contain both glyph keyed and table keyed
@@ -303,8 +315,24 @@ class Compiler {
       absl::Span<const Compiler::Edge> edges, proto::PatchEncoding encoding,
       absl::flat_hash_map<segment_index_t, SubsetDefinition>& segments) const;
 
+  struct ConditionWithSize {
+    ActivationCondition condition;
+    uint64_t tentative_size;
+  };
+
+  absl::StatusOr<std::vector<ConditionWithSize>> EstimateConditionSizes(
+      ProcessingContext& context, const SubsetDefinition& base_subset,
+      const ift::common::FontData& base_font_data,
+      const ift::common::CompatId& table_keyed_compat_id,
+      const std::vector<uint8_t>& glyph_keyed_url_template,
+      absl::Span<const ActivationCondition> conditions,
+      absl::Span<const Compiler::Edge> edges) const;
+
   absl::Status PopulateTableKeyedPatchMap(
       ProcessingContext& context, const SubsetDefinition& base_subset,
+      const ift::common::FontData& base_font_data,
+      const ift::common::CompatId& table_keyed_compat_id,
+      const std::vector<uint8_t>& glyph_keyed_url_template,
       const std::vector<Compiler::Edge>& edges, proto::PatchEncoding encoding,
       proto::PatchMap& table_keyed_patch_map) const;
 
@@ -335,30 +363,16 @@ class Compiler {
       const ProcessingContext& context, hb_face_t* font,
       const design_space_t& design_space) const;
 
+  absl::StatusOr<std::unique_ptr<const ift::common::BinaryDiff>>
+  GetTentativeDifferFor(ift::common::CompatId compat_id,
+                        bool replace_url_template) const;
+
   absl::StatusOr<std::unique_ptr<const ift::common::BinaryDiff>> GetDifferFor(
-      const ift::common::FontData& font_data, ift::common::CompatId compat_id,
-      bool replace_url_template) const;
+      ift::common::CompatId compat_id, bool replace_url_template) const;
 
-  static ift::TableKeyedDiff* FullFontTableKeyedDiff(
-      ift::common::CompatId base_compat_id) {
-    return new TableKeyedDiff(base_compat_id);
-  }
-
-  static ift::TableKeyedDiff* MixedModeTableKeyedDiff(
-      ift::common::CompatId base_compat_id) {
-    return new TableKeyedDiff(base_compat_id,
-                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
-  }
-
-  static ift::TableKeyedDiff* ReplaceIftMapTableKeyedDiff(
-      ift::common::CompatId base_compat_id) {
-    // the replacement differ is used during design space expansions, both
-    // gvar and "IFT " are overwritten to be compatible with the new design
-    // space. Glyph segment patches for all prev loaded glyphs will be
-    // downloaded to repopulate variation data for any already loaded glyphs.
-    return new TableKeyedDiff(base_compat_id, {"glyf", "loca", "CFF "},
-                              {"IFTX", "gvar", "CFF2"});
-  }
+  ift::TableKeyedDiff* GetTableKeyedDifferFor(ift::common::CompatId compat_id,
+                                              bool replace_url_template,
+                                              bool exclude_ift) const;
 
   bool AllocatePatchSet(ProcessingContext& context,
                         const design_space_t& design_space,
@@ -397,7 +411,7 @@ class Compiler {
     absl::flat_hash_map<design_space_t, ift::common::CompatId>
         glyph_keyed_compat_ids_;
 
-    absl::flat_hash_map<SubsetDefinition, ift::common::FontData> built_subsets_;
+    absl::flat_hash_map<SubsetDefinition, CompileResult> built_subsets_;
     absl::flat_hash_map<std::string, ift::common::FontData> patches_;
     absl::flat_hash_map<Jump, uint32_t> table_keyed_patch_id_map_;
     ift::common::IntSet built_table_keyed_patches_;

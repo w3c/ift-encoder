@@ -1028,4 +1028,38 @@ TEST_F(CompilerTest, UrlTemplateOverride) {
   ASSERT_TRUE(ift_table.str().find(expected_template) != std::string::npos);
 }
 
+TEST_F(CompilerTest, PopulateTableKeyedPatchMap_OrdersByPatchSize) {
+  Compiler compiler;
+  auto face = noto_sans_jp.face();
+  compiler.SetFace(face.get());
+
+  auto s = compiler.SetInitSubset(IntSet{'a'});
+  ASSERT_TRUE(s.ok()) << s;
+
+  // Codepoint 'b' will be shared between both segments.
+  IntSet small_segment = {'b'};
+  IntSet large_segment = segment_4_cps;
+  large_segment.insert('b');
+
+  // Add the large segment first, and the small segment second.
+  compiler.AddNonGlyphDataSegment(large_segment);
+  compiler.AddNonGlyphDataSegment(small_segment);
+
+  auto encoding = compiler.Compile();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+
+  // Request codepoint 'b', which matches both segments.
+  btree_set<std::string> applied_uris;
+  auto extended = ift::client::ExtendWithDesignSpace(*encoding, IntSet{'b'}, {},
+                                                     {}, &applied_uris);
+  ASSERT_TRUE(extended.ok()) << extended.status();
+
+  // Since small_segment produces a smaller patch its entry is sorted first in
+  // the PatchMap. The client will match it first and fetch its patch
+  // ("04.ift_tk") instead of large_segment's patch ("03.ift_tk").
+  EXPECT_EQ(applied_uris.size(), 1);
+  EXPECT_TRUE(applied_uris.contains("04.ift_tk"));
+  EXPECT_FALSE(applied_uris.contains("03.ift_tk"));
+}
+
 }  // namespace ift::encoder
