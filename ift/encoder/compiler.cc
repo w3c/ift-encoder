@@ -238,13 +238,10 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
   //  This will optimize for cases that don't include the entire original
   //  font.
   context.force_long_loca_and_gvar_ = false;
-  auto expanded = FullyExpandedSubset(context);
-  if (!expanded.ok()) {
-    return expanded.status();
-  }
+  auto expanded = TRY(FullyExpandedSubset(context));
 
-  context.fully_expanded_subset_.shallow_copy(*expanded);
-  auto expanded_face = expanded->face();
+  context.fully_expanded_subset_.shallow_copy(expanded);
+  auto expanded_face = expanded.face();
 
   // TODO(garretrieger): we don't need to force long gvar anymore. The client is
   //  now capable of upgrading the offset size as needed. Forcing long loca
@@ -253,10 +250,7 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
       TRY(FontHelper::HasLongLoca(expanded_face.get())) ||
       FontHelper::HasWideGvar(expanded_face.get());
 
-  auto init_font = Compile(context, context.init_subset_, true);
-  if (!init_font.ok()) {
-    return init_font.status();
-  }
+  auto init_compile_result = TRY(Compile(context, context.init_subset_, true));
 
   Encoding result;
 
@@ -264,14 +258,14 @@ StatusOr<Compiler::Encoding> Compiler::Compile() const {
     // Glyph transforms in woff2 encoding aren't safe if we are patching glyf
     // with a table keyed patch otherwise they are safe to use. See:
     // https://w3c.github.io/IFT/Overview.html#ift-and-compression
-    hb_face_unique_ptr face = init_font->face();
+    hb_face_unique_ptr face = init_compile_result.font_data.face();
     auto tags = FontHelper::GetTags(face.get());
     bool has_glyf =
         tags.contains(FontHelper::kGlyf) || tags.contains(FontHelper::kLoca);
-    result.init_font =
-        TRY(Woff2::EncodeWoff2(init_font->str(), IsMixedMode() || !has_glyf));
+    result.init_font = TRY(Woff2::EncodeWoff2(
+        init_compile_result.font_data.str(), IsMixedMode() || !has_glyf));
   } else {
-    result.init_font.shallow_copy(*init_font);
+    result.init_font.shallow_copy(init_compile_result.font_data);
   }
   result.patches = std::move(context.patches_);
   return result;
@@ -327,11 +321,8 @@ Status Compiler::EnsureGlyphKeyedPatchesPopulated(
 
   if (!design_space.empty()) {
     // If a design space is provided, apply it.
-    auto result = Instance(context, full_face.get(), design_space);
-    if (!result.ok()) {
-      return result.status();
-    }
-    instance.shallow_copy(*result);
+    auto result = TRY(Instance(context, full_face.get(), design_space));
+    instance.shallow_copy(result);
   }
 
   GlyphKeyedDiff differ(instance, compat_id,
@@ -348,12 +339,8 @@ Status Compiler::EnsureGlyphKeyedPatchesPopulated(
     std::string url = TRY(URLTemplate::PatchToUrl(url_template, index));
 
     const auto& gids = e->second;
-    auto patch = differ.CreatePatch(gids);
-    if (!patch.ok()) {
-      return patch.status();
-    }
-
-    context.patches_[url].shallow_copy(*patch);
+    auto patch = TRY(differ.CreatePatch(gids));
+    context.patches_[url].shallow_copy(patch);
   }
 
   return absl::OkStatus();
@@ -434,8 +421,65 @@ std::vector<ActivationCondition> Compiler::EdgesToActivationConditions(
   return result;
 }
 
+StatusOr<std::vector<Compiler::ConditionWithSize>>
+Compiler::EstimateConditionSizes(
+    ProcessingContext& context, const SubsetDefinition& base_subset,
+    const FontData& base_font_data, const CompatId& table_keyed_compat_id,
+    const std::vector<uint8_t>& glyph_keyed_url_template,
+    absl::Span<const ActivationCondition> conditions,
+    absl::Span<const Compiler::Edge> edges) const {
+  std::vector<ConditionWithSize> conditions_with_sizes;
+  conditions_with_sizes.reserve(conditions.size());
+
+  for (size_t i = 0; i < conditions.size(); ++i) {
+    const auto& edge = edges[i];
+    uint64_t total_tentative_size = 0;
+
+    SubsetDefinition current_subset = base_subset;
+    CompileResult current{
+        .table_keyed_compat_id = table_keyed_compat_id,
+        .glyph_keyed_url_template = glyph_keyed_url_template,
+    };
+    current.font_data.shallow_copy(base_font_data);
+
+    for (const auto& j : edge.Jumps(base_subset, this->use_prefetch_lists_)) {
+      if (j.start != current_subset) {
+        return absl::InternalError(
+            "PopulateTableKeyedPatchMap: Base mismatch with the current jump.");
+      }
+
+      auto next_res = TRY(Compile(context, j.end, false));
+
+      bool replace_url_template =
+          IsMixedMode() && (next_res.glyph_keyed_url_template !=
+                            current.glyph_keyed_url_template);
+
+      auto tentative_differ = TRY(GetTentativeDifferFor(
+          current.table_keyed_compat_id, replace_url_template));
+
+      FontData tentative_patch;
+      TRYV(tentative_differ->Diff(current.font_data, next_res.font_data,
+                                  &tentative_patch));
+
+      total_tentative_size += tentative_patch.size();
+
+      current = std::move(next_res);
+      current_subset = j.end;
+    }
+
+    conditions_with_sizes.push_back({
+        .condition = std::move(conditions[i]),
+        .tentative_size = total_tentative_size,
+    });
+  }
+
+  return conditions_with_sizes;
+}
+
 Status Compiler::PopulateTableKeyedPatchMap(
     ProcessingContext& context, const SubsetDefinition& node_subset,
+    const FontData& base_font_data, const CompatId& table_keyed_compat_id,
+    const std::vector<uint8_t>& glyph_keyed_url_template,
     const std::vector<Compiler::Edge>& edges, PatchEncoding encoding,
     PatchMap& table_keyed_patch_map) const {
   // To create the table keyed patch mappings we use the activation condition
@@ -444,22 +488,39 @@ Status Compiler::PopulateTableKeyedPatchMap(
   flat_hash_map<segment_index_t, SubsetDefinition> segments;
   auto conditions = EdgesToActivationConditions(context, node_subset, edges,
                                                 encoding, segments);
+
+  std::vector<ConditionWithSize> conditions_with_sizes =
+      TRY(EstimateConditionSizes(context, node_subset, base_font_data,
+                                 table_keyed_compat_id,
+                                 glyph_keyed_url_template, conditions, edges));
+
+  std::stable_sort(conditions_with_sizes.begin(), conditions_with_sizes.end(),
+                   [](const ConditionWithSize& a, const ConditionWithSize& b) {
+                     return a.tentative_size < b.tentative_size;
+                   });
+
+  std::vector<ActivationCondition> sorted_conditions;
+  sorted_conditions.reserve(conditions_with_sizes.size());
+  for (auto& cs : conditions_with_sizes) {
+    sorted_conditions.push_back(std::move(cs.condition));
+  }
+
   auto entries = TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
-      conditions, segments));
+      sorted_conditions, segments));
   for (auto e : entries) {
     TRYV(table_keyed_patch_map.AddEntry(e));
   }
   return absl::OkStatus();
 }
 
-StatusOr<FontData> Compiler::Compile(ProcessingContext& context,
-                                     const SubsetDefinition& node_subset,
-                                     bool is_root) const {
+StatusOr<Compiler::CompileResult> Compiler::Compile(
+    ProcessingContext& context, const SubsetDefinition& node_subset,
+    bool is_root) const {
   // See ../../docs/experimental/compiler.md for a detailed discussion of
   // how this implementation works.
   auto it = context.built_subsets_.find(node_subset);
   if (it != context.built_subsets_.end()) {
-    FontData copy;
+    CompileResult copy;
     copy.shallow_copy(it->second);
     return copy;
   }
@@ -482,8 +543,12 @@ StatusOr<FontData> Compiler::Compile(ProcessingContext& context,
 
   if (edges.empty() && !IsMixedMode()) {
     // This is a leaf node, a IFT table isn't needed.
-    context.built_subsets_[node_subset].shallow_copy(node_data);
-    return node_data;
+    CompileResult result = {.font_data = std::move(node_data),
+                            .table_keyed_compat_id = {},
+                            .glyph_keyed_compat_id = {},
+                            .glyph_keyed_url_template = {}};
+    context.built_subsets_[node_subset].shallow_copy(result);
+    return std::move(result);
   }
 
   IFTTable table_keyed;
@@ -499,8 +564,9 @@ StatusOr<FontData> Compiler::Compile(ProcessingContext& context,
   PatchMap& table_keyed_patch_map = table_keyed.GetPatchMap();
   PatchEncoding encoding =
       IsMixedMode() ? TABLE_KEYED_PARTIAL : TABLE_KEYED_FULL;
-  TRYV(PopulateTableKeyedPatchMap(context, node_subset, edges, encoding,
-                                  table_keyed_patch_map));
+  TRYV(PopulateTableKeyedPatchMap(
+      context, node_subset, node_data, table_keyed_compat_id,
+      glyph_keyed_url_template, edges, encoding, table_keyed_patch_map));
 
   auto face = node_data.face();
   std::optional<IFTTable*> ext =
@@ -515,72 +581,109 @@ StatusOr<FontData> Compiler::Compile(ProcessingContext& context,
     node_data.shallow_copy(new_node_data);
   }
 
-  context.built_subsets_[node_subset].shallow_copy(node_data);
+  CompileResult result = {.font_data = std::move(node_data),
+                          .table_keyed_compat_id = table_keyed_compat_id,
+                          .glyph_keyed_compat_id = glyph_keyed_compat_id,
+                          .glyph_keyed_url_template = glyph_keyed_url_template};
+  context.built_subsets_[node_subset].shallow_copy(result);
 
   for (const auto& edge : edges) {
     SubsetDefinition current_node_subset = node_subset;
     FontData current_node_data;
-    current_node_data.shallow_copy(node_data);
+    current_node_data.shallow_copy(result.font_data);
+    CompatId current_table_keyed_compat_id = table_keyed_compat_id;
+    std::vector<uint8_t> current_glyph_keyed_url_template =
+        glyph_keyed_url_template;
 
     for (const auto& j : edge.Jumps(node_subset, use_prefetch_lists_)) {
       uint32_t id = context.table_keyed_patch_id_map_[j];
 
       if (j.start != current_node_subset) {
-        return absl::InternalError("Base mismatch with the current jump.");
+        return absl::InternalError(
+            "Compile: Base mismatch with the current jump.");
       }
 
       auto next = TRY(Compile(context, j.end, false));
       if (context.built_table_keyed_patches_.contains(id)) {
         current_node_subset = j.end;
-        current_node_data = std::move(next);
+        current_node_data = std::move(next.font_data);
+        current_table_keyed_compat_id = next.table_keyed_compat_id;
+        current_glyph_keyed_url_template = next.glyph_keyed_url_template;
         continue;
       }
 
-      // Check if the main table URL will change with this subset
-      std::vector<uint8_t> next_glyph_keyed_url_template;
-      CompatId next_glyph_keyed_compat_id;
-      TRYV(EnsureGlyphKeyedPatchesPopulated(context, j.end.design_space,
-                                            next_glyph_keyed_url_template,
-                                            next_glyph_keyed_compat_id));
-
       bool replace_url_template =
           IsMixedMode() &&
-          (next_glyph_keyed_url_template != glyph_keyed_url_template);
+          (next.glyph_keyed_url_template != current_glyph_keyed_url_template);
 
       FontData patch;
-      auto differ =
-          TRY(GetDifferFor(next, table_keyed_compat_id, replace_url_template));
+      auto differ = TRY(
+          GetDifferFor(current_table_keyed_compat_id, replace_url_template));
 
-      TRYV((*differ).Diff(current_node_data, next, &patch));
+      TRYV((*differ).Diff(current_node_data, next.font_data, &patch));
 
       std::string url =
           TRY(URLTemplate::PatchToUrl(table_keyed_url_template, id));
       context.patches_[url].shallow_copy(patch);
       context.built_table_keyed_patches_.insert(id);
 
-      current_node_data = std::move(next);
+      current_node_data = std::move(next.font_data);
+      current_table_keyed_compat_id = next.table_keyed_compat_id;
+      current_glyph_keyed_url_template = next.glyph_keyed_url_template;
       current_node_subset = j.end;
     }
   }
 
-  return node_data;
+  return std::move(result);
 }
 
-StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetDifferFor(
-    const FontData& font_data, CompatId compat_id,
-    bool replace_url_template) const {
+TableKeyedDiff* Compiler::GetTableKeyedDifferFor(CompatId compat_id,
+                                                 bool replace_url_template,
+                                                 bool exclude_ift) const {
   if (!IsMixedMode()) {
-    return std::unique_ptr<const BinaryDiff>(
-        Compiler::FullFontTableKeyedDiff(compat_id));
+    // If only table keyed patches are used we can diff the whole font.
+    if (exclude_ift) {
+      return new TableKeyedDiff(compat_id, {"IFT ", "IFTX"});
+    } else {
+      return new TableKeyedDiff(compat_id);
+    }
   }
 
   if (replace_url_template) {
-    return std::unique_ptr<const BinaryDiff>(
-        Compiler::ReplaceIftMapTableKeyedDiff(compat_id));
+    // Glyph keyed patches are in use, but we are changing design space. So
+    // tables with variations will need to be replaced (gvar/CFF2), all other
+    // glyph data tables are excluded.
+    if (exclude_ift) {
+      return new TableKeyedDiff(compat_id,
+                                {"IFT ", "IFTX", "glyf", "loca", "CFF "},
+                                {"gvar", "CFF2"});
+    } else {
+      return new TableKeyedDiff(compat_id, {"glyf", "loca", "CFF "},
+                                {"IFTX", "gvar", "CFF2"});
+    }
   }
 
-  return std::unique_ptr<const BinaryDiff>(
-      Compiler::MixedModeTableKeyedDiff(compat_id));
+  // Glyph keyed patches are in use, all glyph data tables are excluded as these
+  // are handled by glyph keyed patches
+  if (exclude_ift) {
+    return new TableKeyedDiff(
+        compat_id, {"IFT ", "IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
+  } else {
+    return new TableKeyedDiff(compat_id,
+                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
+  }
+}
+
+StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetTentativeDifferFor(
+    CompatId compat_id, bool replace_url_template) const {
+  return std::unique_ptr<const BinaryDiff>(GetTableKeyedDifferFor(
+      compat_id, replace_url_template, /*exclude_ift=*/true));
+}
+
+StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetDifferFor(
+    CompatId compat_id, bool replace_url_template) const {
+  return std::unique_ptr<const BinaryDiff>(GetTableKeyedDifferFor(
+      compat_id, replace_url_template, /*exclude_ift=*/false));
 }
 
 StatusOr<hb_subset_plan_t*> Compiler::CreateSubsetPlan(
@@ -639,10 +742,7 @@ StatusOr<FontData> Compiler::GenerateBaseGvar(
   //    not modify shared tuples.
 
   // Step 1: Instancing
-  auto instance = Instance(context, font, design_space);
-  if (!instance.ok()) {
-    return instance.status();
-  }
+  auto instance = TRY(Instance(context, font, design_space));
 
   // Step 2: glyph subsetting
   SubsetDefinition subset = context.init_subset_;
@@ -650,16 +750,13 @@ StatusOr<FontData> Compiler::GenerateBaseGvar(
   // so clear out the design space.
   subset.design_space = {};
 
-  hb_face_unique_ptr instanced_face = instance->face();
+  hb_face_unique_ptr instanced_face = instance.face();
   auto face_builder =
-      CutSubsetFaceBuilder(context, instanced_face.get(), subset);
-  if (!face_builder.ok()) {
-    return face_builder.status();
-  }
+      TRY(CutSubsetFaceBuilder(context, instanced_face.get(), subset));
 
   // Step 3: extract gvar table.
   hb_blob_unique_ptr gvar_blob = make_hb_blob(
-      hb_face_reference_table(face_builder->get(), FontHelper::kGvar));
+      hb_face_reference_table(face_builder.get(), FontHelper::kGvar));
   FontData result(gvar_blob.get());
   return result;
 }
@@ -745,11 +842,8 @@ StatusOr<FontData> Compiler::GenerateBaseCff2(
   // our own.
 
   // Step 1: Instancing
-  auto instance = Instance(context, font, design_space);
-  if (!instance.ok()) {
-    return instance.status();
-  }
-  auto instance_face = instance->face();
+  auto instance = TRY(Instance(context, font, design_space));
+  auto instance_face = instance.face();
 
   // Step 2: find the glyph closure for the base subset.
   SubsetDefinition subset = context.init_subset_;
@@ -830,10 +924,7 @@ StatusOr<FontData> Compiler::CutSubset(const ProcessingContext& context,
                                        hb_face_t* font,
                                        const SubsetDefinition& def,
                                        bool generate_glyph_keyed_bases) const {
-  auto result = CutSubsetFaceBuilder(context, font, def);
-  if (!result.ok()) {
-    return result.status();
-  }
+  auto result = TRY(CutSubsetFaceBuilder(context, font, def));
 
   auto tags = FontHelper::GetTags(font);
   if (generate_glyph_keyed_bases && TRY(def.IsVariableFor(font)) &&
@@ -848,8 +939,7 @@ StatusOr<FontData> Compiler::CutSubset(const ProcessingContext& context,
     // handle including a replacement gvar patch when needed.
     auto base_gvar = TRY(GenerateBaseGvar(context, font, def.design_space));
     hb_blob_unique_ptr gvar_blob = base_gvar.blob();
-    hb_face_builder_add_table(result->get(), FontHelper::kGvar,
-                              gvar_blob.get());
+    hb_face_builder_add_table(result.get(), FontHelper::kGvar, gvar_blob.get());
   }
 
   if (generate_glyph_keyed_bases && tags.contains(FontHelper::kCFF2)) {
@@ -859,11 +949,10 @@ StatusOr<FontData> Compiler::CutSubset(const ProcessingContext& context,
     // variation data will match whatever the glyph keyed patches were cut from.
     auto base_cff2 = TRY(GenerateBaseCff2(context, font, def.design_space));
     hb_blob_unique_ptr cff2_blob = base_cff2.blob();
-    hb_face_builder_add_table(result->get(), FontHelper::kCFF2,
-                              cff2_blob.get());
+    hb_face_builder_add_table(result.get(), FontHelper::kCFF2, cff2_blob.get());
   }
 
-  hb_blob_unique_ptr blob = make_hb_blob(hb_face_reference_blob(result->get()));
+  hb_blob_unique_ptr blob = make_hb_blob(hb_face_reference_blob(result.get()));
 
   FontData subset(blob.get());
   return subset;
@@ -898,12 +987,8 @@ StatusOr<FontData> Compiler::Instance(
 
 StatusOr<FontData> Compiler::RoundTripWoff2(string_view font,
                                             bool glyf_transform) {
-  auto r = Woff2::EncodeWoff2(font, glyf_transform);
-  if (!r.ok()) {
-    return r.status();
-  }
-
-  return Woff2::DecodeWoff2(r->str());
+  auto r = TRY(Woff2::EncodeWoff2(font, glyf_transform));
+  return Woff2::DecodeWoff2(r.str());
 }
 
 CompatId Compiler::ProcessingContext::GenerateCompatId() {
