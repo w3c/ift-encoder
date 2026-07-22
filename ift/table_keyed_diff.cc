@@ -7,6 +7,7 @@
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/font_helper_macros.h"
+#include "ift/common/try.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -14,17 +15,18 @@ using absl::flat_hash_set;
 using absl::Status;
 using ift::common::FontData;
 using ift::common::FontHelper;
+using ift::common::hb_face_unique_ptr;
 
 namespace ift {
 
 Status TableKeyedDiff::Diff(const FontData& font_base,
                             const FontData& font_derived,
                             FontData* patch /* OUT */) const {
-  hb_face_t* face_base = font_base.reference_face();
-  hb_face_t* face_derived = font_derived.reference_face();
+  auto face_base = font_base.face();
+  auto face_derived = font_derived.face();
 
-  auto base_tags = FontHelper::GetTags(face_base);
-  auto derived_tags = FontHelper::GetTags(face_derived);
+  auto base_tags = FontHelper::GetTags(face_base.get());
+  auto derived_tags = FontHelper::GetTags(face_derived.get());
   auto diff_tags = TagsToDiff(base_tags, derived_tags);
 
   flat_hash_map<std::string, std::pair<uint32_t, FontData>> patches;
@@ -43,13 +45,13 @@ Status TableKeyedDiff::Diff(const FontData& font_base,
     FontData base_table;
     if (!replaced_tags_.contains(tag)) {
       if (in_base) {
-        base_table = FontHelper::TableData(face_base, t);
+        base_table = FontHelper::TableData(face_base.get(), t);
       } else {
         new_tables.insert(t);
       }
     }
 
-    FontData derived_table = FontHelper::TableData(face_derived, t);
+    FontData derived_table = FontHelper::TableData(face_derived.get(), t);
     if (base_table == derived_table) {
       // If table is unchanged then no diff is needed.
       unchanged_tables.insert(t);
@@ -57,18 +59,23 @@ Status TableKeyedDiff::Diff(const FontData& font_base,
     }
 
     FontData table_patch;
-    auto sc = binary_diff_.Diff(base_table, derived_table, &table_patch);
-    if (!sc.ok()) {
-      hb_face_destroy(face_base);
-      hb_face_destroy(face_derived);
-      return sc;
+    if (cache_ == nullptr) {
+      TRYV(binary_diff_.Diff(base_table, derived_table, &table_patch));
+    } else {
+      TableDiffKey key(base_table, derived_table);
+      std::optional<FontData>& cache_value = (*cache_)[key];
+      if (cache_value.has_value()) {
+        table_patch.shallow_copy(*cache_value);
+      } else {
+        TRYV(binary_diff_.Diff(base_table, derived_table, &table_patch));
+        FontData cached_patch;
+        cached_patch.shallow_copy(table_patch);
+        cache_value = std::move(cached_patch);
+      }
     }
 
     patches[tag] = std::pair(derived_table.size(), std::move(table_patch));
   }
-
-  hb_face_destroy(face_base);
-  hb_face_destroy(face_derived);
 
   for (hb_tag_t t : unchanged_tables) {
     std::string tag = FontHelper::ToString(t);

@@ -459,7 +459,7 @@ StatusOr<std::vector<std::pair<size_t, uint64_t>>> Compiler::EstimateEdgeSizes(
                               current.glyph_keyed_url_template);
 
         auto tentative_differ = TRY(GetTentativeDifferFor(
-            current.table_keyed_compat_id, replace_url_template));
+            context, current.table_keyed_compat_id, replace_url_template));
 
         FontData tentative_patch;
         TRYV(tentative_differ->Diff(current.font_data, next_res.font_data,
@@ -624,8 +624,8 @@ StatusOr<Compiler::CompileResult> Compiler::Compile(
           (next.glyph_keyed_url_template != current_glyph_keyed_url_template);
 
       FontData patch;
-      auto differ = TRY(
-          GetDifferFor(current_table_keyed_compat_id, replace_url_template));
+      auto differ = TRY(GetDifferFor(context, current_table_keyed_compat_id,
+                                     replace_url_template));
 
       TRYV((*differ).Diff(current_node_data, next.font_data, &patch));
 
@@ -644,15 +644,17 @@ StatusOr<Compiler::CompileResult> Compiler::Compile(
   return std::move(result);
 }
 
-TableKeyedDiff* Compiler::GetTableKeyedDifferFor(CompatId compat_id,
+TableKeyedDiff* Compiler::GetTableKeyedDifferFor(ProcessingContext& context,
+                                                 CompatId compat_id,
                                                  bool replace_url_template,
                                                  bool exclude_ift) const {
   if (!IsMixedMode()) {
     // If only table keyed patches are used we can diff the whole font.
     if (exclude_ift) {
-      return new TableKeyedDiff(compat_id, {"IFT ", "IFTX"});
+      return new TableKeyedDiff(compat_id, {"IFT ", "IFTX"},
+                                &context.table_diff_cache_);
     } else {
-      return new TableKeyedDiff(compat_id);
+      return new TableKeyedDiff(compat_id, &context.table_diff_cache_);
     }
   }
 
@@ -663,10 +665,11 @@ TableKeyedDiff* Compiler::GetTableKeyedDifferFor(CompatId compat_id,
     if (exclude_ift) {
       return new TableKeyedDiff(compat_id,
                                 {"IFT ", "IFTX", "glyf", "loca", "CFF "},
-                                {"gvar", "CFF2"});
+                                {"gvar", "CFF2"}, &context.table_diff_cache_);
     } else {
       return new TableKeyedDiff(compat_id, {"glyf", "loca", "CFF "},
-                                {"IFTX", "gvar", "CFF2"});
+                                {"IFTX", "gvar", "CFF2"},
+                                &context.table_diff_cache_);
     }
   }
 
@@ -674,23 +677,27 @@ TableKeyedDiff* Compiler::GetTableKeyedDifferFor(CompatId compat_id,
   // are handled by glyph keyed patches
   if (exclude_ift) {
     return new TableKeyedDiff(
-        compat_id, {"IFT ", "IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
+        compat_id, {"IFT ", "IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"}, {},
+        &context.table_diff_cache_);
   } else {
     return new TableKeyedDiff(compat_id,
-                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"});
+                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"},
+                              {}, &context.table_diff_cache_);
   }
 }
 
 StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetTentativeDifferFor(
-    CompatId compat_id, bool replace_url_template) const {
+    ProcessingContext& context, CompatId compat_id,
+    bool replace_url_template) const {
   return std::unique_ptr<const BinaryDiff>(GetTableKeyedDifferFor(
-      compat_id, replace_url_template, /*exclude_ift=*/true));
+      context, compat_id, replace_url_template, /*exclude_ift=*/true));
 }
 
 StatusOr<std::unique_ptr<const BinaryDiff>> Compiler::GetDifferFor(
-    CompatId compat_id, bool replace_url_template) const {
+    ProcessingContext& context, CompatId compat_id,
+    bool replace_url_template) const {
   return std::unique_ptr<const BinaryDiff>(GetTableKeyedDifferFor(
-      compat_id, replace_url_template, /*exclude_ift=*/false));
+      context, compat_id, replace_url_template, /*exclude_ift=*/false));
 }
 
 StatusOr<hb_subset_plan_t*> Compiler::CreateSubsetPlan(

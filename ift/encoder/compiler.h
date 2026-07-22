@@ -358,13 +358,16 @@ class Compiler {
       const design_space_t& design_space) const;
 
   absl::StatusOr<std::unique_ptr<const ift::common::BinaryDiff>>
-  GetTentativeDifferFor(ift::common::CompatId compat_id,
+  GetTentativeDifferFor(ProcessingContext& context,
+                        ift::common::CompatId compat_id,
                         bool replace_url_template) const;
 
   absl::StatusOr<std::unique_ptr<const ift::common::BinaryDiff>> GetDifferFor(
-      ift::common::CompatId compat_id, bool replace_url_template) const;
+      ProcessingContext& context, ift::common::CompatId compat_id,
+      bool replace_url_template) const;
 
-  ift::TableKeyedDiff* GetTableKeyedDifferFor(ift::common::CompatId compat_id,
+  ift::TableKeyedDiff* GetTableKeyedDifferFor(ProcessingContext& context,
+                                              ift::common::CompatId compat_id,
                                               bool replace_url_template,
                                               bool exclude_ift) const;
 
@@ -410,6 +413,7 @@ class Compiler {
     absl::flat_hash_map<Jump, uint32_t> table_keyed_patch_id_map_;
     absl::flat_hash_map<Jump, uint64_t> estimated_patch_sizes_;
     ift::common::IntSet built_table_keyed_patches_;
+    ift::TableDiffCache table_diff_cache_;
 
     SubsetDefinition init_subset_;
 

@@ -229,6 +229,30 @@ TEST_F(TableKeyedDiffTest, AddTable) {
   ASSERT_EQ(patch.string(), expected);
 }
 
+TEST_F(TableKeyedDiffTest, CachedDiff) {
+  FontData before = FontHelper::BuildFont({
+      {tag1, "foo"},
+      {tag2, "bar"},
+  });
+
+  FontData after = FontHelper::BuildFont({
+      {tag1, "fooo"},
+      {tag2, "baar"},
+  });
+
+  TableDiffCache cache;
+  TableKeyedDiff differ(CompatId(1, 2, 3, 4), &cache);
+  FontData patch1;
+  auto sc1 = differ.Diff(before, after, &patch1);
+  ASSERT_TRUE(sc1.ok()) << sc1;
+  ASSERT_FALSE(cache.empty());
+
+  FontData patch2;
+  auto sc2 = differ.Diff(before, after, &patch2);
+  ASSERT_TRUE(sc2.ok()) << sc2;
+  ASSERT_EQ(patch1.string(), patch2.string());
+}
+
 /*
 TEST_F(TableKeyedDiffTest, FilteredDiff) {
   FontData before = FontHelper::BuildFont({
