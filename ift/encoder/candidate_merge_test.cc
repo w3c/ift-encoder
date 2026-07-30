@@ -556,7 +556,6 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
   ASSERT_EQ(merge.SegmentsToMerge(), SegmentSet({0, 1, 2}));
 }
 
-#ifdef HB_DEPEND_API
 TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
   std::vector<Segment> segments = {
       {{'A'}, ProbabilityBound{0.95, 0.95}},
@@ -634,7 +633,6 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
   ASSERT_EQ(*context->glyph_groupings.CombinedPatches().Find(gid_A),
             *context->glyph_groupings.CombinedPatches().Find(gid_B));
 }
-#endif
 
 TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   std::vector<Segment> segments = {

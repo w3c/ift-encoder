@@ -72,19 +72,13 @@ cc_library(
     srcs = [
         "candidate_merge.cc",
         "complex_condition_finder.cc",
+        "dependency_closure.cc",
         "estimated_patch_size_cache.cc",
         "glyph_condition_set.cc",
         "glyph_groupings.cc",
         "merger.cc",
         "segmentation_context.cc",
-    ] + select({
-        "//:use_harfbuzz_dep_graph": [
-            "dependency_closure.cc",
-        ],
-        "//conditions:default": [
-            "dependency_closure_disabled.cc",
-        ],
-    }),
+    ],
     hdrs = [
         "candidate_merge.h",
         "complex_condition_finder.h",
@@ -465,12 +459,9 @@ cc_test(
 cc_test(
     name = "dependency_closure_test",
     size = "small",
-    srcs = select({
-        "//:use_harfbuzz_dep_graph": [
-            "dependency_closure_test.cc",
-        ],
-        "//conditions:default": [],
-    }),
+    srcs = [
+        "dependency_closure_test.cc",
+    ],
     data = [
         "//ift/common:testdata",
     ],

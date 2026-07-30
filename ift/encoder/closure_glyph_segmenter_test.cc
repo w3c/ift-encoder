@@ -56,7 +56,6 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
                                   resolver),
         segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY,
                                     resolver),
-#ifdef HB_DEPEND_API
         segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH,
                             resolver),
         segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY, resolver),
@@ -66,16 +65,6 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
             8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
         segmenter_move_to_init_font_dep_graph(
             8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver)
-#else
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_dep_graph_only(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_dep_graph_only_with_simplification(8, 8, PATCH, CLOSURE_ONLY,
-                                                     resolver),
-        segmenter_find_conditions_dep_graph(8, 8, FIND_CONDITIONS, CLOSURE_ONLY,
-                                            resolver),
-        segmenter_move_to_init_font_dep_graph(8, 8, MOVE_TO_INIT_FONT,
-                                              CLOSURE_ONLY, resolver)
-#endif
   {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
@@ -365,7 +354,6 @@ if ((s0 OR s1 OR s2)) then p2
 )");
   ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
 
-#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid74 }
@@ -375,7 +363,6 @@ if ((s0 OR s2)) then p0
 if ((s1 OR s2)) then p1
 if ((s0 OR s2) AND (s1 OR s2)) then p2
 )");
-#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures) {
@@ -627,7 +614,6 @@ if ((s0 OR s1 OR s2 OR s3)) then p6
 )");
   ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
 
-#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid3, gid9, gid155 }
@@ -649,7 +635,6 @@ if ((s0 OR s1 OR s2 OR s3)) then p6
 if ((s0 OR s1) AND s2) then p7
 if ((s0 OR s1) AND (s2 OR s3)) then p8
 )");
-#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
@@ -682,7 +667,6 @@ if ((s1 OR s2 OR s3 OR s4)) then p7
 )");
 }
 
-#ifdef HB_DEPEND_API
 TEST_F(ClosureGlyphSegmenterTest, DepGraphOnly_FindConditions) {
   auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
@@ -747,7 +731,6 @@ if ((s3 OR s4)) then p6
 if ((s1 OR s2 OR s3 OR s4)) then p7
 )");
 }
-#endif
 
 TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
   // Here the found conditions are equal to the fallback segment, this ensures
@@ -1013,7 +996,6 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid117, gid169, gid640, gid700 }
@@ -1021,15 +1003,6 @@ p1: { gid37, gid39 }
 if ((s2 OR s3)) then p0
 if ((s0 OR s1 OR s2 OR s3)) then p1
 )");
-#else
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid117, gid169 }
-p1: { gid37, gid39, gid640, gid700 }
-if ((s2 OR s3)) then p0
-if ((s0 OR s1 OR s2 OR s3)) then p1
-)");
-#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
@@ -1064,7 +1037,6 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37 }
@@ -1078,19 +1050,6 @@ if ((s2 OR s3)) then p2
 if ((s0 OR s2) AND (s2 OR s3)) then p3
 if ((s1 OR s3) AND (s2 OR s3)) then p4
 )");
-#else
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid37 }
-p1: { gid39 }
-p2: { gid117, gid169 }
-p3: { gid640, gid700 }
-if ((s0 OR s2)) then p0
-if ((s1 OR s3)) then p1
-if ((s2 OR s3)) then p2
-if ((s0 OR s1 OR s2 OR s3)) then p3
-)");
-#endif
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
@@ -1126,7 +1085,6 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
 
   // When min group size is 2, there's no merging done since merges are
   // unfavourable and the minimum is met.
-#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37 }
@@ -1140,19 +1098,6 @@ if ((s2 OR s3)) then p2
 if ((s0 OR s2) AND (s2 OR s3)) then p3
 if ((s1 OR s3) AND (s2 OR s3)) then p4
 )");
-#else
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid37 }
-p1: { gid39 }
-p2: { gid117, gid169 }
-p3: { gid640, gid700 }
-if ((s0 OR s2)) then p0
-if ((s1 OR s3)) then p1
-if ((s2 OR s3)) then p2
-if ((s0 OR s1 OR s2 OR s3)) then p3
-)");
-#endif
 
   // Now with min group size larger merges will be done to reach min group size
   strategy.SetMinimumGroupSize(3);
@@ -1169,7 +1114,6 @@ if ((s0 OR s1 OR s2 OR s3)) then p3
   ASSERT_EQ(segmentation->Segments(), expected_segments);
   // Group size minimum is met for everything other than the last condition
   // which has no other candidates to merge with.
-#ifdef HB_DEPEND_API
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid37, gid117, gid169 }
@@ -1179,20 +1123,8 @@ if ((s0 OR s2 OR s3)) then p0
 if ((s1 OR s2 OR s3)) then p1
 if ((s1 OR s3) AND (s2 OR s3)) then p2
 )");
-#else
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid39 }
-p1: { gid37, gid117, gid169 }
-p2: { gid640, gid700 }
-if ((s1 OR s3)) then p0
-if ((s0 OR s2 OR s3)) then p1
-if ((s0 OR s1 OR s2 OR s3)) then p2
-)");
-#endif
 }
 
-#ifdef HB_DEPEND_API
 TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
   UnicodeFrequencies frequencies{
       {{0x62a, 0x62a}, 100},
@@ -1250,7 +1182,6 @@ if ((s2 OR s3)) then p4
 if ((s0 OR s1 OR s2 OR s3)) then p5
 )");
 }
-#endif
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoCostCutoff) {
   UnicodeFrequencies frequencies{
@@ -2034,7 +1965,6 @@ if (s1) then p1
 if (s2) then p2
 )");
 
-#ifdef HB_DEPEND_API
   ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69, gid106, gid670 }
 p0: { gid51, gid660 }
@@ -2046,7 +1976,6 @@ if (s1) then p1
 if (s2) then p2
 if ((s0 OR s1) AND s2) then p3
 )");
-#endif
 
   // Rerun segmentation with merging of Ö and ö allowed, should now get
   // the true condition.

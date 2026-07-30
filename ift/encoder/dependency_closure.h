@@ -15,10 +15,8 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
-#ifdef HB_DEPEND_API
 #include "ift/dep_graph/dependency_graph.h"
 #include "ift/dep_graph/node.h"
-#endif
 
 namespace ift::encoder {
 
@@ -38,9 +36,6 @@ class DependencyClosure {
       const RequestedSegmentationInformation* segmentation_info,
       hb_face_t* face, const ift::common::DataFileResolver& resolver,
       bool allow_context_glyph_analysis = false) {
-#ifndef HB_DEPEND_API
-    return std::unique_ptr<DependencyClosure>(new DependencyClosure());
-#else
     dep_graph::DependencyGraph graph = TRY(
         dep_graph::DependencyGraph::Create(segmentation_info, face, resolver));
     auto result = std::unique_ptr<DependencyClosure>(
@@ -53,7 +48,6 @@ class DependencyClosure {
     TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
 
     return result;
-#endif
   }
 
   enum AnalysisAccuracy {
@@ -94,7 +88,6 @@ class DependencyClosure {
       const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
       ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids);
 
-#ifdef HB_DEPEND_API
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
   // versus real subsetting closure due to reliance on the dependency graph.
@@ -112,7 +105,6 @@ class DependencyClosure {
   const ift::common::SegmentSet& InertSegments() const {
     return inert_segments_;
   }
-#endif
 
   // This structure caches information derived from the segmentation info
   // segments. These two function signal that segmentation info segments have
@@ -138,16 +130,13 @@ class DependencyClosure {
       const common::GlyphSet& glyphs) const;
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
       const SubsetDefinition& def) const;
-#ifdef HB_DEPEND_API
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
       const absl::flat_hash_set<dep_graph::Node> nodes) const;
-#endif
 
   uint64_t AccurateResults() const { return accurate_results_; }
   uint64_t InaccurateResults() const { return inaccurate_results_; }
 
  private:
-#ifdef HB_DEPEND_API
 
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all graph nodes. In some cases may overestimate activation
@@ -193,11 +182,7 @@ class DependencyClosure {
       const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
       absl::flat_hash_set<dep_graph::Node>& modified) const;
-#endif
 
-#ifndef HB_DEPEND_API
-  DependencyClosure() {}
-#else
   DependencyClosure(dep_graph::DependencyGraph&& graph,
                     const RequestedSegmentationInformation* segmentation_info,
                     hb_face_t* face)
@@ -257,8 +242,6 @@ class DependencyClosure {
   // Cache of previously processed InitFont nodes, used to determine newly added
   // init items.
   absl::flat_hash_set<dep_graph::Node> init_font_nodes_;
-
-#endif
 
   uint64_t accurate_results_ = 0;
   uint64_t inaccurate_results_ = 0;

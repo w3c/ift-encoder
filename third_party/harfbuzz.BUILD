@@ -120,12 +120,7 @@ cc_library(
     }),
     defines = [
         "HB_EXPERIMENTAL_API",
-    ] + select({
-        "@ift_encoder//:use_harfbuzz_dep_graph": [
-            "HB_DEPEND_API",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
     includes = [
         "src",
         "src/hb-ucdn",

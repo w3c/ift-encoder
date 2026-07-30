@@ -6,15 +6,16 @@ import "ift/config/segmentation_plan.proto";
 import "ift/config/common.proto";
 
 enum ConditionAnalysisMode {
+  // [DEPRECATED]
   // Analyzes glyph conditions using closure analysis only.
+  // This is a legacy mode, it's much slower and generally produces
+  // worse results then the dependency graph approach.
   CLOSURE_ONLY = 0;
 
   // Attempts to analyze glyph conditions using a dependency
   // graph where possible. When dep graph is expected not to be accurate
   // it falls back to closure analysis. This is for many cases much faster
-  // then pure closure based analysis. However, the dependency
-  // graph approach is still experimental and may (rarely) produce
-  // different results than the pure closure analysis approach.
+  // then pure closure based analysis.
   CLOSURE_AND_DEP_GRAPH = 1;
 
   // Always runs both closure and dependency graph analysis, the
@@ -23,6 +24,7 @@ enum ConditionAnalysisMode {
   // graph approach.
   CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
 
+  // [RECOMMENDED]
   // Analyze glyph conditions using dep graph only. Closure is
   // only used at the very end to validate that founds conditions
   // meet the glyph closure requirement.
@@ -148,7 +150,7 @@ message SegmenterConfig {
 
   // Configures the method used to find glyph activation conditions. See the enum
   // for more informmation.
-  ConditionAnalysisMode condition_analysis_mode = 15 [default = CLOSURE_ONLY];
+  ConditionAnalysisMode condition_analysis_mode = 15 [default = DEP_GRAPH_ONLY];
 
   // next = 16
 }

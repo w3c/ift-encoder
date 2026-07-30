@@ -33,19 +33,6 @@ and run all of the tests:
 bazel test ...
 ```
 
-### Building without Dependency Graph Support
-
-By default this depends on the experimental harfbuzz dependency graph API which isn't yet in mainline harfbuzz.
-The dependency graph functionality can be disabled at compile time using the `harfbuzz_dep_graph` build flag.
-For example:
-
-```sh
-bazel build --//:harfbuzz_dep_graph=False ...
-bazel test --//:harfbuzz_dep_graph=False ...
-```
-
-Disabling the harfbuzz dependency graph API will cause segmenter runs using the `CLOSURE_AND_DEP_GRAPH` and `CLOSURE_AND_VALIDATE_DEP_GRAPH` condition analysis modes to fail.
-
 ## Producing IFT Encoded Fonts
 
 This project provides command line utilities and a C++ API which can be used to produce IFT encoded

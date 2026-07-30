@@ -160,11 +160,7 @@ base_segmentation_plan {
 }
 generate_feature_segments: true
 )"
-#ifdef HB_DEPEND_API
                            "condition_analysis_mode: DEP_GRAPH_ONLY\n"
-#else
-                           "condition_analysis_mode: CLOSURE_ONLY\n"
-#endif
   );
 }
 

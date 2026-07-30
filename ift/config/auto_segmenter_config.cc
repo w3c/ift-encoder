@@ -602,15 +602,11 @@ static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
 
   config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
 
-#ifdef HB_DEPEND_API
   if (quality == ONE) {
     config.set_condition_analysis_mode(DEP_GRAPH_ONLY_WITH_SIMPLIFICATION);
   } else {
     config.set_condition_analysis_mode(DEP_GRAPH_ONLY);
   }
-#else
-  config.set_condition_analysis_mode(CLOSURE_ONLY);
-#endif
 
   switch (quality) {
     case ONE:

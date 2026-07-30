@@ -26,21 +26,15 @@ cc_library(
 
 cc_library(
     name = "dep_graph",
-    srcs = select({
-        "//:use_harfbuzz_dep_graph": [
-            "dependency_graph.cc",
-        ],
-        "//conditions:default": [],
-    }),
-    hdrs = select({
-        "//:use_harfbuzz_dep_graph": [
-            "dependency_graph.h",
-            "node.h",
-            "pending_edge.h",
-            "traversal.h",
-        ],
-        "//conditions:default": [],
-    }),
+    srcs = [
+        "dependency_graph.cc",
+    ],
+    hdrs = [
+        "dependency_graph.h",
+        "node.h",
+        "pending_edge.h",
+        "traversal.h",
+    ],
     visibility = [
         "//ift/encoder:__pkg__",
     ],
@@ -65,12 +59,9 @@ cc_library(
 cc_test(
     name = "dependency_graph_test",
     size = "small",
-    srcs = select({
-        "//:use_harfbuzz_dep_graph": [
-            "dependency_graph_test.cc",
-        ],
-        "//conditions:default": [],
-    }),
+    srcs = [
+        "dependency_graph_test.cc",
+    ],
     data = [
         "//ift/common:testdata",
     ],

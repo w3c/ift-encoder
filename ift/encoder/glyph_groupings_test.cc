@@ -729,7 +729,6 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic) {
   ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
 
-#ifdef HB_DEPEND_API
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDependencyGraph) {
   std::unique_ptr<DependencyClosure> dep_closure = *DependencyClosure::Create(
       requested_segmentation_info_complex_.get(), roboto_.get(), *resolver);
@@ -765,7 +764,6 @@ TEST_F(GlyphGroupingsTest, ComplexConditionFinding_Basic_WithDependencyGraph) {
   ASSERT_EQ(expected, glyph_groupings_complex_.ConditionsAndGlyphs());
   ASSERT_TRUE(glyph_groupings_complex_.UnmappedGlyphs().empty());
 }
-#endif
 
 TEST_F(GlyphGroupingsTest, ComplexConditionFinding_IncrementalUnchanged) {
   auto sc = glyph_groupings_complex_.GroupGlyphs(

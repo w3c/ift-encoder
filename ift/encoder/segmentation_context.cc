@@ -91,15 +91,10 @@ Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
       modified.glyphs.union_set(analysis_modified_gids);
     }
   } else {
-#ifndef HB_DEPEND_API
-    return absl::InternalError(
-        "DEP_GRAPH_ONLY mode requires dependency graph support.");
-#else
     modified.glyphs.union_set(
         (*dependency_closure_)
             ->SegmentsToAffectedGlyphs({modified.base_segment}));
     TransferDependencyGraphGlyphConditions(modified.glyphs);
-#endif
   }
 
   return GroupGlyphs(modified.glyphs, modified.segments);
@@ -113,15 +108,10 @@ Status SegmentationContext::ReprocessAll() {
       TRY(ReprocessSegment(segment_index));
     }
   } else {
-#ifndef HB_DEPEND_API
-    return absl::InternalError(
-        "DEP_GRAPH_ONLY mode requires dependency graph support.");
-#else
     // Pull conditions directly out of the dep graph instead of running closure
     // processing.
     TransferDependencyGraphGlyphConditions(
         segmentation_info_->NonInitFontGlyphs());
-#endif
   }
 
   return GroupGlyphs(SegmentationInfo().NonInitFontGlyphs(), {});
@@ -231,16 +221,11 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
       TRY(ReprocessSegment(segment_index));
     }
   } else {
-#ifndef HB_DEPEND_API
-    return absl::InternalError(
-        "DEP_GRAPH_ONLY mode requires dependency graph support.");
-#else
     GlyphSet gids;
     for (segment_index_t s : segments_to_reprocess) {
       gids.union_set((*dependency_closure_)->SegmentsToAffectedGlyphs({s}));
     }
     TransferDependencyGraphGlyphConditions(gids);
-#endif
   }
 
   // the groupings can be incrementally recomputed by looking at what conditions
@@ -363,7 +348,6 @@ SegmentationContext::InitializeSegmentationContext(
 
 void SegmentationContext::TransferDependencyGraphGlyphConditions(
     const GlyphSet& gids) {
-#ifdef HB_DEPEND_API
   const auto& conditions = (*dependency_closure_)->AllGlyphConditions();
   for (glyph_id_t g : gids) {
     ActivationCondition condition = conditions.at(g);
@@ -384,7 +368,6 @@ void SegmentationContext::TransferDependencyGraphGlyphConditions(
     glyph_condition_set.SetCondition(g, condition);
   }
   inert_segments_ = (*dependency_closure_)->InertSegments();
-#endif
 }
 
 }  // namespace ift::encoder
