@@ -46,15 +46,18 @@ class DependencyGraph {
   // _populate_gids_to_retain() from
   // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
   static constexpr hb_tag_t kClosurePhaseTable[] = {
-      common::FontHelper::kCmap, common::FontHelper::kGSUB,
-      common::FontHelper::kMATH, common::FontHelper::kCOLR,
-      common::FontHelper::kGlyf, common::FontHelper::kCFF,
+      /* 0 */ common::FontHelper::kCmap,
+      /* 1 */ common::FontHelper::kMATH,
+      /* 2 */ common::FontHelper::kGSUB,
+      /* 3 */ common::FontHelper::kCOLR,
+      /* 4 */ common::FontHelper::kGlyf,
+      /* 5 */ common::FontHelper::kCFF,
   };
 
   static constexpr hb_tag_t kClosurePhaseNodeFilter[] = {
       /* cmap */ 0xFFFFFFFF,
-      /* GSUB */ Node::NodeType::GLYPH,
       /* MATH */ Node::NodeType::GLYPH,
+      /* GSUB */ Node::NodeType::GLYPH,
       /* COLR */ Node::NodeType::GLYPH,
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
@@ -62,10 +65,10 @@ class DependencyGraph {
 
   static constexpr hb_tag_t kClosurePhaseStartNodes[] = {
       /* cmap */ Node::NodeType::SEGMENT,
+      /* MATH */ Node::NodeType::GLYPH,
       // For GSUB we also need to consider reached features as starting nodes
       // since those have outgoing GSUB edges.
       /* GSUB */ Node::NodeType::GLYPH | Node::NodeType::FEATURE,
-      /* MATH */ Node::NodeType::GLYPH,
       /* COLR */ Node::NodeType::GLYPH,
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
