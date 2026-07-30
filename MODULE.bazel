@@ -53,9 +53,9 @@ http_archive(
 http_archive(
     name = "harfbuzz",
     build_file = "//third_party:harfbuzz.BUILD",
-    integrity = "sha256-L3SwHBRR3Leerxu4zmnOP6nKaZ5rp8fHJSxZ6iiDrIQ=",
-    strip_prefix = "harfbuzz-d4d4c635217d7e769b66f7d2cb7d528b4a534555",
-    urls = ["https://github.com/harfbuzz/harfbuzz/archive/d4d4c635217d7e769b66f7d2cb7d528b4a534555.zip"],
+    strip_prefix = "harfbuzz-c5eda499b4bcc310095b19faec99c9749dabdb52",
+    integrity = "sha256-4yNdOLuwFK+A9zea2Ykvo1EZbfb+On36/7k7LaXFZYg=",
+    urls = ["https://github.com/harfbuzz/harfbuzz/archive/c5eda499b4bcc310095b19faec99c9749dabdb52.zip"],
 )
 
 # Base 32 Hex

@@ -91,13 +91,13 @@ class DependencyGraph {
   // If filter is null then the filter defaults to the set of non init font
   // glyphs in segmentation info.
   absl::StatusOr<Traversal> ClosureTraversal(
-      const ift::common::SegmentSet& start, TraversalMode mode = ENFORCE_CONTEXT) const;
+      const ift::common::SegmentSet& start,
+      TraversalMode mode = ENFORCE_CONTEXT) const;
   absl::StatusOr<Traversal> ClosureTraversal(
       const absl::btree_set<Node>& nodes,
       const ift::common::GlyphSet* glyph_filter_ptr = nullptr,
       const ift::common::CodepointSet* unicode_filter_ptr = nullptr,
-      TraversalMode mode = ENFORCE_CONTEXT
-    ) const;
+      TraversalMode mode = ENFORCE_CONTEXT) const;
 
   const absl::flat_hash_set<hb_tag_t>& FullFeatureSet() const {
     return full_feature_set_;
@@ -136,7 +136,7 @@ class DependencyGraph {
  private:
   DependencyGraph(
       const ift::encoder::RequestedSegmentationInformation* segmentation_info,
-      hb_depend_t* depend, hb_face_t* face,
+      hb_subset_depend_t* depend, hb_face_t* face,
       absl::flat_hash_set<hb_tag_t> full_feature_set,
       UnicodeEdges unicode_edges);
 
@@ -146,7 +146,8 @@ class DependencyGraph {
     Traversal traversal;
     bool collect_context = true;
 
-    absl::Status Visit(const TraversalContext<ClosureState>& context, const PendingEdge& edge);
+    absl::Status Visit(const TraversalContext<ClosureState>& context,
+                       const PendingEdge& edge);
 
     std::optional<Node> GetNext();
     bool Reached(Node node);
@@ -183,8 +184,8 @@ class DependencyGraph {
       hb_tag_t feature_tag, TraversalContext<CallbackT>* context) const;
 
   template <typename CallbackT>
-  absl::Status HandleSegmentOutgoingEdges(encoder::segment_index_t id,
-                                  TraversalContext<CallbackT>* context) const;
+  absl::Status HandleSegmentOutgoingEdges(
+      encoder::segment_index_t id, TraversalContext<CallbackT>* context) const;
 
   template <typename CallbackT>
   absl::Status HandleSubsetDefinitionOutgoingEdges(
@@ -213,7 +214,8 @@ class DependencyGraph {
   ift::common::hb_face_unique_ptr original_face_;
   absl::flat_hash_set<hb_tag_t> full_feature_set_;
 
-  std::unique_ptr<hb_depend_t, decltype(&hb_depend_destroy)> dependency_graph_;
+  std::unique_ptr<hb_subset_depend_t, decltype(&hb_subset_depend_destroy)>
+      dependency_graph_;
 
   struct LayoutFeatureEdge {
     hb_tag_t layout_tag;
