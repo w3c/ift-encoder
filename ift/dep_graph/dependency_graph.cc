@@ -854,7 +854,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
 
   /* ### Phase 1 + 2: Unicode and Unicode to glyph */
   {
-    TraversalContext context = base_context;
+    TraversalContext<ClosureState> context = base_context;
     context.SetReached(filtered_nodes);
     context.callback.SetStartNodes(filtered_nodes);
     context.table_filter = {DependencyGraph::kClosurePhaseTable[0]};
