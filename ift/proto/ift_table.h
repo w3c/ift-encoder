@@ -59,13 +59,6 @@ class IFTTable {
       hb_face_t* face, absl::string_view ift_table,
       std::optional<absl::string_view> iftx_table);
 
-  /*
-   * Converts this abstract representation to the a serialized format.
-   * Either format 1 or 2:
-   * https://w3c.github.io/IFT/Overview.html#patch-map-table
-   */
-  absl::StatusOr<std::string> Serialize() const;
-
   std::vector<uint8_t> url_template_;
   ift::common::CompatId id_;
   PatchMap patch_map_;

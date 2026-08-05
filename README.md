@@ -12,7 +12,6 @@ found [here](https://w3c.github.io/IFT/Overview.html).
 The current implementation is capable of producing a spec-compliant encoding, but does not
 yet fully support all aspects of the specification. Notably:
 
-*  Format 1 patch maps are not generated.
 *  Not all encoder config options are supported yet. These are marked as unimplemented in the schema.
 
 Additionally, the produced encodings may not be fully optimized for minimal size yet.
