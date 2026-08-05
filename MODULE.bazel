@@ -79,10 +79,10 @@ http_archive(
 # Fontations
 http_archive(
     name = "fontations",
-    urls = ["https://github.com/googlefonts/fontations/archive/1a8baba89aa129a899bc83b0b610881190f8bbad.zip"],
-    strip_prefix = "fontations-1a8baba89aa129a899bc83b0b610881190f8bbad",
+    urls = ["https://github.com/googlefonts/fontations/archive/f95a2db5b2367ddbe752884c39e13b62a2ea39bd.zip"],
+    strip_prefix = "fontations-f95a2db5b2367ddbe752884c39e13b62a2ea39bd",
     build_file = "//third_party:fontations.BUILD",
-    integrity = "sha256-vyDtQ7LJHdb+l0dz8IYs2jvw9bnQxNvhaZgyRLfnlTA=",
+    integrity = "sha256-ge23kFnixCUiaDdsgf2SZ1v9sqPdduEjss5rjrgUbUs=",
 )
 
 
@@ -101,7 +101,7 @@ crate.from_cargo(
      "@fontations//:font-types/Cargo.toml",
      "@fontations//:fuzz/Cargo.toml",
      "@fontations//:incremental-font-transfer/Cargo.toml",
-     "@fontations//:klippa/Cargo.toml",
+     "@fontations//:skera/Cargo.toml",
      "@fontations//:otexplorer/Cargo.toml",
      "@fontations//:read-fonts/Cargo.toml",
      "@fontations//:shared-brotli-patch-decoder/Cargo.toml",

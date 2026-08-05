@@ -21,6 +21,7 @@ rust_binary(
         ":shared_brotli_patch_decoder",
         ":skrifa",
         "@fontations_deps//:clap",
+        "@fontations_deps//:woff2-patched",
     ],
 )
 
@@ -41,11 +42,13 @@ rust_binary(
     deps = [
         ":font_types",
         ":incremental_font_transfer",
-        ":klippa",
+        ":shared_brotli_patch_decoder",
+        ":skera",
         ":read_fonts",
         ":skrifa",
         "@fontations_deps//:clap",
         "@fontations_deps//:regex",
+        "@fontations_deps//:woff2-patched",
     ],
 )
 
@@ -57,13 +60,13 @@ rust_library(
     ),
     deps = [
         ":font_types",
-        ":klippa",
+        ":skera",
         ":read_fonts",
         ":shared_brotli_patch_decoder",
         ":skrifa",
         ":write_fonts",
-        "@fontations_deps//:data-encoding",
-        "@fontations_deps//:data-encoding-macro",
+        #"@fontations_deps//:data-encoding",
+        #"@fontations_deps//:data-encoding-macro",
     ],
 )
 
@@ -84,17 +87,15 @@ rust_library(
 )
 
 rust_library(
-    name = "klippa",
-    srcs = glob(include = ["klippa/src/**/*.rs"]),
+    name = "skera",
+    srcs = glob(include = ["skera/src/**/*.rs"]),
     deps = [
         ":skrifa",
         ":write_fonts",
-        "@fontations_deps//:fnv",
         "@fontations_deps//:hashbrown",
         "@fontations_deps//:regex",
         "@fontations_deps//:thiserror",
     ],
-    # crate_features = ["std", "bytemuck"],
 )
 
 rust_library(
@@ -152,8 +153,8 @@ rust_library(
         "c-brotli",
     ],
     deps = [
-        "@fontations_deps//:brotlic",
-        "@fontations_deps//:brotlic-sys",
         "@fontations_deps//:cfg-if",
+        "@fontations_deps//:cc",
+        "@brotli//:brotlidec",
     ],
 )
