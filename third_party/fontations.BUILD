@@ -65,8 +65,6 @@ rust_library(
         ":shared_brotli_patch_decoder",
         ":skrifa",
         ":write_fonts",
-        #"@fontations_deps//:data-encoding",
-        #"@fontations_deps//:data-encoding-macro",
     ],
 )
 
