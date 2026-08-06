@@ -179,19 +179,18 @@ flat_hash_set<Node> DependencyClosure::SegmentsToAffectedNodeConditions(
 
 StatusOr<DependencyClosure::AnalysisAccuracy> DependencyClosure::AnalyzeSegment(
     const SegmentSet& segments, GlyphSet& and_gids, GlyphSet& or_gids,
-    GlyphSet& exclusive_gids) {
-  AnalysisResult result = TRY(AnalyzeSegmentInternal(segments));
+    GlyphSet& exclusive_gids, bool with_simplification) {
+  AnalysisResult result = TRY(AnalyzeSegmentInternal(segments, with_simplification));
   if (result.accuracy == INACCURATE) {
     inaccurate_results_++;
-    return INACCURATE;
+  } else {
+    accurate_results_++;
   }
 
   and_gids.union_set(result.and_gids);
   or_gids.union_set(result.or_gids);
   exclusive_gids.union_set(result.exclusive_gids);
-
-  accurate_results_++;
-  return ACCURATE;
+  return result.accuracy;
 }
 
 // Filters out invalid and empty segment ids.
@@ -216,7 +215,7 @@ StatusOr<SegmentSet> DependencyClosure::FilterSegments(
 
 StatusOr<DependencyClosure::AnalysisResult>
 DependencyClosure::AnalyzeSegmentInternal(
-    const SegmentSet& segments_input) const {
+    const SegmentSet& segments_input, bool with_simplification) const {
   // This uses a dependency graph (from harfbuzz) to infer how 'segment_id'
   // appears in the activation conditions of any glyphs reachable from it.
   // This aims to have identical output to GlyphClosureCache::AnalyzeSegment()
@@ -250,10 +249,9 @@ DependencyClosure::AnalyzeSegmentInternal(
        inscope_glyphs.intersects(*context_glyphs_)) ||
       (init_font_context_glyphs_.has_value() &&
        inscope_glyphs.intersects(*init_font_context_glyphs_))) {
-    // For now don't return results for anything that involves contextual lookup
-    // glyphs.
+    // context glyphs may result in an inaccurate analysis, we can
+    // still do the analysis but mark it as inaccurate.
     result.accuracy = INACCURATE;
-    return result;
   }
 
   // Classify each glyph based on it's conditions
@@ -273,6 +271,10 @@ DependencyClosure::AnalyzeSegmentInternal(
       // Shouldn't happen, something is wrong with the glyph condition cache.
       return absl::InternalError(absl::StrCat("condition in cache for g", gid,
                                               " does not include s", segment));
+    }
+
+    if (with_simplification) {
+      condition = condition.NonCompositeSuperset();
     }
 
     // Possible cases:

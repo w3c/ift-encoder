@@ -109,7 +109,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet exclusive_gids;
 
     if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids,
-                                               exclusive_gids)) ==
+                                               exclusive_gids, false)) ==
         DependencyClosure::ACCURATE) {
       return absl::InternalError(
           "Dependency closure analysis should have been rejected.");
@@ -123,7 +123,7 @@ class DependencyClosureTest : public ::testing::Test {
     GlyphSet exclusive_gids;
 
     if (TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids,
-                                               exclusive_gids)) !=
+                                               exclusive_gids, false)) !=
         DependencyClosure::ACCURATE) {
       return absl::InternalError(
           "Dependency closure analysis rejected unexpectedly.");
@@ -180,13 +180,90 @@ class DependencyClosureTest : public ::testing::Test {
   std::unique_ptr<DependencyClosure> dependency_closure;
 };
 
+TEST_F(DependencyClosureTest, AnalyzeSegment_InaccurateAnalysisPopulatesSets) {
+  Reconfigure(WithDefaultFeatures({'i'}),
+              {
+                  /* 0 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x485}, ProbabilityBound::Zero()},
+              });
+
+  GlyphSet and_gids;
+  GlyphSet or_gids;
+  GlyphSet exclusive_gids;
+
+  // Segment 0 contains gravecomb (0x300), which intersects with
+  // init_font_context_glyphs_ ('i' in init font + 0x300 form a context lookup).
+  // Therefore, AnalyzeSegment will return INACCURATE.
+  auto accuracy = dependency_closure->AnalyzeSegment(
+      {0}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/false);
+  ASSERT_TRUE(accuracy.ok()) << accuracy.status();
+  EXPECT_EQ(*accuracy, DependencyClosure::INACCURATE);
+
+  // Verify that the analysis was still performed and populated the glyph sets
+  // despite being INACCURATE.
+  auto font = make_hb_font(hb_font_create(face.get()));
+  hb_codepoint_t gravecomb_gid = 0;
+  ASSERT_TRUE(hb_font_get_nominal_glyph(font.get(), 0x300, &gravecomb_gid));
+  EXPECT_TRUE(exclusive_gids.contains(gravecomb_gid));
+}
+
+TEST_F(DependencyClosureTest, AnalyzeSegment_WithSimplification) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
+                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
+                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
+                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
+                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
+                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
+                  /* 6 */ {aalt, ProbabilityBound::Zero()},
+                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+              });
+
+  // g8 (glyph 8) has condition: s1 AND (s4 OR s5).
+  // Without simplification, s1 is part of a mixed condition for g8, so g8 is
+  // not classified as exclusive.
+  {
+    GlyphSet and_gids;
+    GlyphSet or_gids;
+    GlyphSet exclusive_gids;
+
+    auto r = dependency_closure->AnalyzeSegment(
+        {1}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/false);
+    ASSERT_TRUE(r.ok()) << r.status();
+    EXPECT_EQ(*r, DependencyClosure::ACCURATE);
+
+    EXPECT_FALSE(exclusive_gids.contains(8));
+  }
+
+  // With simplification, the condition for g8 simplifies to s1, so g8 is
+  // classified as exclusive.
+  {
+    GlyphSet and_gids;
+    GlyphSet or_gids;
+    GlyphSet exclusive_gids;
+
+    auto r = dependency_closure->AnalyzeSegment(
+        {1}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/true);
+    ASSERT_TRUE(r.ok()) << r.status();
+    EXPECT_EQ(*r, DependencyClosure::ACCURATE);
+
+    EXPECT_TRUE(exclusive_gids.contains(8));
+  }
+}
+
 TEST_F(DependencyClosureTest, AddsToSets) {
   GlyphSet and_gids{101};
   GlyphSet or_gids{102};
   GlyphSet exclusive_gids{103};
 
   auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids,
-                                              exclusive_gids);
+                                              exclusive_gids, false);
   ASSERT_TRUE(r.ok()) << r.status();
   ASSERT_EQ(*r, DependencyClosure::ACCURATE);
 

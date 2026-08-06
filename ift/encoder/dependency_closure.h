@@ -86,7 +86,9 @@ class DependencyClosure {
   //                 ie. (s_1 U ... U s_n) -> exclusive_gids
   absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(
       const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
-      ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids);
+      ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids,
+      bool with_simplification
+  );
 
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
@@ -199,7 +201,7 @@ class DependencyClosure {
   };
 
   absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
-      const ift::common::SegmentSet& segments) const;
+      const ift::common::SegmentSet& segments, bool with_simplification) const;
 
   absl::StatusOr<common::SegmentSet> FilterSegments(
       const common::SegmentSet& segments) const;
