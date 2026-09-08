@@ -15,25 +15,24 @@ void PrintTo(const MergeStrategy& strategy, std::ostream* os) {
         << "  best_case_size_reduction_fraction = "
         << strategy.BestCaseSizeReductionFraction() << std::endl;
 
-    if (strategy.InitFontMergeThreshold().has_value()) {
-      *os << "  init_font_merge_threshold = "
-          << *strategy.InitFontMergeThreshold() << std::endl;
-    }
-    if (strategy.InitFontMergeProbabilityThreshold().has_value()) {
-      *os << "  init_font_merge_probability_threshold = "
-          << *strategy.InitFontMergeProbabilityThreshold() << std::endl;
+    for (size_t i = 0; i < strategy.ProbabilityProfiles().size(); ++i) {
+      const auto& profile = strategy.ProbabilityProfiles()[i];
+      *os << "  profile[" << i << "] {" << std::endl;
+      if (profile.init_font_merge_threshold.has_value()) {
+        *os << "    init_font_merge_threshold = "
+            << *profile.init_font_merge_threshold << std::endl;
+      }
+      if (profile.init_font_merge_probability_threshold.has_value()) {
+        *os << "    init_font_merge_probability_threshold = "
+            << *profile.init_font_merge_probability_threshold << std::endl;
+      }
+      *os << "  }" << std::endl;
     }
     *os << "  use_patch_merges = " << strategy.UsePatchMerges() << std::endl
         << "  pre_closure_group_size = " << strategy.PreClosureGroupSize()
         << std::endl
         << "  pre_closure_probability_threshold = "
         << strategy.PreClosureProbabilityThreshold() << std::endl;
-    *os << std::endl;
-
-    if (strategy.init_font_merge_threshold_.has_value()) {
-      *os << "  init_font_merge_threshold = "
-          << *strategy.init_font_merge_threshold_ << std::endl;
-    }
     *os << "}" << std::endl;
   }
 }

@@ -59,7 +59,9 @@ flowchart TD
 
 ---
 
-### Commit 1: Support Multiple Probability Calculator Profiles in `MergeStrategy`
+### Commit 1: Support Multiple Probability Calculator Profiles in `MergeStrategy` (Completed)
+
+**Status**: Completed
 
 **Goal**: Generalize `MergeStrategy` to manage a list of probability calculator profiles rather than at most one calculator, while retaining backward-compatible convenience methods.
 
