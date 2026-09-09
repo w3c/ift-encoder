@@ -9,11 +9,18 @@ using ift::encoder::SubsetDefinition;
 namespace ift::freq {
 
 UnigramProbabilityCalculator::UnigramProbabilityCalculator(
-    UnicodeFrequencies frequencies)
-    : frequencies_(std::move(frequencies)) {}
+    UnicodeFrequencies frequencies, size_t max_cache_size)
+    : frequencies_(std::move(frequencies)), cache_("unigram probability", max_cache_size) {}
 
 ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
     const SubsetDefinition& definition) const {
+
+  std::optional<double>& cached_bound = cache_[definition.codepoints];
+  if (cached_bound.has_value()) {
+    double value = *cached_bound;
+    return ProbabilityBound(value, value);
+  }
+
   double probability_of_none = 1.0;
   for (uint32_t cp : definition.codepoints) {
     probability_of_none *= (1.0 - frequencies_.ProbabilityFor(cp));
@@ -24,6 +31,7 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
   }
 
   double probability = 1.0 - probability_of_none;
+  cached_bound = probability;
   return {probability, probability};
 }
 
@@ -33,7 +41,7 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
   // the inputs to cost based merging.
   double probability_of_none = 1.0;
   for (const auto* s : segments) {
-    probability_of_none *= (1.0 - s->Probability());
+    probability_of_none *= (1.0 - ComputeProbability(s->Definition()).Min());
   }
   double p = 1.0 - probability_of_none;
   return {p, p};

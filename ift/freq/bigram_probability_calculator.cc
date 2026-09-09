@@ -140,7 +140,8 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
   // ClosureGlyphSegmenter::CodepointToGlyphSegments().
   double best_lower = 0.0;
   for (const auto* s : segments) {
-    best_lower = std::max(best_lower, s->ProbabilityBound().Min());
+    double segment_lower_bound = ComputeProbabilityInternal(s->Definition(), best_lower).Min();
+    best_lower = std::max(best_lower, segment_lower_bound);
     if (best_lower >= 1.0) {
       // Since this is a union the bound must be [1, 1]
       return ProbabilityBound(1.0, 1.0);

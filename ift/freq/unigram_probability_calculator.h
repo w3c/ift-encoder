@@ -2,10 +2,13 @@
 #define IFT_FREQ_UNIGRAM_PROBABILITY_CALCULATOR_H_
 
 #include "ift/freq/bigram_probability_calculator.h"
+#include "ift/freq/lru_cache.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::freq {
+
+constexpr size_t UNIGRAM_PROBABILITY_CACHE_SIZE = 50000;
 
 // The UnigramProbabilityCalculator calculates segment probabilites of occurence
 // using unigram's (ie. one probability per codepoint). Because no additional
@@ -13,7 +16,7 @@ namespace ift::freq {
 // calculations assume that these unigram probabilities are fully independent.
 class UnigramProbabilityCalculator : public ProbabilityCalculator {
  public:
-  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies);
+  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies, size_t max_cache_size = BIGRAM_PROBABILITY_CACHE_SIZE);
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
@@ -30,6 +33,8 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
 
  private:
   UnicodeFrequencies frequencies_;
+  mutable LruCache<ift::common::CodepointSet, std::optional<double>>
+      cache_;
 };
 
 }  // namespace ift::freq

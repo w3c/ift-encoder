@@ -49,9 +49,8 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   UnigramProbabilityCalculator calculator(builder.Build());
 
-  Segment s1{{1}, calculator.ComputeProbability({1})};
-  Segment s3{{3}, calculator.ComputeProbability({3})};
-  s3.SetProbability(calculator.ComputeProbability(s3.Definition()));
+  Segment s1{{1}, ProbabilityBound::Zero()};
+  Segment s3{{3}, ProbabilityBound::Zero()};
 
   double p1 = 10.0 / 20.0;
   double p3 = 5.0 / 20.0;
@@ -63,27 +62,22 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 }
 
 TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
-  Segment s1{{'a'}, ProbabilityBound{0.5, 0.5}};
-  Segment s2{{'b'}, ProbabilityBound{0.2, 0.2}};
-  Segment s3{{'c'}, ProbabilityBound{0.7, 0.7}};
-
   UnicodeFrequenciesBuilder builder;
   builder.Add(1, 1, 10);
 
   UnigramProbabilityCalculator calculator(builder.Build());
 
-  std::vector<ProbabilityBound> bounds{s2.ProbabilityBound()};
+  std::vector<ProbabilityBound> bounds{ProbabilityBound {0.2, 0.2}};
   ProbabilityBound bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.2);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.2);
 
-  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound()};
+  bounds = {ProbabilityBound{0.5, 0.5}, ProbabilityBound{0.7, 0.7}};
   bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7);
 
-  bounds = {s1.ProbabilityBound(), s3.ProbabilityBound(),
-            s2.ProbabilityBound()};
+  bounds = {ProbabilityBound{0.5, 0.5}, ProbabilityBound{0.2, 0.2}, ProbabilityBound{0.7, 0.7}};
   bound = calculator.ComputeConjunctiveProbability(bounds);
   EXPECT_DOUBLE_EQ(bound.Min(), 0.5 * 0.7 * 0.2);
   EXPECT_DOUBLE_EQ(bound.Max(), 0.5 * 0.7 * 0.2);

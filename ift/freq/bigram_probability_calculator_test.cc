@@ -72,7 +72,7 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
 }
 
 TEST(BigramProbabilityCalculatorTest,
-     ComputeMergedProbability_SegmentProbConsidered) {
+     ComputeMergedProbability_SegmentProbNotConsidered) {
   UnicodeFrequencies frequencies{
       {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
 
@@ -81,13 +81,13 @@ TEST(BigramProbabilityCalculatorTest,
 
   BigramProbabilityCalculator calc(std::move(frequencies));
 
-  Segment s1{{'a'}, ProbabilityBound{0.93, 0.85}};
+  Segment s1{{'a'}, ProbabilityBound{0.93, 0.93}};
   Segment s2{{'b'}, calc.ComputeProbability({'b'})};
 
-  // On merge the individual segment probabilities can be used in the new lower
-  // bound
+  // On merge the individual segment probabilities are not used in computing bounds
+  double Pab = 0.70 + 0.60 - 0.40;
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
-            (ProbabilityBound{0.93, 0.93}));
+            (ProbabilityBound{Pab, Pab}));
 }
 
 TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability_Complex) {

@@ -10,8 +10,9 @@ struct Segment {
   Segment(SubsetDefinition definition, freq::ProbabilityBound probability)
       : definition(std::move(definition)), probability(probability) {}
 
-  double Probability() const { return probability.Average(); }
-  const freq::ProbabilityBound& ProbabilityBound() const { return probability; }
+  // Aggregated probability across all merging strategies.
+  double AggregateProbability() const { return probability.Average(); }
+  const freq::ProbabilityBound& AggregateProbabilityBound() const { return probability; }
 
   const SubsetDefinition& Definition() const { return definition; }
   SubsetDefinition& Definition() { return definition; }
@@ -28,7 +29,7 @@ struct Segment {
     return Definition().codepoints.size() >= min_group_size;
   }
 
-  void SetProbability(freq::ProbabilityBound probability) {
+  void SetAggregateProbability(freq::ProbabilityBound probability) {
     this->probability = probability;
   }
 
