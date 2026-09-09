@@ -122,14 +122,22 @@ SegmentSet Merger::InitFontSegmentsToCheck(const SegmentSet& inscope) const {
   return to_check;
 }
 
-StatusOr<SegmentSet> Merger::InitFontApplyProbabilityThreshold() const {
+StatusOr<SegmentSet> Merger::InitFontApplyProbabilityThreshold(
+    size_t profile_index) const {
+  const auto* profile = TRY(strategy_.GetProbabilityProfile(profile_index));
+  const auto* calculator = TRY(strategy_.ProbabilityCalculator(profile_index));
+
   SegmentSet inscope;
   uint32_t skipped = 0;
-  if (strategy_.InitFontMergeProbabilityThreshold().has_value()) {
+  if (profile->init_font_merge_probability_threshold.has_value()) {
     for (segment_index_t s : inscope_segments_for_init_move_) {
       const auto& seg = Context().SegmentationInfo().Segments().at(s);
-      auto p = TRY(strategy_.ProbabilityCalculator())->ComputeProbability(seg.Definition()).Value();
-      if (p >= strategy_.InitFontMergeProbabilityThreshold()) {
+      if (seg.Definition().Empty()) {
+        continue;
+      }
+
+      auto p = calculator->ComputeProbability(seg.Definition()).Value();
+      if (p >= *profile->init_font_merge_probability_threshold) {
         inscope.insert(s);
       } else {
         skipped++;
@@ -138,9 +146,9 @@ StatusOr<SegmentSet> Merger::InitFontApplyProbabilityThreshold() const {
   } else {
     inscope = inscope_segments_for_init_move_;
   }
-
   VLOG(0) << inscope.size() << " inscope segments, " << skipped
           << " skipped for being below the probability threshold.";
+
   return inscope;
 }
 
@@ -150,6 +158,9 @@ btree_map<ActivationCondition, GlyphSet> Merger::InitFontConditionsToCheck(
   // inscope for moving to the init font.
   btree_map<ActivationCondition, GlyphSet> conditions;
   for (segment_index_t s : to_check) {
+    if (Context().SegmentationInfo().Segments().at(s).Definition().Empty()) {
+      continue;
+    }
     for (const auto& c :
          Context().glyph_groupings.TriggeringSegmentToConditions(s)) {
       if (conditions.contains(c)) {
@@ -172,16 +183,18 @@ btree_map<ActivationCondition, GlyphSet> Merger::InitFontConditionsToCheck(
   return conditions;
 }
 
-Status Merger::MoveSegmentsToInitFont() {
-  if (!strategy_.InitFontMergeThreshold().has_value()) {
+Status Merger::MoveSegmentsToInitFont(size_t profile_index) {
+  const auto* profile = TRY(strategy_.GetProbabilityProfile(profile_index));
+  if (!profile->init_font_merge_threshold.has_value()) {
     return absl::FailedPreconditionError(
         "Cannot be called when there is no merge threshold configured.");
   }
 
   VLOG(0) << "Checking if there are any segments which should be moved into "
-             "the initial font.";
+             "the initial font (profile "
+          << profile_index << ").";
 
-  SegmentSet inscope = TRY(InitFontApplyProbabilityThreshold());
+  SegmentSet inscope = TRY(InitFontApplyProbabilityThreshold(profile_index));
 
   // Init move processing works in two phases:
   //
@@ -207,7 +220,7 @@ Status Merger::MoveSegmentsToInitFont() {
             Context().SegmentationInfo().InitFontGlyphs()));
 
     double total_delta = 0.0;
-    double lowest_delta = *strategy_.InitFontMergeThreshold();
+    double lowest_delta = *profile->init_font_merge_threshold;
     std::optional<GlyphSet> glyphs_for_lowest = std::nullopt;
 
     btree_map<ActivationCondition, GlyphSet> conditions =
@@ -216,14 +229,16 @@ Status Merger::MoveSegmentsToInitFont() {
     for (const auto& [condition, glyphs] : conditions) {
       auto best_case_delta =
           TRY(CandidateMerge::ComputeBestCaseInitFontCostDelta(
-              *this, init_font_size, glyphs));
+              *this, init_font_size, glyphs, profile_index));
       if (best_case_delta >= lowest_delta) {
         // Filter by best case first which is much faster to compute.
         continue;
       }
 
       auto [delta, all_glyphs] = TRY(CandidateMerge::ComputeInitFontCostDelta(
-          *this, init_font_size, glyphs, smallest_size_increases));
+          *this, init_font_size, glyphs, smallest_size_increases,
+          profile_index));
+
       if (delta >= lowest_delta) {
         continue;
       }
