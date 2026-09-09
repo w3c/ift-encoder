@@ -67,7 +67,7 @@ class Merger {
    * into the init font. Move only those cases whose delta is below a
    * configurable threshold.
    */
-  absl::Status MoveSegmentsToInitFont();
+  absl::Status MoveSegmentsToInitFont(size_t profile_index = 0);
 
   /*
    * Recompute the state of this merger to respect changes made to the
@@ -179,7 +179,8 @@ class Merger {
                                            double base_probability,
                                            double lowest_cost_delta) const;
 
-  absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold() const;
+  absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold(
+      size_t profile_index = 0) const;
   ift::common::SegmentSet InitFontSegmentsToCheck(
       const ift::common::SegmentSet& inscope) const;
   absl::btree_map<ActivationCondition, ift::common::GlyphSet>

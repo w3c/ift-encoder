@@ -266,12 +266,16 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
       continue;
     }
 
-    const auto& calculator = *TRY(strategy.ProbabilityCalculator());
     for (segment_index_t s : segments) {
-      ProbabilityBound p =
-          calculator.ComputeProbability(subset_definitions[s]);
-      if (p.Value() > out[s].Value()) {
-        out[s] = p;
+      for (const auto& profile : strategy.ProbabilityProfiles()) {
+        if (!profile.calculator) {
+          return absl::InvalidArgumentError("Profile must have a probability calculator.");
+        }
+        ProbabilityBound p =
+            profile.calculator->ComputeProbability(subset_definitions[s]);
+        if (p.Value() > out[s].Value()) {
+          out[s] = p;
+        }
       }
     }
   }
@@ -546,13 +550,18 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // ~1.0). Do this only for strategies that have opted in.
   bool init_font_changed = false;
   for (Merger& merger : mergers) {
-    if (merger.Strategy().UseCosts() &&
-        merger.Strategy().InitFontMergeThreshold().has_value()) {
-      // make sure candidate segments is up to date before attempting to
-      // process.
-      init_font_changed = true;
-      TRYV(merger.ReassignInitSubset());
-      TRYV(merger.MoveSegmentsToInitFont());
+    if (!merger.Strategy().UseCosts() ||
+        !merger.Strategy().HasInitFontMerge()) {
+      continue;
+    }
+    for (size_t p = 0; p < merger.Strategy().ProbabilityProfiles().size();
+         ++p) {
+      const auto& profile = merger.Strategy().ProbabilityProfiles()[p];
+      if (profile.init_font_merge_threshold.has_value()) {
+        init_font_changed = true;
+        TRYV(merger.ReassignInitSubset());
+        TRYV(merger.MoveSegmentsToInitFont(p));
+      }
     }
   }
 

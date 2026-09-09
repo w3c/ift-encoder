@@ -98,7 +98,9 @@ flowchart TD
 
 ---
 
-### Commit 2: Multi-Calculator Initial Font Merging in `Merger` & `ClosureGlyphSegmenter`
+### Commit 2: Multi-Calculator Initial Font Merging in `Merger` & `ClosureGlyphSegmenter` (Completed)
+
+**Status**: Completed
 
 **Goal**: Allow initial font merging to run per probability profile within each strategy, scoping candidate segments to those covered by each calculator.
 

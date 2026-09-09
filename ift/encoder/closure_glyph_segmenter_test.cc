@@ -1775,6 +1775,77 @@ if (s3 AND s8) then p8
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_InitFontMove) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 100},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 100},
+      {{'c', 'c'}, 100},
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq1), 75, 1);
+  strategy.SetInitFontMergeThreshold(-70);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<ift::freq::UnigramProbabilityCalculator>(
+          std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'a' and 'b' move to initial font because profile 1 configured the threshold.
+  // 'c' does not move because profile 2 has no threshold configured.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},     // 'a' (moved to init font)
+      {},     // 'b' (moved to init font)
+      {'c'},  // remains as patch
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_BothHaveInitFontThreshold) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 100},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 100},
+      {{'c', 'c'}, 100},
+      {{'d', 'd'}, 5},
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq1), 75, 1);
+  strategy.SetInitFontMergeThreshold(-70);
+  strategy.AddProbabilityProfile({
+      std::make_shared<ift::freq::UnigramProbabilityCalculator>(
+          std::move(freq2)),
+      -70,
+  });
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'a' and 'b' move to initial font via profile 1.
+  // 'c' moves to initial font via profile 2.
+  // 'd' does not move because its probability is low in profile 2.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},     // 'a' (moved to init font)
+      {},     // 'b' (moved to init font)
+      {},     // 'c' (moved to init font)
+      {'d'},  // remains as patch
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
 TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
   UnicodeFrequencies group1_freq{
       {{' ', ' '}, 100},

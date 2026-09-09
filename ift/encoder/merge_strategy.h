@@ -131,6 +131,13 @@ class MergeStrategy {
     return probability_profiles_;
   }
 
+  absl::StatusOr<const ProbabilityProfile*> GetProbabilityProfile(size_t profile_index) const {
+    if (profile_index >= probability_profiles_.size()) {
+      return absl::InvalidArgumentError("profile_index is out of bounds.");
+    }
+    return &probability_profiles_[profile_index];
+  }
+
   void AddProbabilityProfile(ProbabilityProfile profile) {
     probability_profiles_.push_back(std::move(profile));
   }
@@ -181,6 +188,17 @@ class MergeStrategy {
       return absl::InternalError("Probability calculator is expected to be non-null");
     }
     return probability_profiles_[0].calculator.get();
+  }
+
+  absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator(size_t profile_index) const {
+    if (profile_index >= probability_profiles_.size()) {
+      return absl::InvalidArgumentError("profile_index is out of bounds.");
+    }
+    const auto& profile = probability_profiles_[profile_index];
+    if (!profile.calculator) {
+      return absl::InvalidArgumentError("Probability profile is missing calculator.");
+    }
+    return profile.calculator.get();
   }
 
   absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator() const {
