@@ -155,12 +155,12 @@ static Status Analysis(hb_face_t* font,
     // bigram
     if (UnigramProbabilityCalculator* unigram =
             dynamic_cast<UnigramProbabilityCalculator*>(
-                strategy.ProbabilityCalculator())) {
+                TRY(strategy.ProbabilityCalculator()))) {
       calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
       strategy_probability_calculators.push_back(&calculator_storage.back());
     } else {
       strategy_probability_calculators.push_back(
-          strategy.ProbabilityCalculator());
+          TRY(strategy.ProbabilityCalculator()));
     }
 
     strategy_group_index.push_back(i - 1);

@@ -179,7 +179,7 @@ class Merger {
                                            double base_probability,
                                            double lowest_cost_delta) const;
 
-  ift::common::SegmentSet InitFontApplyProbabilityThreshold() const;
+  absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold() const;
   ift::common::SegmentSet InitFontSegmentsToCheck(
       const ift::common::SegmentSet& inscope) const;
   absl::btree_map<ActivationCondition, ift::common::GlyphSet>

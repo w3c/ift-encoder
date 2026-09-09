@@ -82,7 +82,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
     ordered_candidates.emplace_back(
         condition,
         TRY(condition.Probability(Context().SegmentationInfo().Segments(),
-                                  *strategy_.ProbabilityCalculator())));
+                                  *TRY(strategy_.ProbabilityCalculator()))));
   }
   std::sort(ordered_candidates.begin(), ordered_candidates.end(),
             [](const auto& a, const auto& b) {
@@ -122,13 +122,13 @@ SegmentSet Merger::InitFontSegmentsToCheck(const SegmentSet& inscope) const {
   return to_check;
 }
 
-SegmentSet Merger::InitFontApplyProbabilityThreshold() const {
+StatusOr<SegmentSet> Merger::InitFontApplyProbabilityThreshold() const {
   SegmentSet inscope;
   uint32_t skipped = 0;
-  if (strategy_.InitFontMergeProbabilityThreshold().has_value() && strategy_.ProbabilityCalculator()) {
+  if (strategy_.InitFontMergeProbabilityThreshold().has_value()) {
     for (segment_index_t s : inscope_segments_for_init_move_) {
       const auto& seg = Context().SegmentationInfo().Segments().at(s);
-      auto p = strategy_.ProbabilityCalculator()->ComputeProbability(seg.Definition()).Value();
+      auto p = TRY(strategy_.ProbabilityCalculator())->ComputeProbability(seg.Definition()).Value();
       if (p >= strategy_.InitFontMergeProbabilityThreshold()) {
         inscope.insert(s);
       } else {
@@ -181,7 +181,7 @@ Status Merger::MoveSegmentsToInitFont() {
   VLOG(0) << "Checking if there are any segments which should be moved into "
              "the initial font.";
 
-  SegmentSet inscope = InitFontApplyProbabilityThreshold();
+  SegmentSet inscope = TRY(InitFontApplyProbabilityThreshold());
 
   // Init move processing works in two phases:
   //
@@ -308,8 +308,8 @@ SegmentSet Merger::ComputeCandidateSegments(
 }
 
 Status Merger::InitOptimizationCutoff() {
-  const auto* calculator = strategy_.ProbabilityCalculator();
-  if (strategy_.UseCosts() && calculator) {
+  if (strategy_.UseCosts()) {
+    const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
     optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
     if (optimization_cutoff_segment_ <
         context_->SegmentationInfo().Segments().size()) {
@@ -317,7 +317,7 @@ Status Merger::InitOptimizationCutoff() {
       VLOG(1) << "Cutting off optimization at segment "
               << optimization_cutoff_segment_ << ", P("
               << optimization_cutoff_segment_ << ") = "
-              << calculator->ComputeProbability(s.Definition()).Value();
+              << calculator.ComputeProbability(s.Definition()).Value();
     } else {
       VLOG(1) << "No optimization cutoff.";
     }
@@ -334,10 +334,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
   // considering only exclusive segments is good enough for this calculation and
   // significantly simplifies things.
 
-  const auto* calculator = strategy_.ProbabilityCalculator();
-  if (!calculator) {
-    return absl::InternalError("Probability calculator is unexpectedly missing.");
-  }
+  const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
 
   // First compute the total cost for all active segments
   double total_cost = 0.0;
@@ -350,7 +347,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
 
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
     const auto& segment = context_->SegmentationInfo().Segments()[s];
-    double probability = calculator->ComputeProbability(segment.Definition()).Value();
+    double probability = calculator.ComputeProbability(segment.Definition()).Value();
     total_cost += probability * (size + overhead);
   }
 
@@ -366,7 +363,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
 
     const auto& segment = context_->SegmentationInfo().Segments()[s];
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
-    double probability = calculator->ComputeProbability(segment.Definition()).Value();
+    double probability = calculator.ComputeProbability(segment.Definition()).Value();
     cutoff_tail_cost -= probability * (size + overhead);
     if (cutoff_tail_cost < 0.0) {
       // This segment puts us above the cutoff, so set the cutoff as the
@@ -544,16 +541,12 @@ Status Merger::CollectExclusiveCandidateMerges(
   uint32_t base_size =
       TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
 
-  const auto* calculator = strategy_.ProbabilityCalculator();
-  if (!calculator) {
-    return absl::InternalError("Unexpected missing probability calculator.");
-  }
-
+  const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
   const auto& base_segment = Context()
                                 .SegmentationInfo()
                                 .Segments()
                                 .at(base_segment_index);
-  double base_probability = calculator->ComputeProbability(base_segment.Definition()).Value();
+  double base_probability = calculator.ComputeProbability(base_segment.Definition()).Value();
 
   double inert_threshold = -1.0;
   if (smallest_candidate_merge.has_value()) {
@@ -581,7 +574,7 @@ Status Merger::CollectExclusiveCandidateMerges(
                 .Segments()
                 .at(segment_index);
     if (context_->InertSegments().contains(segment_index) &&
-        calculator->ComputeProbability(segment.Definition()).Value() <= inert_threshold) {
+        calculator.ComputeProbability(segment.Definition()).Value() <= inert_threshold) {
       // Since we iteration is in probability order from highest to lowest, once
       // one segment fails the threshold then we know all further ones will as
       // well.

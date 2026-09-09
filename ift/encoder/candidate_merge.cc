@@ -96,10 +96,7 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
       merger.AssignMergedSegment(base_segment_index_, segments_to_merge_,
                                  *merged_segment_, new_segment_is_inert);
 
-  const auto* calculator = merger.Strategy().ProbabilityCalculator();
-  if (!calculator) {
-    return absl::InternalError("Missing probability calculator.");
-  }
+  const auto& calculator = *TRY(merger.Strategy().ProbabilityCalculator());
 
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
           << " codepoints for segment " << base_segment_index_ << "."
@@ -107,7 +104,7 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
           << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
           << "  Cost delta is " << cost_delta_ << "." << std::endl
           << "  New probability is "
-          << calculator->ComputeProbability(merged_segment_->Definition()).Value();
+          << calculator.ComputeProbability(merged_segment_->Definition()).Value();
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
@@ -350,7 +347,7 @@ static StatusOr<double> CostFor(Merger& merger,
   if (!condition.IsFallback()) {
     probability = TRY(
         condition.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *merger.Strategy().ProbabilityCalculator()));
+                              *TRY(merger.Strategy().ProbabilityCalculator())));
   }
 
   double patch_size =
@@ -479,7 +476,7 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
       // in this calc. Start with finding a test case.
       patch_probability_after = TRY(
           condition.Probability(merger.Context().SegmentationInfo().Segments(),
-                                *merger.Strategy().ProbabilityCalculator()));
+                                *TRY(merger.Strategy().ProbabilityCalculator())));
     }
 
     double patch_size_after =
@@ -521,7 +518,7 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
     if (!condition.IsFallback()) {
       patch_probability = TRY(
           condition.Probability(merger.Context().SegmentationInfo().Segments(),
-                                *merger.Strategy().ProbabilityCalculator()));
+                                *TRY(merger.Strategy().ProbabilityCalculator())));
     }
 
     GlyphSet new_glyphs = glyphs;
@@ -615,7 +612,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   const auto& context = merger.Context();
   const auto& patch_size_cache = context.patch_size_cache;
   const auto& segments = context.SegmentationInfo().Segments();
-  const auto* calculator = merger.Strategy().ProbabilityCalculator();
+  const auto& calculator = TRY(merger.Strategy().ProbabilityCalculator());
   double cost_delta = 0.0;
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] : modified_conditions) {
@@ -825,13 +822,13 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
       TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_a));
   double probability_a = TRY(
       condition_a.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *merger.Strategy().ProbabilityCalculator()));
+                              *TRY(merger.Strategy().ProbabilityCalculator())));
 
   double size_b =
       TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_b));
   double probability_b = TRY(
       condition_b.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *merger.Strategy().ProbabilityCalculator()));
+                              *TRY(merger.Strategy().ProbabilityCalculator())));
 
   double size_existing = 0.0;
   if (!glyphs_existing.empty()) {
@@ -863,7 +860,7 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
 
   double merged_probability = TRY(merged_condition.Probability(
       merger.Context().SegmentationInfo().Segments(),
-      *merger.Strategy().ProbabilityCalculator()));
+      *TRY(merger.Strategy().ProbabilityCalculator())));
 
   VLOG(1) << "cost_delta for patch merge of " << condition_a.ToString()
           << " with " << condition_b.ToString() << " =";

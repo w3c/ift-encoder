@@ -256,7 +256,7 @@ static void ClassifySegments(
   }
 }
 
-static std::vector<ProbabilityBound> ComputeSegmentProbabilities(
+static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
   std::vector<ProbabilityBound> out(subset_definitions.size(),
@@ -266,10 +266,10 @@ static std::vector<ProbabilityBound> ComputeSegmentProbabilities(
       continue;
     }
 
-    auto calculator = strategy.ProbabilityCalculator();
+    const auto& calculator = *TRY(strategy.ProbabilityCalculator());
     for (segment_index_t s : segments) {
       ProbabilityBound p =
-          calculator->ComputeProbability(subset_definitions[s]);
+          calculator.ComputeProbability(subset_definitions[s]);
       if (p.Min() > out[s].Min()) {
         out[s] = p;
       }
@@ -401,9 +401,8 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
           << "  " << ungrouped_segments.size()
           << " segments that are ungrouped";
 
-  // TODO XXXXX update to better handle multiple strategies
   std::vector<ProbabilityBound> segment_probabilities =
-      ComputeSegmentProbabilities(subset_definitions, merge_groups);
+      TRY(ComputeSegmentProbabilities(subset_definitions, merge_groups));
   std::vector<SegmentOrdering> ordering;
   uint32_t group_index = 0;
   for (const auto& [segments, strategy] : merge_groups) {
