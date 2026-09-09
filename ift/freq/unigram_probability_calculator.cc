@@ -51,7 +51,7 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeConjunctiveProbability(
     const std::vector<ProbabilityBound>& bounds) const {
   double probability = 1.0;
   for (const auto& bound : bounds) {
-    probability *= bound.Average();
+    probability *= bound.Value();
   }
   return {probability, probability};
 }

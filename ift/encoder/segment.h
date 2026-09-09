@@ -2,17 +2,13 @@
 #define IFT_ENCODER_SEGMENT_H_
 
 #include "ift/encoder/subset_definition.h"
-#include "ift/freq/probability_bound.h"
 
 namespace ift::encoder {
 
+// TODO XXXX remove Segment? Use just SubsetDefinition?
 struct Segment {
-  Segment(SubsetDefinition definition, freq::ProbabilityBound probability)
-      : definition(std::move(definition)), probability(probability) {}
-
-  // Aggregated probability across all merging strategies.
-  double AggregateProbability() const { return probability.Average(); }
-  const freq::ProbabilityBound& AggregateProbabilityBound() const { return probability; }
+  Segment(SubsetDefinition definition)
+      : definition(std::move(definition)) {}
 
   const SubsetDefinition& Definition() const { return definition; }
   SubsetDefinition& Definition() { return definition; }
@@ -21,26 +17,19 @@ struct Segment {
     if (!Definition().feature_tags.empty() ||
         !Definition().design_space.empty()) {
       // TODO(garretrieger): this computation should also include feature tags
-      // and design space
-      //                     into the min group size calculation.
+      //  and design space into the min group size calculation.
       return true;
     }
 
     return Definition().codepoints.size() >= min_group_size;
   }
 
-  void SetAggregateProbability(freq::ProbabilityBound probability) {
-    this->probability = probability;
-  }
-
   void Clear() {
     definition.Clear();
-    probability = freq::ProbabilityBound::Zero();
   }
 
  private:
   SubsetDefinition definition;
-  freq::ProbabilityBound probability;
 };
 
 }  // namespace ift::encoder

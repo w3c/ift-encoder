@@ -509,7 +509,7 @@ ActivationCondition::ActivationConditionsToPatchMapEntries(
 StatusOr<double> ActivationCondition::Probability(
     Span<const Segment> segments,
     const ProbabilityCalculator& calculator) const {
-  return TRY(this->ProbabilityBound(segments, calculator)).Average();
+  return TRY(this->ProbabilityBound(segments, calculator)).Value();
 }
 
 StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
@@ -533,7 +533,7 @@ StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
       }
       set_bound = calculator.ComputeMergedProbability(union_segments);
     } else {
-      set_bound = segments[*segment_set.min()].ProbabilityBound();
+      set_bound = calculator.ComputeProbability(segments[*segment_set.min()].Definition());
     }
 
     if (!is_conjunctive) {
@@ -551,7 +551,7 @@ StatusOr<double> ActivationCondition::MergedProbability(
     const ProbabilityCalculator& calculator) const {
   return TRY(MergedProbabilityBound(segments, merged_segment_index,
                                     merged_segment, calculator))
-      .Average();
+      .Value();
 }
 
 StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
@@ -580,9 +580,9 @@ StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
       }
       set_bound = calculator.ComputeMergedProbability(union_segments);
     } else if (*segment_set.min() == merged_segment_index) {
-      set_bound = merged_segment.ProbabilityBound();
+      set_bound = calculator.ComputeProbability(merged_segment.Definition());
     } else {
-      set_bound = segments[*segment_set.min()].ProbabilityBound();
+      set_bound = calculator.ComputeProbability(segments[*segment_set.min()].Definition());
     }
 
     if (!is_conjunctive) {

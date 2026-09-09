@@ -11,14 +11,14 @@ namespace ift::freq {
 
 class MockProbabilityCalculator : public ProbabilityCalculator {
  public:
-  MockProbabilityCalculator(std::vector<ift::encoder::Segment> segments)
+  MockProbabilityCalculator(std::vector<std::pair<ift::encoder::Segment, double>> segments)
       : segments_(segments) {}
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override {
-    for (const auto& segment : segments_) {
+    for (const auto& [segment, prob] : segments_) {
       if (segment.Definition() == definition) {
-        return {segment.Probability(), segment.Probability()};
+        return {prob, prob};
       }
     }
     return {0.0, 0.0};
@@ -38,13 +38,13 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
       const std::vector<ProbabilityBound>& bounds) const override {
     double probability = 1.0;
     for (const auto& bound : bounds) {
-      probability *= bound.Average();
+      probability *= bound.Value();
     }
     return {probability, probability};
   }
 
  private:
-  std::vector<ift::encoder::Segment> segments_;
+  std::vector<std::pair<ift::encoder::Segment, double>> segments_;
 };
 
 }  // namespace ift::freq

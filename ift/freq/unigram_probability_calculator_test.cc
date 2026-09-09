@@ -49,8 +49,8 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   UnigramProbabilityCalculator calculator(builder.Build());
 
-  Segment s1{{1}, ProbabilityBound::Zero()};
-  Segment s3{{3}, ProbabilityBound::Zero()};
+  Segment s1 {{1}};
+  Segment s3 {{3}};
 
   double p1 = 10.0 / 20.0;
   double p3 = 5.0 / 20.0;

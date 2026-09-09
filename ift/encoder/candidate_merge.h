@@ -58,7 +58,7 @@ struct CandidateMerge {
  public:
   static CandidateMerge BaselineCandidate(uint32_t base_segment_index,
                                           double cost_delta) {
-    CandidateMerge merge(Segment({}, freq::ProbabilityBound::Zero()));
+    CandidateMerge merge(Segment({}));
     merge.base_segment_index_ = base_segment_index;
     merge.segments_to_merge_ = {base_segment_index};
     merge.input_segments_are_inert_ = true;

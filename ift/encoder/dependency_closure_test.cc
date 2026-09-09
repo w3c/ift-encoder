@@ -77,12 +77,12 @@ class DependencyClosureTest : public ::testing::Test {
   }
 
   std::vector<Segment> segments = {
-      /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-      /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-      /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-      /* 3 */ {{'q'}, ProbabilityBound::Zero()},
-      /* 4 */ {{'A'}, ProbabilityBound::Zero()},
-      /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+      /* 0 */ {{'a'}},
+      /* 1 */ {{'f'}},
+      /* 2 */ {{'i'}},
+      /* 3 */ {{'q'}},
+      /* 4 */ {{'A'}},
+      /* 5 */ {{0xC1 /* Aacute */}},
   };
 
   void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments,
@@ -183,8 +183,8 @@ class DependencyClosureTest : public ::testing::Test {
 TEST_F(DependencyClosureTest, AnalyzeSegment_InaccurateAnalysisPopulatesSets) {
   Reconfigure(WithDefaultFeatures({'i'}),
               {
-                  /* 0 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x485}, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x300 /* gravecomb */}},
+                  /* 1 */ {{0x485}},
               });
 
   GlyphSet and_gids;
@@ -215,14 +215,14 @@ TEST_F(DependencyClosureTest, AnalyzeSegment_WithSimplification) {
 
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
-                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
-                  /* 6 */ {aalt, ProbabilityBound::Zero()},
-                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0x6406}},
+                  /* 4 */ {{0xe0100}},
+                  /* 5 */ {{0xfe00}},
+                  /* 6 */ {aalt},
+                  /* 7 */ {jp78},
               });
 
   // g8 (glyph 8) has condition: s1 AND (s4 OR s5).
@@ -275,12 +275,12 @@ TEST_F(DependencyClosureTest, AddsToSets) {
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'q'}},
+                  /* 4 */ {{'A'}},
+                  /* 5 */ {{0xC1 /* Aacute */}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -303,8 +303,8 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
   // Move 'f' to init font
   Reconfigure(face.get(), WithDefaultFeatures({'f'}),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'i'}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -319,19 +319,19 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
 TEST_F(DependencyClosureTest, InertSegments) {
   Reconfigure(face.get(), WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'b'}},
+                  /* 2 */ {{'f'}},
+                  /* 3 */ {{'i'}},
               });
 
   ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1}));
 
   Reconfigure(face.get(), WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'f', 'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'b'}},
+                  /* 2 */ {{'f', 'i'}},
               });
 
   ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1, 2}));
@@ -340,9 +340,9 @@ TEST_F(DependencyClosureTest, InertSegments) {
 TEST_F(DependencyClosureTest, InertSegments_InitFont) {
   Reconfigure(face.get(), WithDefaultFeatures({'f'}),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'b'}},
+                  /* 2 */ {{'i'}},
               });
 
   ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0, 1, 2}));
@@ -356,14 +356,14 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
 
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
-                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
-                  /* 6 */ {aalt, ProbabilityBound::Zero()},
-                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0x6406}},
+                  /* 4 */ {{0xe0100}},
+                  /* 5 */ {{0xfe00}},
+                  /* 6 */ {aalt},
+                  /* 7 */ {jp78},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -383,10 +383,10 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseIsolation) {
 
   Reconfigure({},
               {
-                  /* 0 */ {{0x132 /* IJ */}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0xCD /* Iacute */}, ProbabilityBound::Zero()},
-                  /* 2 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
-                  /* 3 */ {{ccmp}, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x132 /* IJ */}},
+                  /* 1 */ {{0xCD /* Iacute */}},
+                  /* 2 */ {{0x301 /* acutecomb */}},
+                  /* 3 */ {{ccmp}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -406,13 +406,13 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_FullFont) {
   flat_hash_map<hb_tag_t, segment_index_t> layout_to_seg;
   for (hb_codepoint_t cp : unicodes) {
     cp_to_seg[cp] = segments.size();
-    segments.push_back({{cp}, ProbabilityBound::Zero()});
+    segments.push_back({{cp}});
   }
   for (hb_tag_t feature : features) {
     layout_to_seg[feature] = segments.size();
     SubsetDefinition f;
     f.feature_tags.insert(feature);
-    segments.push_back({f, ProbabilityBound::Zero()});
+    segments.push_back({f});
   }
 
   Reconfigure({}, segments);
@@ -452,9 +452,9 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({},
               {
-                  /* 0 */ {{0xc6 /* AE */}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
-                  /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
+                  /* 0 */ {{0xc6 /* AE */}},
+                  /* 1 */ {{0x301 /* acutecomb */}},
+                  /* 2 */ {{ccmp}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -467,8 +467,8 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseCycle) {
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_BidiCycle) {
   Reconfigure(face.get(), WithDefaultFeatures(),
               {
-                  /* 0 */ {{0x0029 /* ) */}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x0028 /* ( */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x0029 /* ) */}},
+                  /* 1 */ {{0x0028 /* ( */}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -502,8 +502,8 @@ TEST_F(DependencyClosureTest, Liga) {
   // One half of the liga is in the init font
   Reconfigure(face.get(), WithDefaultFeatures({'f'}),
               {
-                  {{'a'}, ProbabilityBound::Zero()},
-                  {{'i'}, ProbabilityBound::Zero()},
+                  {{'a'}},
+                  {{'i'}},
               });
   s = CompareAnalysis({1});
   ASSERT_TRUE(s.ok()) << s;
@@ -513,9 +513,9 @@ TEST_F(DependencyClosureTest, Liga) {
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
 
   Reconfigure({}, {
-                      {liga, ProbabilityBound::Zero()},
-                      {{'f'}, ProbabilityBound::Zero()},
-                      {{'i'}, ProbabilityBound::Zero()},
+                      {liga},
+                      {{'f'}},
+                      {{'i'}},
                   });
 
   s = CompareAnalysis({0});
@@ -535,9 +535,9 @@ TEST_F(DependencyClosureTest, OverlappingSegments) {
   // One half of the liga is in the init font
   Reconfigure(face.get(), WithDefaultFeatures({}),
               {
-                  {{'f'}, ProbabilityBound::Zero()},
-                  {{'i'}, ProbabilityBound::Zero()},
-                  {{'f', 'i'}, ProbabilityBound::Zero()},
+                  {{'f'}},
+                  {{'i'}},
+                  {{'f', 'i'}},
               });
 
   Status s = CompareAnalysis({0});
@@ -554,7 +554,7 @@ TEST_F(DependencyClosureTest, UnicodeToGid_ExcludesInitFont) {
   // 0x7528 and 0x2F64 share the same glyph
   Reconfigure(noto_sans_jp.get(), {0x7528},
               {
-                  {{0x2F64}, ProbabilityBound::Zero()},
+                  {{0x2F64}},
               });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -572,8 +572,8 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
   // since it's reachable via segment 1 (through b -> c -> d).
   Reconfigure(double_nested_face.get(), {},
               {
-                  {{'a'}, ProbabilityBound::Zero()},
-                  {{'b'}, ProbabilityBound::Zero()},
+                  {{'a'}},
+                  {{'b'}},
               });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -584,14 +584,14 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
 
   Reconfigure(double_nested_face.get(), {'a'},
               {
-                  {{'b'}, ProbabilityBound::Zero()},
+                  {{'b'}},
               });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(double_nested_face.get(), {'b'},
               {
-                  {{'a'}, ProbabilityBound::Zero()},
+                  {{'a'}},
               });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -600,7 +600,7 @@ TEST_F(DependencyClosureTest, Disjunctive_Components) {
 TEST_F(DependencyClosureTest, CodepointNotInFont) {
   Reconfigure(double_nested_face.get(), {},
               {
-                  {{'A'}, ProbabilityBound::Zero()},
+                  {{'A'}},
               });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -612,11 +612,11 @@ TEST_F(DependencyClosureTest, SingleSubst) {
 
   Reconfigure(face.get(), {},
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
-                  /* 4 */ {c2sc, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'b'}},
+                  /* 2 */ {{'A'}},
+                  /* 3 */ {{0x1FC /* AEacute */}},
+                  /* 4 */ {c2sc},
               });
 
   Status s = CompareAnalysis({0});
@@ -634,10 +634,10 @@ TEST_F(DependencyClosureTest, SingleSubst) {
   // With c2sc in the init font, we can still analyze the single subst's
   Reconfigure(face.get(), c2sc,
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'b'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x1FC /* AEacute */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'b'}},
+                  /* 2 */ {{'A'}},
+                  /* 3 */ {{0x1FC /* AEacute */}},
               });
 
   s = CompareAnalysis({0});
@@ -663,11 +663,11 @@ TEST_F(DependencyClosureTest, Disjunctive) {
 
 TEST_F(DependencyClosureTest, DisjunctivePartialInInitFont) {
   // One half of a disjunctive dep is in the init font.
-  Reconfigure({'A'}, {{{0xC1}, ProbabilityBound::Zero()}});
+  Reconfigure({'A'}, {{{0xC1}}});
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
-  Reconfigure({0xC1}, {{{'A'}, ProbabilityBound::Zero()}});
+  Reconfigure({0xC1}, {{{'A'}}});
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 }
@@ -675,8 +675,8 @@ TEST_F(DependencyClosureTest, DisjunctivePartialInInitFont) {
 TEST_F(DependencyClosureTest, AlreadyInInitFont) {
   // Analysis of something already in the init font is a noop.
   Reconfigure({'A'}, {
-                         {{'A'}, ProbabilityBound::Zero()},
-                         {{0xC1}, ProbabilityBound::Zero()},
+                         {{'A'}},
+                         {{0xC1}},
                      });
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -689,8 +689,8 @@ TEST_F(DependencyClosureTest, SegmentOutOfBounds) {
 
 TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
   Reconfigure(WithDefaultFeatures({}), {
-                                           {{'i'}, ProbabilityBound::Zero()},
-                                           {{0x485}, ProbabilityBound::Zero()},
+                                           {{'i'}},
+                                           {{0x485}},
                                        });
 
   Status s = CompareAnalysis({0});
@@ -705,8 +705,8 @@ TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
 TEST_F(DependencyClosureTest, Allowed_LookAheadGlyphs) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{'i'}, ProbabilityBound::Zero()},
-                  {{0x485}, ProbabilityBound::Zero()},
+                  {{'i'}},
+                  {{0x485}},
               },
               true);
 
@@ -722,8 +722,8 @@ TEST_F(DependencyClosureTest, Allowed_LookAheadGlyphs) {
 TEST_F(DependencyClosureTest, Rejected_InitFontContext) {
   Reconfigure(WithDefaultFeatures({'i'}),
               {
-                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                  {{0x485}, ProbabilityBound::Zero()},
+                  {{0x300 /* gravecomb */}},
+                  {{0x485}},
               });
 
   // Gravecomb doesn't pass through any contextual dependencies, but
@@ -737,8 +737,8 @@ TEST_F(DependencyClosureTest, Noop_Features) {
   SubsetDefinition features;
   features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));
   Reconfigure({}, {
-                      {{'a'}, ProbabilityBound::Zero()},
-                      {features, ProbabilityBound::Zero()},
+                      {{'a'}},
+                      {features},
                   });
 
   Status s = CompareAnalysis({0});
@@ -751,8 +751,8 @@ TEST_F(DependencyClosureTest, Noop_Features) {
 TEST_F(DependencyClosureTest, UVS) {
   Reconfigure(noto_sans_jp.get(), {},
               {
-                  {{0x4fae}, ProbabilityBound::Zero()},
-                  {{0xfe00}, ProbabilityBound::Zero()},
+                  {{0x4fae}},
+                  {{0xfe00}},
               });
 
   Status s = CompareAnalysis({0});
@@ -766,21 +766,21 @@ TEST_F(DependencyClosureTest, UVS) {
 
   Reconfigure(noto_sans_jp.get(), {},
               {
-                  {{0x4fae, 0xfe00}, ProbabilityBound::Zero()},
+                  {{0x4fae, 0xfe00}},
               });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(noto_sans_jp.get(), {0x4fae},
               {
-                  {{0xfe00}, ProbabilityBound::Zero()},
+                  {{0xfe00}},
               });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
 
   Reconfigure(noto_sans_jp.get(), {0xfe00},
               {
-                  {{0x4fae}, ProbabilityBound::Zero()},
+                  {{0x4fae}},
               });
   s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -794,14 +794,14 @@ TEST_F(DependencyClosureTest, UvsAndFeatures_ConflictingConjunctiveConditions) {
 
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
-                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
-                  /* 6 */ {aalt, ProbabilityBound::Zero()},
-                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0x6406}},
+                  /* 4 */ {{0xe0100}},
+                  /* 5 */ {{0xfe00}},
+                  /* 6 */ {aalt},
+                  /* 7 */ {jp78},
               });
 
   Status s = CompareAnalysis({0});
@@ -825,7 +825,7 @@ TEST_F(DependencyClosureTest, UvsAndFeatures_ConflictingConjunctiveConditions) {
 TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{'i', 0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  {{'i', 0x300 /* gravecomb */}},
               });
 
   // The segment contains everything needed to activated the i + gravecomb
@@ -839,8 +839,8 @@ TEST_F(DependencyClosureTest, BidiMirroring) {
   // Test that the dep graph analysis accounts for bidi mirroring in the
   // harfbuzz closure
   Reconfigure({}, {
-                      {{0x2264 /* less equal */}, ProbabilityBound::Zero()},
-                      {{0x2265 /* greater equal */}, ProbabilityBound::Zero()},
+                      {{0x2264 /* less equal */}},
+                      {{0x2265 /* greater equal */}},
                   });
 
   Status s = CompareAnalysis({0});
@@ -854,8 +854,8 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
   // Test that the dep graph analysis accounts for bidi mirroring in the
   // harfbuzz closure
   Reconfigure({}, {
-                      {{'a'}, ProbabilityBound::Zero()},
-                      {{'b'}, ProbabilityBound::Zero()},
+                      {{'a'}},
+                      {{'b'}},
                   });
 
   Status s = CompareAnalysis({0});
@@ -878,9 +878,9 @@ TEST_F(DependencyClosureTest, SegmentsChanged) {
 TEST_F(DependencyClosureTest, SegmentsMerged_GlyphConditionsUpdate) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -903,9 +903,9 @@ TEST_F(DependencyClosureTest, SegmentsMerged_GlyphConditionsUpdate) {
 TEST_F(DependencyClosureTest, SegmentsMerged_InertSegments) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
               });
 
   ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0}));
@@ -919,9 +919,9 @@ TEST_F(DependencyClosureTest, SegmentsMerged_InertSegments) {
 TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
   Reconfigure(face.get(), WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
               });
 
   auto conditions = dependency_closure->AllGlyphConditions();
@@ -944,9 +944,9 @@ TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
 TEST_F(DependencyClosureTest, InitFontChanged_InertSegments) {
   Reconfigure(face.get(), WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
               });
 
   ASSERT_EQ(dependency_closure->InertSegments(), (SegmentSet{0}));
@@ -968,14 +968,14 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Nodes) {
   jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6717}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x7891}, ProbabilityBound::Zero()},
-                  /* 2 */ {{0x798f}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 4 */ {{0xe0100}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xfe00}, ProbabilityBound::Zero()},
-                  /* 6 */ {aalt, ProbabilityBound::Zero()},
-                  /* 7 */ {jp78, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0x6406}},
+                  /* 4 */ {{0xe0100}},
+                  /* 5 */ {{0xfe00}},
+                  /* 6 */ {aalt},
+                  /* 7 */ {jp78},
               });
 
   auto s =
@@ -1000,9 +1000,9 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_SubsetDef) {
 
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
-                  /* 2 */ {aalt, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6406}},
+                  /* 1 */ {{0x640f}},
+                  /* 2 */ {aalt},
               });
 
   SubsetDefinition query_def;
@@ -1025,10 +1025,10 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_SubsetDef) {
 
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
   Reconfigure(WithDefaultFeatures(), {
-                                         {{'a'}, ProbabilityBound::Zero()},
-                                         {{'b'}, ProbabilityBound::Zero()},
-                                         {{'f'}, ProbabilityBound::Zero()},
-                                         {{'i'}, ProbabilityBound::Zero()},
+                                         {{'a'}},
+                                         {{'b'}},
+                                         {{'f'}},
+                                         {{'i'}},
                                      });
 
   auto s = dependency_closure->SegmentsThatInteractWith(GlyphSet{69 /* a */});
@@ -1055,10 +1055,10 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith) {
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_Context) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'x'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'x'}},
+                  /* 1 */ {{'q'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{0x300 /* gravecomb */}},
               });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
@@ -1074,11 +1074,11 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({}, {
-                      {{'x'}, ProbabilityBound::Zero()},
-                      {{'q'}, ProbabilityBound::Zero()},
-                      {{'i'}, ProbabilityBound::Zero()},
-                      {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                      {{ccmp}, ProbabilityBound::Zero()},
+                      {{'x'}},
+                      {{'q'}},
+                      {{'i'}},
+                      {{0x300 /* gravecomb */}},
+                      {{ccmp}},
                   });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
@@ -1093,9 +1093,9 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_FeaturesInContext) {
 TEST_F(DependencyClosureTest, SegmentsThatInteractWith_InitFontContext) {
   Reconfigure(WithDefaultFeatures({'i'}),
               {
-                  {{'x'}, ProbabilityBound::Zero()},
-                  {{'q'}, ProbabilityBound::Zero()},
-                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  {{'x'}},
+                  {{'q'}},
+                  {{0x300 /* gravecomb */}},
               });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
@@ -1112,10 +1112,10 @@ TEST_F(DependencyClosureTest,
   SubsetDefinition ccmp;
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({'i'}, {
-                         {{'x'}, ProbabilityBound::Zero()},
-                         {{'q'}, ProbabilityBound::Zero()},
-                         {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
-                         {ccmp, ProbabilityBound::Zero()},
+                         {{'x'}},
+                         {{'q'}},
+                         {{0x300 /* gravecomb */}},
+                         {ccmp},
                      });
 
   ASSERT_EQ(segmentation_info->FullClosure(),
@@ -1134,10 +1134,10 @@ TEST_F(DependencyClosureTest, SegmentsThatInteractWith_LayoutFeatures) {
   jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
   Reconfigure(noto_sans_jp_vf.get(), {},
               {
-                  /* 0 */ {{0x6406}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x640f}, ProbabilityBound::Zero()},
-                  /* 2 */ {aalt, ProbabilityBound::Zero()},
-                  /* 3 */ {jp78, ProbabilityBound::Zero()},
+                  /* 0 */ {{0x6406}},
+                  /* 1 */ {{0x640f}},
+                  /* 2 */ {aalt},
+                  /* 3 */ {jp78},
               });
 
   auto s =
@@ -1168,8 +1168,8 @@ TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
 
   Reconfigure(roboto_vf.get(), init,
               {
-                  /* 0 */ {s0, ProbabilityBound::Zero()},
-                  /* 1 */ {s1, ProbabilityBound::Zero()},
+                  /* 0 */ {s0},
+                  /* 1 */ {s1},
               });
 
   Status s = CompareAnalysis({0});
@@ -1185,12 +1185,12 @@ TEST_F(DependencyClosureTest, InitFontFeatureConjunction) {
 TEST_F(DependencyClosureTest, SegmentsToAffected) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'q'}},
+                  /* 4 */ {{'A'}},
+                  /* 5 */ {{0xC1 /* Aacute */}},
               });
 
   EXPECT_EQ(dependency_closure->SegmentsToAffectedGlyphs({0}),
@@ -1226,9 +1226,9 @@ TEST_F(DependencyClosureTest, SegmentsToAffected) {
 TEST_F(DependencyClosureTest, InitFontChanged_Caching) {
   Reconfigure(WithDefaultFeatures(),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
               });
 
   auto conditions1 = dependency_closure->AllGlyphConditions();

@@ -96,13 +96,18 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
       merger.AssignMergedSegment(base_segment_index_, segments_to_merge_,
                                  *merged_segment_, new_segment_is_inert);
 
+  const auto* calculator = merger.Strategy().ProbabilityCalculator();
+  if (!calculator) {
+    return absl::InternalError("Missing probability calculator.");
+  }
+
   VLOG(0) << "  Merged " << size_before << " codepoints up to " << size_after
           << " codepoints for segment " << base_segment_index_ << "."
           << std::endl
           << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
           << "  Cost delta is " << cost_delta_ << "." << std::endl
           << "  New probability is "
-          << merged_segment_->ProbabilityBound().ToString();
+          << calculator->ComputeProbability(merged_segment_->Definition()).Value();
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
@@ -192,10 +197,7 @@ static void MergeSegments(const Merger& merger, const SegmentSet& segments,
 
   // Compute probability before modifying base since it's in the merged segments
   // array.
-  const auto* calculator = merger.Strategy().ProbabilityCalculator();
-  const auto& bound = calculator->ComputeMergedProbability(merged_segments);
   base.Definition() = std::move(union_def);
-  base.SetProbability(bound);
 }
 
 static Status FindModifiedConditions(

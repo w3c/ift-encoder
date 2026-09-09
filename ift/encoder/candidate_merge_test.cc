@@ -47,7 +47,7 @@ class CandidateMergeTest : public ::testing::Test {
   CandidateMergeTest()
       : roboto(make_hb_face(nullptr)),
         resolver(*BazelDataFileResolver::CreateForTest()),
-        empty_segment({}, ProbabilityBound::Zero()),
+        empty_segment({}),
         a(empty_segment),
         b(empty_segment),
         c(empty_segment),
@@ -105,33 +105,33 @@ class CandidateMergeTest : public ::testing::Test {
 // given very positive or very negative costs.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
   std::vector<Segment> segments = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}},
   };
-  std::vector<Segment> segments_with_merges = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'a', 'b', 'c', 'd', 'e', 'f'}}, 0.95},
+      {{{'g', 'h', 'i', 'j', 'k', 'l'}}, 0.95},
+      {{{'m', 'n', 'o', 'p', 'q', 'r'}}, 0.95},
+      {{{'s', 't', 'u', 'v', 'w', 'x'}}, 0.01},
 
       // 0 + 1
-      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'},
-       ProbabilityBound{0.98, 0.98}},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}},
+       0.98},
 
       // 0 + 1 + 2
-      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-        'o', 'p', 'q', 'r'},
-       ProbabilityBound{0.99, 0.99}},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+        'o', 'p', 'q', 'r'}},
+       0.99},
 
       // 0 + 1 + 3
-      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 's', 't',
-        'u', 'v', 'w', 'x'},
-       ProbabilityBound{0.98, 0.98}},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 's', 't',
+        'u', 'v', 'w', 'x'}},
+       0.98},
   };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -176,30 +176,30 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
 TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
   std::vector<Segment> segments = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
+      {{'a', 'b', 'c', 'd', 'e', 'f'}},
+      {{'g', 'h', 'i', 'j', 'k', 'l'}},
+      {{'m', 'n', 'o', 'p', 'q', 'r'}},
+      {{'s', 't', 'u', 'v', 'w', 'x'}},
   };
 
   double merged_01 = 1.0 - (1.0 - 0.95) * (1.0 - 0.95);
   double merged_03 = 1.0 - (1.0 - 0.95) * (1.0 - 0.01);
-  std::vector<Segment> segments_with_merges = {
-      {{'a', 'b', 'c', 'd', 'e', 'f'}, ProbabilityBound{0.95, 0.95}},
-      {{'g', 'h', 'i', 'j', 'k', 'l'}, ProbabilityBound{0.95, 0.95}},
-      {{'m', 'n', 'o', 'p', 'q', 'r'}, ProbabilityBound{0.95, 0.95}},
-      {{'s', 't', 'u', 'v', 'w', 'x'}, ProbabilityBound{0.01, 0.01}},
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'a', 'b', 'c', 'd', 'e', 'f'}}, 0.95},
+      {{{'g', 'h', 'i', 'j', 'k', 'l'}}, 0.95},
+      {{{'m', 'n', 'o', 'p', 'q', 'r'}}, 0.95},
+      {{{'s', 't', 'u', 'v', 'w', 'x'}}, 0.01},
 
       // 0 + 1
-      {{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'},
-       ProbabilityBound{merged_01, merged_01}},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}},
+       merged_01},
 
       // 0 + 3
-      {{'a', 'b', 'c', 'd', 'e', 'f', 's', 't', 'u', 'v', 'w', 'x'},
-       ProbabilityBound{merged_03, merged_03}},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 's', 't', 'u', 'v', 'w', 'x'}},
+       merged_03},
   };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -256,8 +256,8 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
       {{' ', ' '}, 100}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
 
   std::vector<Segment> segments = {
-      {{'f'}, {0.75, 0.75}},
-      {{'i'}, {0.95, 0.95}},
+      {{'f'}},
+      {{'i'}},
   };
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
@@ -307,9 +307,9 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
 // modified condition.
 TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   std::vector<Segment> segments = {
-      {{'a'}, {0.50, 0.50}},
-      {{'f'}, {0.75, 0.75}},
-      {{'i'}, {0.95, 0.95}},
+      {{'a'}},
+      {{'f'}},
+      {{'i'}},
   };
   freq::UnicodeFrequencies frequencies{
       {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
@@ -376,33 +376,33 @@ TEST_F(CandidateMergeTest, OperatorLess) {
 
 TEST_F(CandidateMergeTest, AssessPatchMerge) {
   std::vector<Segment> segments = {
-      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
-      {{'C'}, ProbabilityBound{0.95, 0.95}},
-      {{'e'}, ProbabilityBound{0.95, 0.95}},
-      {{0xe9}, ProbabilityBound{0.01, 0.01}},   // eacute
-      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+      {{'A', 'B'}},
+      {{'C'}},
+      {{'e'}},
+      {{0xe9}},   // eacute
+      {{0x106}},  // Cacute
   };
-  std::vector<Segment> segments_with_merges = {
-      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
-      {{'C'}, ProbabilityBound{0.95, 0.95}},
-      {{'e'}, ProbabilityBound{0.10, 0.10}},
-      {{0x0e9}, ProbabilityBound{0.01, 0.01}},
-      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'A', 'B'}}, 0.95},
+      {{{'C'}}, 0.95},
+      {{{'e'}}, 0.10},
+      {{{0x0e9}}, 0.01},  // eacute
+      {{{0x106}}, 0.01},  // Cacute
 
       // 1 + 4
-      {{'C', 0x106}, ProbabilityBound{0.95, 0.95}},
+      {{{'C', 0x106}}, 0.95},
 
       // 0 + 1 + 4
-      {{'A', 'B', 'C', 0x106}, ProbabilityBound{0.98, 0.98}},
+      {{{'A', 'B', 'C', 0x106}}, 0.98},
 
       // 2 + 3
-      {{'e', 0xe9}, ProbabilityBound{0.10, 0.10}},
+      {{{'e', 0xe9}}, 0.10},
 
       // 0 + 2 + 3
-      {{'A', 'B', 'e', 0xe9}, ProbabilityBound{0.95, 0.95}},
+      {{{'A', 'B', 'e', 0xe9}}, 0.95},
   };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -443,23 +443,23 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
 
 TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
   std::vector<Segment> segments = {
-      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
-      {{'C'}, ProbabilityBound{0.95, 0.95}},
-      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+      {{'A', 'B'}},
+      {{'C'}},
+      {{0x106}},  // Cacute
   };
-  std::vector<Segment> segments_with_merges = {
-      {{'A', 'B'}, ProbabilityBound{0.95, 0.95}},
-      {{'C'}, ProbabilityBound{0.95, 0.95}},
-      {{0x106}, ProbabilityBound{0.01, 0.01}},  // Cacute
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'A', 'B'}}, 0.95},
+      {{{'C'}}, 0.95},
+      {{{0x106}}, 0.01},  // Cacute
 
       // 1 + 2
-      {{'C', 0x106}, ProbabilityBound{0.95, 0.95}},
+      {{{'C', 0x106}}, 0.95},
 
       // 0 + 1 + 2
-      {{'A', 'B', 'C', 0x106}, ProbabilityBound{0.98, 0.98}},
+      {{{'A', 'B', 'C', 0x106}}, 0.98},
   };
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -490,16 +490,21 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
 
 TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
   std::vector<Segment> segments = {
-      {{'A'}, ProbabilityBound{0.95, 0.95}},
-      {{'B'}, ProbabilityBound{0.85, 0.85}},
-      {{'C'}, ProbabilityBound{0.75, 0.75}},
+      {{'A'}},
+      {{'B'}},
+      {{'C'}},
   };
-  std::vector<Segment> segments_with_merges = segments;
-  segments_with_merges.push_back({{'A', 'B'}, ProbabilityBound{0.90, 0.90}});
-  segments_with_merges.push_back({{'A', 'C'}, ProbabilityBound{0.92, 0.92}});
+
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'A'}}, 0.95},
+      {{{'B'}}, 0.85},
+      {{{'C'}}, 0.75},
+      {{{'A', 'B'}}, 0.90},
+      {{{'A', 'C'}}, 0.92},
+  };
 
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -558,16 +563,21 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
 
 TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
   std::vector<Segment> segments = {
-      {{'A'}, ProbabilityBound{0.95, 0.95}},
-      {{'B'}, ProbabilityBound{0.85, 0.85}},
-      {{'C'}, ProbabilityBound{0.75, 0.75}},
+      {{'A'}},
+      {{'B'}},
+      {{'C'}},
   };
   std::vector<Segment> segments_with_merges = segments;
-  segments_with_merges.push_back({{'A', 'B'}, ProbabilityBound{0.90, 0.90}});
-  segments_with_merges.push_back({{'A', 'C'}, ProbabilityBound{0.92, 0.92}});
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'A'}}, 0.95},
+      {{{'B'}}, 0.85},
+      {{{'C'}}, 0.75},
+      {{{'A', 'B'}}, 0.90},
+      {{{'A', 'C'}}, 0.92},
+  };
 
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments_with_merges);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -636,13 +646,19 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
 
 TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
   std::vector<Segment> segments = {
-      {{'b'}, ProbabilityBound{0.95, 0.95}},
-      {{'f'}, ProbabilityBound{0.85, 0.85}},
-      {{'i'}, ProbabilityBound{0.75, 0.75}},
+      {{'b'}},
+      {{'f'}},
+      {{'i'}},
+  };
+
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'b'}}, 0.95},
+      {{{'f'}}, 0.85},
+      {{{'i'}}, 0.75},
   };
 
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -774,13 +790,18 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
 
 TEST_F(CandidateMergeTest, ComputeInitFontCostDelta_TracksSmallestDelta) {
   std::vector<Segment> segments = {
-      {{'b'}, ProbabilityBound{0.95, 0.95}},
-      {{'f'}, ProbabilityBound{0.85, 0.85}},
-      {{'i'}, ProbabilityBound{0.75, 0.75}},
+      {{'b'}},
+      {{'f'}},
+      {{'i'}},
+  };
+  std::vector<std::pair<Segment, double>> segment_probabilities = {
+      {{{'b'}}, 0.95},
+      {{{'f'}}, 0.85},
+      {{{'i'}}, 0.75},
   };
 
   auto probability_calculator =
-      std::make_unique<freq::MockProbabilityCalculator>(segments);
+      std::make_unique<freq::MockProbabilityCalculator>(segment_probabilities);
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(

@@ -56,22 +56,22 @@ class GlyphGroupingsTest : public ::testing::Test {
   GlyphGroupingsTest()
       : roboto_(from_file("ift/common/testdata/Roboto-Regular.ttf")),
         segments_({
-            Segment({'a', 'b'}, ProbabilityBound::Zero()),  // s0
-            Segment({'c', 'd'}, ProbabilityBound::Zero()),  // s1
-            Segment({'e', 'f'}, ProbabilityBound::Zero()),  // s2
-            Segment({'g'}, ProbabilityBound::Zero()),       // s3
-            Segment({'h'}, ProbabilityBound::Zero()),       // s4
+            Segment({'a', 'b'}),  // s0
+            Segment({'c', 'd'}),  // s1
+            Segment({'e', 'f'}),  // s2
+            Segment({'g'}),       // s3
+            Segment({'h'}),       // s4
         }),
 
         glyph_groupings_(hb_face_get_glyph_count(roboto_.get())),
         glyph_groupings_simplification_(hb_face_get_glyph_count(roboto_.get()),
                                         true),
         segments_complex_({
-            Segment({0x54}, ProbabilityBound::Zero()),    // s0
-            Segment({0x6C}, ProbabilityBound::Zero()),    // s1
-            Segment({0x13C}, ProbabilityBound::Zero()),   // s2
-            Segment({0x21A}, ProbabilityBound::Zero()),   // s3
-            Segment({0xF6C3}, ProbabilityBound::Zero()),  // s4
+            Segment({0x54}),    // s0
+            Segment({0x6C}),    // s1
+            Segment({0x13C}),   // s2
+            Segment({0x21A}),   // s3
+            Segment({0xF6C3}),  // s4
         }),
         glyph_groupings_complex_(hb_face_get_glyph_count(roboto_.get())) {
     uint32_t num_glyphs = hb_face_get_glyph_count(roboto_.get());

@@ -57,8 +57,8 @@ TEST_F(GlyphClosureCacheTest, SegmentClosure) {
   auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
-      {{'f'}, ProbabilityBound::Zero()},
-      {{'i'}, ProbabilityBound::Zero()},
+      {{'f'}},
+      {{'i'}},
   };
 
   SubsetDefinition init;
@@ -84,8 +84,8 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
   auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
-      {{'A'}, ProbabilityBound::Zero()},
-      {{0xC1 /* Aacute*/}, ProbabilityBound::Zero()},
+      {{'A'}},
+      {{0xC1 /* Aacute*/}},
   };
 
   // s0 or s1 -> g37 (A)
@@ -111,8 +111,8 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
   auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
-      {{'A'}, ProbabilityBound::Zero()},
-      {{0xC1 /* Aacute*/}, ProbabilityBound::Zero()},
+      {{'A'}},
+      {{0xC1 /* Aacute*/}},
   };
 
   SubsetDefinition init;
@@ -137,8 +137,8 @@ TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
   auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
-      {{'f'}, ProbabilityBound::Zero()},
-      {{'i'}, ProbabilityBound::Zero()},
+      {{'f'}},
+      {{'i'}},
   };
 
   SubsetDefinition init;
@@ -178,8 +178,8 @@ TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
   auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
   ASSERT_TRUE(cache.ok()) << cache.status();
   std::vector<Segment> segments{
-      {{'A'}, ProbabilityBound::Zero()},
-      {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+      {{'A'}},
+      {{0xC1 /* Aacute */}},
   };
 
   SubsetDefinition init_font;

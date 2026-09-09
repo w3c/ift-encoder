@@ -20,6 +20,13 @@ struct ProbabilityBound {
   double Max() const { return max_; }
   double Average() const { return (min_ + max_) / 2.0; }
 
+  // Converts the bound to a single value using the preferred approach.
+  //
+  // Currently this uses the average value.
+  double Value() const {
+    return Average();
+  }
+
   bool operator==(const ProbabilityBound& other) const {
     return min_ == other.min_ && max_ == other.max_;
   }

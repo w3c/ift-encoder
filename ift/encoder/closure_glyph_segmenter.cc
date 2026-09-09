@@ -289,9 +289,9 @@ struct SegmentOrdering {
       return group_index < other.group_index;
     }
 
-    if (probability.Average() != other.probability.Average()) {
+    if (probability.Value() != other.probability.Value()) {
       // Segment probability descending.
-      return probability.Average() > other.probability.Average();
+      return probability.Value() > other.probability.Value();
     }
 
     // Break ties with original segment index ascending.
@@ -324,8 +324,7 @@ static std::vector<Segment> PreGroupSegments(
       strategy = &(merge_group_it->second);
     }
 
-    Segment segment =
-        Segment{subset_definitions[o.original_index], o.probability};
+    Segment segment = Segment{subset_definitions[o.original_index]};
     ordering_it++;
 
     // Don't pregroup feature segments, these generally have broad interactions
@@ -357,13 +356,6 @@ static std::vector<Segment> PreGroupSegments(
 
         ordering_it++;
         remaining--;
-      }
-
-      if (strategy->UseCosts()) {
-        // Segment definition has changed so probability needs to be recomputed.
-        segment.SetProbability(
-            strategy->ProbabilityCalculator()->ComputeProbability(
-                segment.Definition()));
       }
     }
 
@@ -409,6 +401,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
           << "  " << ungrouped_segments.size()
           << " segments that are ungrouped";
 
+  // TODO XXXXX update to better handle multiple strategies
   std::vector<ProbabilityBound> segment_probabilities =
       ComputeSegmentProbabilities(subset_definitions, merge_groups);
   std::vector<SegmentOrdering> ordering;
@@ -669,8 +662,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
        probability_calculators) {
     std::vector<Segment> segments;
     for (const auto& def : segmentation.Segments()) {
-      auto P = probability_calculator->ComputeProbability(def);
-      Segment s(def, P);
+      Segment s(def);
       segments.push_back(std::move(s));
     }
 
@@ -697,7 +689,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
         continue;
       }
-      double Pcp = probability_calculator->ComputeProbability({cp}).Average();
+      double Pcp = probability_calculator->ComputeProbability({cp}).Value();
       ideal_cost += Pcp * incremental_size;
     }
 

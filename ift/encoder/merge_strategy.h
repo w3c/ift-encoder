@@ -129,10 +129,12 @@ class MergeStrategy {
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
 
+  // TODO XXXX make this status returning and guarantee non-null;
   freq::ProbabilityCalculator* ProbabilityCalculator() {
     return probability_calculator_.get();
   }
 
+  // TODO XXXX make this status returning and guarantee non-null;
   const freq::ProbabilityCalculator* ProbabilityCalculator() const {
     return probability_calculator_.get();
   }

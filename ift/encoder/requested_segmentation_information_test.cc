@@ -43,9 +43,9 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
   std::unique_ptr<GlyphClosureCache> cache =
       *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
-      {{'a', 'b'}, ProbabilityBound::Zero()},
-      {{'b', 'c'}, ProbabilityBound::Zero()},
-      {{'d'}, ProbabilityBound::Zero()},
+      {{'a', 'b'}},
+      {{'b', 'c'}},
+      {{'d'}},
   };
 
   auto info_or =
@@ -66,9 +66,9 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
   std::unique_ptr<GlyphClosureCache> cache =
       *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
-      {{'a'}, ProbabilityBound::Zero()},
-      {{'b'}, ProbabilityBound::Zero()},
-      {{'c'}, ProbabilityBound::Zero()},
+      {{'a'}},
+      {{'b'}},
+      {{'c'}},
   };
 
   auto info_or =
@@ -81,7 +81,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
   EXPECT_EQ(info->SegmentsForCodepoints({'c'}), (SegmentSet{2}));
 
   // Merge segment 1 into segment 0, new definition is {'a', 'b'}
-  Segment merged{{'a', 'b'}, ProbabilityBound::Zero()};
+  Segment merged{{'a', 'b'}};
   info->AssignMergedSegment(0, {1}, merged);
 
   EXPECT_EQ(info->SegmentsForCodepoints({'a'}), (SegmentSet{0}));
@@ -93,8 +93,8 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
   std::unique_ptr<GlyphClosureCache> cache =
       *GlyphClosureCache::Create(roboto.get(), *resolver);
   std::vector<Segment> segments{
-      {{'a', 'b'}, ProbabilityBound::Zero()},
-      {{'b', 'c'}, ProbabilityBound::Zero()},
+      {{'a', 'b'}},
+      {{'b', 'c'}},
   };
 
   auto info_or =

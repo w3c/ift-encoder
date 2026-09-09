@@ -91,9 +91,9 @@ class DependencyGraphTest : public ::testing::Test {
 
  private:
   std::vector<Segment> segments = {
-      /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-      /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-      /* 2 */ {{'i'}, ProbabilityBound::Zero()},
+      /* 0 */ {{'a'}},
+      /* 1 */ {{'f'}},
+      /* 2 */ {{'i'}},
   };
 
  protected:
@@ -113,8 +113,8 @@ class DependencyGraphTest : public ::testing::Test {
 TEST_F(DependencyGraphTest, InitFontTraversal) {
   Reconfigure(WithDefaultFeatures({'f', 'i'}),
               {
-                  {{'a'}, ProbabilityBound::Zero()},
-                  {{'b'}, ProbabilityBound::Zero()},
+                  {{'a'}},
+                  {{'b'}},
               });
 
   GlyphSet all_g = GlyphSet::all();
@@ -179,8 +179,7 @@ TEST_F(DependencyGraphTest, ClosureTraversal_FiltersInputNodes) {
 TEST_F(DependencyGraphTest, ClosureTraversal_FiltersNotInFont) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xD4DB},
-                   ProbabilityBound::Zero()},  // korean codepoint not in Roboto
+                  {{0xD4DB}},  // korean codepoint not in Roboto
               });
 
   auto r = graph.ClosureTraversal({Node::Unicode(0xD4DB)});
@@ -192,9 +191,9 @@ TEST_F(DependencyGraphTest, ClosureTraversal_FiltersNotInFont) {
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_Traversal) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xe1}, ProbabilityBound::Zero()},   // á
-                  {{0x61}, ProbabilityBound::Zero()},   // a
-                  {{0x301}, ProbabilityBound::Zero()},  // combining acute
+                  {{0xe1}},   // á
+                  {{0x61}},   // a
+                  {{0x301}},  // combining acute
               });
 
   auto r = graph.ClosureTraversal({Node::Unicode(0xe1)});
@@ -209,8 +208,8 @@ TEST_F(DependencyGraphTest, UnicodeCompDecomp_Traversal) {
 TEST_F(DependencyGraphTest, UnicodeCompDecomp_IncludesNonSegmentCodepoints) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0xe1}, ProbabilityBound::Zero()},  // á
-                  {{0x61}, ProbabilityBound::Zero()},  // a
+                  {{0xe1}},  // á
+                  {{0x61}},  // a
               });
 
   // Even though 0x301 is not in a segment's definition closure traversal will
@@ -230,8 +229,8 @@ TEST_F(DependencyGraphTest, UnicodeCompDecomp_CompositionExclusion) {
   // U+2126 (OHM SIGN) decomposes to U+03A9 (GREEK CAPITAL LETTER OMEGA)
   // and is in the Full_Composition_Exclusion list.
   Reconfigure(WithDefaultFeatures({}), {
-                                           {{0x2126}, ProbabilityBound::Zero()},
-                                           {{0x3a9}, ProbabilityBound::Zero()},
+                                           {{0x2126}},
+                                           {{0x3a9}},
                                        });
 
   // Only composition is excluded so decomposition should still work.
@@ -251,10 +250,10 @@ TEST_F(DependencyGraphTest, UnicodeCompDecomp_HangulExclusionTraversal) {
   // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/#G24646)
   Reconfigure(noto_sans_kr.get(), WithDefaultFeatures({}),
               {
-                  {{0xD4DB}, ProbabilityBound::Zero()},
-                  {{0x1111}, ProbabilityBound::Zero()},
-                  {{0x1171}, ProbabilityBound::Zero()},
-                  {{0x11B6}, ProbabilityBound::Zero()},
+                  {{0xD4DB}},
+                  {{0x1111}},
+                  {{0x1171}},
+                  {{0x11B6}},
               });
 
   auto r = graph.ClosureTraversal({Node::Unicode(0xD4DB)});
@@ -274,11 +273,11 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
   init.feature_tags.insert(HB_TAG('f', 'r', 'a', 'c'));
 
   Reconfigure(init, {
-                        {{'i'}, ProbabilityBound::Zero()},
-                        {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                        {{'i'}},
+                        {{0x300 /* gravecomb */}},
 
-                        {{'1'}, ProbabilityBound::Zero()},
-                        {{0x2044 /* fraction */}, ProbabilityBound::Zero()},
+                        {{'1'}},
+                        {{0x2044 /* fraction */}},
                     });
 
   auto r = graph.ClosureTraversal({
@@ -318,7 +317,7 @@ TEST_F(DependencyGraphTest, ContextGlyphs) {
 TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
   Reconfigure(WithDefaultFeatures({'i'}),
               {
-                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  {{0x300 /* gravecomb */}},
               });
 
   auto r = graph.ClosureTraversal({
@@ -336,8 +335,8 @@ TEST_F(DependencyGraphTest, ContextGlyphTraversal) {
 TEST_F(DependencyGraphTest, ClosurePhasesEnforced) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{0x133 /* ij */}, ProbabilityBound::Zero()},
-                  {{0x300 /* gravecomb */}, ProbabilityBound::Zero()},
+                  {{0x133 /* ij */}},
+                  {{0x300 /* gravecomb */}},
               });
 
   auto r = graph.ClosureTraversal({
@@ -363,8 +362,8 @@ TEST_F(DependencyGraphTest, IgnoreUnreachable_Uvs) {
   /* <map uv="0x4fae" uvs="0xfe00" name="uniFA30"/>  */
   Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
               {
-                  {{0x4fae}, ProbabilityBound::Zero()},
-                  {{0xfa30}, ProbabilityBound::Zero()},
+                  {{0x4fae}},
+                  {{0xfa30}},
               });
 
   auto r = graph.ClosureTraversal({
@@ -382,8 +381,8 @@ TEST_F(DependencyGraphTest, IgnoreAlreadyReachedPendingEdge) {
   Reconfigure(
       WithDefaultFeatures({}),
       {
-          {{'f', 0xfb01 /* fi */, 0xfb03 /* ffi */}, ProbabilityBound::Zero()},
-          {{'i'}, ProbabilityBound::Zero()},
+          {{'f', 0xfb01 /* fi */, 0xfb03 /* ffi */}},
+          {{'i'}},
       });
 
   auto r = graph.ClosureTraversal({
@@ -405,8 +404,8 @@ TEST_F(DependencyGraphTest, IgnoreDefaultUVS) {
   /* <map uv="0x798f" uvs="0xe0100"/> should be ignored  */
   Reconfigure(noto_sans_jp_vf.get(), WithDefaultFeatures({}),
               {
-                  {{0x798f}, ProbabilityBound::Zero()},
-                  {{0xe0100}, ProbabilityBound::Zero()},
+                  {{0x798f}},
+                  {{0xe0100}},
               });
 
   auto r = graph.ClosureTraversal({
@@ -424,8 +423,8 @@ TEST_F(DependencyGraphTest, IgnoreDefaultUVS) {
 TEST_F(DependencyGraphTest, IgnoreUnreachable_Liga) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  {{'f'}, ProbabilityBound::Zero()},
-                  {{0xfb01 /* fi */}, ProbabilityBound::Zero()},
+                  {{'f'}},
+                  {{0xfb01 /* fi */}},
               });
 
   auto r = graph.ClosureTraversal({
@@ -446,8 +445,8 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge) {
   SubsetDefinition c2sc;
   c2sc.feature_tags = {HB_TAG('c', '2', 's', 'c')};
   Reconfigure(WithDefaultFeatures({'A'}), {
-                                              {{'B'}, ProbabilityBound::Zero()},
-                                              {c2sc, ProbabilityBound::Zero()},
+                                              {{'B'}},
+                                              {c2sc},
                                           });
 
   /* ### s0 ### */
@@ -491,8 +490,8 @@ TEST_F(DependencyGraphTest, ImpliedFeatureEdge_Liga) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   Reconfigure({'f'}, {
-                         {{'i'}, ProbabilityBound::Zero()},
-                         {liga, ProbabilityBound::Zero()},
+                         {{'i'}},
+                         {liga},
                      });
 
   /* s0 constraints not satisfied */
@@ -527,8 +526,8 @@ TEST_F(DependencyGraphTest, PendingEdgesCollection) {
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   // Roboto has f + i -> fi in liga.
   Reconfigure({'f'}, {
-                         {{'i'}, ProbabilityBound::Zero()},
-                         {liga, ProbabilityBound::Zero()},
+                         {{'i'}},
+                         {liga},
                      });
 
   // Start with only s0 (i). f is in init.
@@ -555,8 +554,8 @@ TEST_F(DependencyGraphTest, PendingEdgesCollection) {
 
 TEST_F(DependencyGraphTest, RequiredGlyphsFor_Liga) {
   Reconfigure(WithDefaultFeatures({}), {
-                                           {{'f'}, ProbabilityBound::Zero()},
-                                           {{'i'}, ProbabilityBound::Zero()},
+                                           {{'f'}},
+                                           {{'i'}},
                                        });
 
   auto traversal = graph.ClosureTraversal({
@@ -601,10 +600,10 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   Reconfigure({}, {
-                      {{'a'}, ProbabilityBound::Zero()},
-                      {{'f'}, ProbabilityBound::Zero()},
-                      {{'i'}, ProbabilityBound::Zero()},
-                      {liga, ProbabilityBound::Zero()},
+                      {{'a'}},
+                      {{'f'}},
+                      {{'i'}},
+                      {liga},
                   });
 
   auto sccs_or = graph.StronglyConnectedComponents(
@@ -673,8 +672,8 @@ TEST_F(DependencyGraphTest,
 
   Reconfigure(WithDefaultFeatures({'f', 'i'}),
               {
-                  {{'a'}, ProbabilityBound::Zero()},
-                  {dlig, ProbabilityBound::Zero()},
+                  {{'a'}},
+                  {dlig},
               });
 
   auto sccs_or = graph.StronglyConnectedComponents(
@@ -696,12 +695,12 @@ TEST_F(DependencyGraphTest,
        StronglyConnectedComponents_TopologicalSorting_InitFontFeatures) {
   Reconfigure(WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'a'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 2 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 3 */ {{'q'}, ProbabilityBound::Zero()},
-                  /* 4 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 5 */ {{0xC1 /* Aacute */}, ProbabilityBound::Zero()},
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'q'}},
+                  /* 4 */ {{'A'}},
+                  /* 5 */ {{0xC1 /* Aacute */}},
               });
 
   auto sccs_or = graph.StronglyConnectedComponents(
@@ -728,9 +727,9 @@ TEST_F(DependencyGraphTest,
   ccmp.feature_tags = {HB_TAG('c', 'c', 'm', 'p')};
   Reconfigure({},
               {
-                  /* 0 */ {{0xc6 /* AE */}, ProbabilityBound::Zero()},
-                  /* 1 */ {{0x301 /* acutecomb */}, ProbabilityBound::Zero()},
-                  /* 2 */ {{ccmp}, ProbabilityBound::Zero()},
+                  /* 0 */ {{0xc6 /* AE */}},
+                  /* 1 */ {{0x301 /* acutecomb */}},
+                  /* 2 */ {{ccmp}},
               });
 
   // With both GSUB and glyf enabled, it should find a cycle.
@@ -770,8 +769,8 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_TableFiltering) {
 
   Reconfigure(WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'A'}, ProbabilityBound::Zero()},
-                  /* 1 */ {c2sc, ProbabilityBound::Zero()},
+                  /* 0 */ {{'A'}},
+                  /* 1 */ {c2sc},
               });
 
   glyph_id_t gid_A = *FontHelper::GetNominalGlyph(face.get(), 'A');
@@ -798,9 +797,9 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeFiltering) {
 
   Reconfigure(WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 2 */ {liga, ProbabilityBound::Zero()},
+                  /* 0 */ {{'f'}},
+                  /* 1 */ {{'i'}},
+                  /* 2 */ {liga},
               });
 
   glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
@@ -824,9 +823,9 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges) {
 
   Reconfigure(WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 2 */ {liga, ProbabilityBound::Zero()},
+                  /* 0 */ {{'f'}},
+                  /* 1 */ {{'i'}},
+                  /* 2 */ {liga},
               });
 
   auto edges_or = graph.CollectIncomingEdges(
@@ -868,10 +867,10 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_NodeInclusionFilter) {
   SubsetDefinition liga;
   liga.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
   Reconfigure({}, {
-                      {{'a'}, ProbabilityBound::Zero()},
-                      {{'f'}, ProbabilityBound::Zero()},
-                      {{'i'}, ProbabilityBound::Zero()},
-                      {liga, ProbabilityBound::Zero()},
+                      {{'a'}},
+                      {{'f'}},
+                      {{'i'}},
+                      {liga},
                   });
 
   glyph_id_t gid_f = *FontHelper::GetNominalGlyph(face.get(), 'f');
@@ -897,9 +896,9 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeInclusionFilter) {
 
   Reconfigure(WithDefaultFeatures({}),
               {
-                  /* 0 */ {{'f'}, ProbabilityBound::Zero()},
-                  /* 1 */ {{'i'}, ProbabilityBound::Zero()},
-                  /* 2 */ {liga, ProbabilityBound::Zero()},
+                  /* 0 */ {{'f'}},
+                  /* 1 */ {{'i'}},
+                  /* 2 */ {liga},
               });
 
   glyph_id_t gid_fi = *FontHelper::GetNominalGlyph(face.get(), 0xfb01);

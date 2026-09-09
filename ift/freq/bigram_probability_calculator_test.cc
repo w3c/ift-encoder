@@ -63,28 +63,9 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   BigramProbabilityCalculator calc(std::move(frequencies));
 
-  Segment s1{{'a'}, calc.ComputeProbability({'a'})};
-  Segment s2{{'b'}, calc.ComputeProbability({'b'})};
+  Segment s1{{'a'}};
+  Segment s2{{'b'}};
 
-  double Pab = 0.70 + 0.60 - 0.40;
-  ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
-            (ProbabilityBound{Pab, Pab}));
-}
-
-TEST(BigramProbabilityCalculatorTest,
-     ComputeMergedProbability_SegmentProbNotConsidered) {
-  UnicodeFrequencies frequencies{
-      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
-
-      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
-  };
-
-  BigramProbabilityCalculator calc(std::move(frequencies));
-
-  Segment s1{{'a'}, ProbabilityBound{0.93, 0.93}};
-  Segment s2{{'b'}, calc.ComputeProbability({'b'})};
-
-  // On merge the individual segment probabilities are not used in computing bounds
   double Pab = 0.70 + 0.60 - 0.40;
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}),
             (ProbabilityBound{Pab, Pab}));
@@ -100,8 +81,8 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability_Complex) {
 
   BigramProbabilityCalculator calc(std::move(frequencies));
 
-  Segment s1{{'a', 'b'}, calc.ComputeProbability({'a', 'b'})};
-  Segment s2{{'c', 'd'}, calc.ComputeProbability({'c', 'd'})};
+  Segment s1{{'a', 'b'}};
+  Segment s2{{'c', 'd'}};
   ProbabilityBound expected = calc.ComputeProbability({'a', 'b', 'c', 'd'});
   ASSERT_EQ(calc.ComputeMergedProbability({&s1, &s2}), expected);
 
@@ -109,9 +90,9 @@ TEST(BigramProbabilityCalculatorTest, ComputeMergedProbability_Complex) {
   ASSERT_EQ(calc.ComputeMergedProbability({&s1}), expected);
 
   expected = calc.ComputeProbability({'a', 'b', 'c', 'd', 'e'});
-  Segment s3{{'a', 'd'}, calc.ComputeProbability({'a', 'd'})};
-  Segment s4{{'b', 'e'}, calc.ComputeProbability({'b', 'e'})};
-  Segment s5{{'c'}, calc.ComputeProbability({'c'})};
+  Segment s3{{'a', 'd'}};
+  Segment s4{{'b', 'e'}};
+  Segment s5{{'c'}};
   ProbabilityBound actual = calc.ComputeMergedProbability({&s3, &s4, &s5});
   ASSERT_NEAR(actual.Min(), expected.Min(), 1e-9);
   ASSERT_NEAR(actual.Max(), expected.Max(), 1e-9);
