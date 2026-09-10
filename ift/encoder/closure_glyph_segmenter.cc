@@ -270,7 +270,7 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     for (segment_index_t s : segments) {
       ProbabilityBound p =
           calculator.ComputeProbability(subset_definitions[s]);
-      if (p.Min() > out[s].Min()) {
+      if (p.Value() > out[s].Value()) {
         out[s] = p;
       }
     }
@@ -335,7 +335,7 @@ static std::vector<Segment> PreGroupSegments(
 
     if (strategy != nullptr && !is_feature_segment &&
         strategy->PreClosureGroupSize() > 1 &&
-        o.probability.Max() <= strategy->PreClosureProbabilityThreshold()) {
+        o.probability.Value() <= strategy->PreClosureProbabilityThreshold()) {
       uint32_t remaining = strategy->PreClosureGroupSize() - 1;
       while (remaining > 0) {
         if (ordering_it == ordering.end() ||

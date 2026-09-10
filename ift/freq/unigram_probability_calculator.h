@@ -8,7 +8,7 @@
 
 namespace ift::freq {
 
-constexpr size_t UNIGRAM_PROBABILITY_CACHE_SIZE = 50000;
+constexpr size_t UNIGRAM_PROBABILITY_CACHE_SIZE = 300000;
 
 // The UnigramProbabilityCalculator calculates segment probabilites of occurence
 // using unigram's (ie. one probability per codepoint). Because no additional
@@ -16,7 +16,7 @@ constexpr size_t UNIGRAM_PROBABILITY_CACHE_SIZE = 50000;
 // calculations assume that these unigram probabilities are fully independent.
 class UnigramProbabilityCalculator : public ProbabilityCalculator {
  public:
-  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies, size_t max_cache_size = BIGRAM_PROBABILITY_CACHE_SIZE);
+  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies, size_t max_cache_size = UNIGRAM_PROBABILITY_CACHE_SIZE);
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
