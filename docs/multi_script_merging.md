@@ -162,7 +162,9 @@ flowchart TD
 
 ---
 
-### Commit 4: Segment Ordering, Candidate Selection & Optimization Cutoff Aggregation
+### Commit 4: Segment Ordering, Candidate Selection & Optimization Cutoff Aggregation (Completed)
+
+**Status**: Completed
 
 **Goal**: Update segment ordering, candidate collections, inert pruning, and optimization cutoff to account for all probability calculators in a strategy.
 
@@ -188,9 +190,29 @@ flowchart TD
      * In `Merger::BestCaseInertProbabilityThreshold()`: Use $P_{\text{agg}}(\text{base})$ and $P_{\text{agg}}(\text{other})$ to compute threshold and skip candidates.
   4. **Patch Merge Candidate Ordering**:
      * In `Merger::TryNextPatchMerge()`: Sort composite conditions by aggregate probability $\sum_m P_m(\text{condition})$ descending.
+* **Implementation note**: The aggregate probability helpers introduced in
+  commit 3 were moved from `candidate_merge.cc` onto `Merger`
+  (`AggregateProbability()`, `AggregateMergedProbability()` and
+  `MaxAggregateProbability()`) so that both cost delta computation and
+  candidate selection share a single definition. Note that an aggregate
+  probability ranges over $[0, M]$ rather than $[0, 1]$, so the clamp in
+  `BestCaseInertProbabilityThreshold()` was changed from `1.0` to
+  `MaxAggregateProbability()`.
+
+  `ComputeSegmentProbabilities()` is the one exception: it *averages* rather
+  than sums across a strategy's calculators. Its output is compared against
+  `PreClosureProbabilityThreshold()` and against the probabilities of segments
+  from other strategies, so it must stay in $[0, 1]$ and must not scale with
+  the number of calculators in a strategy.
 * **Verification**:
   * Unit tests in `closure_glyph_segmenter_test.cc`: Verify segment ordering prioritizes codepoints with high frequency in any calculator over tail codepoints with low frequency in all calculators.
   * Run `bazel test -c opt //ift/encoder:closure_glyph_segmenter_test`.
+  * Note: the inert candidate pruning change (item 3) is a soundness fix for an
+    optimization and has no observable effect on the resulting segmentation. A
+    candidate with a low probability under the first calculator but a high
+    aggregate probability is always a cross calculator merge, which is rejected
+    on cost grounds anyway. It is therefore covered indirectly by
+    `MultipleProfiles_MergesWithinEachCalculator`.
 
 ---
 

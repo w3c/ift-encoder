@@ -29,6 +29,38 @@ bool Merger::ShouldRecordMergedSizeReductions() const {
   return absl::GetFlag(FLAGS_record_merged_size_reductions);
 }
 
+StatusOr<double> Merger::AggregateProbability(
+    const SubsetDefinition& definition) const {
+  double total = 0.0;
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    total += TRY(profile.Calculator())->ComputeProbability(definition).Value();
+  }
+  return total;
+}
+
+StatusOr<double> Merger::AggregateProbability(
+    const ActivationCondition& condition) const {
+  const auto& segments = Context().SegmentationInfo().Segments();
+  double total = 0.0;
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    total += TRY(condition.Probability(segments, *TRY(profile.Calculator())));
+  }
+  return total;
+}
+
+StatusOr<double> Merger::AggregateMergedProbability(
+    const ActivationCondition& condition,
+    segment_index_t merged_segment_index, const Segment& merged_segment) const {
+  const auto& segments = Context().SegmentationInfo().Segments();
+  double total = 0.0;
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    total += TRY(condition.MergedProbability(segments, merged_segment_index,
+                                             merged_segment,
+                                             *TRY(profile.Calculator())));
+  }
+  return total;
+}
+
 StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
   if (strategy_.IsNone()) {
     return std::nullopt;
@@ -79,10 +111,8 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
     if (!glyphs.intersects(candidate_patch_merge_glyphs_)) {
       continue;
     }
-    ordered_candidates.emplace_back(
-        condition,
-        TRY(condition.Probability(Context().SegmentationInfo().Segments(),
-                                  *TRY(strategy_.ProbabilityCalculator()))));
+    ordered_candidates.emplace_back(condition,
+                                    TRY(AggregateProbability(condition)));
   }
   std::sort(ordered_candidates.begin(), ordered_candidates.end(),
             [](const auto& a, const auto& b) {
@@ -324,7 +354,6 @@ SegmentSet Merger::ComputeCandidateSegments(
 
 Status Merger::InitOptimizationCutoff() {
   if (strategy_.UseCosts()) {
-    const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
     optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
     if (optimization_cutoff_segment_ <
         context_->SegmentationInfo().Segments().size()) {
@@ -332,7 +361,7 @@ Status Merger::InitOptimizationCutoff() {
       VLOG(1) << "Cutting off optimization at segment "
               << optimization_cutoff_segment_ << ", P("
               << optimization_cutoff_segment_ << ") = "
-              << calculator.ComputeProbability(s.Definition()).Value();
+              << TRY(AggregateProbability(s.Definition()));
     } else {
       VLOG(1) << "No optimization cutoff.";
     }
@@ -348,8 +377,11 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
   // probabilites are too small to have any real impact on the final costs,
   // considering only exclusive segments is good enough for this calculation and
   // significantly simplifies things.
-
-  const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
+  //
+  // Costs are computed against all of the strategies probability calculators,
+  // so the aggregate probability of each segment is used here. A segment which
+  // is frequently used by at least one of the calculators will as a result be
+  // kept above the cutoff.
 
   // First compute the total cost for all active segments
   double total_cost = 0.0;
@@ -362,7 +394,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
 
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
     const auto& segment = context_->SegmentationInfo().Segments()[s];
-    double probability = calculator.ComputeProbability(segment.Definition()).Value();
+    double probability = TRY(AggregateProbability(segment.Definition()));
     total_cost += probability * (size + overhead);
   }
 
@@ -378,7 +410,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
 
     const auto& segment = context_->SegmentationInfo().Segments()[s];
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
-    double probability = calculator.ComputeProbability(segment.Definition()).Value();
+    double probability = TRY(AggregateProbability(segment.Definition()));
     cutoff_tail_cost -= probability * (size + overhead);
     if (cutoff_tail_cost < 0.0) {
       // This segment puts us above the cutoff, so set the cutoff as the
@@ -518,6 +550,12 @@ StatusOr<std::optional<InvalidationSet>> Merger::PatchMergeWithCosts(
 double Merger::BestCaseInertProbabilityThreshold(
     uint32_t base_patch_size, double base_probability,
     double lowest_cost_delta) const {
+  // Note: all probabilities here are aggregate probabilities (summed across
+  // all of the strategies probability calculators), matching how cost deltas
+  // are computed. The derivation below is unaffected since costs are linear in
+  // the probabilities, but the resulting threshold is bounded by the maximum
+  // aggregate probability instead of 1.0.
+  //
   // The following assumptions are made:
   // - P(base) >= P(other)
   // - the best case merged size is max(base_size, other_size) + k
@@ -542,10 +580,11 @@ double Merger::BestCaseInertProbabilityThreshold(
   //
   // P(other) > (k * P(base) - lowest_cost_delta) / base_size
   base_patch_size += Strategy().NetworkOverheadCost();
-  return std::min(1.0, std::max(0.0, (((double)BEST_CASE_MERGE_SIZE_DELTA) *
-                                          base_probability -
-                                      lowest_cost_delta) /
-                                         ((double)base_patch_size)));
+  return std::min(MaxAggregateProbability(),
+                  std::max(0.0, (((double)BEST_CASE_MERGE_SIZE_DELTA) *
+                                     base_probability -
+                                 lowest_cost_delta) /
+                                    ((double)base_patch_size)));
 }
 
 Status Merger::CollectExclusiveCandidateMerges(
@@ -556,12 +595,12 @@ Status Merger::CollectExclusiveCandidateMerges(
   uint32_t base_size =
       TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
 
-  const auto& calculator = *TRY(strategy_.ProbabilityCalculator());
   const auto& base_segment = Context()
                                 .SegmentationInfo()
                                 .Segments()
                                 .at(base_segment_index);
-  double base_probability = calculator.ComputeProbability(base_segment.Definition()).Value();
+  double base_probability =
+      TRY(AggregateProbability(base_segment.Definition()));
 
   double inert_threshold = -1.0;
   if (smallest_candidate_merge.has_value()) {
@@ -589,7 +628,7 @@ Status Merger::CollectExclusiveCandidateMerges(
                 .Segments()
                 .at(segment_index);
     if (context_->InertSegments().contains(segment_index) &&
-        calculator.ComputeProbability(segment.Definition()).Value() <= inert_threshold) {
+        TRY(AggregateProbability(segment.Definition())) <= inert_threshold) {
       // Since we iteration is in probability order from highest to lowest, once
       // one segment fails the threshold then we know all further ones will as
       // well.

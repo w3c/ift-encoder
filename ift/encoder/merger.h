@@ -95,6 +95,48 @@ class Merger {
 
   void LogMergedSizeHistogram() const;
 
+  // The total cost of a segmentation is defined as the sum of the costs
+  // evaluated independently against each of the strategies probability
+  // calculators (see docs/multi_script_merging.md):
+  //
+  //   cost(S) = sum_m sum_i P_m(c_i) * (size(p_i) + k)
+  //
+  // Patch sizes and glyph sets are identical for all calculators, only the
+  // probabilities differ. As a result the summed cost of a patch can be
+  // computed using the aggregate probability, sum_m P_m(c_i), of the
+  // associated activation condition:
+  //
+  //   sum_m P_m(c_i) * (size(p_i) + k) = (sum_m P_m(c_i)) * (size(p_i) + k)
+  //
+  // The same applies to cost deltas since the cost function is linear over the
+  // set of calculators.
+  //
+  // Note: unlike a regular probability an aggregate probability is in the
+  // range [0, number of probability profiles].
+
+  // Computes the aggregate probability that a page uses at least one of the
+  // codepoints/features in definition.
+  absl::StatusOr<double> AggregateProbability(
+      const SubsetDefinition& definition) const;
+
+  // Computes the aggregate probability of condition being activated.
+  absl::StatusOr<double> AggregateProbability(
+      const ActivationCondition& condition) const;
+
+  // Same as AggregateProbability(condition), but computes the probability of
+  // condition as it would be if merged_segment_index has been replaced by
+  // merged_segment.
+  absl::StatusOr<double> AggregateMergedProbability(
+      const ActivationCondition& condition,
+      segment_index_t merged_segment_index,
+      const Segment& merged_segment) const;
+
+  // The largest value an aggregate probability can take, that is the number of
+  // probability profiles in the strategy.
+  double MaxAggregateProbability() const {
+    return (double)strategy_.ProbabilityProfiles().size();
+  }
+
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
          ift::common::SegmentSet inscope_segments,

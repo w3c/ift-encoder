@@ -13,6 +13,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
@@ -1842,6 +1843,142 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_BothHaveInitFontThreshold) {
       {},     // 'b' (moved to init font)
       {},     // 'c' (moved to init font)
       {'d'},  // remains as patch
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+// Segment ordering within a merge group uses the average probability across
+// all of the strategies calculators.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_SegmentOrdering) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 60},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 1},
+  };
+
+  // 'a' is not present in this data set, so it has a probability of 0 here.
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 1},
+  };
+
+  // Network overhead of 0 means no merges will be selected, so the resulting
+  // segment order is purely the result of the segment ordering.
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq1), 0, 1);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<UnigramProbabilityCalculator>(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {{'a'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Average probabilities are: 'a' = 0.30, 'b' = 0.50, 'c' = 0.01, so 'b' is
+  // ordered ahead of 'a'. Note: if only the first calculator was considered
+  // 'a' (0.60) would have been placed first.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'b'},
+      {'a'},
+      {'c'},
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+// The optimization cutoff is computed against the cost summed across all of
+// the strategies calculators, so a segment which contributes significant cost
+// under any one calculator stays above the cutoff.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_OptimizationCutoff) {
+  // Matches the data used by SimpleSegmentation_WithCostCutoff: 'b', 'c', and
+  // 'd' are rare, and always occur together.
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},
+      {{'d', 'd'}, 1},
+      // Pairs - setup so that b, c, d are always occuring together.
+      {{'b', 'c'}, 1},
+      {{'b', 'd'}, 1},
+      {{'c', 'd'}, 1},
+  };
+
+  // In this data set 'b', 'c', and 'd' are common (and still always occur
+  // together), while 'a' is not present at all.
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 50},
+      {{'d', 'd'}, 50},
+      {{'b', 'c'}, 50},
+      {{'b', 'd'}, 50},
+      {{'c', 'd'}, 50},
+  };
+
+  auto strategy = *MergeStrategy::BigramCostBased(std::move(freq1), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.05);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<ift::freq::BigramProbabilityCalculator>(
+          std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'b', 'c', and 'd' account for a significant fraction of the total cost
+  // once the second calculator is included, so unlike
+  // SimpleSegmentation_WithCostCutoff they are not cutoff and are merged
+  // together.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'},
+      {'b', 'c', 'd'},
+      {},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69 }
+p1: { gid70, gid71, gid72 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
+// Candidate selection (including inert candidate pruning) operates on
+// aggregate probabilities, so a pair of segments which are only used by the
+// second calculator are still considered for, and selected as, merges.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_MergesWithinEachCalculator) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 95},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'c', 'c'}, 95},
+      {{'d', 'd'}, 95},
+  };
+
+  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq1), 75, 1);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<UnigramProbabilityCalculator>(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'c' and 'd' have a probability of zero under the first calculator, but
+  // are still merged since candidate pruning considers all calculators.
+  // Merges are not made across the two calculators since a shared patch would
+  // be loaded by both.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b'},
+      {},
+      {'c', 'd'},
+      {},
   };
   EXPECT_EQ(segmentation->Segments(), expected_segments);
 }
