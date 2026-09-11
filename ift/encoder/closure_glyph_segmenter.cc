@@ -256,6 +256,18 @@ static void ClassifySegments(
   }
 }
 
+// Computes a single representative probability for each segment which is used
+// to order segments within their merge group.
+//
+// A strategy may have more than one probability calculator (one per frequency
+// data set), in which case the average probability across that strategies
+// calculators is used. Averaging (instead of summing) keeps the value in
+// [0, 1] so that it remains comparable to the strategies pre closure
+// probability threshold, and comparable to the values computed for other
+// strategies which may have a different number of calculators.
+//
+// A segment can be present in more than one merge group (shared segments), for
+// those the largest of the per strategy averages is used.
 static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
@@ -266,13 +278,24 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
       continue;
     }
 
+    const auto& profiles = strategy.ProbabilityProfiles();
+    if (profiles.empty()) {
+      continue;
+    }
+
     for (segment_index_t s : segments) {
-      for (const auto& profile : strategy.ProbabilityProfiles()) {
+      double min = 0.0;
+      double max = 0.0;
+      for (const auto& profile : profiles) {
         ProbabilityBound p =
             TRY(profile.Calculator())->ComputeProbability(subset_definitions[s]);
-        if (p.Value() > out[s].Value()) {
-          out[s] = p;
-        }
+        min += p.Min();
+        max += p.Max();
+      }
+
+      ProbabilityBound average(min / profiles.size(), max / profiles.size());
+      if (average.Value() > out[s].Value()) {
+        out[s] = average;
       }
     }
   }
