@@ -138,31 +138,29 @@ StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
 
   covered_codepoints = freq.CoveredCodepoints();
 
-  MergeStrategy strategy = MergeStrategy::None();
-  if (merged.use_bigrams()) {
-    strategy = TRY(MergeStrategy::BigramCostBased(
-        std::move(freq), merged.network_overhead_cost(),
-        merged.min_group_size()));
-  } else {
-    strategy = TRY(MergeStrategy::CostBased(std::move(freq),
-                                            merged.network_overhead_cost(),
-                                            merged.min_group_size()));
+  MergeStrategy::ProbabilityProfile profile =
+      merged.use_bigrams()
+          ? TRY(MergeStrategy::ProbabilityProfile::Bigram(std::move(freq)))
+          : TRY(MergeStrategy::ProbabilityProfile::Unigram(std::move(freq)));
+
+  if (merged.has_initial_font_merge_threshold()) {
+    profile.init_font_merge_threshold = merged.initial_font_merge_threshold();
   }
+
+  if (merged.has_initial_font_merge_probability_threshold()) {
+    profile.init_font_merge_probability_threshold =
+        merged.initial_font_merge_probability_threshold();
+  }
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      std::move(profile), merged.network_overhead_cost(),
+      merged.min_group_size());
 
   strategy.SetUsePatchMerges(merged.experimental_use_patch_merges());
 
   strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
   strategy.SetBestCaseSizeReductionFraction(
       merged.best_case_size_reduction_fraction());
-
-  if (merged.has_initial_font_merge_threshold()) {
-    strategy.SetInitFontMergeThreshold(merged.initial_font_merge_threshold());
-  }
-
-  if (merged.has_initial_font_merge_probability_threshold()) {
-    strategy.SetInitFontMergeProbabilityThreshold(
-        merged.initial_font_merge_probability_threshold());
-  }
 
   return strategy;
 }

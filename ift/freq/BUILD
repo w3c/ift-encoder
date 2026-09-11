@@ -23,7 +23,6 @@ cc_library(
     hdrs = [
         "bigram_probability_calculator.h",
         "lru_cache.h",
-        "noop_probability_calculator.h",
         "probability_calculator.h",
         "unicode_frequencies.h",
         "unigram_probability_calculator.h",
