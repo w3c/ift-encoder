@@ -125,7 +125,9 @@ flowchart TD
 
 ---
 
-### Commit 3: Multi-Calculator Cost Delta Summation in `CandidateMerge`
+### Commit 3: Multi-Calculator Cost Delta Summation in `CandidateMerge` (Completed)
+
+**Status**: Completed
 
 **Goal**: Calculate cost deltas as the sum of deltas evaluated across all probability calculators in the strategy.
 
@@ -145,6 +147,15 @@ flowchart TD
      * Loop over all profiles $m$:
        $$\Delta \text{Cost}_m = P_m(a \lor b) \cdot (\text{size}_{a \lor b} + k) - P_m(a) \cdot (\text{size}_a + k) - P_m(b) \cdot (\text{size}_b + k)$$
      * Sum deltas across all profiles: $\Delta \text{Cost} = \sum_{m=1}^M \Delta \text{Cost}_m$.
+* **Implementation note**: Patch sizes and glyph sets are identical for all
+  calculators, only the probabilities differ. Since the cost function is linear
+  in the probabilities the per calculator deltas are summed by evaluating each
+  patch cost with the *aggregate probability* of its activation condition
+  ($\sum_m P_m(c)$), which avoids recomputing patch sizes once per calculator.
+  This is implemented by the `AggregateProbability()` and
+  `AggregateMergedProbability()` helpers in `candidate_merge.cc`. The fallback
+  patch is needed with probability 1.0 under every calculator, so its size
+  delta is multiplied by the number of profiles.
 * **Verification**:
   * Unit tests in `ift/encoder/candidate_merge_test.cc`: Evaluate segment and patch merge deltas with two mock calculators with known probabilities. Verify total delta matches the exact expected sum.
   * Run `bazel test -c opt //ift/encoder:candidate_merge_test`.
@@ -161,12 +172,13 @@ flowchart TD
   * `ift/encoder/merger.cc`
   * `ift/encoder/candidate_merge.cc`
 * **Changes**:
-  1. **Aggregate Probability Weight**:
+  1. **Global Segment Ordering**:
      * For a segment $s$, its combined probability weight across the strategy is:
        $$P_{\text{agg}}(s) = \sum_{m=1}^M P_m(s)$$
-     * In `ComputeSegmentProbabilities()`: Sum probabilities across all calculators in the strategy for each segment $s$.
-     * In `PreGroupSegments()`: Recompute $P_{\text{agg}}$ across all calculators when pre-grouping segments.
-     * In `MergeSegments()`: Set merged segment probability to $\sum_m \text{calculator}_m\text{->ComputeMergedProbability}(\dots)$.
+     * Global segment ordering is based in part on `ComputeSegmentProbabilities()`.
+     * In `ComputeSegmentProbabilities()`: assigns a single probability to each segment derived from all strategies.
+       This should be updated to computed the average probability across all calculators for each strategy,
+       and then pick the largest average probability when combining across strategies.
   2. **Optimization Cutoff**:
      * In `Merger::ComputeSegmentCutoff()`:
        * Cost contribution of segment $s$ is $P_{\text{agg}}(s) \times (\text{size}(s) + k)$.

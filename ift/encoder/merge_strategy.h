@@ -32,6 +32,14 @@ class MergeStrategy {
     std::optional<double> init_font_merge_threshold = std::nullopt;
     std::optional<double> init_font_merge_probability_threshold = std::nullopt;
 
+    absl::StatusOr<const freq::ProbabilityCalculator*> Calculator() const {
+      if (!calculator) {
+        return absl::InvalidArgumentError(
+          "Probability profile is missing a probability calculator.");
+      }
+      return calculator.get();
+    }
+
     bool operator==(const ProbabilityProfile& other) const {
       return (calculator == nullptr) == (other.calculator == nullptr) &&
              init_font_merge_threshold == other.init_font_merge_threshold &&

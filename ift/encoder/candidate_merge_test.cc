@@ -358,6 +358,126 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   EXPECT_NEAR(merge.CostDelta(), expected_cost_delta, 1e-9);
 }
 
+// Checks that when a strategy has multiple probability calculators the cost
+// delta of a segment merge is the sum of the deltas computed against each
+// calculator.
+TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_MultipleCalculators) {
+  std::vector<Segment> segments = {
+      {{'f'}},
+      {{'i'}},
+  };
+
+  // Calculator one models a language where 'f' and 'i' are common.
+  std::vector<std::pair<Segment, double>> probabilities_1 = {
+      {{{'f'}}, 0.75},
+      {{{'i'}}, 0.95},
+      {{{'f', 'i'}}, 0.98},
+  };
+  // Calculator two models a language where 'f' and 'i' are uncommon.
+  std::vector<std::pair<Segment, double>> probabilities_2 = {
+      {{{'f'}}, 0.10},
+      {{{'i'}}, 0.20},
+      {{{'f', 'i'}}, 0.25},
+  };
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 4);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(*context, strategy, all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+
+  // There are four glyph sets in use here with this segmentation:
+  // 1. f -> {74}
+  // 2. i -> {77}
+  // 3. f+i -> {444, 446}
+  // 4. merged -> {74, 77, 444, 446}
+  size_cache->SetPatchSize({74}, 200);
+  size_cache->SetPatchSize({77}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({74, 77, 444, 446}, 600);
+
+  // Patch sizes are identical for both calculators, only the probabilities
+  // differ. So the expected total delta is the sum of the delta computed
+  // against each calculator individually.
+  double expected_delta_1 = -0.75 * (200 + 75)  // less cost of {f}
+                            - 0.95 * (300 + 75)           // less cost of {i}
+                            - (0.75 * 0.95) * (150 + 75)  // less cost {f + i}
+                            + 0.98 * (600 + 75);          // add merged patch
+  double expected_delta_2 = -0.10 * (200 + 75)  // less cost of {f}
+                            - 0.20 * (300 + 75)           // less cost of {i}
+                            - (0.10 * 0.20) * (150 + 75)  // less cost {f + i}
+                            + 0.25 * (600 + 75);          // add merged patch
+
+  context->patch_size_cache.reset(size_cache);
+  auto r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+  EXPECT_NEAR(merge.CostDelta(), expected_delta_1 + expected_delta_2, 1e-9);
+}
+
+// A calculator which has no frequency data for the codepoints involved in a
+// merge contributes nothing to the cost delta.
+TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_UnrelatedCalculator) {
+  std::vector<Segment> segments = {
+      {{'f'}},
+      {{'i'}},
+  };
+
+  std::vector<std::pair<Segment, double>> probabilities_1 = {
+      {{{'f'}}, 0.75},
+      {{{'i'}}, 0.95},
+      {{{'f', 'i'}}, 0.98},
+  };
+  // This calculator has no data for 'f' or 'i', so all associated
+  // probabilities are 0.
+  std::vector<std::pair<Segment, double>> probabilities_2 = {
+      {{{'z'}}, 0.90},
+  };
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 4);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(*context, strategy, all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({74}, 200);
+  size_cache->SetPatchSize({77}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({74, 77, 444, 446}, 600);
+
+  double expected_cost_delta = -0.75 * (200 + 75)  // less cost of {f}
+                               - 0.95 * (300 + 75)           // less cost of {i}
+                               - (0.75 * 0.95) * (150 + 75)  // less {f + i}
+                               + 0.98 * (600 + 75);  // add merged patch
+
+  context->patch_size_cache.reset(size_cache);
+  auto r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+  CandidateMerge merge = **r;
+  EXPECT_NEAR(merge.CostDelta(), expected_cost_delta, 1e-9);
+}
+
 TEST_F(CandidateMergeTest, OperatorLess) {
   EXPECT_TRUE(a < b);
   EXPECT_TRUE(b < c);
@@ -559,6 +679,86 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
 
   CandidateMerge merge = **r;
   ASSERT_EQ(merge.SegmentsToMerge(), SegmentSet({0, 1, 2}));
+}
+
+// Checks that patch merge cost deltas are the sum of the deltas computed
+// against each of the strategies probability calculators.
+TEST_F(CandidateMergeTest, AssessPatchMerge_MultipleCalculators) {
+  std::vector<Segment> segments = {
+      {{'A'}},
+      {{'B'}},
+      {{'C'}},
+  };
+
+  std::vector<std::pair<Segment, double>> probabilities_1 = {
+      {{{'A'}}, 0.95},      {{{'B'}}, 0.85},      {{{'C'}}, 0.75},
+      {{{'A', 'B'}}, 0.90}, {{{'A', 'C'}}, 0.92},
+  };
+  std::vector<std::pair<Segment, double>> probabilities_2 = {
+      {{{'A'}}, 0.05},      {{{'B'}}, 0.15},      {{{'C'}}, 0.25},
+      {{{'A', 'B'}}, 0.30}, {{{'A', 'C'}}, 0.40},
+  };
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 1);
+  strategy.AddProbabilityCalculator(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(*context, strategy, all, all);
+
+  glyph_id_t gid_B = *FontHelper::GetNominalGlyph(roboto.get(), 'B');
+  size_cache->SetPatchSize({gid_B}, 200);
+
+  // Manually set up a conjunctive condition for gid_B: s1 AND s2.
+  context->glyph_condition_set.AddAndCondition(gid_B, 1);
+  context->glyph_condition_set.AddAndCondition(gid_B, 2);
+
+  ActivationCondition conj_cond = ActivationCondition::and_segments({1, 2}, 0);
+
+  // We also need a base patch to exist.
+  glyph_id_t gid_A = *FontHelper::GetNominalGlyph(roboto.get(), 'A');
+  size_cache->SetPatchSize({gid_A}, 100);
+  size_cache->SetPatchSize({gid_A, gid_B}, 250);
+  context->glyph_condition_set.AddAndCondition(gid_A, 0);
+
+  // Update glyph groupings.
+  auto sc = context->glyph_groupings.GroupGlyphs(
+      context->SegmentationInfo(), context->glyph_condition_set,
+      *context->glyph_closure_cache, std::nullopt, {gid_A, gid_B}, {0, 1, 2},
+      false);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  context->patch_size_cache.reset(size_cache);
+
+  auto r = CandidateMerge::AssessPatchMerge(
+      merger, ActivationCondition::exclusive_segment(0, 0), conj_cond,
+      std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+
+  // Delta for a single calculator m =
+  // - P_m(s0) * (size(gid_A) + 75)
+  // - P_m(s1 AND s2) * (size(gid_B) + 75)
+  // + P_m((s0 OR s1) AND (s0 OR s2)) * (size(gid_A, gid_b) + 75)
+  //
+  // The total delta is the sum of the deltas for each calculator.
+  double expected_delta_1 = -0.95 * (100 + 75) -
+                            (0.85 * 0.75) * (200 + 75) +
+                            (0.90 * 0.92) * (250 + 75);
+  double expected_delta_2 = -0.05 * (100 + 75) -
+                            (0.15 * 0.25) * (200 + 75) +
+                            (0.30 * 0.40) * (250 + 75);
+
+  EXPECT_NEAR((*r)->CostDelta(), expected_delta_1 + expected_delta_2, 1e-9);
 }
 
 TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {

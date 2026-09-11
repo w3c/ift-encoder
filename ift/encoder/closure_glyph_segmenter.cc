@@ -268,11 +268,8 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
 
     for (segment_index_t s : segments) {
       for (const auto& profile : strategy.ProbabilityProfiles()) {
-        if (!profile.calculator) {
-          return absl::InvalidArgumentError("Profile must have a probability calculator.");
-        }
         ProbabilityBound p =
-            profile.calculator->ComputeProbability(subset_definitions[s]);
+            TRY(profile.Calculator())->ComputeProbability(subset_definitions[s]);
         if (p.Value() > out[s].Value()) {
           out[s] = p;
         }
