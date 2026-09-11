@@ -67,6 +67,51 @@ static double SumDeltas(std::vector<double>& deltas) {
   return total;
 }
 
+// The total cost of a segmentation is defined as the sum of the costs
+// evaluated independently against each of the strategies probability
+// calculators (see docs/multi_script_merging.md):
+//
+//   cost(S) = sum_m sum_i P_m(c_i) * (size(p_i) + k)
+//
+// Patch sizes and glyph sets are identical for all calculators, only the
+// probabilities differ. As a result the summed cost of a patch can be computed
+// using the aggregate probability, sum_m P_m(c_i), of the associated
+// activation condition:
+//
+//   sum_m P_m(c_i) * (size(p_i) + k) = (sum_m P_m(c_i)) * (size(p_i) + k)
+//
+// The same applies to cost deltas since the cost function is linear over the
+// set of calculators.
+//
+// Computes the aggregate probability of condition, that is the sum of the
+// probability of condition evaluated against each of the strategies
+// probability calculators.
+static StatusOr<double> AggregateProbability(
+    const Merger& merger, const ActivationCondition& condition) {
+  const auto& segments = merger.Context().SegmentationInfo().Segments();
+  double total = 0.0;
+  for (const auto& profile : merger.Strategy().ProbabilityProfiles()) {
+    total += TRY(condition.Probability(segments, *TRY(profile.Calculator())));
+  }
+  return total;
+}
+
+// Same as AggregateProbability(), but computes the probability of condition
+// as it would be after merged_segment_index has been replaced by
+// merged_segment.
+static StatusOr<double> AggregateMergedProbability(
+    const Merger& merger, const ActivationCondition& condition,
+    segment_index_t merged_segment_index, const Segment& merged_segment) {
+  const auto& segments = merger.Context().SegmentationInfo().Segments();
+  double total = 0.0;
+  for (const auto& profile : merger.Strategy().ProbabilityProfiles()) {
+    total += TRY(condition.MergedProbability(segments, merged_segment_index,
+                                             merged_segment,
+                                             *TRY(profile.Calculator())));
+  }
+  return total;
+}
+
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
     Merger& merger, segment_index_t base_segment_index,
     const GlyphSet& glyphs) {
@@ -656,17 +701,17 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   segment_index_t base = *merged_segments.min();
   const auto& context = merger.Context();
   const auto& patch_size_cache = context.patch_size_cache;
-  const auto& segments = context.SegmentationInfo().Segments();
-  const auto& calculator = TRY(merger.Strategy().ProbabilityCalculator());
+
   // Cost delta contributions are collected here and summed at the end rather
   // than accumulated as we go. modified_conditions and new_conditions are both
   // iterated in hash order, which is not stable between runs. See SumDeltas().
   std::vector<double> deltas;
   deltas.reserve(2 * modified_conditions.size() + 1);
+
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] : modified_conditions) {
     uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
-    double p = TRY(condition->Probability(segments, *calculator));
+    double p = TRY(AggregateProbability(merger, *condition));
     double d = p * (patch_size + per_request_overhead);
     deltas.push_back(-d);
     VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
@@ -686,8 +731,8 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       // Because we haven't actuated the merge yet (segments does not reflect
       // it), MergedProbability() is needed to correctly compute the new
       // probability.
-      info.probability = TRY(it->first.MergedProbability(
-          segments, base, merged_segment, *calculator));
+      info.probability = TRY(
+          AggregateMergedProbability(merger, it->first, base, merged_segment));
     }
 
     if (!best_case) {
@@ -756,10 +801,14 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     new_fallback.subtract(*exclusive_gids);
 
     // Fallback is always needed with 100% probability so delta is just the size
-    // difference (new - old)
-    double diff = ((double)TRY(patch_size_cache->GetPatchSize(new_fallback))) -
-                  ((double)TRY(patch_size_cache->GetPatchSize(
-                      context.glyph_groupings.UnmappedGlyphs())));
+    // difference (new - old). Since the fallback is needed with 100%
+    // probability under every calculator the delta is counted once per
+    // probability profile.
+    double num_profiles = merger.Strategy().ProbabilityProfiles().size();
+    double diff = (((double)TRY(patch_size_cache->GetPatchSize(new_fallback))) -
+                   ((double)TRY(patch_size_cache->GetPatchSize(
+                       context.glyph_groupings.UnmappedGlyphs())))) *
+                  num_profiles;
     VLOG(1) << "    + " << diff << " [fallback delta]";
     deltas.push_back(diff);
   }
@@ -870,15 +919,11 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
 
   double size_a =
       TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_a));
-  double probability_a = TRY(
-      condition_a.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *TRY(merger.Strategy().ProbabilityCalculator())));
+  double probability_a = TRY(AggregateProbability(merger, condition_a));
 
   double size_b =
       TRY(merger.Context().patch_size_cache->GetPatchSize(glyphs_b));
-  double probability_b = TRY(
-      condition_b.Probability(merger.Context().SegmentationInfo().Segments(),
-                              *TRY(merger.Strategy().ProbabilityCalculator())));
+  double probability_b = TRY(AggregateProbability(merger, condition_b));
 
   double size_existing = 0.0;
   if (!glyphs_existing.empty()) {
@@ -908,9 +953,8 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
   size_existing += network_overhead;
   merged_patch_size += network_overhead;
 
-  double merged_probability = TRY(merged_condition.Probability(
-      merger.Context().SegmentationInfo().Segments(),
-      *TRY(merger.Strategy().ProbabilityCalculator())));
+  double merged_probability =
+      TRY(AggregateProbability(merger, merged_condition));
 
   VLOG(1) << "cost_delta for patch merge of " << condition_a.ToString()
           << " with " << condition_b.ToString() << " =";
