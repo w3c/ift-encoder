@@ -135,8 +135,17 @@ static Status Analysis(hb_face_t* font,
                        btree_map<SegmentSet, MergeStrategy>&& merge_groups,
                        const GlyphSegmentation& segmentation,
                        std::shared_ptr<DataFileResolver> resolver) {
+  // A strategy may have more than one probability profile associated with it,
+  // each one is analyzed separately.
+  size_t num_profiles = 0;
+  for (const auto& [_, strategy] : merge_groups) {
+    num_profiles += strategy.ProbabilityProfiles().size();
+  }
+
   std::vector<BigramProbabilityCalculator> calculator_storage;
-  calculator_storage.reserve(merge_groups.size());
+  // Reserve up front, pointers into this vector are handed out below so it
+  // must not reallocate.
+  calculator_storage.reserve(num_profiles);
 
   std::vector<const ProbabilityCalculator*> strategy_probability_calculators;
   std::vector<unsigned> strategy_group_index;
@@ -149,21 +158,29 @@ static Status Analysis(hb_face_t* font,
       continue;
     }
 
-    // Depending on the configuration the encoding may have used unigram
-    // probability calculations. For the purpose of analysis we want to be
-    // consistent and so unigram probability calculator should be upgraded to a
-    // bigram
-    if (UnigramProbabilityCalculator* unigram =
-            dynamic_cast<UnigramProbabilityCalculator*>(
-                TRY(strategy.ProbabilityCalculator()))) {
-      calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
-      strategy_probability_calculators.push_back(&calculator_storage.back());
-    } else {
-      strategy_probability_calculators.push_back(
-          TRY(strategy.ProbabilityCalculator()));
-    }
+    for (const auto& profile : strategy.ProbabilityProfiles()) {
+      // Note: shared_ptr constness is shallow, so this is a mutable pointer
+      // which is needed for the destructive bigram upgrade below.
+      ProbabilityCalculator* calculator = profile.calculator.get();
+      if (calculator == nullptr) {
+        return absl::InvalidArgumentError(
+            "Probability profile is missing a probability calculator.");
+      }
 
-    strategy_group_index.push_back(i - 1);
+      // Depending on the configuration the encoding may have used unigram
+      // probability calculations. For the purpose of analysis we want to be
+      // consistent and so unigram probability calculator should be upgraded to
+      // a bigram
+      if (UnigramProbabilityCalculator* unigram =
+              dynamic_cast<UnigramProbabilityCalculator*>(calculator)) {
+        calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
+        strategy_probability_calculators.push_back(&calculator_storage.back());
+      } else {
+        strategy_probability_calculators.push_back(calculator);
+      }
+
+      strategy_group_index.push_back(i - 1);
+    }
   }
 
   ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver);

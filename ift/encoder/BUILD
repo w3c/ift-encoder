@@ -232,6 +232,7 @@ cc_test(
     ],
     deps = [
         ":merge_strategy",
+        "//ift/freq",
         "//ift/freq:mock_probability_calculator",
         "@abseil-cpp//absl/types:span",
         "@googletest//:gtest",

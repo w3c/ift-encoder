@@ -11,7 +11,6 @@
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "ift/freq/bigram_probability_calculator.h"
-#include "ift/freq/noop_probability_calculator.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
@@ -28,6 +27,38 @@ class MergeStrategy {
   friend void PrintTo(const MergeStrategy& strategy, std::ostream* os);
 
   struct ProbabilityProfile {
+    ProbabilityProfile() = default;
+
+    explicit ProbabilityProfile(
+        std::shared_ptr<freq::ProbabilityCalculator> calculator,
+        std::optional<double> init_font_merge_threshold = std::nullopt,
+        std::optional<double> init_font_merge_probability_threshold =
+            std::nullopt)
+        : calculator(std::move(calculator)),
+          init_font_merge_threshold(init_font_merge_threshold),
+          init_font_merge_probability_threshold(
+              init_font_merge_probability_threshold) {}
+
+    static absl::StatusOr<ProbabilityProfile> Unigram(
+        freq::UnicodeFrequencies&& frequency_data) {
+      if (!frequency_data.HasData()) {
+        return absl::InvalidArgumentError("Frequency data is missing.");
+      }
+      return ProbabilityProfile(
+          std::make_shared<ift::freq::UnigramProbabilityCalculator>(
+              std::move(frequency_data)));
+    }
+
+    static absl::StatusOr<ProbabilityProfile> Bigram(
+        freq::UnicodeFrequencies&& frequency_data) {
+      if (!frequency_data.HasData()) {
+        return absl::InvalidArgumentError("Frequency data is missing.");
+      }
+      return ProbabilityProfile(
+          std::make_shared<ift::freq::BigramProbabilityCalculator>(
+              std::move(frequency_data)));
+    }
+
     std::shared_ptr<freq::ProbabilityCalculator> calculator;
     std::optional<double> init_font_merge_threshold = std::nullopt;
     std::optional<double> init_font_merge_probability_threshold = std::nullopt;
@@ -35,7 +66,7 @@ class MergeStrategy {
     absl::StatusOr<const freq::ProbabilityCalculator*> Calculator() const {
       if (!calculator) {
         return absl::InvalidArgumentError(
-          "Probability profile is missing a probability calculator.");
+            "Probability profile is missing a probability calculator.");
       }
       return calculator.get();
     }
@@ -66,11 +97,11 @@ class MergeStrategy {
   // as far less merge candidates need to be evaluated.
   static MergeStrategy Heuristic(uint32_t patch_size_min_bytes,
                                  uint32_t patch_size_max_bytes = UINT32_MAX) {
-    MergeStrategy strategy(false, 0, 0, patch_size_min_bytes,
-                           patch_size_max_bytes);
-    strategy.AddProbabilityCalculator(
-        std::make_shared<ift::freq::NoopProbabilityCalculator>());
-    return strategy;
+    // No probability profiles are added here: heuristic (and none) strategies
+    // never consult probabilities, every read of ProbabilityProfiles() is
+    // gated behind UseCosts().
+    return MergeStrategy(false, 0, 0, patch_size_min_bytes,
+                         patch_size_max_bytes);
   }
 
   // Merging will be performed such that it attempts to minimize the total
@@ -82,56 +113,12 @@ class MergeStrategy {
   // Network overhead cost is a fixed number of bytes that is added to every
   // patch size. Setting it higher will encourage more aggressive merging, while
   // setting it lower will encourage less aggressive merging.
-  static absl::StatusOr<MergeStrategy> CostBased(
-      freq::UnicodeFrequencies frequency_data,
-      uint32_t network_overhead_cost = 75, uint32_t min_group_size = 4) {
-    if (!frequency_data.HasData()) {
-      return absl::InvalidArgumentError(
-          "If cost based merging is enabled unicode frequency data must be "
-          "provided.");
-    }
-
+  static MergeStrategy CostBased(ProbabilityProfile&& profile,
+                                 uint32_t network_overhead_cost = 75,
+                                 uint32_t min_group_size = 4) {
     MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
                            UINT32_MAX);
-    strategy.AddProbabilityCalculator(
-        std::make_shared<ift::freq::UnigramProbabilityCalculator>(
-            std::move(frequency_data)));
-    return strategy;
-  }
-
-  // Merging will be performed such that it attempts to minimize the total
-  // estimated cost of the segmentation. Works the same as CostBased() with
-  // the following changes:
-  // - When analyzing probabilities of segments being encountered the
-  // calculations
-  //   will include both individual codepoint and pair codepoint probabilities.
-  // - Notably this means we don't need to assume independent codepoint
-  // probabilities like
-  //   "CostBased()" does.
-  // - As a result this is more accurate, but more computationally costly.
-  static absl::StatusOr<MergeStrategy> BigramCostBased(
-      freq::UnicodeFrequencies frequency_data,
-      uint32_t network_overhead_cost = 75, uint32_t min_group_size = 4) {
-    if (!frequency_data.HasData()) {
-      return absl::InvalidArgumentError(
-          "If cost based merging is enabled unicode frequency data must be "
-          "provided.");
-    }
-
-    MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
-                           UINT32_MAX);
-    strategy.AddProbabilityCalculator(
-        std::make_shared<ift::freq::BigramProbabilityCalculator>(
-            std::move(frequency_data)));
-    return strategy;
-  }
-
-  static MergeStrategy CostBased(
-      std::shared_ptr<freq::ProbabilityCalculator> probability_calculator,
-      uint32_t network_overhead_cost, uint32_t min_group_size) {
-    MergeStrategy strategy(true, network_overhead_cost, min_group_size, 0,
-                           UINT32_MAX);
-    strategy.AddProbabilityCalculator(std::move(probability_calculator));
+    strategy.AddProbabilityProfile(std::move(profile));
     return strategy;
   }
 
@@ -139,7 +126,8 @@ class MergeStrategy {
     return probability_profiles_;
   }
 
-  absl::StatusOr<const ProbabilityProfile*> GetProbabilityProfile(size_t profile_index) const {
+  absl::StatusOr<const ProbabilityProfile*> GetProbabilityProfile(
+      size_t profile_index) const {
     if (profile_index >= probability_profiles_.size()) {
       return absl::InvalidArgumentError("profile_index is out of bounds.");
     }
@@ -148,19 +136,6 @@ class MergeStrategy {
 
   void AddProbabilityProfile(ProbabilityProfile profile) {
     probability_profiles_.push_back(std::move(profile));
-  }
-
-  void AddProbabilityCalculator(
-      std::shared_ptr<freq::ProbabilityCalculator> calculator,
-      std::optional<double> init_font_merge_threshold = std::nullopt,
-      std::optional<double> init_font_merge_probability_threshold =
-          std::nullopt) {
-    probability_profiles_.push_back(ProbabilityProfile{
-        .calculator = std::move(calculator),
-        .init_font_merge_threshold = init_font_merge_threshold,
-        .init_font_merge_probability_threshold =
-            init_font_merge_probability_threshold,
-    });
   }
 
   bool HasInitFontMerge() const {
@@ -191,29 +166,17 @@ class MergeStrategy {
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
 
-  absl::StatusOr<freq::ProbabilityCalculator*> ProbabilityCalculator() {
-    if (probability_profiles_.empty()) {
-      return absl::InternalError("Probability calculator is expected to be non-null");
-    }
-    return probability_profiles_[0].calculator.get();
-  }
-
-  absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator(size_t profile_index) const {
+  absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator(
+      size_t profile_index) const {
     if (profile_index >= probability_profiles_.size()) {
       return absl::InvalidArgumentError("profile_index is out of bounds.");
     }
     const auto& profile = probability_profiles_[profile_index];
     if (!profile.calculator) {
-      return absl::InvalidArgumentError("Probability profile is missing calculator.");
+      return absl::InvalidArgumentError(
+          "Probability profile is missing calculator.");
     }
     return profile.calculator.get();
-  }
-
-  absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator() const {
-    if (probability_profiles_.empty()) {
-      return absl::InternalError("Probability calculator is expected to be non-null");
-    }
-    return probability_profiles_[0].calculator.get();
   }
 
   void SetMinimumGroupSize(uint32_t value) { min_group_size_ = value; }
@@ -243,23 +206,6 @@ class MergeStrategy {
     best_case_size_reduction_fraction_ = std::max(0.0, std::min(1.0, value));
   }
 
-  // Configures the threshold (cost delta) for when to merge a segment into
-  // the init font. If not set then no segments will be merged into the init
-  // font.
-  std::optional<double> InitFontMergeThreshold() const {
-    if (probability_profiles_.empty()) {
-      return std::nullopt;
-    }
-    return probability_profiles_[0].init_font_merge_threshold;
-  }
-
-  std::optional<double> InitFontMergeProbabilityThreshold() const {
-    if (probability_profiles_.empty()) {
-      return std::nullopt;
-    }
-    return probability_profiles_[0].init_font_merge_probability_threshold;
-  }
-
   uint32_t PreClosureGroupSize() const { return pre_closure_group_size_; }
 
   double PreClosureProbabilityThreshold() const {
@@ -272,20 +218,6 @@ class MergeStrategy {
 
   void SetPreClosureProbabilityThreshold(double value) {
     pre_closure_probability_threshold_ = value;
-  }
-
-  void SetInitFontMergeThreshold(std::optional<double> value) {
-    if (probability_profiles_.empty()) {
-      probability_profiles_.push_back(ProbabilityProfile{});
-    }
-    probability_profiles_[0].init_font_merge_threshold = value;
-  }
-
-  void SetInitFontMergeProbabilityThreshold(std::optional<double> value) {
-    if (probability_profiles_.empty()) {
-      probability_profiles_.push_back(ProbabilityProfile{});
-    }
-    probability_profiles_[0].init_font_merge_probability_threshold = value;
   }
 
   void SetUsePatchMerges(bool value) { use_patch_merges_ = value; }

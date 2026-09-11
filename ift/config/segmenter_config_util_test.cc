@@ -23,6 +23,7 @@ using ift::common::DataFileResolver;
 using ift::common::SegmentSet;
 using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
+using ProbabilityProfile = ift::encoder::MergeStrategy::ProbabilityProfile;
 using ift::encoder::SubsetDefinition;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnicodeFrequenciesBuilder;
@@ -47,10 +48,13 @@ MergeStrategy ExpectedCostStrategy(
   UnicodeFrequenciesBuilder freq_builder;
   freq_builder.Add(1, 1, 1);
 
+  auto profile =
+      *MergeStrategy::ProbabilityProfile::Unigram(freq_builder.Build());
+  profile.init_font_merge_threshold = init_font_threshold;
+
   MergeStrategy s =
-      *MergeStrategy::CostBased(freq_builder.Build(), net_overhead, 1);
+      MergeStrategy::CostBased(std::move(profile), net_overhead, 1);
   s.SetOptimizationCutoffFraction(0.001);
-  s.SetInitFontMergeThreshold(init_font_threshold);
 
   return s;
 }

@@ -39,6 +39,7 @@ using ift::common::SegmentSet;
 using ift::freq::MockProbabilityCalculator;
 using ift::freq::ProbabilityBound;
 using ift::freq::UnicodeFrequencies;
+using ProbabilityProfile = ift::encoder::MergeStrategy::ProbabilityProfile;
 
 namespace ift::encoder {
 
@@ -117,17 +118,16 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
       {{{'s', 't', 'u', 'v', 'w', 'x'}}, 0.01},
 
       // 0 + 1
-      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}},
-       0.98},
+      {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'}}, 0.98},
 
       // 0 + 1 + 2
       {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-        'o', 'p', 'q', 'r'}},
+         'o', 'p', 'q', 'r'}},
        0.99},
 
       // 0 + 1 + 3
       {{{'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 's', 't',
-        'u', 'v', 'w', 'x'}},
+         'u', 'v', 'w', 'x'}},
        0.98},
   };
   auto probability_calculator =
@@ -142,8 +142,9 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 4),
+      all, all);
 
   // Case 1: merge high frequency segments {0, 1, 2}. The cost of the new
   // segments increased probability is outweighed by the reduction of
@@ -210,8 +211,9 @@ TEST_F(CandidateMergeTest, AssessMerge_WithBestCandidate) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 4),
+      all, all);
 
   unsigned base_size =
       *context->patch_size_cache->GetPatchSize({'a', 'b', 'c', 'd', 'e', 'f'});
@@ -268,8 +270,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex) {
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
-      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all,
-      all);
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -322,8 +326,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_Complex_ModifiedConditions) {
   ASSERT_TRUE(context.ok()) << context.status();
 
   Merger merger = *Merger::New(
-      *context, *MergeStrategy::CostBased(std::move(frequencies), 75, 4), all,
-      all);
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -381,9 +387,11 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_MultipleCalculators) {
   };
 
   MergeStrategy strategy = MergeStrategy::CostBased(
-      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 4);
-  strategy.AddProbabilityCalculator(
-      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+      ProbabilityProfile(
+          std::make_shared<MockProbabilityCalculator>(probabilities_1)),
+      75, 4);
+  strategy.AddProbabilityProfile(ProbabilityProfile(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2)));
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -409,11 +417,11 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_MultipleCalculators) {
   // Patch sizes are identical for both calculators, only the probabilities
   // differ. So the expected total delta is the sum of the delta computed
   // against each calculator individually.
-  double expected_delta_1 = -0.75 * (200 + 75)  // less cost of {f}
+  double expected_delta_1 = -0.75 * (200 + 75)            // less cost of {f}
                             - 0.95 * (300 + 75)           // less cost of {i}
                             - (0.75 * 0.95) * (150 + 75)  // less cost {f + i}
                             + 0.98 * (600 + 75);          // add merged patch
-  double expected_delta_2 = -0.10 * (200 + 75)  // less cost of {f}
+  double expected_delta_2 = -0.10 * (200 + 75)            // less cost of {f}
                             - 0.20 * (300 + 75)           // less cost of {i}
                             - (0.10 * 0.20) * (150 + 75)  // less cost {f + i}
                             + 0.25 * (600 + 75);          // add merged patch
@@ -446,9 +454,11 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_UnrelatedCalculator) {
   };
 
   MergeStrategy strategy = MergeStrategy::CostBased(
-      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 4);
-  strategy.AddProbabilityCalculator(
-      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+      ProbabilityProfile(
+          std::make_shared<MockProbabilityCalculator>(probabilities_1)),
+      75, 4);
+  strategy.AddProbabilityProfile(ProbabilityProfile(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2)));
 
   ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
   auto context = SegmentationContext::InitializeSegmentationContext(
@@ -465,10 +475,10 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_UnrelatedCalculator) {
   size_cache->SetPatchSize({444, 446}, 150);
   size_cache->SetPatchSize({74, 77, 444, 446}, 600);
 
-  double expected_cost_delta = -0.75 * (200 + 75)  // less cost of {f}
+  double expected_cost_delta = -0.75 * (200 + 75)            // less cost of {f}
                                - 0.95 * (300 + 75)           // less cost of {i}
                                - (0.75 * 0.95) * (150 + 75)  // less {f + i}
-                               + 0.98 * (600 + 75);  // add merged patch
+                               + 0.98 * (600 + 75);          // add merged patch
 
   context->patch_size_cache.reset(size_cache);
   auto r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
@@ -496,11 +506,8 @@ TEST_F(CandidateMergeTest, OperatorLess) {
 
 TEST_F(CandidateMergeTest, AssessPatchMerge) {
   std::vector<Segment> segments = {
-      {{'A', 'B'}},
-      {{'C'}},
-      {{'e'}},
-      {{0xe9}},   // eacute
-      {{0x106}},  // Cacute
+      {{'A', 'B'}}, {{'C'}}, {{'e'}}, {{0xe9}},  // eacute
+      {{0x106}},                                 // Cacute
   };
   std::vector<std::pair<Segment, double>> segment_probabilities = {
       {{{'A', 'B'}}, 0.95},
@@ -533,8 +540,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 1),
+      all, all);
 
   // Try merging the patch for {0} and {1 OR 4}.
   auto r = CandidateMerge::AssessPatchMerge(
@@ -590,8 +598,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_RequiresPatches) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 1),
+      all, all);
 
   // Try merging the patch for {0} and {1}.
   auto r = CandidateMerge::AssessPatchMerge(
@@ -616,11 +625,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
   };
 
   std::vector<std::pair<Segment, double>> segment_probabilities = {
-      {{{'A'}}, 0.95},
-      {{{'B'}}, 0.85},
-      {{{'C'}}, 0.75},
-      {{{'A', 'B'}}, 0.90},
-      {{{'A', 'C'}}, 0.92},
+      {{{'A'}}, 0.95},      {{{'B'}}, 0.85},      {{{'C'}}, 0.75},
+      {{{'A', 'B'}}, 0.90}, {{{'A', 'C'}}, 0.92},
   };
 
   auto probability_calculator =
@@ -637,8 +643,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 1),
+      all, all);
 
   glyph_id_t gid_B = *FontHelper::GetNominalGlyph(roboto.get(), 'B');
   size_cache->SetPatchSize({gid_B}, 200);
@@ -700,9 +707,11 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_MultipleCalculators) {
   };
 
   MergeStrategy strategy = MergeStrategy::CostBased(
-      std::make_shared<MockProbabilityCalculator>(probabilities_1), 75, 1);
-  strategy.AddProbabilityCalculator(
-      std::make_shared<MockProbabilityCalculator>(probabilities_2));
+      ProbabilityProfile(
+          std::make_shared<MockProbabilityCalculator>(probabilities_1)),
+      75, 1);
+  strategy.AddProbabilityProfile(ProbabilityProfile(
+      std::make_shared<MockProbabilityCalculator>(probabilities_2)));
 
   MockPatchSizeCache* size_cache = new MockPatchSizeCache();
 
@@ -751,11 +760,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_MultipleCalculators) {
   // + P_m((s0 OR s1) AND (s0 OR s2)) * (size(gid_A, gid_b) + 75)
   //
   // The total delta is the sum of the deltas for each calculator.
-  double expected_delta_1 = -0.95 * (100 + 75) -
-                            (0.85 * 0.75) * (200 + 75) +
+  double expected_delta_1 = -0.95 * (100 + 75) - (0.85 * 0.75) * (200 + 75) +
                             (0.90 * 0.92) * (250 + 75);
-  double expected_delta_2 = -0.05 * (100 + 75) -
-                            (0.15 * 0.25) * (200 + 75) +
+  double expected_delta_2 = -0.05 * (100 + 75) - (0.15 * 0.25) * (200 + 75) +
                             (0.30 * 0.40) * (250 + 75);
 
   EXPECT_NEAR((*r)->CostDelta(), expected_delta_1 + expected_delta_2, 1e-9);
@@ -769,11 +776,8 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
   };
   std::vector<Segment> segments_with_merges = segments;
   std::vector<std::pair<Segment, double>> segment_probabilities = {
-      {{{'A'}}, 0.95},
-      {{{'B'}}, 0.85},
-      {{{'C'}}, 0.75},
-      {{{'A', 'B'}}, 0.90},
-      {{{'A', 'C'}}, 0.92},
+      {{{'A'}}, 0.95},      {{{'B'}}, 0.85},      {{{'C'}}, 0.75},
+      {{{'A', 'B'}}, 0.90}, {{{'A', 'C'}}, 0.92},
   };
 
   auto probability_calculator =
@@ -791,8 +795,9 @@ TEST_F(CandidateMergeTest, AssessPatchMerge_NonDisjunctive_WithSimplification) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 1), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 1),
+      all, all);
 
   glyph_id_t gid_B = *FontHelper::GetNominalGlyph(roboto.get(), 'B');
   size_cache->SetPatchSize({gid_B}, 200);
@@ -869,8 +874,9 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 4),
+      all, all);
 
   glyph_id_t g_a = 69;
   glyph_id_t g_b = 70;
@@ -1012,8 +1018,9 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta_TracksSmallestDelta) {
 
   Merger merger = *Merger::New(
       *context,
-      MergeStrategy::CostBased(std::move(probability_calculator), 75, 4), all,
-      all);
+      MergeStrategy::CostBased(
+          ProbabilityProfile(std::move(probability_calculator)), 75, 4),
+      all, all);
 
   glyph_id_t g_a = 69;
   glyph_id_t g_b = 70;
