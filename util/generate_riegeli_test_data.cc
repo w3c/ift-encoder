@@ -18,13 +18,47 @@ ABSL_FLAG(std::string, output_path, "", "Path to write the output file.");
 
 ABSL_FLAG(bool, include_invalid_record, false, "If set add an invalid record.");
 ABSL_FLAG(bool, shard, false, "If set shard into multiple files.");
+ABSL_FLAG(bool, alternate_data, false,
+          "If set write an alternate data set which covers a different set of "
+          "codepoints (0x45 and 0x47) than the main one (0x43 and 0x44).");
 
 namespace {
+
+absl::Status WriteAlternateData(const std::string& output_path) {
+  CodepointCount message1;
+  message1.add_codepoints(0x45);
+  message1.set_count(100);
+
+  CodepointCount message2;
+  message2.add_codepoints(0x47);
+  message2.add_codepoints(0x47);
+  message2.set_count(50);
+
+  CodepointCount message3;
+  message3.add_codepoints(0x45);
+  message3.add_codepoints(0x47);
+  message3.set_count(25);
+
+  riegeli::RecordWriter writer{riegeli::FdWriter(output_path)};
+  writer.WriteRecord(message1);
+  writer.WriteRecord(message2);
+  writer.WriteRecord(message3);
+
+  if (!writer.Close()) {
+    return writer.status();
+  }
+
+  return absl::OkStatus();
+}
 
 absl::Status Main() {
   std::string output_path = absl::GetFlag(FLAGS_output_path);
   if (output_path.empty()) {
     return absl::InvalidArgumentError("output_path must be specified.");
+  }
+
+  if (absl::GetFlag(FLAGS_alternate_data)) {
+    return WriteAlternateData(output_path);
   }
 
   CodepointCount message1;

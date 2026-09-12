@@ -89,6 +89,14 @@ class SegmenterConfigUtil {
       const std::string& frequency_data_file_path, bool built_in,
       std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
+  // Builds a probability profile (calculator + init font merge settings) for a
+  // single frequency data set. Codepoints covered by the data set are added to
+  // covered_codepoints.
+  absl::StatusOr<ift::encoder::MergeStrategy::ProbabilityProfile>
+  ProtoToProbabilityProfile(const FrequencyDataConfig& config,
+                            const ift::common::CodepointSet& font_codepoints,
+                            ift::common::CodepointSet& covered_codepoints);
+
   absl::StatusOr<ift::encoder::MergeStrategy> ProtoToCostStrategy(
       const CostConfiguration& base, const CostConfiguration& config,
       ift::common::CodepointSet& covered_codepoints,
