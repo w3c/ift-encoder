@@ -405,8 +405,8 @@ TEST(ActivationConditionTest, AndOr_True) {
   ASSERT_EQ(a, condition);
   ASSERT_EQ(b, ActivationCondition::or_segments({1, 2}, 11));
 
-  ASSERT_EQ(c, ActivationCondition::True(10));
-  ASSERT_EQ(d, true_con);
+  ASSERT_EQ(c, ActivationCondition::True(11));
+  ASSERT_EQ(d, ActivationCondition::True(11));
 }
 
 TEST(ActivationConditionTest, And) {
@@ -465,14 +465,48 @@ TEST(ActivationConditionTest, Or) {
   auto combined_ab = ActivationCondition::Or(a, b);
   EXPECT_EQ(combined_ab.ToString(),
             "if ((s1 OR s3) AND (s1 OR s4) AND (s2 OR s3) AND (s2 OR s4)) "
-            "then p10");
-  EXPECT_EQ(combined_ab.activated(), 10);
+            "then p11");
+  EXPECT_EQ(combined_ab.activated(), 11);
   EXPECT_FALSE(combined_ab.IsExclusive());
   EXPECT_FALSE(combined_ab.IsFallback());
 
   auto combined_ba = ActivationCondition::Or(b, a);
-  EXPECT_EQ(combined_ba.activated(), 11);
-  EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
+  EXPECT_EQ(combined_ab, combined_ba);
+}
+
+TEST(ActivationConditionTest, Or_IsOrderIndependent) {
+  auto a = ActivationCondition::or_segments({1, 2}, 10);
+  a.SetEncoding(ift::proto::DEFAULT_ENCODING);
+  auto b = ActivationCondition::or_segments({3}, 11, /*is_fallback=*/true);
+  b.SetEncoding(ift::proto::DEFAULT_ENCODING);
+  auto c = ActivationCondition::and_segments({4, 5}, 9);
+  c.SetEncoding(ift::proto::TABLE_KEYED_PARTIAL);
+
+  auto ab = ActivationCondition::Or(a, b);
+  EXPECT_EQ(ab, ActivationCondition::Or(b, a));
+  EXPECT_TRUE(ab.IsFallback());
+  EXPECT_EQ(ab.activated(), 11);
+
+  auto ac = ActivationCondition::Or(a, c);
+  EXPECT_EQ(ac, ActivationCondition::Or(c, a));
+  EXPECT_EQ(ac.Encoding(), ift::proto::TABLE_KEYED_PARTIAL);
+
+  // Folding over all three must give the same result no matter which order the
+  // conditions are visited in.
+  ActivationCondition expected =
+      ActivationCondition::Or(ActivationCondition::Or(a, b), c);
+  EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(a, c), b),
+            expected);
+  EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(b, a), c),
+            expected);
+  EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(b, c), a),
+            expected);
+  EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(c, a), b),
+            expected);
+  EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(c, b), a),
+            expected);
+  EXPECT_EQ(ActivationCondition::Or(a, ActivationCondition::Or(b, c)),
+            expected);
 }
 
 TEST(ActivationConditionTest, Or_Simplification) {
