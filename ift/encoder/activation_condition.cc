@@ -170,10 +170,14 @@ ActivationCondition ActivationCondition::And(const ActivationCondition& a,
 ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
                                             const ActivationCondition& b) {
   ActivationCondition condition;
-  condition.is_fallback_ = a.is_fallback_;
+  // These fields all participate in operator==(), Hash() and operator<(), so
+  // they must be combined in a commutative and associative way. Otherwise
+  // folding Or() across a group of conditions would produce different results
+  // depending on the order the conditions are visited in.
+  condition.is_fallback_ = a.is_fallback_ || b.is_fallback_;
   condition.is_exclusive_ = false;
-  condition.activated_ = a.activated_;
-  condition.encoding_ = a.encoding_;
+  condition.activated_ = std::max(a.activated_, b.activated_);
+  condition.encoding_ = std::max(a.encoding_, b.encoding_);
 
   // The general approach to doing Or combination is to create a cross product
   // of the sub groups from a and b. However, for any sub groups of a and b that

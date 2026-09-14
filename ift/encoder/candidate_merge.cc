@@ -1,5 +1,7 @@
 #include "ift/encoder/candidate_merge.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -39,6 +41,30 @@ using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::SegmentSet;
 using ift::common::Woff2;
+
+static double SumDeltas(std::vector<double>& deltas) {
+  // Delta lists often come from hash containers which do not have stable
+  // ordering. Since floating point addition is not associative we need
+  // to first sort into a determnistic order or risk the sum result being
+  // non-deterministic.
+  std::sort(deltas.begin(), deltas.end(), [](double a, double b) {
+    // Sort by magnitude (increasing) then sign to maximize accuracy of the sum.
+    // It minimizes how many low order bits get rounded away when
+    // each new term is added.
+    double magnitude_a = std::abs(a);
+    double magnitude_b = std::abs(b);
+    if (magnitude_a != magnitude_b) {
+      return magnitude_a < magnitude_b;
+    }
+    return a < b;
+  });
+
+  double total = 0.0;
+  for (double delta : deltas) {
+    total += delta;
+  }
+  return total;
+}
 
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
     Merger& merger, segment_index_t base_segment_index,
@@ -413,9 +439,13 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
     }
   }
 
-  double total_delta = init_increase;
+  // Cost delta contributions are collected here and summed at the end rather
+  // than accumulated as we go. affected_conditions and new_conditions are both
+  // iterated in hash order, which is not stable between runs. See SumDeltas().
+  std::vector<double> deltas;
+  deltas.push_back(init_increase);
 
-  VLOG(1) << "    + " << total_delta << " [init font increase]";
+  VLOG(1) << "    + " << init_increase << " [init font increase]";
 
   SegmentSet modified_segments =
       merger.Context().SegmentationInfo().SegmentsForCodepoints(
@@ -437,11 +467,12 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   auto affected_conditions = PatchesWithGlyphsOrSegments(
       merger.Context(), glyph_closure_delta, modified_segments);
+  deltas.reserve(deltas.size() + 3 * affected_conditions.size());
   for (const auto& [condition, glyphs] : affected_conditions) {
     GlyphSet glyphs_after = glyphs;
     glyphs_after.subtract(glyph_closure_delta);
 
-    total_delta -= TRY(CostFor(merger, condition, glyphs));
+    deltas.push_back(-TRY(CostFor(merger, condition, glyphs)));
 
     if (glyphs_after.empty()) {
       continue;
@@ -465,7 +496,8 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
       // Existing isn't in the affected list so we need to account for it's
       // removal, and transfer it's glyphs to new_conditions.
       it->second.union_set(existing->second);
-      total_delta -= TRY(CostFor(merger, existing->first, existing->second));
+      deltas.push_back(
+          -TRY(CostFor(merger, existing->first, existing->second)));
     }
   }
 
@@ -487,9 +519,10 @@ StatusOr<std::pair<double, GlyphSet>> CandidateMerge::ComputeInitFontCostDelta(
 
     VLOG(1) << "    + (" << patch_probability_after << " * " << patch_size_after
             << ") -> " << cost_after << " [modified patch]";
-    total_delta += cost_after;
+    deltas.push_back(cost_after);
   }
 
+  double total_delta = SumDeltas(deltas);
   VLOG(1) << "    = " << total_delta;
 
   return std::make_pair(total_delta, glyph_closure_delta);
@@ -505,15 +538,20 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
   TRYV(ComputeInitFontGlyphDelta(merger, moved_glyphs, new_glyph_closure,
                                  glyph_closure_delta, codepoint_closure_delta));
 
-  double cost_delta = 0.0;
+  // Cost delta contributions are collected here and summed at the end rather
+  // than accumulated as we go, since PatchesWithGlyphsOrSegments() is iterated
+  // in hash order which is not stable between runs. See SumDeltas().
+  std::vector<double> deltas;
   double best_case_reduction =
       merger.Strategy().BestCaseSizeReductionFraction();
   double per_request_overhead = merger.Strategy().NetworkOverheadCost();
   // This best case computation is a simplified version that ignores the impact
   // of changing segments on the cost computation and focuses only on the glyphs
   // that are being moved.
-  for (const auto& [condition, glyphs] : PatchesWithGlyphsOrSegments(
-           merger.Context(), glyph_closure_delta, SegmentSet{})) {
+  auto affected_conditions = PatchesWithGlyphsOrSegments(
+      merger.Context(), glyph_closure_delta, SegmentSet{});
+  deltas.reserve(affected_conditions.size());
+  for (const auto& [condition, glyphs] : affected_conditions) {
     double patch_probability = 1.0;
     if (!condition.IsFallback()) {
       patch_probability = TRY(
@@ -533,8 +571,8 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
       // For full patch removal we can estimate impact on the delta by assuming
       // that all of the data of the patch is moved to the init font and further
       // compressed by the best case reduction fraction.
-      cost_delta += best_case_reduction * patch_size -
-                    patch_probability * (patch_size + per_request_overhead);
+      deltas.push_back(best_case_reduction * patch_size -
+                       patch_probability * (patch_size + per_request_overhead));
       continue;
     }
 
@@ -560,13 +598,15 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
       //
       // TODO(garretrieger): XXXXX may want to incorporate a minimum patch size
       // amount since we're saying patch isn't removed.
-      cost_delta += (best_case_reduction - patch_probability) * patch_size;
+      deltas.push_back((best_case_reduction - patch_probability) * patch_size);
     }
 
     // Otherwise if patch_probability is <= best_case_reduction then the cost
     // delta will be positive unless patch size reduction is 0, in which chase
     // the change to total cost delta is also 0.
   }
+
+  double cost_delta = SumDeltas(deltas);
 
   VLOG(1) << "best case cost_delta for move of glyphs "
           << moved_glyphs.ToString() << " to the initial font = " << cost_delta;
@@ -613,13 +653,17 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   const auto& patch_size_cache = context.patch_size_cache;
   const auto& segments = context.SegmentationInfo().Segments();
   const auto& calculator = TRY(merger.Strategy().ProbabilityCalculator());
-  double cost_delta = 0.0;
+  // Cost delta contributions are collected here and summed at the end rather
+  // than accumulated as we go. modified_conditions and new_conditions are both
+  // iterated in hash order, which is not stable between runs. See SumDeltas().
+  std::vector<double> deltas;
+  deltas.reserve(2 * modified_conditions.size() + 1);
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] : modified_conditions) {
     uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
     double p = TRY(condition->Probability(segments, *calculator));
     double d = p * (patch_size + per_request_overhead);
-    cost_delta -= d;
+    deltas.push_back(-d);
     VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
             << ") -> " << d << " [removed patch " << condition->ToString()
             << "]";
@@ -699,7 +743,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     double d = p * s;
     VLOG(1) << "    + (" << p << " * " << s << ") -> " << d << " [new patch "
             << c.ToString() << "]";
-    cost_delta += d;
+    deltas.push_back(d);
   }
 
   if (fallback_changed) {
@@ -712,9 +756,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
                   ((double)TRY(patch_size_cache->GetPatchSize(
                       context.glyph_groupings.UnmappedGlyphs())));
     VLOG(1) << "    + " << diff << " [fallback delta]";
-    cost_delta += diff;
+    deltas.push_back(diff);
   }
 
+  double cost_delta = SumDeltas(deltas);
   VLOG(1) << "    = " << cost_delta;
   return cost_delta;
 }
