@@ -54,6 +54,20 @@ absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInFrequencies(
     const char* name, const ift::common::DataFileResolver& resolver,
     std::optional<ift::common::CodepointSet> filter = std::nullopt);
 
+// Loads the unigram only copy of a frequency data set from
+// https://github.com/w3c/ift-encoder-data
+//
+// The returned data has the same individual code point counts as
+// LoadBuiltInFrequencies() would return, but no code point pair (bigram)
+// counts. It's significantly faster to load, especially for the large CJK
+// data sets.
+//
+// name is the file name to load, it may include a trailing "@*" (which is
+// ignored, the unigram data is never sharded).
+absl::StatusOr<ift::freq::UnicodeFrequencies> LoadBuiltInUnigramFrequencies(
+    const char* name, const ift::common::DataFileResolver& resolver,
+    std::optional<ift::common::CodepointSet> filter = std::nullopt);
+
 // Returns a list of all built-in frequency data sets and the codepoints
 // they cover.
 absl::StatusOr<absl::flat_hash_map<std::string, ift::common::CodepointSet>>

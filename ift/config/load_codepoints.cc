@@ -222,6 +222,17 @@ StatusOr<UnicodeFrequencies> LoadBuiltInFrequencies(
   return LoadFrequenciesFromRiegeli(path.c_str(), filter);
 }
 
+StatusOr<UnicodeFrequencies> LoadBuiltInUnigramFrequencies(
+    const char* name, const DataFileResolver& resolver,
+    std::optional<CodepointSet> filter) {
+  std::string data_dir = TRY(resolver.GetUnigramFrequencyDataDirectory());
+  // The unigram data is never sharded, so drop the sharded file suffix if
+  // it's present.
+  absl::string_view unsharded_name = absl::StripSuffix(name, "@*");
+  std::string path = StrCat(data_dir, "/", unsharded_name);
+  return LoadFrequenciesFromRiegeli(path.c_str(), filter);
+}
+
 StatusOr<flat_hash_map<std::string, CodepointSet>> BuiltInFrequenciesList(
     const DataFileResolver& resolver) {
   std::string data_dir = TRY(resolver.GetFrequencyDataDirectory());

@@ -65,4 +65,16 @@ StatusOr<std::string> BazelDataFileResolver::GetFrequencyDataDirectory() const {
   return std::filesystem::path(metadata_path).parent_path().string();
 }
 
+StatusOr<std::string> BazelDataFileResolver::GetUnigramFrequencyDataDirectory()
+    const {
+  // There's no metadata file for the unigram data, so locate the directory
+  // via one of the data files it contains.
+  std::string data_file_path = runfiles_->Rlocation(UNIGRAM_FREQ_DATA_FILE);
+  if (data_file_path.empty() || !std::filesystem::exists(data_file_path)) {
+    return absl::NotFoundError(
+        "Failed to find unigram frequency data directory via runfiles");
+  }
+  return std::filesystem::path(data_file_path).parent_path().string();
+}
+
 }  // namespace ift::common

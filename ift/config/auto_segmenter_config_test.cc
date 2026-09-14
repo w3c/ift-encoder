@@ -28,8 +28,8 @@ using ::ift::common::hb_blob_unique_ptr;
 using ::ift::common::hb_face_unique_ptr;
 using ::ift::common::make_hb_blob;
 using ::ift::common::make_hb_face;
+using ::testing::Each;
 using ::testing::Eq;
-using ::testing::Pair;
 using ::testing::UnorderedElementsAre;
 
 class AutoSegmenterConfigTest : public ::testing::Test {
@@ -54,43 +54,68 @@ class AutoSegmenterConfigTest : public ::testing::Test {
   hb_face_unique_ptr cjk_face_;
 };
 
-using ScriptPair = std::pair<std::string, std::string>;
+// A merge group: it's name and the list of frequency data sets it uses.
+using ScriptGroup = std::pair<std::string, std::vector<std::string>>;
 
-static std::vector<ScriptPair> GetScripts(const SegmenterConfig& config) {
-  std::vector<ScriptPair> result;
+static std::vector<ScriptGroup> GetScripts(const SegmenterConfig& config) {
+  std::vector<ScriptGroup> result;
   for (const auto& mg : config.merge_groups()) {
-    result.push_back({mg.name(), mg.cost_config().built_in_freq_data_name()});
+    std::vector<std::string> freq_data;
+    for (const auto& config : mg.cost_config().frequency_data()) {
+      freq_data.push_back(config.built_in_freq_data_name());
+    }
+    result.push_back({mg.name(), freq_data});
   }
   return result;
 }
 
+// Returns the names of the frequency data sets which have an initial font
+// merge threshold configured.
 static std::vector<std::string> GetScriptsWithInitialMergeThreshold(
     const SegmenterConfig& config) {
   std::vector<std::string> result;
   for (const auto& mg : config.merge_groups()) {
-    if (mg.cost_config().has_initial_font_merge_threshold()) {
-      result.push_back(mg.name());
+    for (const auto& config : mg.cost_config().frequency_data()) {
+      if (config.has_initial_font_merge_threshold()) {
+        result.push_back(config.built_in_freq_data_name());
+      }
     }
   }
   return result;
 }
 
-const ScriptPair kLatin = {"Latin", "Script_latin.riegeli"};
-const ScriptPair kCyrillic = {"Cyrillic", "Script_cyrillic.riegeli"};
-const ScriptPair kGreek = {"Greek", "Script_greek.riegeli"};
-const ScriptPair kSymbols = {"Symbols", "Script_symbols.riegeli"};
-const ScriptPair kEmoji = {"Emoji", "Script_emoji.riegeli"};
-const ScriptPair kCJK = {"CJK", "Script_CJK.riegeli@*"};
-const ScriptPair kFallback = {"Fallback", "fallback.riegeli"};
+const ScriptGroup kCyrillic = {"Cyrillic", {"Script_cyrillic.riegeli"}};
+const ScriptGroup kGreek = {"Greek", {"Script_greek.riegeli"}};
+const ScriptGroup kSymbols = {"Symbols", {"Script_symbols.riegeli"}};
+const ScriptGroup kLatin = {"Latin", {"Script_latin.riegeli"}};
+const ScriptGroup kLanguageFr = {"Language_fr", {"Language_fr.riegeli"}};
+const ScriptGroup kFallback = {"Fallback", {"fallback.riegeli"}};
+// Most of the emoji code points in the font are ones shared with latin
+// (digits, #, *, (c), (R), TM) so emoji is grouped with latin. Emoji also
+// shares enough of its probability mass with symbols to pull symbols into the
+// same group.
+const ScriptGroup kEmojiLatinAndSymbols = {
+    "Emoji+Latin+Symbols",
+    {"Script_emoji.riegeli", "Script_latin.riegeli", "Script_symbols.riegeli"}};
+const ScriptGroup kCJK = {
+    "Chinese-simplified+Chinese-traditional+Japanese+Korean",
+    {"Script_chinese-simplified.riegeli@*",
+     "Script_chinese-traditional.riegeli@*", "Script_japanese.riegeli@*",
+     "Script_korean.riegeli@*"}};
+const ScriptGroup kZhHansCJK = {
+    "Language_zh-Hans+Chinese-traditional+Japanese+Korean",
+    {"Language_zh-Hans.riegeli@*", "Script_chinese-traditional.riegeli@*",
+     "Script_japanese.riegeli@*", "Script_korean.riegeli@*"}};
+const ScriptGroup kUnifiedCJK = {"CJK", {"Script_CJK.riegeli@*"}};
 
 TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(
       GetScripts(*config_or),
-      UnorderedElementsAre(kLatin, kCyrillic, kGreek, kSymbols, kFallback));
+      UnorderedElementsAre(kLatin, kSymbols, kCyrillic, kGreek, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Latin"));
+              UnorderedElementsAre("Script_latin.riegeli"));
 
   std::string config_string;
   TextFormat::PrintToString(*config_or, &config_string);
@@ -102,7 +127,6 @@ base_heuristic_config {
   min_patch_size: 2500
 }
 base_cost_config {
-  use_bigrams: true
   network_overhead_cost: 200
   min_group_size: 4
   optimization_cutoff_fraction: 0.005
@@ -117,7 +141,10 @@ merge_groups {
   preprocess_merging_group_size: 4
   preprocess_merging_probability_threshold: 0.005
   cost_config {
-    built_in_freq_data_name: "Script_cyrillic.riegeli"
+    frequency_data {
+      built_in_freq_data_name: "Script_cyrillic.riegeli"
+      use_bigrams: true
+    }
   }
 }
 merge_groups {
@@ -125,7 +152,10 @@ merge_groups {
   preprocess_merging_group_size: 4
   preprocess_merging_probability_threshold: 0.005
   cost_config {
-    built_in_freq_data_name: "Script_greek.riegeli"
+    frequency_data {
+      built_in_freq_data_name: "Script_greek.riegeli"
+      use_bigrams: true
+    }
   }
 }
 merge_groups {
@@ -133,9 +163,12 @@ merge_groups {
   preprocess_merging_group_size: 4
   preprocess_merging_probability_threshold: 0.005
   cost_config {
-    built_in_freq_data_name: "Script_latin.riegeli"
-    initial_font_merge_threshold: -160
-    initial_font_merge_probability_threshold: 0.3
+    frequency_data {
+      built_in_freq_data_name: "Script_latin.riegeli"
+      use_bigrams: true
+      initial_font_merge_threshold: -160
+      initial_font_merge_probability_threshold: 0.3
+    }
   }
 }
 merge_groups {
@@ -143,7 +176,10 @@ merge_groups {
   preprocess_merging_group_size: 4
   preprocess_merging_probability_threshold: 0.005
   cost_config {
-    built_in_freq_data_name: "Script_symbols.riegeli"
+    frequency_data {
+      built_in_freq_data_name: "Script_symbols.riegeli"
+      use_bigrams: true
+    }
   }
 }
 merge_groups {
@@ -151,7 +187,10 @@ merge_groups {
   preprocess_merging_group_size: 4
   preprocess_merging_probability_threshold: 0.005
   cost_config {
-    built_in_freq_data_name: "fallback.riegeli"
+    frequency_data {
+      built_in_freq_data_name: "fallback.riegeli"
+      use_bigrams: true
+    }
   }
 }
 base_segmentation_plan {
@@ -170,9 +209,9 @@ TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(
       GetScripts(*config_or),
-      UnorderedElementsAre(kLatin, kCyrillic, kGreek, kSymbols, kFallback));
+      UnorderedElementsAre(kLatin, kSymbols, kCyrillic, kGreek, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Cyrillic"));
+              UnorderedElementsAre("Script_cyrillic.riegeli"));
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_LanguageFr) {
@@ -180,10 +219,10 @@ TEST_F(AutoSegmenterConfigTest, Roboto_LanguageFr) {
                                                        "Language_fr");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
-              UnorderedElementsAre(Pair("Language_fr", "Language_fr.riegeli"),
-                                   kCyrillic, kGreek, kSymbols, kFallback));
+              UnorderedElementsAre(kLanguageFr, kSymbols, kCyrillic, kGreek,
+                                   kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Language_fr"));
+              UnorderedElementsAre("Language_fr.riegeli"));
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
@@ -191,11 +230,13 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
   auto config_or =
       AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
+  // The individual CJK scripts heavily overlap each other so they are
+  // combined into a single merge group.
   EXPECT_THAT(GetScripts(*config_or),
-              UnorderedElementsAre(kLatin, kGreek, kCyrillic, kCJK, kSymbols,
-                                   kEmoji, kFallback));
+              UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
+                                   kCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Latin"));
+              UnorderedElementsAre("Script_latin.riegeli"));
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
@@ -203,11 +244,12 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(cjk_face_.get(),
                                                        *resolver, "Script_CJK");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
+  // The unified CJK data set replaces all of the individual CJK scripts.
   EXPECT_THAT(GetScripts(*config_or),
-              UnorderedElementsAre(kLatin, kGreek, kCyrillic, kCJK, kSymbols,
-                                   kEmoji, kFallback));
+              UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
+                                   kUnifiedCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("CJK"));
+              UnorderedElementsAre("Script_CJK.riegeli@*"));
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
@@ -215,13 +257,13 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(
       cjk_face_.get(), *resolver, "Script_japanese");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
-  EXPECT_THAT(
-      GetScripts(*config_or),
-      UnorderedElementsAre(kLatin, kGreek, kCyrillic,
-                           Pair("Japanese", "Script_japanese.riegeli@*"),
-                           kSymbols, kEmoji, kFallback));
+  // Japanese remains grouped with the other CJK scripts, but only it gets
+  // the initial font merge threshold.
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
+                                   kCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Japanese"));
+              UnorderedElementsAre("Script_japanese.riegeli@*"));
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_LanguageZhHans) {
@@ -230,12 +272,10 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_LanguageZhHans) {
       cjk_face_.get(), *resolver, "Language_zh-Hans");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
-              UnorderedElementsAre(
-                  kLatin, kGreek, kCyrillic,
-                  Pair("Language_zh-Hans", "Language_zh-Hans.riegeli@*"),
-                  kSymbols, kEmoji, kFallback));
+              UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
+                                   kZhHansCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Language_zh-Hans"));
+              UnorderedElementsAre("Language_zh-Hans.riegeli@*"));
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptNotFound) {
@@ -262,19 +302,19 @@ TEST_F(AutoSegmenterConfigTest, Roboto_FullFileName_Script) {
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(
       GetScripts(*config_or),
-      UnorderedElementsAre(kLatin, kCyrillic, kGreek, kSymbols, kFallback));
+      UnorderedElementsAre(kLatin, kSymbols, kCyrillic, kGreek, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Cyrillic"));
+              UnorderedElementsAre("Script_cyrillic.riegeli"));
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_FullFileName_Language) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
                                                        "Language_fr.riegeli");
   EXPECT_THAT(GetScripts(*config_or),
-              UnorderedElementsAre(Pair("Language_fr", "Language_fr.riegeli"),
-                                   kCyrillic, kGreek, kSymbols, kFallback));
+              UnorderedElementsAre(kLanguageFr, kSymbols, kCyrillic, kGreek,
+                                   kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
-              UnorderedElementsAre("Language_fr"));
+              UnorderedElementsAre("Language_fr.riegeli"));
 }
 
 TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
@@ -291,13 +331,24 @@ TEST_F(AutoSegmenterConfigTest, LanguageMappingsExist) {
   }
 }
 
+// Returns the use_bigrams setting of every frequency data set in the config.
+static std::vector<bool> GetUseBigrams(const SegmenterConfig& config) {
+  std::vector<bool> result;
+  for (const auto& mg : config.merge_groups()) {
+    for (const auto& freq_config : mg.cost_config().frequency_data()) {
+      result.push_back(freq_config.use_bigrams());
+    }
+  }
+  return result;
+}
+
 TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
                                                        std::nullopt, 1);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_EQ(config_or->brotli_quality(), 0);
   EXPECT_EQ(config_or->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
-  EXPECT_EQ(config_or->base_cost_config().use_bigrams(), false);
+  EXPECT_THAT(GetUseBigrams(*config_or), Each(false));
   EXPECT_EQ(config_or->brotli_quality_for_initial_font_merging(), 0);
   EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
 
@@ -306,7 +357,7 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
   EXPECT_EQ(config_or_8->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
-  EXPECT_EQ(config_or_8->base_cost_config().use_bigrams(), true);
+  EXPECT_THAT(GetUseBigrams(*config_or_8), Each(true));
   EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
   EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(),
             0.005);

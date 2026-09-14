@@ -49,6 +49,9 @@ class UnicodeFrequencies {
   }
 
   // Returns the set of codepoints that frequency data is available for.
+  //
+  // Note: the result is recomputed on each call (O(size of the data set)), so
+  // avoid calling this inside a loop.
   ift::common::CodepointSet CoveredCodepoints() const;
 
  private:

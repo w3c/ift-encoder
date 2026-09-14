@@ -80,11 +80,14 @@ cc_library(
     data = [
         "@derived_normalization_props//file",
         "@ift_encoder_data//:data/metadata.binpb",
+        "@ift_encoder_data//:data/unigram/fallback.riegeli",
         "@ift_encoder_data//:freq_data",
+        "@ift_encoder_data//:unigram_freq_data",
         "@unicode_data//file",
     ],
     defines = [
         "FREQ_DATA_METADATA=\\\"$(rlocationpath @ift_encoder_data//:data/metadata.binpb)\\\"",
+        "UNIGRAM_FREQ_DATA_FILE=\\\"$(rlocationpath @ift_encoder_data//:data/unigram/fallback.riegeli)\\\"",
         "UNICODE_DATA_PATH=\\\"$(rlocationpath @unicode_data//file)\\\"",
         "DERIVED_PROPS_PATH=\\\"$(rlocationpath @derived_normalization_props//file)\\\"",
     ],
