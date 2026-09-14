@@ -161,6 +161,28 @@ TEST_F(GlyphPartitionTest, Copy) {
   ASSERT_NE(*gu3.Find(1), *gu3.Find(2));
 }
 
+TEST_F(GlyphPartitionTest, CopyAssignmentInvalidatesCache) {
+  GlyphPartition gu1(10);
+  ASSERT_TRUE(gu1.Union({1, 2}).ok());
+
+  GlyphPartition gu2(10);
+  ASSERT_TRUE(gu2.Union({3, 4, 5}).ok());
+
+  // Populate gu1's cache before overwriting it, the stale entries must not be
+  // visible afterwards.
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet{1, 2}));
+  ASSERT_EQ(gu1.NonIdentityGroups()->size(), 1);
+
+  gu1 = gu2;
+
+  ASSERT_EQ(*gu1.GlyphsFor(1), (GlyphSet{1}));
+  ASSERT_EQ(*gu1.GlyphsFor(3), (GlyphSet{3, 4, 5}));
+  auto groups = gu1.NonIdentityGroups();
+  ASSERT_TRUE(groups.ok()) << groups.status();
+  ASSERT_EQ(groups->size(), 1);
+  ASSERT_EQ((*groups)[0], (GlyphSet{3, 4, 5}));
+}
+
 TEST_F(GlyphPartitionTest, UnionPair) {
   GlyphPartition gu(10);
   ASSERT_TRUE(gu.Union(1, 3).ok());

@@ -125,7 +125,7 @@ class GlyphConditionSet {
   void SetCondition(glyph_id_t gid, ActivationCondition condition) {
     for (segment_index_t s :
          gid_conditions_[gid].condition_.TriggeringSegments()) {
-      segment_to_gid_conditions_[s].erase(gid);
+      RemoveFromSegmentIndex(s, gid);
     }
     common::SegmentSet segments = condition.TriggeringSegments();
     gid_conditions_[gid].condition_ = std::move(condition);
@@ -156,16 +156,19 @@ class GlyphConditionSet {
     }
 
     for (uint32_t segment_index : touched) {
-      segment_to_gid_conditions_[segment_index].subtract(glyphs);
+      RemoveFromSegmentIndex(segment_index, glyphs);
     }
   }
 
   void InvalidateGlyphInformation(const ift::common::SegmentSet& segments) {
     ift::common::GlyphSet touched;
     for (uint32_t segment_index : segments) {
-      auto& entry = segment_to_gid_conditions_[segment_index];
-      touched.union_set(entry);
-      entry.clear();
+      auto it = segment_to_gid_conditions_.find(segment_index);
+      if (it == segment_to_gid_conditions_.end()) {
+        continue;
+      }
+      touched.union_set(it->second);
+      segment_to_gid_conditions_.erase(it);
     }
 
     for (uint32_t gid : touched) {
@@ -182,7 +185,7 @@ class GlyphConditionSet {
 
   bool operator==(const GlyphConditionSet& other) const {
     return other.gid_conditions_ == gid_conditions_ &&
-           other.segment_to_gid_conditions_ == other.segment_to_gid_conditions_;
+           other.segment_to_gid_conditions_ == segment_to_gid_conditions_;
   }
 
   bool operator!=(const GlyphConditionSet& other) const {
@@ -197,15 +200,44 @@ class GlyphConditionSet {
     // set to see exactly what got removed.
     common::SegmentSet removed = gid_conditions_[gid].RemoveSegments(segments);
     for (segment_index_t s : removed) {
-      segment_to_gid_conditions_[s].erase(gid);
+      RemoveFromSegmentIndex(s, gid);
     }
   }
+
+  // Drops gid from segment's entry in the reverse index.
+  void RemoveFromSegmentIndex(segment_index_t segment, glyph_id_t gid) {
+    auto it = segment_to_gid_conditions_.find(segment);
+    if (it == segment_to_gid_conditions_.end()) {
+      return;
+    }
+    it->second.erase(gid);
+    if (it->second.empty()) {
+      segment_to_gid_conditions_.erase(it);
+    }
+  }
+
+  // Drops glyphs from segment's entry in the reverse index.
+  void RemoveFromSegmentIndex(segment_index_t segment,
+                              const ift::common::GlyphSet& glyphs) {
+    auto it = segment_to_gid_conditions_.find(segment);
+    if (it == segment_to_gid_conditions_.end()) {
+      return;
+    }
+    it->second.subtract(glyphs);
+    if (it->second.empty()) {
+      segment_to_gid_conditions_.erase(it);
+    }
+  }
+
   // Index in this vector is the glyph id associated with the condition at that
   // index.
   std::vector<GlyphConditions> gid_conditions_;
 
   // Index that tracks for each segment id which set of glyphs include that
   // segment in it's conditions.
+  //
+  // Entries are never left empty: a segment with no glyphs is removed from the
+  // map entirely.
   absl::flat_hash_map<uint32_t, ift::common::GlyphSet>
       segment_to_gid_conditions_;
 };

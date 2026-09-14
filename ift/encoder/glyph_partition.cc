@@ -32,6 +32,12 @@ GlyphPartition& GlyphPartition::operator=(const GlyphPartition& other) {
 
   rank_ = other.rank_;
   parent_ = other.parent_;
+
+  // The cache is derived from parent_, so it must be dropped whenever parent_
+  // is replaced.
+  cache_valid_ = false;
+  rep_to_set_.clear();
+  non_identity_groups_.clear();
   return *this;
 }
 

@@ -197,4 +197,48 @@ TEST(GlyphConditionSetTest, EqualityOperators) {
   EXPECT_TRUE(set1 != set3);
 }
 
+TEST(GlyphConditionSetTest, EqualityIgnoresRemovedSegmentHistory) {
+  // A set which had a segment added and then removed again must compare equal
+  // to one which never had it: the reverse index should not be left holding an
+  // empty entry for that segment.
+  GlyphConditionSet set1(3);
+  set1.AddAndCondition(0, 10);
+  set1.AddAndCondition(0, 20);
+  set1.InvalidateGlyphInformation(GlyphSet{0}, SegmentSet{20});
+
+  GlyphConditionSet set2(3);
+  set2.AddAndCondition(0, 10);
+
+  EXPECT_EQ(set1.ConditionsFor(0).activation(),
+            set2.ConditionsFor(0).activation());
+  EXPECT_TRUE(set1 == set2);
+  EXPECT_FALSE(set1 != set2);
+
+  // The same holds for the other two invalidation paths.
+  GlyphConditionSet set4(3);
+  set4.AddAndCondition(0, 10);
+  set4.AddAndCondition(1, 20);
+  set4.InvalidateGlyphInformation(SegmentSet{20});
+  EXPECT_TRUE(set4 == set2);
+
+  GlyphConditionSet set5(3);
+  set5.AddAndCondition(0, 10);
+  set5.AddAndCondition(1, 20);
+  set5.InvalidateGlyphInformation(GlyphSet{1});
+  EXPECT_TRUE(set5 == set2);
+}
+
+TEST(GlyphConditionSetTest, EqualityChecksReverseIndex) {
+  // Same conditions, but assigned to different glyphs, so the reverse index
+  // differs.
+  GlyphConditionSet set1(3);
+  set1.AddAndCondition(0, 10);
+
+  GlyphConditionSet set2(3);
+  set2.AddAndCondition(1, 10);
+
+  EXPECT_FALSE(set1 == set2);
+  EXPECT_TRUE(set1 != set2);
+}
+
 }  // namespace ift::encoder
