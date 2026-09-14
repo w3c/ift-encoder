@@ -54,6 +54,9 @@ cc_library(
     hdrs = [
         "glyph_partition.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":common",
         "//ift/common",

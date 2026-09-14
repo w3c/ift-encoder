@@ -302,7 +302,9 @@ flowchart TD
 
 ---
 
-### Commit 6: Update `AutoSegmenterConfig` to Detect Overlaps and Group Scripts
+### Commit 6: Update `AutoSegmenterConfig` to Detect Overlaps and Group Scripts (Completed)
+
+**Status**: Completed
 
 **Goal**: Automatically detect script overlaps in a font and cluster overlapping scripts into unified merge groups, eliminating the synthetic `Script_CJK.riegeli@*` workaround.
 
@@ -327,6 +329,75 @@ flowchart TD
     * Verify `primary_script = "Script_japanese"` sets `initial_font_merge_threshold` only for Japanese.
     * Verify disjoint scripts (e.g. Latin and Arabic) remain in separate `MergeGroup`s.
   * Run `bazel test -c opt //ift/config:auto_segmenter_config_test`.
+
+**Implementation notes**:
+
+* Script detection ignores the synthetic `Script_CJK.riegeli@*` data set (it's
+  only used when explicitly selected as the primary script) and detects each
+  CJK script individually. To do that the set of "common" codepoints which
+  detection subtracts (codepoints which appear in two or more script data sets)
+  is computed over the *non CJK* scripts only: the CJK scripts share nearly all
+  of their codepoints with each other, so including them would leave each
+  individual CJK script with almost nothing unique and none of them would be
+  detected.
+* The overlap criterion (step 3) deviates from the plan. A "shares at least one
+  non-common codepoint" test chains nearly every script into one giant group:
+  in practice almost all pairs of data sets share `U+0020` and `U+00A0`, emoji
+  and CJK share `U+3030`, `U+303D`, `U+3297`, `U+3299`, and emoji and latin
+  share `U+0023`, `U+002A`, `U+0030`-`U+0039`, `U+00A9`, `U+00AE`, `U+2122`.
+  Instead two filters are applied:
+  1. Codepoints whose Unicode general category is a space separator, a format
+     character or a control character, plus combining marks in
+     `U+0300`-`U+0400`, are excluded from overlap consideration entirely.
+     These appear in nearly every data set and say nothing about script
+     relatedness.
+  2. The remaining shared codepoints are weighted by probability mass rather
+     than counted. For scripts $A$ and $B$ with shared codepoints
+     $S = C(A) \cap C(B)$, the overlap is
+     $$\max\left(\frac{\sum_{cp \in S} P_A(cp)}{\sum_{cp \in C(A)} P_A(cp)},
+     \frac{\sum_{cp \in S} P_B(cp)}{\sum_{cp \in C(B)} P_B(cp)}\right)$$
+     and the scripts are grouped when this is `>= 0.1`. Weighting by
+     probability is what matters in practice: the shared codepoints of two
+     scripts left in separate merge groups fall back to heuristic merging, so
+     grouping is important exactly when the shared codepoints carry a lot of
+     probability mass (eg. emoji and latin, where emoji's handful of shared
+     ASCII codepoints carry almost all of its probability mass) and
+     unimportant when they carry very little (eg. emoji and CJK).
+* Measured values for `NotoSansJP-Regular.ttf` are strongly separated. The CJK
+  pairs all score above 0.98 (zh-Hans/zh-Hant 0.99995, zh-Hans/ja 0.99976,
+  zh-Hans/ko 0.99269, zh-Hant/ja 0.99944, zh-Hant/ko 0.98986, ja/ko 0.99883)
+  and emoji/latin scores 0.99541 on only 15 shared codepoints, while
+  emoji/CJK scores 7e-05 (on 4 shared codepoints) and is rejected.
+  emoji/symbols sits in between at 0.14812, above the 0.1 threshold, so the
+  font's emoji, latin and symbols end up in a single merge group. For
+  `Roboto-Regular.ttf` no pair of detected scripts shares a single
+  non-excluded codepoint, so no frequency data is loaded at all and every
+  script stays in its own merge group.
+* Computing the weights requires real frequency data, but only the unigram
+  counts are needed. Rather than loading (and discarding the bigrams of) the
+  full data sets, the weights are computed from the prebuilt unigram only
+  copies of the data sets in `data/unigram/` of the `ift-encoder-data`
+  repository (see https://github.com/w3c/ift-encoder-data/pull/9), reached via
+  the new `DataFileResolver::GetUnigramFrequencyDataDirectory()` and
+  `LoadBuiltInUnigramFrequencies()`. These files are never sharded, so a
+  trailing `@*` on a data set name is stripped before opening them.
+  Additionally frequency data is only loaded for scripts which share at least
+  one (non-excluded) codepoint with another script. Together these keep the
+  cost of auto config generation negligible, even for CJK fonts
+  (`//ift/config:auto_segmenter_config_test` remains `size = "small"` and runs
+  in under a second).
+* `ApplyPrimaryScript()` no longer collapses all CJK scripts when the primary
+  is a CJK language/script; it only does so when the primary is the synthetic
+  `Script_CJK.riegeli@*` data set (which is otherwise never auto detected).
+  So `primary_script = "Script_japanese"` keeps japanese grouped with the
+  other CJK scripts and only sets the initial font merge threshold on the
+  japanese data set.
+* `use_bigrams` and `initial_font_merge_probability_threshold` are now set per
+  `FrequencyDataConfig` rather than on the (deprecated) `CostConfiguration`
+  fields, which also removes the last deprecation warnings in the build.
+* Merge group names are the `+` joined script names of the group, in the same
+  (sorted) order as the frequency data sets, eg. `Latin+Symbols` or
+  `Chinese-simplified+Chinese-traditional+Japanese+Korean`.
 
 ---
 

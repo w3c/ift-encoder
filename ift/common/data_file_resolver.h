@@ -20,6 +20,15 @@ class DataFileResolver {
 
   // Returns the path to the directory containing frequency data files.
   virtual absl::StatusOr<std::string> GetFrequencyDataDirectory() const = 0;
+
+  // Returns the path to the directory containing the unigram only copies of
+  // the frequency data files.
+  //
+  // These contain the same individual code point counts as the files in
+  // GetFrequencyDataDirectory(), but with all of the code point pair (bigram)
+  // counts removed. They are unsharded and are much faster to load.
+  virtual absl::StatusOr<std::string> GetUnigramFrequencyDataDirectory()
+      const = 0;
 };
 
 }  // namespace ift::common

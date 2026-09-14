@@ -1,11 +1,17 @@
 #include "ift/config/auto_segmenter_config.h"
 
+#include <algorithm>
 #include <cctype>
 #include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/strip.h"
 #include "hb.h"
 #include "ift/common/font_helper.h"
@@ -13,6 +19,8 @@
 #include "ift/common/try.h"
 #include "ift/config/load_codepoints.h"
 #include "ift/config/segmenter_config.pb.h"
+#include "ift/encoder/glyph_partition.h"
+#include "ift/freq/unicode_frequencies.h"
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -20,7 +28,10 @@ using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
 using ift::common::CodepointSet;
+using ift::common::IntSet;
 using ift::common::FontHelper;
+using ift::encoder::GlyphPartition;
+using ift::freq::UnicodeFrequencies;
 
 namespace ift::config {
 
@@ -183,8 +194,8 @@ static flat_hash_set<std::string> CjkScripts() {
   };
 }
 
-static CodepointSet CommonCodepoints(
-    const flat_hash_map<std::string, CodepointSet>& freq_list, bool cjk_only) {
+static CodepointSet NonCjkCommonCodepoints(
+    const flat_hash_map<std::string, CodepointSet>& freq_list) {
   auto cjk_scripts = CjkScripts();
   flat_hash_map<hb_codepoint_t, uint32_t> unicode_counts;
   for (const auto& [file_name, script_codepoints] : freq_list) {
@@ -198,8 +209,7 @@ static CodepointSet CommonCodepoints(
       continue;
     }
 
-    bool is_cjk = cjk_scripts.contains(file_name);
-    if (cjk_only && !is_cjk) {
+    if (cjk_scripts.contains(file_name)) {
       continue;
     }
 
@@ -222,56 +232,201 @@ static btree_set<std::string> DetectScripts(
     const flat_hash_map<std::string, CodepointSet>& freq_list,
     const CodepointSet& unicodes) {
   btree_set<std::string> detected_scripts;
-  flat_hash_set<std::string> detected_cjk_scripts;
 
-  CodepointSet common = CommonCodepoints(freq_list, false);
-  auto cjk_scripts = CjkScripts();
+  // This is the set of codepoints which appears in two or more non-cjk scripts
+  CodepointSet non_cjk_common = NonCjkCommonCodepoints(freq_list);
 
   for (const auto& [file_name, script_codepoints] : freq_list) {
     if (!IsScript(file_name) && file_name != "fallback.riegeli") {
       continue;
     }
     if (file_name == "Script_CJK.riegeli@*") {
-      // special cased later.
+      // This is a synthetic combination of the individual CJK scripts, it's
+      // only used if it's explicitly selected as the primary script.
       continue;
     }
 
-    // To avoid false positives on fonts with common ASCII/punctuation,
-    // only consider codepoints outside the basic Latin range for detection.
+    // For script detection look only at codepoints which are unique to this
+    // script. All of CJK scripts have large overlap with each other, due
+    // to this we don't exclude this CJK specific overlap from script detection.
     CodepointSet unique_codepoints = script_codepoints;
-    unique_codepoints.subtract(common);
-
-    CodepointSet intersection = unique_codepoints;
-    intersection.intersect(unicodes);
+    unique_codepoints.subtract(non_cjk_common);
+    unique_codepoints.intersect(unicodes);
 
     // TODO(garretrieger): consider using a threshold on intersection size here.
-    if (intersection.size() > 1) {
+    if (unique_codepoints.size() > 1) {
       LOG(INFO) << "Script " << file_name << " is present, "
-                << intersection.size() << " codepoints.";
+                << unique_codepoints.size() << " codepoints.";
       detected_scripts.insert(file_name);
-      if (cjk_scripts.contains(file_name)) {
-        detected_cjk_scripts.insert(file_name);
-      }
     }
-  }
-
-  // Since the language specific CJK scripts all overlap if we have detected
-  // more than one, or the only codepoints present are common to all cjk scripts
-  // then replace the language specific scripts with the unified CJK script.
-  CodepointSet only_cjk_common = CommonCodepoints(freq_list, true);
-  only_cjk_common.subtract(common);
-  if (detected_cjk_scripts.size() > 1 ||
-      (detected_cjk_scripts.empty() && only_cjk_common.intersects(unicodes))) {
-    // upgrade from individual CJK scripts to the unified one.
-    for (const auto& script : detected_cjk_scripts) {
-      detected_scripts.erase(script);
-    }
-
-    LOG(INFO) << "Script_CJK.riegeli@* added to detected list.";
-    detected_scripts.insert("Script_CJK.riegeli@*");
   }
 
   return detected_scripts;
+}
+
+// Codepoints in these categories (spaces, marks and invisible formatting
+// characters) are present in many every script's frequency data. Filtering
+// them out from overlap detection helps avoid grouping together a large number
+// of scripts unnecessarily.
+static bool IgnoredForOverlapDetection(hb_codepoint_t cp) {
+  switch (hb_unicode_general_category(hb_unicode_funcs_get_default(), cp)) {
+    case HB_UNICODE_GENERAL_CATEGORY_CONTROL:
+    case HB_UNICODE_GENERAL_CATEGORY_FORMAT:
+    case HB_UNICODE_GENERAL_CATEGORY_SPACE_SEPARATOR:
+      return true;
+    case HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK:
+    case HB_UNICODE_GENERAL_CATEGORY_SPACING_MARK:
+      return cp >= 0x300 && cp <= 0x400;
+    default:
+      return false;
+  }
+}
+
+// Returns the codepoints of script which are in the font and which are
+// usable for overlap detection.
+static CodepointSet OverlapCodepoints(
+    const flat_hash_map<std::string, CodepointSet>& freq_list,
+    const std::string& script, const CodepointSet& unicodes) {
+  auto it = freq_list.find(script);
+  if (it == freq_list.end()) {
+    return CodepointSet();
+  }
+
+  CodepointSet in_script_and_font = it->second;
+  in_script_and_font.intersect(unicodes);
+
+  CodepointSet result;
+  for (hb_codepoint_t cp : in_script_and_font) {
+    if (!IgnoredForOverlapDetection(cp)) {
+      result.insert(cp);
+    }
+  }
+
+  return result;
+}
+
+// Two scripts are considered to be overlapping if the codepoints they share
+// account for at least this fraction of the total probability mass of at
+// least one of the two scripts.
+static constexpr double kScriptOverlapThreshold = 0.10;
+
+// Groups scripts which significantly overlap each other together. Scripts
+// which don't overlap anything are placed in a group by themselves.
+//
+// Overlap is measured by how much of a script's probability mass is covered
+// by the codepoints it shares with another script. Weighting by probability
+// (instead of just counting shared codepoints) ensures that cases where
+// overlapping codepoints will have a large impact on cost are processed
+// together which produces better results.
+//
+// Grouping is important for shared codepoints: if the scripts which share
+// them are placed in different merge groups then those codepoints fall back
+// to heuristic merging, which produces poor results.
+//
+// The returned groups, and the scripts within them, are in a deterministic
+// order.
+static StatusOr<std::vector<std::vector<std::string>>> GroupOverlappingScripts(
+    const btree_set<std::string>& detected_scripts,
+    const flat_hash_map<std::string, CodepointSet>& freq_list,
+    const CodepointSet& unicodes,
+    const ift::common::DataFileResolver& resolver) {
+  std::vector<std::string> scripts(detected_scripts.begin(),
+                                   detected_scripts.end());
+  std::vector<CodepointSet> codepoints;
+  codepoints.reserve(scripts.size());
+  for (const auto& script : scripts) {
+    codepoints.push_back(OverlapCodepoints(freq_list, script, unicodes));
+  }
+
+  // Only pairs of scripts that share at least one codepoint can overlap.
+  std::vector<std::pair<uint32_t, uint32_t>> candidate_pairs;
+  IntSet candidate_scripts;
+  for (uint32_t i = 0; i < scripts.size(); i++) {
+    for (uint32_t j = i + 1; j < scripts.size(); j++) {
+      if (!codepoints[i].intersects(codepoints[j])) {
+        continue;
+      }
+      candidate_pairs.push_back(std::make_pair(i, j));
+      candidate_scripts.insert(i);
+      candidate_scripts.insert(j);
+    }
+  }
+
+  // Frequency data is needed to weight the shared codepoints, it's expensive
+  // to load so only do it for the scripts that might be grouped. Pair
+  // (bigram) data isn't needed here, so use the much smaller unigram only
+  // copy of the data.
+  flat_hash_map<uint32_t, UnicodeFrequencies> frequencies;
+  flat_hash_map<uint32_t, CodepointSet> covered_codepoints;
+  flat_hash_map<uint32_t, double> total_probability;
+  for (uint32_t i : candidate_scripts) {
+    UnicodeFrequencies freq = TRY(
+        LoadBuiltInUnigramFrequencies(scripts[i].c_str(), resolver, unicodes));
+
+    // Note: CoveredCodepoints() recomputes the set on each call, so cache here.
+    CodepointSet covered = freq.CoveredCodepoints();
+
+    double total = 0.0;
+    for (hb_codepoint_t cp : codepoints[i]) {
+      if (!covered.contains(cp)) {
+        continue;
+      }
+      total += freq.ProbabilityFor(cp);
+    }
+
+    frequencies.emplace(i, std::move(freq));
+    covered_codepoints.emplace(i, std::move(covered));
+    total_probability[i] = total;
+  }
+
+  GlyphPartition partition(scripts.size());
+  for (const auto& [i, j] : candidate_pairs) {
+    CodepointSet shared = codepoints[i];
+    shared.intersect(codepoints[j]);
+
+    double shared_probability_i = 0.0;
+    double shared_probability_j = 0.0;
+    for (hb_codepoint_t cp : shared) {
+      if (covered_codepoints.at(i).contains(cp)) {
+        shared_probability_i += frequencies.at(i).ProbabilityFor(cp);
+      }
+      if (covered_codepoints.at(j).contains(cp)) {
+        shared_probability_j += frequencies.at(j).ProbabilityFor(cp);
+      }
+    }
+
+    double fraction_i = total_probability[i] > 0.0
+                            ? shared_probability_i / total_probability[i]
+                            : 0.0;
+    double fraction_j = total_probability[j] > 0.0
+                            ? shared_probability_j / total_probability[j]
+                            : 0.0;
+
+    double fraction = std::max(fraction_i, fraction_j);
+    VLOG(1) << "Overlap between " << scripts[i] << " and " << scripts[j]
+            << " is " << fraction << " (" << shared.size()
+            << " shared codepoints).";
+    if (fraction >= kScriptOverlapThreshold) {
+      LOG(INFO) << "Grouping " << scripts[i] << " and " << scripts[j]
+                << " together, they share " << fraction
+                << " of their probability mass.";
+      TRYV(partition.Union(i, j));
+    }
+  }
+
+  std::vector<std::vector<std::string>> groups;
+  flat_hash_map<uint32_t, uint32_t> representative_to_group;
+  for (uint32_t i = 0; i < scripts.size(); i++) {
+    uint32_t representative = TRY(partition.Find(i));
+    auto [it, inserted] =
+        representative_to_group.insert({representative, groups.size()});
+    if (inserted) {
+      groups.push_back(std::vector<std::string>());
+    }
+    groups[it->second].push_back(scripts[i]);
+  }
+
+  return groups;
 }
 
 static StatusOr<std::string> FindFileName(
@@ -480,11 +635,11 @@ static Status ApplyPrimaryScript(
 
   // Primary script behaviour:
   // - base script if present is replaced by primary script.
-  // - if base script is CJK, then all CJK's are replaced by primary script
+  // - if the primary is the unified CJK data set then all of the individual
+  //   CJK scripts are replaced by it.
   detected_scripts.erase(primary_base_script);
-  auto cjk_scripts = CjkScripts();
-  if (cjk_scripts.contains(primary_base_script)) {
-    for (const auto& script : cjk_scripts) {
+  if (primary_script == "Script_CJK.riegeli@*") {
+    for (const auto& script : CjkScripts()) {
       detected_scripts.erase(script);
     }
   }
@@ -501,12 +656,6 @@ static void ApplyQualityLevelTo(Quality quality,
 
 static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
   config.set_min_group_size(kMinimumGroupSize);
-
-  if (quality == ONE || quality == TWO) {
-    config.set_use_bigrams(false);
-  } else {
-    config.set_use_bigrams(true);
-  }
 
   switch (quality) {
     case ONE:
@@ -528,6 +677,39 @@ static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
     case SEVEN:
     default:
       config.set_optimization_cutoff_fraction(0.005);
+      break;
+  }
+}
+
+static void ApplyQualityLevelTo(Quality quality, FrequencyDataConfig& config) {
+  config.set_use_bigrams(quality != ONE && quality != TWO);
+
+  if (!config.has_initial_font_merge_threshold()) {
+    return;
+  }
+
+  switch (quality) {
+    case ONE:
+      config.set_initial_font_merge_probability_threshold(0.60);
+      break;
+    case TWO:
+      config.set_initial_font_merge_probability_threshold(0.54);
+      break;
+    case THREE:
+      config.set_initial_font_merge_probability_threshold(0.48);
+      break;
+    case FOUR:
+      config.set_initial_font_merge_probability_threshold(0.42);
+      break;
+    case FIVE:
+      config.set_initial_font_merge_probability_threshold(0.36);
+      break;
+    case SIX:
+      config.set_initial_font_merge_probability_threshold(0.30);
+      break;
+    case SEVEN:
+    default:
+      config.set_initial_font_merge_probability_threshold(0.25);
       break;
   }
 }
@@ -561,38 +743,9 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
         break;
     }
 
-    if (merge_group.mutable_cost_config()->has_initial_font_merge_threshold()) {
-      switch (quality) {
-        case ONE:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.60);
-          break;
-        case TWO:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.54);
-          break;
-        case THREE:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.48);
-          break;
-        case FOUR:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.42);
-          break;
-        case FIVE:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.36);
-          break;
-        case SIX:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.30);
-          break;
-        case SEVEN:
-        default:
-          merge_group.mutable_cost_config()
-              ->set_initial_font_merge_probability_threshold(0.25);
-          break;
-      }
+    for (auto& freq_data :
+         *merge_group.mutable_cost_config()->mutable_frequency_data()) {
+      ApplyQualityLevelTo(quality, freq_data);
     }
   }
 }
@@ -730,17 +883,30 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   std::string primary_script_file =
       TRY(FindFileName(primary_script.value_or("Script_latin"), freq_list));
 
-  // Add merge groups for other detected scripts
-  for (const std::string& script : detected_scripts) {
+  // Add a merge group for each group of detected scripts. Scripts which
+  // overlap each other are placed into the same merge group so that their
+  // shared codepoints are cost merged instead of falling back to heuristic
+  // merging.
+  auto script_groups = TRY(
+      GroupOverlappingScripts(detected_scripts, freq_list, unicodes, resolver));
+  for (const auto& script_group : script_groups) {
     auto* mg = config.add_merge_groups();
-    mg->set_name(ScriptName(script));
     auto* cost = mg->mutable_cost_config();
 
-    cost->set_built_in_freq_data_name(script);
-    if (script == primary_script_file) {
-      cost->set_initial_font_merge_threshold(-(double)DEFAULT_NETWORK_COST *
-                                             (0.8));
+    std::vector<std::string> names;
+    names.reserve(script_group.size());
+    for (const std::string& script : script_group) {
+      names.push_back(ScriptName(script));
+
+      auto* freq_data = cost->add_frequency_data();
+      freq_data->set_built_in_freq_data_name(script);
+      if (script == primary_script_file) {
+        freq_data->set_initial_font_merge_threshold(
+            -(double)DEFAULT_NETWORK_COST * (0.8));
+      }
     }
+
+    mg->set_name(absl::StrJoin(names, "+"));
   }
 
   ApplyQualityLevelTo(quality, config);
