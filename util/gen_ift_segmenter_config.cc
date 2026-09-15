@@ -21,8 +21,15 @@ using ift::config::SegmenterConfig;
 ABSL_FLAG(std::string, input_font, "in.ttf",
           "Path to the font file to analyze.");
 
-ABSL_FLAG(std::string, primary_script, "Script_latin",
-          "The primary script or language frequency data file to use.");
+ABSL_FLAG(std::string, primary_script, "",
+    "This sets the primary script or "
+    "language frequency data file the font is expected to be used with. "
+    "This is used to signal the merger to prioritize performance with the "
+    "specified script/language. Concretely: initial font merging will be "
+    "done using the primary script/language frequency data. Additionally, "
+    "when multiple scripts overlap (eg. like with CJK) merging will "
+    "prioritize optimizing against the primary script/language instead of "
+    "all overlapping scripts equally.");
 
 ABSL_FLAG(int, quality, 0,
           "The quality level to use. A value of 0 means auto pick. Valid "
@@ -49,8 +56,12 @@ static Status Main(const std::vector<char*> args) {
     quality_level = absl::GetFlag(FLAGS_quality);
   }
 
+  std::optional<std::string> primary_script = std::nullopt;
+  if (!absl::GetFlag(FLAGS_primary_script).empty()) {
+    primary_script = absl::GetFlag(FLAGS_primary_script);
+  }
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), *resolver, absl::GetFlag(FLAGS_primary_script),
+      font.get(), *resolver, primary_script,
       quality_level));
 
   std::string output;

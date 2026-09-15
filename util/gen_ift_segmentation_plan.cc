@@ -111,9 +111,13 @@ static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font,
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
+
+    std::optional<std::string> primary_script = std::nullopt;
+    if (!absl::GetFlag(FLAGS_auto_config_primary_script).empty()) {
+      primary_script = absl::GetFlag(FLAGS_auto_config_primary_script);
+    }
     return AutoSegmenterConfig::GenerateConfig(
-        font, resolver, absl::GetFlag(FLAGS_auto_config_primary_script),
-        quality_level);
+        font, resolver, primary_script, quality_level);
   }
 
   FontData config_text =
