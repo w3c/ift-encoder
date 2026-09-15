@@ -258,7 +258,14 @@ SegmentSet SegmenterConfigUtil::MapToIndices(
     const flat_hash_map<SegmentId, uint32_t>& id_to_index) {
   SegmentSet mapped;
   for (uint32_t s_id : segments.values()) {
-    mapped.insert(id_to_index.at(SegmentId{.id_value = s_id}));
+    auto it = id_to_index.find(SegmentId{.id_value = s_id});
+    if (it == id_to_index.end()) {
+      // There's no segment associated with this id, for example because the
+      // segment's codepoints are all in the initial font or not in the font
+      // at all. Nothing to add to the group.
+      continue;
+    }
+    mapped.insert(it->second);
   }
   return mapped;
 }

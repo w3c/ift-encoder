@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -842,6 +843,64 @@ static Quality AutoPickQuality(uint32_t codepoint_count) {
   return ONE;
 }
 
+// Returns the codepoints in the font which are covered by the frequency data
+// of at least one of scripts.
+static CodepointSet CoveredCodepoints(
+    const std::vector<std::string>& scripts,
+    const flat_hash_map<std::string, CodepointSet>& freq_list,
+    const CodepointSet& unicodes) {
+  CodepointSet result;
+  for (const std::string& script : scripts) {
+    auto it = freq_list.find(script);
+    if (it == freq_list.end()) {
+      continue;
+    }
+    result.union_set(it->second);
+  }
+  result.intersect(unicodes);
+  return result;
+}
+
+// Adds a merge group to config which uses the frequency data of each of
+// scripts. The script matching primary_script_file (if any) is configured to
+// do initial font merging.
+//
+// By default the group covers all segments which the supplied frequency data
+// sets have data for. If covered_codepoints is provided the group is instead
+// configured to cover exactly those codepoints.
+static void AddMergeGroup(const std::vector<std::string>& scripts,
+                          const std::string& primary_script_file,
+                          std::optional<CodepointSet> covered_codepoints,
+                          SegmenterConfig& config) {
+  auto* mg = config.add_merge_groups();
+  auto* cost = mg->mutable_cost_config();
+
+  std::vector<std::string> names;
+  names.reserve(scripts.size());
+  for (const std::string& script : scripts) {
+    names.push_back(ScriptName(script));
+
+    auto* freq_data = cost->add_frequency_data();
+    freq_data->set_built_in_freq_data_name(script);
+    if (script == primary_script_file) {
+      freq_data->set_initial_font_merge_threshold(
+          -(double)DEFAULT_NETWORK_COST * (0.8));
+    }
+  }
+
+  if (covered_codepoints.has_value()) {
+    // In an auto generated config there are no explicitly configured
+    // segments, so the segmenter creates one segment per codepoint in the
+    // font and uses the codepoint value as the segment id.
+    auto* segment_ids = mg->mutable_segment_ids();
+    for (hb_codepoint_t cp : *covered_codepoints) {
+      segment_ids->add_values(cp);
+    }
+  }
+
+  mg->set_name(absl::StrJoin(names, "+"));
+}
+
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     hb_face_t* face, const ift::common::DataFileResolver& resolver,
     std::optional<std::string> primary_script,
@@ -890,23 +949,44 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   auto script_groups = TRY(
       GroupOverlappingScripts(detected_scripts, freq_list, unicodes, resolver));
   for (const auto& script_group : script_groups) {
-    auto* mg = config.add_merge_groups();
-    auto* cost = mg->mutable_cost_config();
+    if (!primary_script.has_value() || script_group.size() < 2 ||
+        std::find(script_group.begin(), script_group.end(),
+                  primary_script_file) == script_group.end()) {
+      AddMergeGroup(script_group, primary_script_file, std::nullopt, config);
+      continue;
+    }
 
-    std::vector<std::string> names;
-    names.reserve(script_group.size());
+    // An explicitly specified primary script is the use case the font is
+    // expected to be primarily used for, so merging should be biased towards
+    // optimizing it. If it was left grouped with the other scripts it would
+    // be treated as equally important as each of them, so instead give it a
+    // merge group of its own.
+    AddMergeGroup({primary_script_file}, primary_script_file, std::nullopt,
+                  config);
+
+    // The rest of the group still needs to be handled, but only for the
+    // codepoints which the primary script's merge group doesn't already
+    // cover. Those are configured explicitly so that the two groups don't
+    // overlap.
+    std::vector<std::string> remaining_scripts;
     for (const std::string& script : script_group) {
-      names.push_back(ScriptName(script));
-
-      auto* freq_data = cost->add_frequency_data();
-      freq_data->set_built_in_freq_data_name(script);
-      if (script == primary_script_file) {
-        freq_data->set_initial_font_merge_threshold(
-            -(double)DEFAULT_NETWORK_COST * (0.8));
+      if (script != primary_script_file) {
+        remaining_scripts.push_back(script);
       }
     }
 
-    mg->set_name(absl::StrJoin(names, "+"));
+    CodepointSet remaining_codepoints =
+        CoveredCodepoints(remaining_scripts, freq_list, unicodes);
+    remaining_codepoints.subtract(
+        CoveredCodepoints({primary_script_file}, freq_list, unicodes));
+    if (remaining_codepoints.empty()) {
+      // The primary script covers everything the rest of the group does, no
+      // additional group is needed.
+      continue;
+    }
+
+    AddMergeGroup(remaining_scripts, primary_script_file,
+                  std::move(remaining_codepoints), config);
   }
 
   ApplyQualityLevelTo(quality, config);
