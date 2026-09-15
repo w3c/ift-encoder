@@ -157,9 +157,13 @@ StatusOr<SegmentationPlan> CreateSegmentationPlan(
     if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
       quality_level = absl::GetFlag(FLAGS_auto_config_quality);
     }
+
+    std::optional<std::string> primary_script = std::nullopt;
+    if (!absl::GetFlag(FLAGS_auto_config_primary_script).empty()) {
+      primary_script = absl::GetFlag(FLAGS_auto_config_primary_script);
+    }
     auto config = AutoSegmenterConfig::GenerateConfig(
-        font, *resolver, absl::GetFlag(FLAGS_auto_config_primary_script),
-        quality_level);
+        font, *resolver, primary_script, quality_level);
     if (!config.ok()) {
       return absl::InternalError(
           StrCat("Failed to generate config: ", config.status().message()));
