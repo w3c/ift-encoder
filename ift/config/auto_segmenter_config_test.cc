@@ -2,16 +2,21 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "hb-subset.h"
 #include "hb.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
+#include "ift/common/font_helper.h"
+#include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 #include "ift/config/load_codepoints.h"
 
@@ -28,8 +33,13 @@ using ::ift::common::hb_blob_unique_ptr;
 using ::ift::common::hb_face_unique_ptr;
 using ::ift::common::make_hb_blob;
 using ::ift::common::make_hb_face;
+using ::ift::common::CodepointSet;
+using ::ift::common::FontHelper;
+using ::testing::AnyOfArray;
+using ::testing::Contains;
 using ::testing::Each;
 using ::testing::Eq;
+using ::testing::Not;
 using ::testing::UnorderedElementsAre;
 
 class AutoSegmenterConfigTest : public ::testing::Test {
@@ -48,6 +58,19 @@ class AutoSegmenterConfigTest : public ::testing::Test {
 
     cjk_face_ =
         loader->LoadFace("ift/common/testdata/NotoSansJP-Regular.ttf").value();
+  }
+
+  // Returns face reduced down to only the supplied codepoints.
+  static hb_face_unique_ptr Subset(
+      hb_face_t* face, const ift::common::CodepointSet& codepoints) {
+    hb_subset_input_t* input = hb_subset_input_create_or_fail();
+    for (hb_codepoint_t cp : codepoints) {
+      hb_set_add(hb_subset_input_unicode_set(input), cp);
+    }
+
+    hb_face_unique_ptr subset = make_hb_face(hb_subset_or_fail(face, input));
+    hb_subset_input_destroy(input);
+    return subset;
   }
 
   hb_face_unique_ptr face_;
@@ -84,6 +107,26 @@ static std::vector<std::string> GetScriptsWithInitialMergeThreshold(
   return result;
 }
 
+// Returns the set of codepoints that the merge group named group_name is
+// explicitly configured to cover. Returns nullopt if there's no such group or
+// if it doesn't have an explicit coverage set (in which case coverage is
+// derived from the groups frequency data).
+static std::optional<ift::common::CodepointSet> GetSegmentIds(
+    const SegmenterConfig& config, absl::string_view group_name) {
+  for (const auto& mg : config.merge_groups()) {
+    if (mg.name() != group_name || !mg.has_segment_ids()) {
+      continue;
+    }
+
+    ift::common::CodepointSet result;
+    for (uint32_t value : mg.segment_ids().values()) {
+      result.insert(value);
+    }
+    return result;
+  }
+  return std::nullopt;
+}
+
 const ScriptGroup kCyrillic = {"Cyrillic", {"Script_cyrillic.riegeli"}};
 const ScriptGroup kGreek = {"Greek", {"Script_greek.riegeli"}};
 const ScriptGroup kSymbols = {"Symbols", {"Script_symbols.riegeli"}};
@@ -102,10 +145,19 @@ const ScriptGroup kCJK = {
     {"Script_chinese-simplified.riegeli@*",
      "Script_chinese-traditional.riegeli@*", "Script_japanese.riegeli@*",
      "Script_korean.riegeli@*"}};
-const ScriptGroup kZhHansCJK = {
-    "Language_zh-Hans+Chinese-traditional+Japanese+Korean",
-    {"Language_zh-Hans.riegeli@*", "Script_chinese-traditional.riegeli@*",
-     "Script_japanese.riegeli@*", "Script_korean.riegeli@*"}};
+const ScriptGroup kJapanese = {"Japanese", {"Script_japanese.riegeli@*"}};
+// The CJK scripts left over once an explicitly specified japanese primary
+// script has been split out into it's own group.
+const ScriptGroup kCJKWithoutJapanese = {
+    "Chinese-simplified+Chinese-traditional+Korean",
+    {"Script_chinese-simplified.riegeli@*",
+     "Script_chinese-traditional.riegeli@*", "Script_korean.riegeli@*"}};
+const ScriptGroup kLanguageZhHans = {"Language_zh-Hans",
+                                     {"Language_zh-Hans.riegeli@*"}};
+const ScriptGroup kCJKWithoutZhHans = {
+    "Chinese-traditional+Japanese+Korean",
+    {"Script_chinese-traditional.riegeli@*", "Script_japanese.riegeli@*",
+     "Script_korean.riegeli@*"}};
 const ScriptGroup kUnifiedCJK = {"CJK", {"Script_CJK.riegeli@*"}};
 
 TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
@@ -226,7 +278,8 @@ TEST_F(AutoSegmenterConfigTest, Roboto_LanguageFr) {
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
-  if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
   auto config_or =
       AutoSegmenterConfig::GenerateConfig(cjk_face_.get(), *resolver);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
@@ -240,7 +293,8 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
-  if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
   auto config_or = AutoSegmenterConfig::GenerateConfig(cjk_face_.get(),
                                                        *resolver, "Script_CJK");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
@@ -253,29 +307,105 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
-  if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
   auto config_or = AutoSegmenterConfig::GenerateConfig(
       cjk_face_.get(), *resolver, "Script_japanese");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
-  // Japanese remains grouped with the other CJK scripts, but only it gets
-  // the initial font merge threshold.
+  // Japanese has been explicitly selected as the primary script so it's given
+  // a merge group of it's own (which biases merging towards optimizing
+  // japanese). The remaining CJK scripts get a second group.
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
-                                   kCJK, kFallback));
+                                   kJapanese, kCJKWithoutJapanese, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
               UnorderedElementsAre("Script_japanese.riegeli@*"));
+
+  // The primary script's group covers everything it's frequency data covers,
+  // so it doesn't need an explicit coverage.
+  EXPECT_FALSE(GetSegmentIds(*config_or, kJapanese.first).has_value());
+
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  // The second group is configured to cover only the codepoints which are
+  // not covered by the japanese group.
+  auto covered = GetSegmentIds(*config_or, kCJKWithoutJapanese.first);
+  ASSERT_TRUE(covered.has_value());
+  EXPECT_FALSE(covered->empty());
+  EXPECT_FALSE(
+      covered->intersects(freq_list->at("Script_japanese.riegeli@*")));
+
+  CodepointSet font_unicodes = FontHelper::ToCodepointsSet(cjk_face_.get());
+  CodepointSet expected;
+  for (const auto& script : kCJKWithoutJapanese.second) {
+    CodepointSet remaining_script_codepoints = freq_list->at(script);
+    remaining_script_codepoints.intersect(font_unicodes);
+    remaining_script_codepoints.subtract(freq_list->at("Script_japanese.riegeli@*"));
+    ASSERT_TRUE(remaining_script_codepoints.is_subset_of(*covered));
+    expected.union_set(remaining_script_codepoints);
+  }
+  ASSERT_EQ(*covered, expected);
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_LanguageZhHans) {
-  if (!cjk_face_) GTEST_SKIP() << "NotoSansJP-Regular.ttf not found";
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
   auto config_or = AutoSegmenterConfig::GenerateConfig(
       cjk_face_.get(), *resolver, "Language_zh-Hans");
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_THAT(GetScripts(*config_or),
               UnorderedElementsAre(kEmojiLatinAndSymbols, kGreek, kCyrillic,
-                                   kZhHansCJK, kFallback));
+                                   kLanguageZhHans, kCJKWithoutZhHans,
+                                   kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
               UnorderedElementsAre("Language_zh-Hans.riegeli@*"));
+
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  EXPECT_FALSE(GetSegmentIds(*config_or, kLanguageZhHans.first).has_value());
+
+  auto covered = GetSegmentIds(*config_or, kCJKWithoutZhHans.first);
+  ASSERT_TRUE(covered.has_value());
+  EXPECT_FALSE(covered->empty());
+  EXPECT_FALSE(
+      covered->intersects(freq_list->at("Language_zh-Hans.riegeli@*")));
+}
+
+TEST_F(AutoSegmenterConfigTest, NotoSansJP_PrimaryScriptCoversWholeGroup) {
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  // Reduce the font down to only the codepoints which the japanese frequency
+  // data covers. Emoji is excluded as well, otherwise the handful of emoji
+  // codepoints that remain would be pulled into the CJK merge group.
+  CodepointSet subset_codepoints = freq_list->at("Script_japanese.riegeli@*");
+  subset_codepoints.subtract(freq_list->at("Script_emoji.riegeli"));
+  hb_face_unique_ptr subset = Subset(cjk_face_.get(), subset_codepoints);
+  ASSERT_TRUE(subset.get());
+
+  // The other CJK scripts are still present in the subsetted font and are
+  // still grouped together with japanese.
+  auto config_or =
+      AutoSegmenterConfig::GenerateConfig(subset.get(), *resolver);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(GetScripts(*config_or), Contains(kCJK));
+
+  // However japanese covers all of the codepoints in the font, so once it's
+  // split out into it's own group there's nothing left for the other CJK
+  // scripts to cover and no group is created for them.
+  config_or = AutoSegmenterConfig::GenerateConfig(subset.get(), *resolver,
+                                                  "Script_japanese");
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(GetScripts(*config_or), Contains(kJapanese));
+  EXPECT_THAT(GetScripts(*config_or), Not(Contains(kCJKWithoutJapanese)));
+  for (const auto& [name, data_sets] : GetScripts(*config_or)) {
+    EXPECT_THAT(data_sets, Each(Not(AnyOfArray(kCJKWithoutJapanese.second))))
+        << "in merge group " << name;
+  }
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptNotFound) {

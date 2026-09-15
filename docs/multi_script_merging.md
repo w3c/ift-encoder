@@ -389,9 +389,33 @@ flowchart TD
 * `ApplyPrimaryScript()` no longer collapses all CJK scripts when the primary
   is a CJK language/script; it only does so when the primary is the synthetic
   `Script_CJK.riegeli@*` data set (which is otherwise never auto detected).
-  So `primary_script = "Script_japanese"` keeps japanese grouped with the
-  other CJK scripts and only sets the initial font merge threshold on the
-  japanese data set.
+* An explicitly specified primary script is a signal that the font will
+  primarily be used for that script/language, so merging should be biased
+  towards optimizing it. If it was left in a group with the other scripts it
+  overlaps then all of the group's data sets would be weighted equally. So
+  when the primary script is explicitly specified and lands in a group with
+  other scripts, the group is split in two:
+  1. A merge group containing only the primary script's data set (this is
+     also the one which gets the initial font merge threshold).
+  2. A merge group containing the rest of the group's scripts, with
+     `MergeGroup.segment_ids` explicitly set to the codepoints those scripts
+     cover which the primary script does not. This keeps the two groups
+     disjoint, so everything the primary script has data for is optimized for
+     the primary script alone and the remainder is optimized with equal
+     weight for the other scripts. If the primary covers everything the rest
+     of the group does, the second group is dropped.
+
+  eg. for `NotoSansJP-Regular.ttf` with `primary_script = "Script_japanese"`
+  this produces a `Japanese` group plus a
+  `Chinese-simplified+Chinese-traditional+Korean` group covering the ~5700
+  codepoints in the font which the japanese data set doesn't cover. When the
+  primary script is left unspecified (it defaults to `Script_latin`) no split
+  is done.
+
+  Note: the explicit coverage is expressed as codepoint values because an
+  auto generated config has no explicitly configured segments, in which case
+  the segmenter creates one segment per font codepoint keyed by the codepoint
+  value.
 * `use_bigrams` and `initial_font_merge_probability_threshold` are now set per
   `FrequencyDataConfig` rather than on the (deprecated) `CostConfiguration`
   fields, which also removes the last deprecation warnings in the build.

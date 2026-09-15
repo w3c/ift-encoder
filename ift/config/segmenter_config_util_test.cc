@@ -144,6 +144,37 @@ TEST_F(SegmenterConfigUtilTest,
                          {{0, 1, 2}, MergeStrategy::Heuristic(101)}}));
 }
 
+TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_SegmentIdsWithoutSegmentsIgnored) {
+  SegmenterConfig config;
+  config.mutable_initial_segment()->mutable_codepoints()->add_values(2);
+
+  auto* group = config.add_merge_groups();
+  group->mutable_segment_ids()->add_values(1);
+  // There's no segment for these two: 2 is in the initial font and 77 isn't
+  // in the font at all.
+  group->mutable_segment_ids()->add_values(2);
+  group->mutable_segment_ids()->add_values(77);
+  group->mutable_heuristic_config()->set_min_patch_size(101);
+
+  CodepointSet font_codepoints{1, 2, 4};
+
+  SegmenterConfigUtil util("", resolver);
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups =
+      util.ConfigToMergeGroups(config, font_codepoints, {}, segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              {1},
+                              {4},
+                          }));
+
+  ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{
+                         {{0}, MergeStrategy::Heuristic(101)}}));
+}
+
 TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_NoSegments_Heuristic) {
   // Minimal config with one heuristic merge group that covers everything.
   SegmenterConfig config;
