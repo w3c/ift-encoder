@@ -246,4 +246,34 @@ TEST(BigramProbabilityCalculatorTest, ComputeProbability_LruEviction) {
   ASSERT_EQ(calc.ComputeProbability({'a'}), (ProbabilityBound{0.7, 0.7}));
 }
 
+TEST(BigramProbabilityCalculatorTest, SegmentCache) {
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 70}, {{'b', 'b'}, 60}, {{'c', 'c'}, 100},
+      {{'a', 'b'}, 40}, {{'a', 'c'}, 50}, {{'b', 'c'}, 60},
+  };
+
+  BigramProbabilityCalculator calc(std::move(frequencies));
+  calc.ResetSegmentProbabilities(3);
+
+  std::vector<Segment> segments {{{'a'}}};
+  // Populate segment 0 with def_a (prob 0.7)
+  EXPECT_EQ(calc.ComputeProbability(segments, 0), (ProbabilityBound{0.7, 0.7}));
+  segments[0] = {{'b'}};
+
+  // Requesting segment 0 with def_b returns cached value for segment 0 (0.7)
+  EXPECT_EQ(calc.ComputeProbability(segments, 0), (ProbabilityBound{0.7, 0.7}));
+
+  // Invalidate segment 0
+  calc.InvalidateSegmentProbabilities({0});
+  EXPECT_EQ(calc.ComputeProbability(segments, 0), (ProbabilityBound{0.6, 0.6}));
+
+  // Test Span/SegmentSet overload of ComputeMergedProbability
+  segments = {Segment{{'a'}}, Segment{{'b'}}, Segment{{'c'}}};
+  calc.ResetSegmentProbabilities(3);
+  double Pab = 0.70 + 0.60 - 0.40;
+  EXPECT_EQ(
+      calc.ComputeMergedProbability(segments, ift::common::SegmentSet{0, 1}),
+      (ProbabilityBound{Pab, Pab}));
+}
+
 }  // namespace ift::freq

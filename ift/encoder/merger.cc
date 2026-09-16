@@ -30,10 +30,12 @@ bool Merger::ShouldRecordMergedSizeReductions() const {
 }
 
 StatusOr<double> Merger::AggregateProbability(
-    const SubsetDefinition& definition) const {
+    segment_index_t segment_index) const {
   double total = 0.0;
   for (const auto& profile : strategy_.ProbabilityProfiles()) {
-    total += TRY(profile.Calculator())->ComputeProbability(definition).Value();
+    total += TRY(profile.Calculator())
+                 ->ComputeProbability(Context().SegmentationInfo().Segments(), segment_index)
+                 .Value();
   }
   return total;
 }
@@ -50,12 +52,13 @@ StatusOr<double> Merger::AggregateProbability(
 
 StatusOr<double> Merger::AggregateMergedProbability(
     const ActivationCondition& condition,
-    segment_index_t merged_segment_index, const Segment& merged_segment) const {
+    segment_index_t merged_segment_index,
+    const SegmentSet& merged_segments) const {
   const auto& segments = Context().SegmentationInfo().Segments();
   double total = 0.0;
   for (const auto& profile : strategy_.ProbabilityProfiles()) {
     total += TRY(condition.MergedProbability(segments, merged_segment_index,
-                                             merged_segment,
+                                             merged_segments,
                                              *TRY(profile.Calculator())));
   }
   return total;
@@ -156,17 +159,19 @@ StatusOr<SegmentSet> Merger::InitFontApplyProbabilityThreshold(
     size_t profile_index) const {
   const auto* profile = TRY(strategy_.GetProbabilityProfile(profile_index));
   const auto* calculator = TRY(strategy_.ProbabilityCalculator(profile_index));
+  const auto& segments = Context().SegmentationInfo().Segments();
 
   SegmentSet inscope;
   uint32_t skipped = 0;
   if (profile->init_font_merge_probability_threshold.has_value()) {
     for (segment_index_t s : inscope_segments_for_init_move_) {
-      const auto& seg = Context().SegmentationInfo().Segments().at(s);
+
+      const auto& seg = segments.at(s);
       if (seg.Definition().Empty()) {
         continue;
       }
 
-      auto p = calculator->ComputeProbability(seg.Definition()).Value();
+      auto p = calculator->ComputeProbability(segments, s).Value();
       if (p >= *profile->init_font_merge_probability_threshold) {
         inscope.insert(s);
       } else {
@@ -310,9 +315,18 @@ Status Merger::MoveSegmentsToInitFont(size_t profile_index) {
   return absl::OkStatus();
 }
 
+Status Merger::ResetSegmentProbabilities() const {
+  size_t num_segments = Context().SegmentationInfo().Segments().size();
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    TRY(profile.Calculator())->ResetSegmentProbabilities(num_segments);
+  }
+  return absl::OkStatus();
+}
+
 Status Merger::ReassignInitSubset() {
   candidate_segments_ =
       ComputeCandidateSegments(Context(), strategy_, inscope_segments_);
+  TRYV(ResetSegmentProbabilities());
   TRYV(InitOptimizationCutoff());
   return absl::OkStatus();
 }
@@ -321,6 +335,14 @@ uint32_t Merger::AssignMergedSegment(segment_index_t base,
                                      const SegmentSet& to_merge,
                                      const Segment& merged_segment,
                                      bool is_inert) {
+  SegmentSet invalidated = to_merge;
+  invalidated.insert(base);
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    auto calc = profile.Calculator();
+    if (calc.ok()) {
+      (*calc)->InvalidateSegmentProbabilities(invalidated);
+    }
+  }
   candidate_segments_.subtract(to_merge);
   candidate_segments_.insert(base);
   return Context().AssignMergedSegment(base, to_merge, merged_segment,
@@ -357,11 +379,10 @@ Status Merger::InitOptimizationCutoff() {
     optimization_cutoff_segment_ = TRY(ComputeSegmentCutoff());
     if (optimization_cutoff_segment_ <
         context_->SegmentationInfo().Segments().size()) {
-      const auto& s = context_->SegmentationInfo().Segments()[optimization_cutoff_segment_];
       VLOG(1) << "Cutting off optimization at segment "
               << optimization_cutoff_segment_ << ", P("
               << optimization_cutoff_segment_ << ") = "
-              << TRY(AggregateProbability(s.Definition()));
+              << TRY(AggregateProbability(optimization_cutoff_segment_));
     } else {
       VLOG(1) << "No optimization cutoff.";
     }
@@ -393,8 +414,7 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
     }
 
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
-    const auto& segment = context_->SegmentationInfo().Segments()[s];
-    double probability = TRY(AggregateProbability(segment.Definition()));
+    double probability = TRY(AggregateProbability(s));
     total_cost += probability * (size + overhead);
   }
 
@@ -408,9 +428,8 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
       continue;
     }
 
-    const auto& segment = context_->SegmentationInfo().Segments()[s];
     double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
-    double probability = TRY(AggregateProbability(segment.Definition()));
+    double probability = TRY(AggregateProbability(s));
     cutoff_tail_cost -= probability * (size + overhead);
     if (cutoff_tail_cost < 0.0) {
       // This segment puts us above the cutoff, so set the cutoff as the
@@ -595,12 +614,7 @@ Status Merger::CollectExclusiveCandidateMerges(
   uint32_t base_size =
       TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
 
-  const auto& base_segment = Context()
-                                .SegmentationInfo()
-                                .Segments()
-                                .at(base_segment_index);
-  double base_probability =
-      TRY(AggregateProbability(base_segment.Definition()));
+  double base_probability = TRY(AggregateProbability(base_segment_index));
 
   double inert_threshold = -1.0;
   if (smallest_candidate_merge.has_value()) {
@@ -624,11 +638,8 @@ Status Merger::CollectExclusiveCandidateMerges(
       return absl::OkStatus();
     }
 
-    const auto& segment = context_->SegmentationInfo()
-                .Segments()
-                .at(segment_index);
     if (context_->InertSegments().contains(segment_index) &&
-        TRY(AggregateProbability(segment.Definition())) <= inert_threshold) {
+        TRY(AggregateProbability(segment_index)) <= inert_threshold) {
       // Since we iteration is in probability order from highest to lowest, once
       // one segment fails the threshold then we know all further ones will as
       // well.

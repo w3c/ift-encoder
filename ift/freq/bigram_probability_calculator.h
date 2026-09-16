@@ -7,6 +7,7 @@
 #include "ift/freq/lru_cache.h"
 #include "ift/freq/probability_bound.h"
 #include "ift/freq/probability_calculator.h"
+#include "ift/freq/segment_probability_cache.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::freq {
@@ -28,11 +29,28 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
 
+  ProbabilityBound ComputeProbability(
+      absl::Span<const ift::encoder::Segment> segments,
+      ift::encoder::segment_index_t segment_index) const override;
+
   ProbabilityBound ComputeMergedProbability(
       const std::vector<const ift::encoder::Segment*>& segments) const override;
 
+  ProbabilityBound ComputeMergedProbability(
+      absl::Span<const ift::encoder::Segment> segments,
+      const ift::common::SegmentSet& segment_indices) const override;
+
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const override;
+
+  void InvalidateSegmentProbabilities(
+      const ift::common::SegmentSet& segments) const override {
+    segment_cache_.Invalidate(segments);
+  }
+
+  void ResetSegmentProbabilities(size_t num_segments) const override {
+    segment_cache_.Reset(num_segments);
+  }
 
  private:
   ProbabilityBound BigramProbabilityBound(
@@ -46,6 +64,7 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
   UnicodeFrequencies frequencies_;
   mutable LruCache<ift::common::CodepointSet, std::optional<ProbabilityBound>>
       cache_;
+  mutable SegmentProbabilityCache segment_cache_;
 };
 
 }  // namespace ift::freq

@@ -8,7 +8,9 @@
 #include "ift/freq/probability_bound.h"
 
 using ift::common::CodepointSet;
+using ift::common::SegmentSet;
 using ift::encoder::Segment;
+using ift::encoder::segment_index_t;
 using ift::encoder::SubsetDefinition;
 
 namespace ift::freq {
@@ -108,6 +110,18 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
   return ComputeProbabilityInternal(definition, 0.0);
 }
 
+ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
+    absl::Span<const ift::encoder::Segment> segments,
+    segment_index_t segment_index) const {
+  std::optional<ProbabilityBound>& cached_seg = segment_cache_[segment_index];
+  if (cached_seg.has_value()) {
+    return *cached_seg;
+  }
+
+  cached_seg = ComputeProbabilityInternal(segments.at(segment_index).Definition(), 0.0);
+  return *cached_seg;
+}
+
 ProbabilityBound BigramProbabilityCalculator::ComputeProbabilityInternal(
     const SubsetDefinition& definition, double best_lower) const {
   if (definition.Empty()) {
@@ -181,6 +195,34 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
     }
   }
   */
+  return ComputeProbabilityInternal(union_def, best_lower);
+}
+
+ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
+    absl::Span<const Segment> segments,
+    const SegmentSet& segment_indices) const {
+  if (segment_indices.size() == 1) {
+    segment_index_t s = *segment_indices.min();
+    return ComputeProbability(segments, s);
+  }
+  // This assumes that segments are all disjoint, which is enforced in
+  // ClosureGlyphSegmenter::CodepointToGlyphSegments().
+  double best_lower = 0.0;
+  for (segment_index_t s : segment_indices) {
+    double segment_lower_bound =
+        ComputeProbability(segments, s).Min();
+    best_lower = std::max(best_lower, segment_lower_bound);
+    if (best_lower >= 1.0) {
+      // Since this is a union the bound must be [1, 1]
+      return ProbabilityBound(1.0, 1.0);
+    }
+  }
+
+  SubsetDefinition union_def;
+  for (segment_index_t s : segment_indices) {
+    union_def.Union(segments[s].Definition());
+  }
+
   return ComputeProbabilityInternal(union_def, best_lower);
 }
 

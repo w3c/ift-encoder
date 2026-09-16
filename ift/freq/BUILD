@@ -24,6 +24,7 @@ cc_library(
         "bigram_probability_calculator.h",
         "lru_cache.h",
         "probability_calculator.h",
+        "segment_probability_cache.h",
         "unicode_frequencies.h",
         "unigram_probability_calculator.h",
     ],
@@ -36,6 +37,7 @@ cc_library(
         "@abseil-cpp//absl/hash",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
         "@harfbuzz",
     ],
 )
@@ -96,3 +98,16 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "segment_probability_cache_test",
+    srcs = ["segment_probability_cache_test.cc"],
+    deps = [
+        ":common",
+        ":freq",
+        "//ift/common",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+

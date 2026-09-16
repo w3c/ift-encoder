@@ -208,15 +208,15 @@ class ActivationCondition {
 
   // Compute and return the probability that this condition will be activated if
   // it is modified to merge all segments in "merged_segments" into a single
-  // segment with "merged_probability".
+  // segment at "merged_segment_index".
   absl::StatusOr<freq::ProbabilityBound> MergedProbabilityBound(
       absl::Span<const Segment> segments, segment_index_t merged_segment_index,
-      const Segment& merged_segment,
+      const ift::common::SegmentSet& merged_segments,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
   absl::StatusOr<double> MergedProbability(
       absl::Span<const Segment> segments, segment_index_t merged_segment_index,
-      const Segment& merged_segment,
+      const ift::common::SegmentSet& merged_segments,
       const ift::freq::ProbabilityCalculator& calculator) const;
 
   ift::config::ActivationConditionProto ToConfigProto() const;

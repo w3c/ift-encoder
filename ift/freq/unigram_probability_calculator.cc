@@ -1,20 +1,24 @@
 #include "ift/freq/unigram_probability_calculator.h"
 
 #include "hb.h"
+#include "ift/common/int_set.h"
 #include "ift/encoder/segment.h"
+#include "ift/encoder/types.h"
 
+using ift::common::SegmentSet;
 using ift::encoder::Segment;
+using ift::encoder::segment_index_t;
 using ift::encoder::SubsetDefinition;
 
 namespace ift::freq {
 
 UnigramProbabilityCalculator::UnigramProbabilityCalculator(
     UnicodeFrequencies frequencies, size_t max_cache_size)
-    : frequencies_(std::move(frequencies)), cache_("unigram probability", max_cache_size) {}
+    : frequencies_(std::move(frequencies)),
+      cache_("unigram probability", max_cache_size) {}
 
 ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
-    const SubsetDefinition& definition) const {
-
+      const SubsetDefinition& definition) const {
   std::optional<double>& cached_bound = cache_[definition.codepoints];
   if (cached_bound.has_value()) {
     double value = *cached_bound;
@@ -35,6 +39,18 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
   return {probability, probability};
 }
 
+ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
+    absl::Span<const ift::encoder::Segment> segments,
+    segment_index_t segment_index) const {
+  std::optional<ProbabilityBound>& cached_seg = segment_cache_[segment_index];
+  if (cached_seg.has_value()) {
+    return *cached_seg;
+  }
+
+  cached_seg = ComputeProbability(segments.at(segment_index).Definition());
+  return *cached_seg;
+}
+
 ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
     const std::vector<const Segment*>& segments) const {
   // Note: this assumes that all segments are disjoint. Which we enforce for
@@ -42,6 +58,20 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
   double probability_of_none = 1.0;
   for (const auto* s : segments) {
     probability_of_none *= (1.0 - ComputeProbability(s->Definition()).Min());
+  }
+  double p = 1.0 - probability_of_none;
+  return {p, p};
+}
+
+ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
+    absl::Span<const Segment> segments,
+    const SegmentSet& segment_indices) const {
+  // Note: this assumes that all segments are disjoint. Which we enforce for
+  // the inputs to cost based merging.
+  double probability_of_none = 1.0;
+  for (segment_index_t s : segment_indices) {
+    probability_of_none *=
+        (1.0 - ComputeProbability(segments, s).Min());
   }
   double p = 1.0 - probability_of_none;
   return {p, p};

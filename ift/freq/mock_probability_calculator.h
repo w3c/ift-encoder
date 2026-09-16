@@ -24,6 +24,12 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
     return {0.0, 0.0};
   }
 
+  ProbabilityBound ComputeProbability(
+      absl::Span<const ift::encoder::Segment> segments,
+      ift::encoder::segment_index_t segment_index) const override {
+    return ComputeProbability(segments.at(segment_index).Definition());
+  }
+
   ProbabilityBound ComputeMergedProbability(
       const std::vector<const ift::encoder::Segment*>& segments)
       const override {
