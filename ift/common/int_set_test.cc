@@ -88,25 +88,37 @@ TEST_F(IntSetTest, InitList) {
 }
 
 TEST_F(IntSetTest, Move) {
+  IntSet empty{};
+  empty.Hash();
+
   IntSet a{10, 1000};
+  size_t hash_a = a.Hash();
 
   IntSet b(std::move(a));
 
   ASSERT_TRUE(b.contains(10));
   ASSERT_FALSE(b.contains(100));
   ASSERT_TRUE(b.contains(1000));
+  ASSERT_EQ(b.Hash(), hash_a);
 
   // We gaurantee moved values remain valid after a move.
   ASSERT_EQ(a.size(), 0);
+  ASSERT_EQ(a, empty);
+  ASSERT_EQ(a.Hash(), empty.Hash());
 
-  a = std::move(b);
+  IntSet c{5, 6};
+  size_t hash_c = c.Hash();
+  c = std::move(b);
 
-  ASSERT_TRUE(a.contains(10));
-  ASSERT_FALSE(a.contains(100));
-  ASSERT_TRUE(a.contains(1000));
+  ASSERT_TRUE(c.contains(10));
+  ASSERT_FALSE(c.contains(100));
+  ASSERT_TRUE(c.contains(1000));
+  ASSERT_EQ(c.Hash(), hash_a);
 
-  // We gaurantee moved values remain valid after a move.
-  ASSERT_EQ(b.size(), 0);
+  // b now has c's old contents and hash
+  ASSERT_EQ(b.size(), 2);
+  ASSERT_EQ(b, (IntSet{5, 6}));
+  ASSERT_EQ(b.Hash(), hash_c);
 }
 
 TEST_F(IntSetTest, CopyConstructor) {
@@ -146,14 +158,25 @@ TEST_F(IntSetTest, CopyHbSet) {
 
 TEST_F(IntSetTest, Assignment) {
   IntSet a{13, 47};
+  size_t hash_a = a.Hash();
   IntSet b{5, 9};
+  b.Hash();
 
   b = a;
 
   ASSERT_EQ(a, b);
+  ASSERT_EQ(b.Hash(), hash_a);
   ASSERT_TRUE(a.contains(13));
   ASSERT_TRUE(a.contains(47));
 
+  ASSERT_TRUE(b.contains(13));
+  ASSERT_TRUE(b.contains(47));
+
+  // Self-assignment
+  IntSet& b_ref = b;
+  b = b_ref;
+  ASSERT_EQ(a, b);
+  ASSERT_EQ(b.Hash(), hash_a);
   ASSERT_TRUE(b.contains(13));
   ASSERT_TRUE(b.contains(47));
 }

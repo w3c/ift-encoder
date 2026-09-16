@@ -4,8 +4,10 @@
 #include <cstddef>
 #include <optional>
 #include <sstream>
+#include <utility>
 #include <vector>
 
+#include "absl/hash/hash.h"
 #include "absl/types/span.h"
 #include "ift/common/hb_set_unique_ptr.h"
 namespace ift::common {
@@ -101,28 +103,37 @@ class IntSet {
     hb_set_union(set_.get(), set.get());
   }
 
-  IntSet(const IntSet& other) : set_(make_hb_set()) {
+  IntSet(const IntSet& other) : set_(make_hb_set()), cached_hash_(other.cached_hash_) {
     hb_set_union(set_.get(), other.set_.get());
   }
 
   IntSet& operator=(const IntSet& other) {
+    if (this == &other) {
+      return *this;
+    }
     hb_set_clear(set_.get());
     hb_set_union(set_.get(), other.set_.get());
+    cached_hash_ = other.cached_hash_;
     return *this;
   }
 
-  IntSet(IntSet&& other) noexcept : set_(make_hb_set()) {
+  IntSet(IntSet&& other) noexcept : set_(make_hb_set()), cached_hash_(other.cached_hash_) {
     // swap pointers so that the moved set is still in a valid state.
-    this->set_.swap(other.set_);
+    set_.swap(other.set_);
+    other.cached_hash_ = std::nullopt;
   }
 
   IntSet& operator=(IntSet&& other) noexcept {
     // swap pointers so that the moved set is still in a valid state.
     this->set_.swap(other.set_);
+    std::swap(cached_hash_, other.cached_hash_);
     return *this;
   }
 
   bool operator==(const IntSet& other) const {
+    if (cached_hash_.has_value() && other.cached_hash_.has_value() && *cached_hash_ != *other.cached_hash_) {
+      return false;
+    }
     return hb_set_is_equal(this->set_.get(), other.set_.get());
   }
 
@@ -152,11 +163,16 @@ class IntSet {
     return a == this->end();
   }
 
+  size_t Hash() const {
+    if (!cached_hash_.has_value()) {
+      cached_hash_ = absl::HashOf(hb_set_hash(set_.get()));
+    }
+    return *cached_hash_;
+  }
+
   template <typename H>
-  friend H AbslHashValue(H h, const IntSet& set) {
-    // Utilize the existing harfbuzz hashing function.
-    unsigned harfbuzz_hash = hb_set_hash(set.set_.get());
-    return H::combine(std::move(h), harfbuzz_hash);
+  friend H AbslHashValue(H h, const IntSet& s) {
+    return H::combine(std::move(h), s.Hash());
   }
 
   iterator begin() { return iterator(set_.get()); }
@@ -197,16 +213,21 @@ class IntSet {
     return const_iterator(set_.get(), start);
   }
 
-  void insert(hb_codepoint_t codepoint) { hb_set_add(set_.get(), codepoint); }
+  void insert(hb_codepoint_t codepoint) {
+    hb_set_add(set_.get(), codepoint);
+    cached_hash_ = std::nullopt;
+  }
 
   void insert_range(hb_codepoint_t start, hb_codepoint_t end) {
     hb_set_add_range(set_.get(), start, end);
+    cached_hash_ = std::nullopt;
   }
 
   // Optimized insert that takes an array of sorted values
   void insert_sorted_array(absl::Span<const hb_codepoint_t> sorted_values) {
     hb_set_add_sorted_array(set_.get(), sorted_values.data(),
                             sorted_values.size());
+    cached_hash_ = std::nullopt;
   }
 
   std::vector<hb_codepoint_t> to_vector() const {
@@ -265,6 +286,7 @@ class IntSet {
     bool has = contains(codepoint);
     if (has) {
       hb_set_del(set_.get(), codepoint);
+      cached_hash_ = std::nullopt;
       return 1;
     }
     return 0;
@@ -275,34 +297,49 @@ class IntSet {
   bool empty() const { return hb_set_is_empty(set_.get()); }
 
   // Removes all elements
-  void clear() { hb_set_clear(set_.get()); }
+  void clear() {
+    hb_set_clear(set_.get());
+    cached_hash_ = std::nullopt;
+  }
 
   // Compute the union of this and other, store the result in this set.
   void union_set(const IntSet& other) {
     hb_set_union(set_.get(), other.set_.get());
+    cached_hash_ = std::nullopt;
   }
 
-  void union_into(hb_set_t* other) const { hb_set_union(other, set_.get()); }
+  void union_into(hb_set_t* other) const {
+    hb_set_union(other, set_.get());
+  }
 
-  void union_from(hb_set_t* other) const { hb_set_union(set_.get(), other); }
+  void union_from(hb_set_t* other) {
+    hb_set_union(set_.get(), other);
+    cached_hash_ = std::nullopt;
+  }
 
   // Compute the intersection of this and other, store the result in this set.
   void intersect(const IntSet& other) {
     hb_set_intersect(set_.get(), other.set_.get());
+    cached_hash_ = std::nullopt;
   }
 
   // Subtract other from this set.
   void subtract(const IntSet& other) {
     hb_set_subtract(set_.get(), other.set_.get());
+    cached_hash_ = std::nullopt;
   }
 
   // Compute the symmetric difference of this and other, store the result in
   // this set.
   void symmetric_difference(const IntSet& other) {
     hb_set_symmetric_difference(set_.get(), other.set_.get());
+    cached_hash_ = std::nullopt;
   }
 
-  void invert() { hb_set_invert(set_.get()); }
+  void invert() {
+    hb_set_invert(set_.get());
+    cached_hash_ = std::nullopt;
+  }
 
   std::string ToString() const {
     std::stringstream out;
@@ -362,6 +399,7 @@ class IntSet {
   //       the only owner. This prevents the sets contents from being changed
   //       outside of this class.
   hb_set_unique_ptr set_;
+  mutable std::optional<size_t> cached_hash_ = std::nullopt;
 };
 
 // Typed variants
