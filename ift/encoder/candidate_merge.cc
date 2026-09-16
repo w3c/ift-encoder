@@ -129,7 +129,8 @@ StatusOr<InvalidationSet> CandidateMerge::Apply(Merger& merger) {
           << "  New patch size " << new_patch_size_ << " bytes. " << std::endl
           << "  Cost delta is " << cost_delta_ << "." << std::endl
           << "  New average probability is "
-          << (TRY(merger.AggregateProbability(merged_segment_->Definition())) / merger.MaxAggregateProbability());
+          << (TRY(merger.AggregateProbability(base_segment_index_)) /
+              merger.MaxAggregateProbability());
 
   // Regardless of wether the new segment is inert all of the information
   // associated with the segments removed by the merge should be removed.
@@ -620,7 +621,7 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
 template <bool best_case>
 StatusOr<double> CandidateMerge::ComputeCostDelta(
     Merger& merger, const SegmentSet& merged_segments,
-    const Segment& merged_segment, std::optional<GlyphSet> exclusive_gids) {
+    std::optional<GlyphSet> exclusive_gids) {
   if (merged_segments.size() <= 1) {
     return 0;
   }
@@ -685,7 +686,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       // it), MergedProbability() is needed to correctly compute the new
       // probability.
       info.probability = TRY(
-          merger.AggregateMergedProbability(it->first, base, merged_segment));
+          merger.AggregateMergedProbability(it->first, base, merged_segments));
     }
 
     if (!best_case) {
@@ -975,17 +976,12 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
       merger.Context().InertSegments().contains(base_segment_index) &&
       segments_to_merge_are_inert;
 
-  const auto& segments = merger.Context().SegmentationInfo().Segments();
-
-  Segment merged_segment = segments[base_segment_index];
-  MergeSegments(merger, segments_to_merge, merged_segment);
-
   if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
     // Before doing a full assessment check a "best case" cost delta.
     // If that doesn't beat the current smallest there's no need to
     // do more indepth analysis.
     double best_case_delta = TRY(ComputeCostDelta<true>(
-        merger, segments_to_merge_with_base, merged_segment, std::nullopt));
+        merger, segments_to_merge_with_base, std::nullopt));
     if (best_case_delta >= best_merge_candidate->CostDelta()) {
       // We can't possibly beat the current lowest delta.
       return std::nullopt;
@@ -1041,7 +1037,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
     cost_delta = TRY(ComputeCostDelta<false>(
-        merger, segments_to_merge_with_base, merged_segment, exclusive_gids));
+        merger, segments_to_merge_with_base, exclusive_gids));
   }
 
   if (best_merge_candidate.has_value() &&
@@ -1049,6 +1045,10 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     // Our delta is not smaller, don't bother returning a candidate.
     return std::nullopt;
   }
+
+  const auto& segments = merger.Context().SegmentationInfo().Segments();
+  Segment merged_segment = segments[base_segment_index];
+  MergeSegments(merger, segments_to_merge, merged_segment);
 
   CandidateMerge candidate(std::move(merged_segment));
   candidate.base_segment_index_ = base_segment_index;

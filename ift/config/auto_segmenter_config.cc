@@ -204,12 +204,6 @@ static CodepointSet NonCjkCommonCodepoints(
       continue;
     }
 
-    if (file_name == "Script_CJK.riegeli@*") {
-      // this is a combination of CJK so ignore for the purposes of common
-      // codepoints.
-      continue;
-    }
-
     if (cjk_scripts.contains(file_name)) {
       continue;
     }
@@ -266,7 +260,7 @@ static btree_set<std::string> DetectScripts(
 }
 
 // Codepoints in these categories (spaces, marks and invisible formatting
-// characters) are present in many every script's frequency data. Filtering
+// characters) are present in many script's frequency data. Filtering
 // them out from overlap detection helps avoid grouping together a large number
 // of scripts unnecessarily.
 static bool IgnoredForOverlapDetection(hb_codepoint_t cp) {

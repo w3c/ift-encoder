@@ -26,6 +26,7 @@ class Merger {
       ift::common::SegmentSet inscope_segments_for_init_move) {
     Merger merger(context, strategy, inscope_segments,
                   inscope_segments_for_init_move, UINT32_MAX);
+    TRYV(merger.ResetSegmentProbabilities());
     TRYV(merger.InitOptimizationCutoff());
     return merger;
   }
@@ -114,10 +115,10 @@ class Merger {
   // Note: unlike a regular probability an aggregate probability is in the
   // range [0, number of probability profiles].
 
-  // Computes the aggregate probability that a page uses at least one of the
-  // codepoints/features in definition.
+  // Computes the aggregate probability for the segment at segment_index, using
+  // cached segment probabilities when available.
   absl::StatusOr<double> AggregateProbability(
-      const SubsetDefinition& definition) const;
+      segment_index_t segment_index) const;
 
   // Computes the aggregate probability of condition being activated.
   absl::StatusOr<double> AggregateProbability(
@@ -125,11 +126,11 @@ class Merger {
 
   // Same as AggregateProbability(condition), but computes the probability of
   // condition as it would be if merged_segment_index has been replaced by
-  // merged_segment.
+  // the union of merged_segments.
   absl::StatusOr<double> AggregateMergedProbability(
       const ActivationCondition& condition,
       segment_index_t merged_segment_index,
-      const Segment& merged_segment) const;
+      const ift::common::SegmentSet& merged_segments) const;
 
   // The largest value an aggregate probability can take, that is the number of
   // probability profiles in the strategy.
@@ -165,6 +166,7 @@ class Merger {
 
   absl::StatusOr<std::optional<InvalidationSet>> TryNextPatchMerge();
 
+  absl::Status ResetSegmentProbabilities() const;
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 

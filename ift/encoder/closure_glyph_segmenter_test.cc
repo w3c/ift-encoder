@@ -1323,6 +1323,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
       {{'c', 'c'}, 1},   {{'d', 'd'}, 50}, {{'e', 'e'}, 25},
   };
   UnigramProbabilityCalculator calculator(std::move(frequencies));
+  calculator.ResetSegmentProbabilities(2);
 
   // Basic no segment case.
   GlyphSegmentation segmentation1({'a', 'b', 'c'}, {}, {});

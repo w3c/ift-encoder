@@ -135,7 +135,7 @@ struct CandidateMerge {
       const ift::common::GlyphSet& glyphs);
 
   // Computes the predicted change to the total cost if merged_segments
-  // are joined together into a new segment, merged_segment.
+  // are joined together into a new segment.
   //
   // exclusive_gids is an optional hint that specifies which glyphs
   // will end up in the exclusive patch after merged_segments are merged
@@ -146,7 +146,6 @@ struct CandidateMerge {
   template <bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      const Segment& merged_segment,
       std::optional<common::GlyphSet> exclusive_gids);
 
   // Computes the predicted change to the toal cost if moved_glyphs are

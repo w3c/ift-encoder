@@ -264,9 +264,9 @@ TEST(ActivationConditionTest, Probability_RejectsEmptySegmentSet) {
   EXPECT_FALSE(
       invalid_condition.Probability(segments, probability_calculator).ok());
 
-  Segment merged_segment {{'a'}};
+  SegmentSet merged_segments{0};
   EXPECT_FALSE(invalid_condition
-                   .MergedProbability(segments, {}, merged_segment,
+                   .MergedProbability(segments, {}, merged_segments,
                                       probability_calculator)
                    .ok());
 }
@@ -279,8 +279,8 @@ TEST(ActivationConditionTest, Probability_EmptyCondition) {
   EXPECT_EQ(*empty_condition.Probability(segments, probability_calculator),
             1.0);
 
-  Segment merged_segment {{'a'}};
-  EXPECT_EQ(*empty_condition.MergedProbability(segments, {}, merged_segment,
+  SegmentSet merged_segments{0};
+  EXPECT_EQ(*empty_condition.MergedProbability(segments, {}, merged_segments,
                                                probability_calculator),
             1.0);
 }
@@ -315,17 +315,17 @@ TEST(ActivationConditionTest, MergedProbability) {
   };
   MockProbabilityCalculator probability_calculator(segment_probabilities);
 
-  Segment merged_segment {{'a', 'b'}};
+  SegmentSet merged_segments{0, 1};
 
   // Ignores segments that are not present in the condition.
   EXPECT_NEAR(*ActivationCondition::exclusive_segment(0, 1).MergedProbability(
-                  segments, 5, merged_segment, probability_calculator),
+                  segments, 5, merged_segments, probability_calculator),
               Pa, 1e-9);
   EXPECT_NEAR(*ActivationCondition::or_segments({0, 2}, 1).MergedProbability(
-                  segments, 5, merged_segment, probability_calculator),
+                  segments, 5, merged_segments, probability_calculator),
               Pac, 1e-9);
   EXPECT_NEAR(*ActivationCondition::and_segments({0, 2}, 1).MergedProbability(
-                  segments, 5, merged_segment, probability_calculator),
+                  segments, 5, merged_segments, probability_calculator),
               Pa * Pc, 1e-9);
 
   // Conjunctive with merge intersection
@@ -333,7 +333,7 @@ TEST(ActivationConditionTest, MergedProbability) {
   EXPECT_NEAR(*ActivationCondition::and_segments({0, 2}, 1)
               // compute P((a OR b) AND c)
               .ReplaceSegments(0, {0, 1})
-              .MergedProbability(segments, 0, merged_segment,
+              .MergedProbability(segments, 0, merged_segments,
                                  probability_calculator),
               Pab * Pc, 1e-9);
 
@@ -341,24 +341,24 @@ TEST(ActivationConditionTest, MergedProbability) {
   // {0} get's replaced with {0 U 1}
   EXPECT_NEAR(*ActivationCondition::or_segments({0}, 1)
                    .ReplaceSegments(0, {0, 1})
-                   .MergedProbability(segments, 0, merged_segment,
+                   .MergedProbability(segments, 0, merged_segments,
                                       probability_calculator),
               Pab, 1e-9);
   EXPECT_NEAR(*ActivationCondition::or_segments({1}, 1)
                    .ReplaceSegments(0, {0, 1})
-                   .MergedProbability(segments, 0, merged_segment,
+                   .MergedProbability(segments, 0, merged_segments,
                                       probability_calculator),
               Pab, 1e-9);
   EXPECT_NEAR(*ActivationCondition::or_segments({0, 1}, 1)
                    .ReplaceSegments(0, {0, 1})
-                   .MergedProbability(segments, 0, merged_segment,
+                   .MergedProbability(segments, 0, merged_segments,
                                       probability_calculator),
               Pab, 1e-9);
 
   // Disjunctive with partial merge intersection
   EXPECT_NEAR(*ActivationCondition::or_segments({0, 2}, 1)
                    .ReplaceSegments(0, {0, 1})
-                   .MergedProbability(segments, 0, merged_segment,
+                   .MergedProbability(segments, 0, merged_segments,
                                       probability_calculator),
               0.95, 1e-9);
 
@@ -366,7 +366,7 @@ TEST(ActivationConditionTest, MergedProbability) {
   EXPECT_NEAR(*ActivationCondition::and_segments({0, 1, 2}, 1)
                    .ReplaceSegments(2, {1, 2}) // -> a AND c
                    // compute a AND (a OR b)
-                   .MergedProbability(segments, 2, merged_segment,
+                   .MergedProbability(segments, 2, merged_segments,
                                       probability_calculator),
               Pa * Pab, 1e-9);
 
@@ -374,7 +374,7 @@ TEST(ActivationConditionTest, MergedProbability) {
   // (0 or 1) AND 2 =merge {1, 2}=> (0 or 1)
   EXPECT_NEAR(*ActivationCondition::composite_condition({{0, 1}, {2}}, 1)
                    .ReplaceSegments(1, {1, 2})
-                   .MergedProbability(segments, 1, merged_segment,
+                   .MergedProbability(segments, 1, merged_segments,
                                       probability_calculator),
               Pab, 1e-9);
 }
