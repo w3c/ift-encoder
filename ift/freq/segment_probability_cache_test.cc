@@ -23,10 +23,11 @@ TEST(SegmentProbabilityCacheTest, ClearAndAccess) {
   EXPECT_DOUBLE_EQ(cache[1]->Min(), 0.25);
   EXPECT_DOUBLE_EQ(cache[1]->Max(), 0.75);
 
-  // Clear resets entries and resizes
+  // Reset clears entries and resizes
   cache.Reset(2);
+  EXPECT_FALSE(cache[0].has_value());
   EXPECT_FALSE(cache[1].has_value());
-  EXPECT_FALSE(cache[2].has_value());
+  EXPECT_THROW(cache[2], std::out_of_range);
 }
 
 TEST(SegmentProbabilityCacheTest, Invalidate) {
@@ -38,13 +39,15 @@ TEST(SegmentProbabilityCacheTest, Invalidate) {
   cache[2] = ProbabilityBound(0.3, 0.3);
   cache[3] = ProbabilityBound(0.4, 0.4);
 
-  SegmentSet to_invalidate = {1, 3, 10};
+  SegmentSet to_invalidate = {1, 3};
   cache.Invalidate(to_invalidate);
 
   EXPECT_TRUE(cache[0].has_value());
   EXPECT_FALSE(cache[1].has_value());
   EXPECT_TRUE(cache[2].has_value());
   EXPECT_FALSE(cache[3].has_value());
+
+  EXPECT_THROW(cache.Invalidate({10}), std::out_of_range);
 }
 
 }  // namespace

@@ -693,6 +693,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       Segment s(def);
       segments.push_back(std::move(s));
     }
+    probability_calculator->ResetSegmentProbabilities(segments.size());
 
     // TODO(garretrieger): for the total cost we need to also add in the table
     // keyed patch costs

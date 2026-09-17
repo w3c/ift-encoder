@@ -11,20 +11,19 @@
 namespace ift::freq {
 
 // Caches ProbabilityBound values indexed by segment_index_t.
-// Pre-sized via Clear(num_segments); out-of-bounds accesses always evaluate as
-// misses without resizing the underlying vector.
+// Pre-sized via Reset(num_segments); out-of-bounds accesses fail.
 class SegmentProbabilityCache {
  public:
   SegmentProbabilityCache() = default;
 
   std::optional<ProbabilityBound>& operator[](
       ift::encoder::segment_index_t segment_index) {
-    return entries_[segment_index];
+    return entries_.at(segment_index);
   }
 
   void Invalidate(const ift::common::SegmentSet& segments) {
     for (ift::encoder::segment_index_t s : segments) {
-      entries_[s] = std::nullopt;
+      entries_.at(s) = std::nullopt;
     }
   }
 
