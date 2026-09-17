@@ -26,6 +26,7 @@ class Merger {
       ift::common::SegmentSet inscope_segments_for_init_move) {
     Merger merger(context, strategy, inscope_segments,
                   inscope_segments_for_init_move, UINT32_MAX);
+    TRYV(merger.ResetSegmentProbabilities());
     TRYV(merger.InitOptimizationCutoff());
     return merger;
   }
@@ -67,7 +68,7 @@ class Merger {
    * into the init font. Move only those cases whose delta is below a
    * configurable threshold.
    */
-  absl::Status MoveSegmentsToInitFont();
+  absl::Status MoveSegmentsToInitFont(size_t profile_index = 0);
 
   /*
    * Recompute the state of this merger to respect changes made to the
@@ -94,6 +95,48 @@ class Merger {
   bool ShouldRecordMergedSizeReductions() const;
 
   void LogMergedSizeHistogram() const;
+
+  // The total cost of a segmentation is defined as the sum of the costs
+  // evaluated independently against each of the strategies probability
+  // calculators (see docs/multi_script_merging.md):
+  //
+  //   cost(S) = sum_m sum_i P_m(c_i) * (size(p_i) + k)
+  //
+  // Patch sizes and glyph sets are identical for all calculators, only the
+  // probabilities differ. As a result the summed cost of a patch can be
+  // computed using the aggregate probability, sum_m P_m(c_i), of the
+  // associated activation condition:
+  //
+  //   sum_m P_m(c_i) * (size(p_i) + k) = (sum_m P_m(c_i)) * (size(p_i) + k)
+  //
+  // The same applies to cost deltas since the cost function is linear over the
+  // set of calculators.
+  //
+  // Note: unlike a regular probability an aggregate probability is in the
+  // range [0, number of probability profiles].
+
+  // Computes the aggregate probability for the segment at segment_index, using
+  // cached segment probabilities when available.
+  absl::StatusOr<double> AggregateProbability(
+      segment_index_t segment_index) const;
+
+  // Computes the aggregate probability of condition being activated.
+  absl::StatusOr<double> AggregateProbability(
+      const ActivationCondition& condition) const;
+
+  // Same as AggregateProbability(condition), but computes the probability of
+  // condition as it would be if merged_segment_index has been replaced by
+  // the union of merged_segments.
+  absl::StatusOr<double> AggregateMergedProbability(
+      const ActivationCondition& condition,
+      segment_index_t merged_segment_index,
+      const ift::common::SegmentSet& merged_segments) const;
+
+  // The largest value an aggregate probability can take, that is the number of
+  // probability profiles in the strategy.
+  double MaxAggregateProbability() const {
+    return (double)strategy_.ProbabilityProfiles().size();
+  }
 
  private:
   Merger(SegmentationContext& context, MergeStrategy strategy,
@@ -123,6 +166,7 @@ class Merger {
 
   absl::StatusOr<std::optional<InvalidationSet>> TryNextPatchMerge();
 
+  absl::Status ResetSegmentProbabilities() const;
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
@@ -179,7 +223,8 @@ class Merger {
                                            double base_probability,
                                            double lowest_cost_delta) const;
 
-  absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold() const;
+  absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold(
+      size_t profile_index = 0) const;
   ift::common::SegmentSet InitFontSegmentsToCheck(
       const ift::common::SegmentSet& inscope) const;
   absl::btree_map<ActivationCondition, ift::common::GlyphSet>

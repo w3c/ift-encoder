@@ -135,7 +135,7 @@ struct CandidateMerge {
       const ift::common::GlyphSet& glyphs);
 
   // Computes the predicted change to the total cost if merged_segments
-  // are joined together into a new segment, merged_segment.
+  // are joined together into a new segment.
   //
   // exclusive_gids is an optional hint that specifies which glyphs
   // will end up in the exclusive patch after merged_segments are merged
@@ -146,7 +146,6 @@ struct CandidateMerge {
   template <bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      const Segment& merged_segment,
       std::optional<common::GlyphSet> exclusive_gids);
 
   // Computes the predicted change to the toal cost if moved_glyphs are
@@ -158,11 +157,12 @@ struct CandidateMerge {
   ComputeInitFontCostDelta(Merger& merger, uint32_t existing_init_font_size,
                            const ift::common::GlyphSet& moved_glyphs,
                            absl::flat_hash_map<ift::common::GlyphSet, uint32_t>&
-                               smallest_size_increases);
+                               smallest_size_increases,
+                           size_t profile_index = 0);
 
   static absl::StatusOr<double> ComputeBestCaseInitFontCostDelta(
       Merger& merger, uint32_t existing_init_font_size,
-      const ift::common::GlyphSet& moved_glyphs);
+      const ift::common::GlyphSet& moved_glyphs, size_t profile_index = 0);
 
   struct PatchMergeDetails {
     ActivationCondition condition_a;

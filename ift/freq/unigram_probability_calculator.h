@@ -4,6 +4,7 @@
 #include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/lru_cache.h"
 #include "ift/freq/probability_calculator.h"
+#include "ift/freq/segment_probability_cache.h"
 #include "ift/freq/unicode_frequencies.h"
 
 namespace ift::freq {
@@ -16,25 +17,45 @@ constexpr size_t UNIGRAM_PROBABILITY_CACHE_SIZE = 300000;
 // calculations assume that these unigram probabilities are fully independent.
 class UnigramProbabilityCalculator : public ProbabilityCalculator {
  public:
-  explicit UnigramProbabilityCalculator(UnicodeFrequencies frequencies, size_t max_cache_size = UNIGRAM_PROBABILITY_CACHE_SIZE);
+  explicit UnigramProbabilityCalculator(
+      UnicodeFrequencies frequencies,
+      size_t max_cache_size = UNIGRAM_PROBABILITY_CACHE_SIZE);
 
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
 
+  ProbabilityBound ComputeProbability(
+      absl::Span<const ift::encoder::Segment> segments,
+      ift::encoder::segment_index_t segment_index) const override;
+
   ProbabilityBound ComputeMergedProbability(
       const std::vector<const ift::encoder::Segment*>& segments) const override;
 
+  ProbabilityBound ComputeMergedProbability(
+      absl::Span<const ift::encoder::Segment> segments,
+      const ift::common::SegmentSet& segment_indices) const override;
+
   ProbabilityBound ComputeConjunctiveProbability(
       const std::vector<ProbabilityBound>& bounds) const override;
+
+  void InvalidateSegmentProbabilities(
+      const ift::common::SegmentSet& segments) const override {
+    segment_cache_.Invalidate(segments);
+  }
+
+  void ResetSegmentProbabilities(size_t num_segments) const override {
+    segment_cache_.Reset(num_segments);
+  }
 
   BigramProbabilityCalculator ToBigramCalculator() && {
     return BigramProbabilityCalculator(std::move(frequencies_));
   }
 
  private:
+
   UnicodeFrequencies frequencies_;
-  mutable LruCache<ift::common::CodepointSet, std::optional<double>>
-      cache_;
+  mutable LruCache<ift::common::CodepointSet, std::optional<double>> cache_;
+  mutable SegmentProbabilityCache segment_cache_;
 };
 
 }  // namespace ift::freq

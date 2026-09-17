@@ -256,6 +256,18 @@ static void ClassifySegments(
   }
 }
 
+// Computes a single representative probability for each segment which is used
+// to order segments within their merge group.
+//
+// A strategy may have more than one probability calculator (one per frequency
+// data set), in which case the average probability across that strategies
+// calculators is used. Averaging (instead of summing) keeps the value in
+// [0, 1] so that it remains comparable to the strategies pre closure
+// probability threshold, and comparable to the values computed for other
+// strategies which may have a different number of calculators.
+//
+// A segment can be present in more than one merge group (shared segments), for
+// those the largest of the per strategy averages is used.
 static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
@@ -266,12 +278,24 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
       continue;
     }
 
-    const auto& calculator = *TRY(strategy.ProbabilityCalculator());
+    const auto& profiles = strategy.ProbabilityProfiles();
+    if (profiles.empty()) {
+      continue;
+    }
+
     for (segment_index_t s : segments) {
-      ProbabilityBound p =
-          calculator.ComputeProbability(subset_definitions[s]);
-      if (p.Value() > out[s].Value()) {
-        out[s] = p;
+      double min = 0.0;
+      double max = 0.0;
+      for (const auto& profile : profiles) {
+        ProbabilityBound p =
+            TRY(profile.Calculator())->ComputeProbability(subset_definitions[s]);
+        min += p.Min();
+        max += p.Max();
+      }
+
+      ProbabilityBound average(min / profiles.size(), max / profiles.size());
+      if (average.Value() > out[s].Value()) {
+        out[s] = average;
       }
     }
   }
@@ -546,13 +570,18 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   // ~1.0). Do this only for strategies that have opted in.
   bool init_font_changed = false;
   for (Merger& merger : mergers) {
-    if (merger.Strategy().UseCosts() &&
-        merger.Strategy().InitFontMergeThreshold().has_value()) {
-      // make sure candidate segments is up to date before attempting to
-      // process.
-      init_font_changed = true;
-      TRYV(merger.ReassignInitSubset());
-      TRYV(merger.MoveSegmentsToInitFont());
+    if (!merger.Strategy().UseCosts() ||
+        !merger.Strategy().HasInitFontMerge()) {
+      continue;
+    }
+    for (size_t p = 0; p < merger.Strategy().ProbabilityProfiles().size();
+         ++p) {
+      const auto& profile = merger.Strategy().ProbabilityProfiles()[p];
+      if (profile.init_font_merge_threshold.has_value()) {
+        init_font_changed = true;
+        TRYV(merger.ReassignInitSubset());
+        TRYV(merger.MoveSegmentsToInitFont(p));
+      }
     }
   }
 
@@ -664,6 +693,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       Segment s(def);
       segments.push_back(std::move(s));
     }
+    probability_calculator->ResetSegmentProbabilities(segments.size());
 
     // TODO(garretrieger): for the total cost we need to also add in the table
     // keyed patch costs

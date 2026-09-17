@@ -20,6 +20,7 @@ class BazelDataFileResolver : public DataFileResolver {
   absl::StatusOr<std::string> GetUnicodeDataPath() const override;
   absl::StatusOr<std::string> GetDerivedNormalizationPropsPath() const override;
   absl::StatusOr<std::string> GetFrequencyDataDirectory() const override;
+  absl::StatusOr<std::string> GetUnigramFrequencyDataDirectory() const override;
 
  private:
   BazelDataFileResolver(

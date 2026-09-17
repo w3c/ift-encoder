@@ -30,6 +30,11 @@ class FixedDataFileResolver : public DataFileResolver {
     return frequency_data_dir_;
   }
 
+  absl::StatusOr<std::string> GetUnigramFrequencyDataDirectory()
+      const override {
+    return frequency_data_dir_ + "/unigram";
+  }
+
  private:
   std::string unicode_data_path_;
   std::string derived_props_path_;

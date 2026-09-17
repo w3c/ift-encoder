@@ -2,7 +2,7 @@
 
 Author: Garret Rieger  
 Date: Aug 5th, 2026  
-Updated: Aug 5th, 2026
+Updated: Sep 15th, 2026
 
 ## Introduction
 
@@ -234,7 +234,7 @@ of which of 1, 2, or 3 tends to produce the best results.
 
 Code point frequency data is typically collected within the scope of a particular language and/or
 writing script. When doing merge optimization for a font that supports multiple languages/scripts,
-then multiple sets of frequency data may be used as inputs to the merging process.
+multiple sets of frequency data may be used as inputs to the merging process.
 
 There are two primary challenges that arise when more than one codepoint frequency data set is used:
 
@@ -255,41 +255,105 @@ could solve some of the above two issues by normalizing the frequency data sets 
 using language prevalence data, but that would unfairly optimize segmentations for high use
 languages at the cost of performance for lower use ones.
 
-Note: this is an active area of development, so the rest of this section describes a speculative
-solution to the problem.
+### Merge Groups and Isolation
 
-The proposed solutions is to modify the total cost function for a segmentation to evaluate costs
-against each frequency data set independently (each weighted equally):
+To manage multiple scripts and frequency data sets, the segmenter partitions input segments into
+one or more *merge groups*, where each merge group defines a set of segments and an associated
+merging strategy.
 
-```
-total cost(glyph segmentation) =
-  cost(glyph segmentation evaluated against language 1 frequencies) +
-  ...                                                               +
-  cost(glyph segmentation evaluated against language 2 frequencies)
-```
+During merging analysis, merge groups are isolated from each other: each merge group is processed
+independently and only evaluates candidate merges among the segments and patches exclusively assigned
+to that group. Any segment that belongs to more than one merge group is classified as a shared
+segment and excluded from merge candidate selection across all groups.
 
-The costs delta computations will be modified to compute a delta against each language/script which
-intersects the merge being considered. In cases where a pair probability is needed that spans two
-languages or isn't present in the current data set, the probability can be considered to be 0 or
-near zero.
+Isolating merge groups from each other serves two purposes:
+* For disjoint scripts (for example Latin and Cyrillic), separating them into distinct merge groups
+  avoids evaluating cross-script candidate merges where pair co-occurrence probabilities are unknown.
+* It bounds the quadratic $O(n^2)$ candidate search space to the segments within each individual
+  merge group rather than across the entire font.
 
-The current implementation only implements support for mostly disjoint scripts/languages. For each
-frequency data set we identify the set of patches which involve only codepoints that exclusively
-belong to that frequency data set.  Merges are only assessed for pairs of patches in this set. As a
-result, we won't ever need to compute probabilities which span frequency data sets. This approach
-appears to work well in practice for mostly disjoint writing scripts (for example Latin and
-Cyrillic).
+When generating a segmenter configuration automatically, scripts whose shared codepoints account for
+a significant fraction of their probability mass (such as CJK scripts sharing unified Han ideographs,
+or Latin and Emoji sharing common ASCII digits and symbols) are clustered into a single unified merge
+group. Grouping overlapping scripts together ensures that their shared codepoints are cost-merged
+within that group instead of being isolated as shared segments or falling back to heuristic merging.
+Conversely, scripts with negligible or no overlap are placed into separate merge groups.
 
-Future development will add support for evaluating multiple deltas when dealing with patches that
-interact with multiple frequency data sets.
+### Multi-Dataset Cost Function
 
-For initial font merges it does not always make sense to consider all languages for merging into the
-initial font. Languages that are expected to be used infrequently should not have their high
-frequency codepoints moved into the initial font as this will cause them to be always loaded
-regardless of the language currently in use. To deal with this the configuration for the merging
-process has a setting to opt-in a frequency data for initial merging. This allows specific languages
-to be prioritized for placement into the initial font depending on the intended use case for the
-specific font.
+Within a merge group, one or more frequency data sets can be specified (for example, separate
+frequency data sets for Japanese, Simplified Chinese, Traditional Chinese, and Korean within a
+single CJK merge group). Each frequency data set is backed by its own probability calculator.
+
+To treat each supported script and language within a merge group with equal importance without
+normalizing by global language prevalence, the cost function evaluated for merging decisions sums
+the cost evaluated against each frequency data set independently with equal weight. For a merge
+group configured with $M$ frequency data sets, the total cost of a glyph segmentation $S$ is:
+
+$$\text{cost}(S) = \sum_{m=1}^M \text{cost}_m(S) = \sum_{m=1}^M \sum_{p_i \in S} P_m(c_i) \times (\text{size}(p_i) + k)$$
+
+Where $P_m(c_i)$ is the activation probability of condition $c_i$ evaluated against frequency data
+set $m$. If a codepoint or codepoint pair is not present in data set $m$, its probability under $m$
+is $0$.
+
+Because the total cost function is linear over the frequency data sets, the cost delta
+$\Delta \text{cost}$ for any candidate segment or patch merge is simply the sum of the cost deltas
+evaluated against each frequency data set independently:
+
+$$\Delta \text{cost} = \sum_{m=1}^M \Delta \text{cost}_m$$
+
+A candidate merge is accepted if it reduces this combined total cost across all frequency data sets
+in the merge group.
+
+### Cost Delta Optimization
+
+When evaluating a candidate merge across multiple frequency data sets within a merge group, the
+resulting glyph sets, compressed patch sizes $\text{size}(p_i)$, and network overhead $k$ are
+identical across all data sets; only the condition activation probabilities $P_m(c_i)$ differ per
+data set.
+
+Because each patch's cost contribution is linear in its probability, the constant patch size term
+$(\text{size}(p_i) + k)$ can be factored out of the per-data-set summation:
+
+$$\sum_{m=1}^M P_m(c_i) \times (\text{size}(p_i) + k) = (\text{size}(p_i) + k) \times \sum_{m=1}^M P_m(c_i)$$
+
+In the merger implementation, actual cost delta computation is optimized by first computing the
+*aggregate probability* $P_{\text{agg}}(c_i) = \sum_{m=1}^M P_m(c_i)$ of a condition across all
+frequency data sets in the merge group, and then multiplying that sum once by $(\text{size}(p_i) + k)$
+for each affected patch. This avoids redundant patch size evaluations and per-data-set delta loops.
+Similarly, because the fallback patch is needed with probability $1.0$ under every frequency data set,
+its size delta is multiplied by the number of data sets $M$.
+
+### Prioritizing a Primary Script and Language
+
+While equal weighting across frequency data sets is desirable when a font is intended for general
+multi-script use, a font is often deployed with a specific primary script or language in mind. The
+segmenter supports a primary script setting that prioritizes a particular script and language in two
+ways:
+
+1. **Initial Font Merging**: For initial font merges, it does not always make sense to consider all
+   languages. Languages that are expected to be used infrequently should not have their high
+   frequency codepoints moved into the initial font, as doing so would force those glyphs to always
+   be loaded regardless of the language currently in use. To handle this, initial font merge
+   thresholds are configured per frequency data set, and initial font candidate merges are evaluated
+   against each opted-in frequency data set individually rather than against the summed group cost.
+   By opting in only the primary script's frequency data set for initial font merging, only high
+   frequency glyphs from the primary script are prioritized for placement in the initial font.
+
+2. **Merge Group Splitting**: When a primary script is explicitly specified during automatic
+   configuration and it belongs to a cluster of overlapping scripts (for example, specifying
+   Japanese as the primary script for a CJK font), leaving all overlapping scripts in a single merge
+   group would weight them equally during segment and patch merging. To bias merging optimization
+   toward the primary script, the overlapping cluster is split into two disjoint merge groups:
+   * A primary merge group containing only the primary script's frequency data set, covering all
+     codepoints in the font that are present in the primary script's frequency data.
+   * A secondary merge group containing the remaining overlapping scripts in the cluster, explicitly
+     restricted to the remaining codepoints covered by those scripts that are *not* covered by the
+     primary script.
+
+   This split ensures that all codepoints used by the primary script are merged and optimized
+   exclusively according to the primary script's frequencies, while any remaining codepoints unique
+   to the other scripts are still cost-optimized with equal weight among those remaining scripts.
 
 ### Merging Practical Matters
 
@@ -431,8 +495,7 @@ following caches are used:
 * Patch size cache: caches a mapping from glyph set to associated patch size. Helps reduce calls to brotli.
 * Glyph closure cache: caches a mapping from subset definition to glyph set from computing glyph closure
   on the subset definition.
-* Activation Probabilities: are cached on the Segment objects and disjunctive segment sub-group probabilities
-  are stored in a dedicated cache.
+* Activation Probabilities: segment and disjunctive segment sub-group probabilities are cached within each probability calculator instance.
 
 ## Future Work
 

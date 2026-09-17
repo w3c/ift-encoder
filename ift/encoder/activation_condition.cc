@@ -527,17 +527,14 @@ StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
   bool is_conjunctive = conditions_.size() > 1;
   for (const auto& segment_set : conditions_) {
     freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
-    if (segment_set.empty()) {
+    size_t size = segment_set.size();
+    if (size == 0) {
       return absl::InternalError("Unexpected empty disjunctive group.");
-    } else if (segment_set.size() > 1) {
-      // For a group (s1 OR s2 OR ...), compute the union of their definitions.
-      std::vector<const Segment*> union_segments;
-      for (unsigned s_index : segment_set) {
-        union_segments.push_back(&segments[s_index]);
-      }
-      set_bound = calculator.ComputeMergedProbability(union_segments);
+    } else if (size > 1) {
+      set_bound = calculator.ComputeMergedProbability(segments, segment_set);
     } else {
-      set_bound = calculator.ComputeProbability(segments[*segment_set.min()].Definition());
+      segment_index_t s = *segment_set.min();
+      set_bound = calculator.ComputeProbability(segments, s);
     }
 
     if (!is_conjunctive) {
@@ -551,16 +548,16 @@ StatusOr<ProbabilityBound> ActivationCondition::ProbabilityBound(
 
 StatusOr<double> ActivationCondition::MergedProbability(
     Span<const Segment> segments, segment_index_t merged_segment_index,
-    const Segment& merged_segment,
+    const SegmentSet& merged_segments,
     const ProbabilityCalculator& calculator) const {
   return TRY(MergedProbabilityBound(segments, merged_segment_index,
-                                    merged_segment, calculator))
+                                    merged_segments, calculator))
       .Value();
 }
 
 StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
     Span<const Segment> segments, segment_index_t merged_segment_index,
-    const Segment& merged_segment,
+    const SegmentSet& merged_segments,
     const ProbabilityCalculator& calculator) const {
   if (conditions_.empty()) {
     return freq::ProbabilityBound(1.0, 1.0);
@@ -570,23 +567,25 @@ StatusOr<ProbabilityBound> ActivationCondition::MergedProbabilityBound(
   bool is_conjunctive = conditions_.size() > 1;
   for (const auto& segment_set : conditions_) {
     freq::ProbabilityBound set_bound = freq::ProbabilityBound::Zero();
-    if (segment_set.empty()) {
+    size_t size = segment_set.size();
+    if (size == 0) {
       return absl::InternalError("Unexpected empty disjunctive group.");
-    } else if (segment_set.size() > 1) {
-      // For a group (s1 OR s2 OR ...), compute the union of their definitions.
-      std::vector<const Segment*> union_segments;
-      for (unsigned s_index : segment_set) {
-        if (s_index == merged_segment_index) {
-          union_segments.push_back(&merged_segment);
-        } else {
-          union_segments.push_back(&segments[s_index]);
-        }
+    } else if (size > 1) {
+      if (segment_set.contains(merged_segment_index)) {
+        SegmentSet effective = segment_set;
+        effective.union_set(merged_segments);
+        set_bound = calculator.ComputeMergedProbability(segments, effective);
+      } else {
+        set_bound = calculator.ComputeMergedProbability(segments, segment_set);
       }
-      set_bound = calculator.ComputeMergedProbability(union_segments);
-    } else if (*segment_set.min() == merged_segment_index) {
-      set_bound = calculator.ComputeProbability(merged_segment.Definition());
     } else {
-      set_bound = calculator.ComputeProbability(segments[*segment_set.min()].Definition());
+      segment_index_t s = *segment_set.min();
+      if (s == merged_segment_index) {
+        set_bound =
+            calculator.ComputeMergedProbability(segments, merged_segments);
+      } else {
+        set_bound = calculator.ComputeProbability(segments, s);
+      }
     }
 
     if (!is_conjunctive) {

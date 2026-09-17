@@ -1,6 +1,9 @@
 #include "ift/config/segmenter_config_util.h"
 
 #include <cstdint>
+#include <optional>
+#include <utility>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "ift/common/font_helper.h"
@@ -117,54 +120,137 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
   return segments;
 }
 
+// These two helpers intentionally read the deprecated single frequency data set
+// fields to keep older configs working, so suppress the deprecation warnings.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+// Converts the deprecated single frequency data set fields on a cost
+// configuration into the equivalent FrequencyDataConfig.
+static FrequencyDataConfig LegacyFrequencyDataConfig(
+    const CostConfiguration& config) {
+  FrequencyDataConfig freq_config;
+  if (!config.built_in_freq_data_name().empty()) {
+    freq_config.set_built_in_freq_data_name(config.built_in_freq_data_name());
+  } else {
+    freq_config.set_path_to_frequency_data(config.path_to_frequency_data());
+  }
+
+  freq_config.set_use_bigrams(config.use_bigrams());
+
+  if (config.has_initial_font_merge_threshold()) {
+    freq_config.set_initial_font_merge_threshold(
+        config.initial_font_merge_threshold());
+  }
+
+  if (config.has_initial_font_merge_probability_threshold()) {
+    freq_config.set_initial_font_merge_probability_threshold(
+        config.initial_font_merge_probability_threshold());
+  }
+
+  return freq_config;
+}
+
+// Returns true if config has one of the deprecated single frequency data set
+// fields set.
+static bool HasLegacyFrequencyData(const CostConfiguration& config) {
+  return !config.path_to_frequency_data().empty() ||
+         !config.built_in_freq_data_name().empty();
+}
+
+#pragma GCC diagnostic pop
+
+StatusOr<MergeStrategy::ProbabilityProfile>
+SegmenterConfigUtil::ProtoToProbabilityProfile(
+    const FrequencyDataConfig& config, const CodepointSet& font_codepoints,
+    CodepointSet& covered_codepoints) {
+  if (config.path_to_frequency_data().empty() &&
+      config.built_in_freq_data_name().empty()) {
+    return absl::InvalidArgumentError(
+        "Path to frequency data must be provided.");
+  }
+
+  UnicodeFrequencies freq =
+      !config.built_in_freq_data_name().empty()
+          ? TRY(GetFrequencyData(config.built_in_freq_data_name(), true,
+                                 font_codepoints))
+          : TRY(GetFrequencyData(config.path_to_frequency_data(), false,
+                                 font_codepoints));
+
+  covered_codepoints.union_set(freq.CoveredCodepoints());
+
+  MergeStrategy::ProbabilityProfile profile =
+      config.use_bigrams()
+          ? TRY(MergeStrategy::ProbabilityProfile::Bigram(std::move(freq)))
+          : TRY(MergeStrategy::ProbabilityProfile::Unigram(std::move(freq)));
+
+  if (config.has_initial_font_merge_threshold()) {
+    profile.init_font_merge_threshold = config.initial_font_merge_threshold();
+  }
+
+  if (config.has_initial_font_merge_probability_threshold()) {
+    profile.init_font_merge_probability_threshold =
+        config.initial_font_merge_probability_threshold();
+  }
+
+  return profile;
+}
+
 StatusOr<MergeStrategy> SegmenterConfigUtil::ProtoToCostStrategy(
     const CostConfiguration& base, const CostConfiguration& config,
     CodepointSet& covered_codepoints, const CodepointSet& font_codepoints) {
   CostConfiguration merged = base;
   merged.MergeFrom(config);
 
-  if (merged.path_to_frequency_data().empty() &&
-      merged.built_in_freq_data_name().empty()) {
+  // MergeFrom() concatenates repeated fields, but frequency data sets specified
+  // on a merge group are intended to replace, not extend, those from the base
+  // config.
+  if (!config.frequency_data().empty() && !base.frequency_data().empty()) {
+    merged.clear_frequency_data();
+    for (const auto& freq_config : config.frequency_data()) {
+      *merged.add_frequency_data() = freq_config;
+    }
+  }
+
+  std::vector<FrequencyDataConfig> freq_configs(merged.frequency_data().begin(),
+                                                merged.frequency_data().end());
+  if (!freq_configs.empty() && HasLegacyFrequencyData(merged)) {
     return absl::InvalidArgumentError(
-        "Path to frequency data must be provided.");
+        "Cost configuration must not specify both 'frequency_data' and the "
+        "deprecated single frequency data set fields.");
   }
 
-  UnicodeFrequencies freq =
-      config.has_built_in_freq_data_name()
-          ? TRY(GetFrequencyData(merged.built_in_freq_data_name(), true,
-                                 font_codepoints))
-          : TRY(GetFrequencyData(merged.path_to_frequency_data(), false,
-                                 font_codepoints));
-
-  covered_codepoints = freq.CoveredCodepoints();
-
-  MergeStrategy strategy = MergeStrategy::None();
-  if (merged.use_bigrams()) {
-    strategy = TRY(MergeStrategy::BigramCostBased(
-        std::move(freq), merged.network_overhead_cost(),
-        merged.min_group_size()));
-  } else {
-    strategy = TRY(MergeStrategy::CostBased(std::move(freq),
-                                            merged.network_overhead_cost(),
-                                            merged.min_group_size()));
+  if (freq_configs.empty()) {
+    if (!HasLegacyFrequencyData(merged)) {
+      return absl::InvalidArgumentError(
+          "Path to frequency data must be provided.");
+    }
+    freq_configs.push_back(LegacyFrequencyDataConfig(merged));
   }
 
-  strategy.SetUsePatchMerges(merged.experimental_use_patch_merges());
+  covered_codepoints.clear();
+  std::optional<MergeStrategy> strategy;
+  for (const auto& freq_config : freq_configs) {
+    MergeStrategy::ProbabilityProfile profile = TRY(ProtoToProbabilityProfile(
+        freq_config, font_codepoints, covered_codepoints));
 
-  strategy.SetOptimizationCutoffFraction(merged.optimization_cutoff_fraction());
-  strategy.SetBestCaseSizeReductionFraction(
+    if (!strategy.has_value()) {
+      strategy = MergeStrategy::CostBased(std::move(profile),
+                                          merged.network_overhead_cost(),
+                                          merged.min_group_size());
+    } else {
+      strategy->AddProbabilityProfile(std::move(profile));
+    }
+  }
+
+  strategy->SetUsePatchMerges(merged.experimental_use_patch_merges());
+
+  strategy->SetOptimizationCutoffFraction(
+      merged.optimization_cutoff_fraction());
+  strategy->SetBestCaseSizeReductionFraction(
       merged.best_case_size_reduction_fraction());
 
-  if (merged.has_initial_font_merge_threshold()) {
-    strategy.SetInitFontMergeThreshold(merged.initial_font_merge_threshold());
-  }
-
-  if (merged.has_initial_font_merge_probability_threshold()) {
-    strategy.SetInitFontMergeProbabilityThreshold(
-        merged.initial_font_merge_probability_threshold());
-  }
-
-  return strategy;
+  return *std::move(strategy);
 }
 
 SegmentSet SegmenterConfigUtil::MapToIndices(
@@ -172,7 +258,14 @@ SegmentSet SegmenterConfigUtil::MapToIndices(
     const flat_hash_map<SegmentId, uint32_t>& id_to_index) {
   SegmentSet mapped;
   for (uint32_t s_id : segments.values()) {
-    mapped.insert(id_to_index.at(SegmentId{.id_value = s_id}));
+    auto it = id_to_index.find(SegmentId{.id_value = s_id});
+    if (it == id_to_index.end()) {
+      // There's no segment associated with this id, for example because the
+      // segment's codepoints are all in the initial font or not in the font
+      // at all. Nothing to add to the group.
+      continue;
+    }
+    mapped.insert(it->second);
   }
   return mapped;
 }

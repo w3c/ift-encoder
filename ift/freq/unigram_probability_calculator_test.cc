@@ -88,4 +88,36 @@ TEST(UnigramProbabilityCalculatorTest, ComputeConjunctiveProbability) {
   EXPECT_DOUBLE_EQ(bound.Max(), 1.0);
 }
 
+TEST(UnigramProbabilityCalculatorTest, SegmentCache) {
+  UnicodeFrequenciesBuilder builder;
+  builder.Add(1, 1, 10);
+  builder.Add(2, 2, 20);
+  builder.Add(3, 3, 5);
+
+  UnigramProbabilityCalculator calculator(builder.Build());
+  calculator.ResetSegmentProbabilities(3);
+
+  std::vector<Segment> segments = {{{1}}};
+  double p1 = 10.0 / 20.0;
+  double p3 = 5.0 / 20.0;
+
+  // Populate segment 0 with def1
+  EXPECT_DOUBLE_EQ(calculator.ComputeProbability(segments, 0).Min(), p1);
+
+  // Requesting segment 0 with def2 returns the cached value for segment 0 (p1)
+  segments[0] = {{3}};
+  EXPECT_DOUBLE_EQ(calculator.ComputeProbability(segments, 0).Min(), p1);
+
+  // Invalidate segment 0
+  calculator.InvalidateSegmentProbabilities({0});
+  EXPECT_DOUBLE_EQ(calculator.ComputeProbability(segments, 0).Min(), p3);
+
+  // Test Span/SegmentSet overload of ComputeMergedProbability
+  segments = {Segment{{1}}, Segment{{2}}, Segment{{3}}};
+  calculator.ResetSegmentProbabilities(3);
+  ProbabilityBound merged = calculator.ComputeMergedProbability(
+      segments, ift::common::SegmentSet{0, 2});
+  EXPECT_DOUBLE_EQ(merged.Min(), 1.0 - (1.0 - p1) * (1.0 - p3));
+}
+
 }  // namespace ift::freq

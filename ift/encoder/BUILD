@@ -54,6 +54,9 @@ cc_library(
     hdrs = [
         "glyph_partition.h",
     ],
+    visibility = [
+        "//visibility:public",
+    ],
     deps = [
         ":common",
         "//ift/common",
@@ -219,8 +222,27 @@ cc_library(
     ],
     deps = [
         "//ift/freq",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/types:span",
     ],
 )
+
+cc_test(
+    name = "merge_strategy_test",
+    size = "small",
+    srcs = [
+        "merge_strategy_test.cc",
+    ],
+    deps = [
+        ":merge_strategy",
+        "//ift/freq",
+        "//ift/freq:mock_probability_calculator",
+        "@abseil-cpp//absl/types:span",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
 
 cc_test(
     name = "compiler_test",

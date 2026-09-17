@@ -13,6 +13,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
@@ -40,6 +41,7 @@ using ift::freq::MockProbabilityCalculator;
 using ift::freq::ProbabilityBound;
 using ift::freq::UnicodeFrequencies;
 using ift::freq::UnigramProbabilityCalculator;
+using ProbabilityProfile = ift::encoder::MergeStrategy::ProbabilityProfile;
 
 namespace ift::encoder {
 
@@ -64,8 +66,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         segmenter_find_conditions_dep_graph(
             8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
         segmenter_move_to_init_font_dep_graph(
-            8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver)
-  {
+            8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("ift/common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -414,18 +415,20 @@ if (s0 AND s2) then p2
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, SegmentationWithFeatures_DontMergeFeatureToFeature) {
+TEST_F(ClosureGlyphSegmenterTest,
+       SegmentationWithFeatures_DontMergeFeatureToFeature) {
   SubsetDefinition c2sc;
   c2sc.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
   SubsetDefinition dlig;
   dlig.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
 
-  auto segmentation =
-      CodepointToGlyphSegments(roboto.get(), {'f', 'F'}, {{'s'}, {'t'}, {'S'}, c2sc, dlig},
-                               MergeStrategy::Heuristic(10000));
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {'f', 'F'}, {{'s'}, {'t'}, {'S'}, c2sc, dlig},
+      MergeStrategy::Heuristic(10000));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  std::vector<SubsetDefinition> expected_segments = {{'s', 't', 'S'}, {}, {}, c2sc, dlig};
+  std::vector<SubsetDefinition> expected_segments = {
+      {'s', 't', 'S'}, {}, {}, c2sc, dlig};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
@@ -830,8 +833,8 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
 
 TEST_F(ClosureGlyphSegmenterTest, CostRequiresFrequencies) {
   UnicodeFrequencies frequencies;
-  auto s = MergeStrategy::CostBased(std::move(frequencies));
-  ASSERT_TRUE(absl::IsInvalidArgument(s.status())) << s.status();
+  auto profile = ProbabilityProfile::Unigram(std::move(frequencies));
+  ASSERT_TRUE(absl::IsInvalidArgument(profile.status())) << profile.status();
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_CostStrategy) {
@@ -846,7 +849,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_CostStrategy) {
       {{'a', 'b', 'c', 'd', 'e'},
        {'f', 'g', 'h', 'i', 'j'},
        {'k', 'l', 'm', 'n', 'o'}},
-      *MergeStrategy::CostBased(std::move(frequencies)));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies))));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // It's expected that s0 and s1 are merged together to reduce network
@@ -879,7 +883,8 @@ TEST_F(ClosureGlyphSegmenterTest,
   auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c'}, {'f', 'g', 'h'}, {'k', 'l', 'm', 'n', 'o'}},
-      *MergeStrategy::CostBased(std::move(frequencies1), 75, 3));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies1)), 75, 3));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -906,7 +911,8 @@ if (s0 AND s2) then p3
   segmentation = CodepointToGlyphSegments(
       roboto.get(), {},
       {{'a', 'b', 'c'}, {'f', 'g', 'h'}, {'k', 'l', 'm', 'n', 'o'}},
-      *MergeStrategy::CostBased(std::move(frequencies2), 75, 5));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies2)), 75, 5));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   expected_segments = {
@@ -936,7 +942,8 @@ TEST_F(ClosureGlyphSegmenterTest, CustomOverhead_CostStrategy) {
       {{'a', 'b', 'c', 'd', 'e'},
        {'f', 'g', 'h', 'i', 'j'},
        {'k', 'l', 'm', 'n', 'o'}},
-      *MergeStrategy::CostBased(std::move(frequencies), 7500));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 7500));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // Very high per request overhead incentivizes merging everything
@@ -958,7 +965,8 @@ TEST_F(ClosureGlyphSegmenterTest, NonDisjointCodepoints) {
   UnicodeFrequencies frequencies{{{'a', 'a'}, 10}};
   auto s = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a', 'd'}, {'d', 'c'}},
-      *MergeStrategy::CostBased(std::move(frequencies)));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies))));
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.status().code(), absl::StatusCode::kInvalidArgument)
       << s.status();
@@ -972,8 +980,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
       {{0x106, 0x106}, 1}, /* Cacute */
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
@@ -1013,8 +1021,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
       {{0x106, 0x106}, 1}, /* Cacute */
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(false);
 
@@ -1059,8 +1067,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
       {{0x106, 0x106}, 1},                    /* Cacute */
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 2);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 2);
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
@@ -1132,8 +1140,8 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
       {{0x62c, 0x62c}, 1},
       {{0x62d, 0x62d}, 1},
   };
-  MergeStrategy strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
@@ -1196,8 +1204,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoCostCutoff) {
       {{'c', 'd'}, 1},
   };
 
-  auto strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
+  auto strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Bigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
 
   auto segmentation = CodepointToGlyphSegments(
@@ -1237,8 +1245,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_WithCostCutoff) {
       {{'c', 'd'}, 1},
   };
 
-  auto strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
+  auto strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Bigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.05);
 
   auto segmentation = CodepointToGlyphSegments(
@@ -1282,8 +1290,8 @@ TEST_F(ClosureGlyphSegmenterTest,
       {{'c', 'd'}, 1},
   };
 
-  auto strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 2);
+  auto strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Bigram(std::move(frequencies)), 75, 2);
   strategy.SetOptimizationCutoffFraction(0.05);
 
   auto segmentation = CodepointToGlyphSegments(
@@ -1363,8 +1371,8 @@ TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {
       {{0x106, 0x106}, 1}, /* Cacute */
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::CostBased(std::move(frequencies), 75, 1);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(false);
 
@@ -1420,7 +1428,8 @@ TEST_F(ClosureGlyphSegmenterTest, InitNoGlyphSegments_CostMerging) {
           {'B'},
           {'C'},
       },
-      *MergeStrategy::CostBased(std::move(frequencies)));
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies))));
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // It's expected that s0 and s1 are merged together to reduce network
@@ -1453,9 +1462,9 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging) {
       {{'b', 'c'}, 50},
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies));
-  strategy.SetInitFontMergeThreshold(-75);
+  auto profile = *ProbabilityProfile::Bigram(std::move(frequencies));
+  profile.init_font_merge_threshold = -75;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
 
   auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
@@ -1490,10 +1499,10 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_WithProbabilityThreshold) {
       {{'b', 'c'}, 97},
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies));
-  strategy.SetInitFontMergeThreshold(-75);
-  strategy.SetInitFontMergeProbabilityThreshold(0.98);
+  auto profile = *ProbabilityProfile::Bigram(std::move(frequencies));
+  profile.init_font_merge_threshold = -75;
+  profile.init_font_merge_probability_threshold = 0.98;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
 
   auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'a'}, {'d'}, {'b'}, {'c'}}, strategy);
@@ -1525,9 +1534,9 @@ TEST_F(ClosureGlyphSegmenterTest,
       {{0x106, 0x106}, 1},  // Cacute
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies), 75, 1);
-  strategy.SetInitFontMergeThreshold(-75);
+  auto profile = *ProbabilityProfile::Bigram(std::move(frequencies));
+  profile.init_font_merge_threshold = -75;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile), 75, 1);
 
   auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{'A'}, {'B'}, {'C'}, {0x106}}, strategy);
@@ -1568,8 +1577,9 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMerging_CommonGlyphs) {
       {{0x106, 0x106}, 100},  // Cacute (contains C glyph)
   };
 
-  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(frequencies));
-  strategy.SetInitFontMergeThreshold(-75);
+  auto profile = *ProbabilityProfile::Unigram(std::move(frequencies));
+  profile.init_font_merge_threshold = -75;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
 
   auto segmentation = CodepointToGlyphSegments(
       roboto.get(), {}, {{0x106}, {'A'}, {'C'}}, strategy);
@@ -1606,9 +1616,11 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
   // {b, g} is ungrouped
   btree_map<SegmentSet, MergeStrategy> merge_groups{
       {{0, 2, 3, 4, 5, 14},
-       *MergeStrategy::CostBased(std::move(group1_freq), 75, 1)},
+       MergeStrategy::CostBased(
+           *ProbabilityProfile::Unigram(std::move(group1_freq)), 75, 1)},
       {{0, 7, 8, 9, 10, 11, 12, 13},
-       *MergeStrategy::CostBased(std::move(group2_freq), 75, 2)},
+       MergeStrategy::CostBased(
+           *ProbabilityProfile::Unigram(std::move(group2_freq)), 75, 2)},
   };
 
   auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
@@ -1695,12 +1707,14 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
 
   // {a} is shared
   // {b, g} is ungrouped
-  MergeStrategy s1 = *MergeStrategy::CostBased(std::move(group1_freq), 75, 1);
-  s1.SetInitFontMergeThreshold(-70);
+  auto profile1 = *ProbabilityProfile::Unigram(std::move(group1_freq));
+  profile1.init_font_merge_threshold = -70;
+  MergeStrategy s1 = MergeStrategy::CostBased(std::move(profile1), 75, 1);
   s1.SetOptimizationCutoffFraction(0.50);
 
-  MergeStrategy s2 = *MergeStrategy::CostBased(std::move(group2_freq), 75, 2);
-  s2.SetInitFontMergeThreshold(std::nullopt);
+  // No init font merging for this profile.
+  auto profile2 = *ProbabilityProfile::Unigram(std::move(group2_freq));
+  MergeStrategy s2 = MergeStrategy::CostBased(std::move(profile2), 75, 2);
 
   btree_map<SegmentSet, MergeStrategy> merge_groups{
       {{0, 1, 2, 3, 4, 5, 6}, s1},
@@ -1775,6 +1789,209 @@ if (s3 AND s8) then p8
 )");
 }
 
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_InitFontMove) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 100},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 100},
+      {{'c', 'c'}, 100},
+  };
+
+  auto profile = *ProbabilityProfile::Unigram(std::move(freq1));
+  profile.init_font_merge_threshold = -70;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile), 75, 1);
+  strategy.AddProbabilityProfile(
+      *ProbabilityProfile::Unigram(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {{'a'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'a' and 'b' move to initial font because profile 1 configured the
+  // threshold. 'c' does not move because profile 2 has no threshold configured.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},     // 'a' (moved to init font)
+      {},     // 'b' (moved to init font)
+      {'c'},  // remains as patch
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_BothHaveInitFontThreshold) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 100},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 100},
+      {{'c', 'c'}, 100},
+      {{'d', 'd'}, 5},
+  };
+
+  auto profile = *ProbabilityProfile::Unigram(std::move(freq1));
+  profile.init_font_merge_threshold = -70;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile), 75, 1);
+  strategy.AddProbabilityProfile(ProbabilityProfile(
+      std::make_shared<ift::freq::UnigramProbabilityCalculator>(
+          std::move(freq2)),
+      -70));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'a' and 'b' move to initial font via profile 1.
+  // 'c' moves to initial font via profile 2.
+  // 'd' does not move because its probability is low in profile 2.
+  std::vector<SubsetDefinition> expected_segments = {
+      {},     // 'a' (moved to init font)
+      {},     // 'b' (moved to init font)
+      {},     // 'c' (moved to init font)
+      {'d'},  // remains as patch
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+// Segment ordering within a merge group uses the average probability across
+// all of the strategies calculators.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_SegmentOrdering) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 60},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 1},
+  };
+
+  // 'a' is not present in this data set, so it has a probability of 0 here.
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 1},
+  };
+
+  // Network overhead of 0 means no merges will be selected, so the resulting
+  // segment order is purely the result of the segment ordering.
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq1)), 0, 1);
+  strategy.AddProbabilityProfile(
+      *ProbabilityProfile::Unigram(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                               {{'a'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // Average probabilities are: 'a' = 0.30, 'b' = 0.50, 'c' = 0.01, so 'b' is
+  // ordered ahead of 'a'. Note: if only the first calculator was considered
+  // 'a' (0.60) would have been placed first.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'b'},
+      {'a'},
+      {'c'},
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+// The optimization cutoff is computed against the cost summed across all of
+// the strategies calculators, so a segment which contributes significant cost
+// under any one calculator stays above the cutoff.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_OptimizationCutoff) {
+  // Matches the data used by SimpleSegmentation_WithCostCutoff: 'b', 'c', and
+  // 'd' are rare, and always occur together.
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 1},
+      {{'c', 'c'}, 1},
+      {{'d', 'd'}, 1},
+      // Pairs - setup so that b, c, d are always occuring together.
+      {{'b', 'c'}, 1},
+      {{'b', 'd'}, 1},
+      {{'c', 'd'}, 1},
+  };
+
+  // In this data set 'b', 'c', and 'd' are common (and still always occur
+  // together), while 'a' is not present at all.
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100}, {{'b', 'b'}, 50}, {{'c', 'c'}, 50}, {{'d', 'd'}, 50},
+      {{'b', 'c'}, 50},  {{'b', 'd'}, 50}, {{'c', 'd'}, 50},
+  };
+
+  auto strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Bigram(std::move(freq1)), 75, 1);
+  strategy.SetOptimizationCutoffFraction(0.05);
+  strategy.AddProbabilityProfile(*ProbabilityProfile::Bigram(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, std::move(strategy));
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'b', 'c', and 'd' account for a significant fraction of the total cost
+  // once the second calculator is included, so unlike
+  // SimpleSegmentation_WithCostCutoff they are not cutoff and are merged
+  // together.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a'},
+      {'b', 'c', 'd'},
+      {},
+      {},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid69 }
+p1: { gid70, gid71, gid72 }
+if (s0) then p0
+if (s1) then p1
+)");
+}
+
+// Candidate selection (including inert candidate pruning) operates on
+// aggregate probabilities, so a pair of segments which are only used by the
+// second calculator are still considered for, and selected as, merges.
+TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_MergesWithinEachCalculator) {
+  UnicodeFrequencies freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 95},
+  };
+
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'c', 'c'}, 95},
+      {{'d', 'd'}, 95},
+  };
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq1)), 75, 1);
+  strategy.AddProbabilityProfile(
+      *ProbabilityProfile::Unigram(std::move(freq2)));
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'c' and 'd' have a probability of zero under the first calculator, but
+  // are still merged since candidate pruning considers all calculators.
+  // Merges are not made across the two calculators since a shared patch would
+  // be loaded by both.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'a', 'b'},
+      {},
+      {'c', 'd'},
+      {},
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
 TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
   UnicodeFrequencies group1_freq{
       {{' ', ' '}, 100},
@@ -1789,8 +2006,12 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_CompositesRespectGroups) {
   };
 
   btree_map<SegmentSet, MergeStrategy> merge_groups{
-      {{0, 1}, *MergeStrategy::CostBased(std::move(group1_freq), 75, 1)},
-      {{2, 3}, *MergeStrategy::CostBased(std::move(group2_freq), 75, 1)},
+      {{0, 1},
+       MergeStrategy::CostBased(
+           *ProbabilityProfile::Unigram(std::move(group1_freq)), 75, 1)},
+      {{2, 3},
+       MergeStrategy::CostBased(
+           *ProbabilityProfile::Unigram(std::move(group2_freq)), 75, 1)},
   };
 
   auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
@@ -1871,7 +2092,8 @@ TEST_F(ClosureGlyphSegmenterTest, CompositeMerge_Cutoff) {
       {{'f', 'f'}, 99},  {{'i', 'i'}, 99},
   };
 
-  MergeStrategy strategy = *MergeStrategy::CostBased(std::move(freq), 75, 1);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq)), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.50);
   auto segmentation = CodepointToGlyphSegments(roboto.get(), {},
                                                {
@@ -1991,7 +2213,9 @@ if ((s0 OR s1) AND s2) then p3
           smcp,
       },
       {
-          {{0, 1}, *MergeStrategy::CostBased(std::move(frequencies), 75, 3)},
+          {{0, 1},
+           MergeStrategy::CostBased(
+               *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 3)},
           {{2}, MergeStrategy::None()},
       });
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -2014,7 +2238,8 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
       {{'h', 'h'}, 5},   {{'i', 'i'}, 1},  // 8
   };
 
-  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  MergeStrategy costs = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq)), 0, 1);
   costs.SetPreClosureProbabilityThreshold(0.55);
   costs.SetPreClosureGroupSize(3);
 
@@ -2081,9 +2306,9 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
       /* s4 */ {{0x62d, 0x62d}, 1},
   };
 
-  MergeStrategy strategy =
-      *MergeStrategy::BigramCostBased(std::move(frequencies));
-  strategy.SetInitFontMergeThreshold(-75);
+  auto profile = *ProbabilityProfile::Bigram(std::move(frequencies));
+  profile.init_font_merge_threshold = -75;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
 
   auto segmentation = FindConditionsCodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
@@ -2113,7 +2338,8 @@ TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_MidGroup) {
       {{'b', 'b'}, 29},
   };
 
-  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  MergeStrategy costs = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq)), 0, 1);
   costs.SetPreClosureProbabilityThreshold(0.55);
   costs.SetPreClosureGroupSize(3);
 
@@ -2167,7 +2393,8 @@ TEST_F(ClosureGlyphSegmenterTest, FeatureSegments_NoPreGrouping_AsFirst) {
       {{'c', 'c'}, 28},
   };
 
-  MergeStrategy costs = *MergeStrategy::CostBased(std::move(freq), 0, 1);
+  MergeStrategy costs = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq)), 0, 1);
   costs.SetPreClosureProbabilityThreshold(0.55);
   costs.SetPreClosureGroupSize(3);
 
@@ -2201,8 +2428,8 @@ TEST_F(ClosureGlyphSegmenterTest, PreGrouping_RemappedIndexBug) {
       {{'a', 'a'}, 100},
   };
 
-  MergeStrategy strategy_0 =
-      *MergeStrategy::CostBased(std::move(freq_high), 0, 1);
+  MergeStrategy strategy_0 = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq_high)), 0, 1);
 
   // Use Heuristic for Group 1 to force merging of whatever ends up in it.
   MergeStrategy strategy_1 = MergeStrategy::Heuristic(1000);
