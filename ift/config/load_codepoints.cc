@@ -211,6 +211,10 @@ StatusOr<UnicodeFrequencies> LoadFrequenciesFromRiegeli(
   for (const auto& path : paths) {
     TRYV(LoadFrequenciesFromRiegeliIndividual(path.c_str(), builder));
   }
+
+  std::filesystem::path p(path);
+  builder.SetName(p.filename().string());
+
   return builder.Build();
 }
 

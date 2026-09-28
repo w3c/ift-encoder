@@ -30,6 +30,7 @@
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
@@ -70,6 +71,9 @@ ABSL_FLAG(bool, include_initial_codepoints_in_config, true,
 
 ABSL_FLAG(bool, output_segmentation_analysis, false,
           "If set an analysis of the segmentation will be output to stderr.");
+
+ABSL_FLAG(bool, segmentation_analysis_split_cjk, false,
+          "If set, then for analysis split \"Script_CJK\" into the individual scripts.");
 
 ABSL_FLAG(
     bool, output_fallback_glyph_count, false,
@@ -149,10 +153,9 @@ static Status Analysis(hb_face_t* font,
   std::vector<BigramProbabilityCalculator> calculator_storage;
   // Reserve up front, pointers into this vector are handed out below so it
   // must not reallocate.
-  calculator_storage.reserve(num_profiles);
+  calculator_storage.reserve(num_profiles + 4); // +4 because CJK may be split int othe 4 sub scripts
 
   std::vector<const ProbabilityCalculator*> strategy_probability_calculators;
-  std::vector<unsigned> strategy_group_index;
 
   unsigned i = 0;
   for (auto& [_, strategy] : merge_groups) {
@@ -171,19 +174,30 @@ static Status Analysis(hb_face_t* font,
             "Probability profile is missing a probability calculator.");
       }
 
-      // Depending on the configuration the encoding may have used unigram
-      // probability calculations. For the purpose of analysis we want to be
-      // consistent and so unigram probability calculator should be upgraded to
-      // a bigram
-      if (UnigramProbabilityCalculator* unigram =
+      if (absl::GetFlag(FLAGS_segmentation_analysis_split_cjk) &&
+          calculator->Name() == "Script_CJK.riegeli@*") {
+        std::vector<const char*> names = {
+          "Script_japanese.riegeli@*",
+          "Script_korean.riegeli@*",
+          "Script_chinese-simplified.riegeli@*",
+          "Script_chinese-traditional.riegeli@*",
+        };
+        for (const char* name :names) {
+          auto freq = TRY(ift::config::LoadBuiltInFrequencies(name, *resolver.get()));
+          auto& calc = calculator_storage.emplace_back(std::move(freq));
+          strategy_probability_calculators.push_back(&calc);
+        }
+      } else if (UnigramProbabilityCalculator* unigram =
               dynamic_cast<UnigramProbabilityCalculator*>(calculator)) {
+        // Depending on the configuration the encoding may have used unigram
+        // probability calculations. For the purpose of analysis we want to be
+        // consistent and so unigram probability calculator should be upgraded to
+        // a bigram
         calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
         strategy_probability_calculators.push_back(&calculator_storage.back());
       } else {
         strategy_probability_calculators.push_back(calculator);
       }
-
-      strategy_group_index.push_back(i - 1);
     }
   }
 
@@ -208,18 +222,14 @@ static Status Analysis(hb_face_t* font,
       non_ift_total_cost = cost.non_ift_total_cost;
     }
 
-    unsigned group_index = strategy_group_index[i++];
-
     ift_patch_cost += cost.ift_patch_cost;
     ideal_patch_cost += cost.ideal_patch_cost;
 
-    std::cerr << "ift_cost_bytes[" << group_index
+    std::cerr << "ift_cost_bytes[" << cost.name
               << "] = " << (uint64_t)cost.ift_patch_cost << std::endl;
-    std::cerr << "ideal_cost_bytes[" << group_index
+    std::cerr << "ideal_cost_bytes[" << cost.name
               << "] = " << (uint64_t)cost.ideal_patch_cost << std::endl;
     std::cerr << std::endl;
-
-    group_index++;
   }
 
   std::cerr << "non_ift_total_cost = " << (uint64_t)non_ift_total_cost

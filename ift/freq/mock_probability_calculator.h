@@ -14,6 +14,10 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
   MockProbabilityCalculator(std::vector<std::pair<ift::encoder::Segment, double>> segments)
       : segments_(segments) {}
 
+  absl::string_view Name() const override {
+    return "MockProbabilityCalculator";
+  }
+
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override {
     for (const auto& [segment, prob] : segments_) {

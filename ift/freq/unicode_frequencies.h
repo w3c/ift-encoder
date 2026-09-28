@@ -25,6 +25,10 @@ class UnicodeFrequencies {
 
   bool HasData() const { return max_count_ > 0; }
 
+  absl::string_view Name() const {
+    return name;
+  }
+
   // Add frequency data for the codepoint pair (cp1, cp2).
   // When cp1 == cp2 this supplies frequency for a single codepoint.
   void Add(uint32_t cp1, uint32_t cp2, uint64_t count);
@@ -58,6 +62,7 @@ class UnicodeFrequencies {
   friend class UnicodeFrequenciesBuilder;
   absl::flat_hash_map<uint64_t, double> probabilities_;
   uint64_t max_count_ = 0;
+  std::string name = "";
   double unknown_probability_ = 1.0;
 };
 
@@ -67,6 +72,10 @@ class UnicodeFrequenciesBuilder {
       std::optional<ift::common::CodepointSet> filter = std::nullopt)
       : filter_(std::move(filter)) {}
 
+  void SetName(absl::string_view value) {
+    name = value;
+  }
+
   // Add frequency data for the codepoint pair (cp1, cp2).
   // When cp1 == cp2 this supplies frequency for a single codepoint.
   void Add(uint32_t cp1, uint32_t cp2, uint64_t count);
@@ -75,6 +84,7 @@ class UnicodeFrequenciesBuilder {
 
  private:
   absl::flat_hash_map<uint64_t, uint64_t> frequencies_;
+  std::string name;
   uint64_t max_count_ = 0;
   std::optional<ift::common::CodepointSet> filter_;
 };

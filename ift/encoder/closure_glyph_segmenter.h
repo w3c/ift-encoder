@@ -20,6 +20,7 @@
 namespace ift::encoder {
 
 struct SegmentationCost {
+  std::string name;
   double ift_init_cost;
   double ift_patch_cost;
 
