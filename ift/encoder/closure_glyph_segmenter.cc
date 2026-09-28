@@ -723,6 +723,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     }
 
     out.push_back(SegmentationCost{
+        .name = std::string(probability_calculator->Name()),
         .ift_init_cost = init_font_size,
         .ift_patch_cost = total_cost,
         .non_ift_total_cost = non_ift_font_size,

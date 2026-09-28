@@ -21,6 +21,10 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
       UnicodeFrequencies frequencies,
       size_t max_cache_size = UNIGRAM_PROBABILITY_CACHE_SIZE);
 
+  absl::string_view Name() const override {
+    return frequencies_.Name();
+  }
+
   ProbabilityBound ComputeProbability(
       const ift::encoder::SubsetDefinition& definition) const override;
 

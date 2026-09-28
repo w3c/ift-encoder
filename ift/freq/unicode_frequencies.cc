@@ -43,6 +43,7 @@ UnicodeFrequencies UnicodeFrequenciesBuilder::Build() {
       result.probabilities_[key] = (double)count / (double)max_count_;
     }
   }
+  result.name = name;
   return result;
 }
 

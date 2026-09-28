@@ -16,6 +16,8 @@ class ProbabilityCalculator {
  public:
   virtual ~ProbabilityCalculator() = default;
 
+  virtual absl::string_view Name() const = 0;
+
   // Compute and returns the probability bounds on a page
   // intersecting the given subset definition.
   // If segment_index is provided, the calculator may cache the result by
