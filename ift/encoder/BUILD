@@ -221,7 +221,9 @@ cc_library(
         "//visibility:public",
     ],
     deps = [
+        "//ift/common:try",
         "//ift/freq",
+        "@abseil-cpp//absl/status:status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/types:span",
     ],

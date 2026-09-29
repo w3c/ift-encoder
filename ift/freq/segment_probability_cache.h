@@ -10,13 +10,14 @@
 
 namespace ift::freq {
 
-// Caches ProbabilityBound values indexed by segment_index_t.
+// Caches per-segment probability entries indexed by segment_index_t.
 // Pre-sized via Reset(num_segments); out-of-bounds accesses fail.
+template <typename Entry = ProbabilityBound>
 class SegmentProbabilityCache {
  public:
   SegmentProbabilityCache() = default;
 
-  std::optional<ProbabilityBound>& operator[](
+  std::optional<Entry>& operator[](
       ift::encoder::segment_index_t segment_index) {
     return entries_.at(segment_index);
   }
@@ -32,7 +33,7 @@ class SegmentProbabilityCache {
   }
 
  private:
-  std::vector<std::optional<ProbabilityBound>> entries_;
+  std::vector<std::optional<Entry>> entries_;
 };
 
 }  // namespace ift::freq

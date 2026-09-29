@@ -1,8 +1,11 @@
 #ifndef IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 #define IFT_FREQ_BIGRAM_PROBABILITY_CALCULATOR_H_
 
+#include <cstdint>
 #include <optional>
+#include <vector>
 
+#include "absl/container/btree_set.h"
 #include "ift/common/int_set.h"
 #include "ift/freq/lru_cache.h"
 #include "ift/freq/probability_bound.h"
@@ -30,15 +33,14 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
     return frequencies_.Name();
   }
 
-  ProbabilityBound ComputeProbability(
-      const ift::encoder::SubsetDefinition& definition) const override;
+  ProbabilityBound ComputeProbability(uint32_t codepoint) const override {
+    double p = frequencies_.ProbabilityFor(codepoint);
+    return {p, p};
+  }
 
   ProbabilityBound ComputeProbability(
       absl::Span<const ift::encoder::Segment> segments,
       ift::encoder::segment_index_t segment_index) const override;
-
-  ProbabilityBound ComputeMergedProbability(
-      const std::vector<const ift::encoder::Segment*>& segments) const override;
 
   ProbabilityBound ComputeMergedProbability(
       absl::Span<const ift::encoder::Segment> segments,
@@ -57,18 +59,43 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
   }
 
  private:
+  struct BigramSegmentCacheEntry {
+    ProbabilityBound codepoints_bound;
+    ProbabilityBound bound;
+    std::vector<uint32_t> cps;
+    std::vector<double> unigram_probs;
+    std::vector<double> partial_totals;
+    double unigram_total = 0.0;
+    double bigram_total = 0.0;
+    double max_single_bound = 0.0;
+    double max_pair_bound = 0.0;
+    bool saturated = false;
+  };
+
   ProbabilityBound BigramProbabilityBound(
       const ift::common::CodepointSet& codepoints,
       double current_best_lower) const;
 
-  ProbabilityBound ComputeProbabilityInternal(
-      const ift::encoder::SubsetDefinition& definition,
-      double best_lower) const;
+  ProbabilityBound ApplyFeatureTags(
+      const absl::btree_set<hb_tag_t>& feature_tags,
+      ProbabilityBound codepoints_bound) const;
+
+  ProbabilityBound ApplyLowerBoundAndFeatureTags(
+    const absl::btree_set<hb_tag_t>& feature_tags,
+    double best_lower,
+    ProbabilityBound codepoints_bound) const;
+
+  BigramSegmentCacheEntry ComputeSegmentEntry(
+      const ift::encoder::SubsetDefinition& definition) const;
+
+  const BigramSegmentCacheEntry& GetOrComputeSegmentEntry(
+      absl::Span<const ift::encoder::Segment> segments,
+      ift::encoder::segment_index_t segment_index) const;
 
   UnicodeFrequencies frequencies_;
   mutable LruCache<ift::common::CodepointSet, std::optional<ProbabilityBound>>
       cache_;
-  mutable SegmentProbabilityCache segment_cache_;
+  mutable SegmentProbabilityCache<BigramSegmentCacheEntry> segment_cache_;
 };
 
 }  // namespace ift::freq

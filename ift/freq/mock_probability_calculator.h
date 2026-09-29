@@ -18,8 +18,12 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
     return "MockProbabilityCalculator";
   }
 
+  ProbabilityBound ComputeProbability(uint32_t codepoint) const override {
+    return ComputeProbability(ift::encoder::SubsetDefinition {codepoint});
+  }
+
   ProbabilityBound ComputeProbability(
-      const ift::encoder::SubsetDefinition& definition) const override {
+      const ift::encoder::SubsetDefinition& definition) const {
     for (const auto& [segment, prob] : segments_) {
       if (segment.Definition() == definition) {
         return {prob, prob};
@@ -35,8 +39,19 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
   }
 
   ProbabilityBound ComputeMergedProbability(
+       absl::Span<const ift::encoder::Segment> segments,
+      const ift::common::SegmentSet& segment_indices) const override {
+    std::vector<const ift::encoder::Segment*> segment_ptrs;
+    segment_ptrs.reserve(segment_indices.size());
+    for (ift::encoder::segment_index_t s : segment_indices) {
+      segment_ptrs.push_back(&segments[s]);
+    }
+    return ComputeMergedProbability(segment_ptrs);
+  }
+
+  ProbabilityBound ComputeMergedProbability(
       const std::vector<const ift::encoder::Segment*>& segments)
-      const override {
+      const {
     ift::encoder::SubsetDefinition merged;
     for (const auto* s : segments) {
       merged.Union(s->Definition());

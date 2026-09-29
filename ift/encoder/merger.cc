@@ -319,10 +319,7 @@ Status Merger::MoveSegmentsToInitFont(size_t profile_index) {
 
 Status Merger::ResetSegmentProbabilities() const {
   size_t num_segments = Context().SegmentationInfo().Segments().size();
-  for (const auto& profile : strategy_.ProbabilityProfiles()) {
-    TRY(profile.Calculator())->ResetSegmentProbabilities(num_segments);
-  }
-  return absl::OkStatus();
+  return strategy_.ResetSegmentProbabilities(num_segments);
 }
 
 Status Merger::ReassignInitSubset() {
