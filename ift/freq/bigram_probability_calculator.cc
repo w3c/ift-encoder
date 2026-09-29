@@ -1,12 +1,20 @@
 #include "ift/freq/bigram_probability_calculator.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <vector>
 
+#include "absl/container/btree_set.h"
+#include "absl/container/inlined_vector.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
+using absl::btree_set;
+using absl::InlinedVector;
 using ift::common::CodepointSet;
 using ift::common::SegmentSet;
 using ift::encoder::Segment;
@@ -20,124 +28,45 @@ BigramProbabilityCalculator::BigramProbabilityCalculator(
     : frequencies_(std::move(frequencies)),
       cache_("bigram probability", max_cache_size) {}
 
-ProbabilityBound BigramProbabilityCalculator::BigramProbabilityBound(
-    const CodepointSet& codepoints, double best_lower) const {
-  std::optional<ProbabilityBound>& cached_bound = cache_[codepoints];
-  if (cached_bound.has_value()) {
-    double lower = std::max(cached_bound->Min(), best_lower);
-    double upper = std::max(cached_bound->Max(), lower);
-    return ProbabilityBound(lower, upper);
-  }
-
-  unsigned n = codepoints.size();
-  std::vector<unsigned> cps;
-  std::vector<double> P;
-  std::vector<double> partial_totals;
-  cps.reserve(n);
-  P.reserve(n);
-  partial_totals.resize(n, 0.0);
-
-  double unigram_total = 0.0;
-  double max_single_bound = 0.0;
-  for (unsigned cp : codepoints) {
-    double P_cp = frequencies_.ProbabilityFor(cp);
-    cps.push_back(cp);
-    P.push_back(P_cp);
-    unigram_total += P_cp;
-    max_single_bound = std::max(P_cp, max_single_bound);
-  }
-
-  if (max_single_bound >= 1.0) {
-    // Bounds can't be lower than [1, 1] stop checking.
-    ProbabilityBound bound(1.0, 1.0);
-    cached_bound = bound;
-    return bound;
-  }
-
-  double bigram_total = 0.0;
-  double max_pair_bound = 0.0;
-  for (unsigned i = 0; i < n; i++) {
-    for (unsigned j = i + 1; j < n; j++) {
-      double Pij = frequencies_.ProbabilityFor(cps[i], cps[j], P[i], P[j]);
-      bigram_total += Pij;
-      partial_totals[i] += Pij;
-      partial_totals[j] += Pij;
-
-      max_pair_bound = std::max(P[i] + P[j] - Pij, max_pair_bound);
-      if (max_pair_bound >= 1.0) {
-        // Bounds can't be lower than [1, 1] stop checking.
-        ProbabilityBound bound(1.0, 1.0);
-        cached_bound = bound;
-        return bound;
-      }
-    }
-  }
-
-  double max_partial_bigram_total = 0.0;
-  for (double partial_total : partial_totals) {
-    max_partial_bigram_total =
-        std::max(partial_total, max_partial_bigram_total);
-  }
-
+static ProbabilityBound KouniasBound(
+  double unigram_total,
+  double bigram_total,
+  double max_partial_bigram_total,
+  double max_single_bound,
+  double max_pair_bound
+) {
   // The bounds calculations are based on the Kounias bounds:
   // https://projecteuclid.org/journals/annals-of-mathematical-statistics/volume-39/issue-6/Bounds-for-the-Probability-of-a-Union-with-Applications/10.1214/aoms/1177698049.full
 
-  // == Lower Bound ==
   // A lower bound is given by the greater of three values:
   // - Either the largest individual codepoint frequency.
   // - max(Pi + Pj - Pij)
   // - Or: sum(Pi) - sum(Pj<k)
-  double raw_lower = std::max(
-      std::max(unigram_total - bigram_total, max_pair_bound), max_single_bound);
+  double lower = std::max(
+      std::max(unigram_total - bigram_total,
+               max_pair_bound), max_single_bound);
 
-  // == Upper Bound ==
   // An upper bound is given by
   // sum(Pi) - max_j=1..n [ sum_j!=k(Pjk) ]
-  double raw_upper = std::max(
-      std::min(unigram_total - max_partial_bigram_total, 1.0), raw_lower);
-
-  ProbabilityBound raw_bound(raw_lower, raw_upper);
-  cached_bound = raw_bound;
-
-  double final_lower = std::max(raw_lower, best_lower);
-  double final_upper = std::max(raw_upper, final_lower);
-
-  return ProbabilityBound(final_lower, final_upper);
+  double upper = std::max(
+      std::min(unigram_total - max_partial_bigram_total, 1.0),
+      lower);
+  return ProbabilityBound(lower, upper);
 }
 
-ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
-    const SubsetDefinition& definition) const {
-  return ComputeProbabilityInternal(definition, 0.0);
-}
-
-ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
-    absl::Span<const ift::encoder::Segment> segments,
-    segment_index_t segment_index) const {
-  std::optional<ProbabilityBound>& cached_seg = segment_cache_[segment_index];
-  if (cached_seg.has_value()) {
-    return *cached_seg;
-  }
-
-  cached_seg = ComputeProbabilityInternal(segments.at(segment_index).Definition(), 0.0);
-  return *cached_seg;
-}
-
-ProbabilityBound BigramProbabilityCalculator::ComputeProbabilityInternal(
-    const SubsetDefinition& definition, double best_lower) const {
-  if (definition.Empty()) {
-    return {1, 1};
-  }
-
-  ProbabilityBound codepoints_bound =
-      BigramProbabilityBound(definition.codepoints, best_lower);
-
-  if (definition.feature_tags.empty()) {
+ProbabilityBound BigramProbabilityCalculator::ApplyFeatureTags(
+    const btree_set<hb_tag_t>& feature_tags,
+    ProbabilityBound codepoints_bound) const {
+  if (feature_tags.empty()) {
     return codepoints_bound;
   }
 
+  // Since we don't have conjunctive frequencies between codepoints/features
+  // and features/features use a simple disjunctive bound for incorporating
+  // layout feature probabilities.
   double feature_min = 0.0;
   double feature_sum = 0.0;
-  for (hb_tag_t tag : definition.feature_tags) {
+  for (hb_tag_t tag : feature_tags) {
     double p = frequencies_.ProbabilityForLayoutTag(tag);
     feature_min = std::max(feature_min, p);
     feature_sum += p;
@@ -148,82 +77,242 @@ ProbabilityBound BigramProbabilityCalculator::ComputeProbabilityInternal(
                           std::min(1.0, codepoints_bound.Max() + t_max));
 }
 
-ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
-    const std::vector<const Segment*>& segments) const {
-  // This assumes that segments are all disjoint, which is enforced in
-  // ClosureGlyphSegmenter::CodepointToGlyphSegments().
-  double best_lower = 0.0;
-  for (const auto* s : segments) {
-    double segment_lower_bound = ComputeProbabilityInternal(s->Definition(), best_lower).Min();
-    best_lower = std::max(best_lower, segment_lower_bound);
-    if (best_lower >= 1.0) {
-      // Since this is a union the bound must be [1, 1]
-      return ProbabilityBound(1.0, 1.0);
-    }
+ProbabilityBound BigramProbabilityCalculator::ApplyLowerBoundAndFeatureTags(
+    const absl::btree_set<hb_tag_t>& feature_tags,
+    double best_lower,
+    ProbabilityBound codepoints_bound) const {
+
+  double final_lower = std::max(codepoints_bound.Min(), best_lower);
+  double final_upper = std::max(codepoints_bound.Max(), final_lower);
+  codepoints_bound = ProbabilityBound(final_lower, final_upper);
+  return ApplyFeatureTags(feature_tags, codepoints_bound);
+}
+
+BigramProbabilityCalculator::BigramSegmentCacheEntry
+BigramProbabilityCalculator::ComputeSegmentEntry(
+    const SubsetDefinition& definition) const {
+  BigramSegmentCacheEntry entry;
+  if (definition.Empty()) {
+    entry.codepoints_bound = ProbabilityBound(1.0, 1.0);
+    entry.bound = ProbabilityBound(1.0, 1.0);
+    entry.saturated = true;
+    return entry;
   }
 
-  SubsetDefinition union_def;
-  for (const auto* s : segments) {
-    union_def.Union(s->Definition());
+  unsigned n = definition.codepoints.size();
+  entry.cps.reserve(n);
+  entry.unigram_probs.reserve(n);
+  entry.partial_totals.resize(n, 0.0);
+
+  for (unsigned cp : definition.codepoints) {
+    double P_cp = frequencies_.ProbabilityFor(cp);
+    entry.cps.push_back(cp);
+    entry.unigram_probs.push_back(P_cp);
+    entry.unigram_total += P_cp;
+    entry.max_single_bound = std::max(P_cp, entry.max_single_bound);
   }
 
-  // TODO(garretrieger): we can potentially cache information in the segment
-  //                     probability bound from the previous prob calculations
-  //                     that could be used during this merge to accelerate
-  //                     the computation. For example the unigram and bigram
-  //                     sums. Example code follows, would need to be updated
-  //                     to also handle the pair probabilities, and the upper
-  //                     bound calculations.
-  /*
-  double unigram_sum = 0.0;
-  double bigram_sum = 0.0;
-  for (unsigned i = 0; i < segments.size(); i++) {
-    const Segment* s1 = segments[i];
-    bigram_sum += s1->ProbabilityBound().bigram_sum_;
-    unigram_sum += s1->ProbabilityBound().unigram_sum_;
+  if (entry.max_single_bound >= 1.0) {
+    entry.codepoints_bound = ProbabilityBound(1.0, 1.0);
+    entry.saturated = true;
+  } else {
+    for (unsigned i = 0; i < n; i++) {
+      for (unsigned j = i + 1; j < n; j++) {
+        double Pij = frequencies_.ProbabilityFor(
+            entry.cps[i], entry.cps[j], entry.unigram_probs[i],
+            entry.unigram_probs[j]);
+        entry.bigram_total += Pij;
+        entry.partial_totals[i] += Pij;
+        entry.partial_totals[j] += Pij;
 
-    // All of the bigram sums within a segment are already captured, we just
-    // need to add the combinations between the input segments.
-    for (unsigned j = i + 1; j < segments.size(); j++) {
-      const Segment* s2 = segments[j];
-      for (unsigned cp1 : s1->Definition().codepoints) {
-        for (unsigned cp2 : s2->Definition().codepoints) {
-          assert(cp1 != cp2);
-          bigram_sum += frequencies_.ProbabilityFor(cp1, cp2);
+        entry.max_pair_bound = std::max(
+            entry.unigram_probs[i] + entry.unigram_probs[j] - Pij,
+            entry.max_pair_bound);
+        if (entry.max_pair_bound >= 1.0) {
+          entry.codepoints_bound = ProbabilityBound(1.0, 1.0);
+          entry.saturated = true;
+          break;
         }
       }
+      if (entry.saturated) {
+        break;
+      }
+    }
+
+    if (!entry.saturated) {
+      double max_partial_bigram_total = 0.0;
+      for (double partial_total : entry.partial_totals) {
+        max_partial_bigram_total =
+            std::max(partial_total, max_partial_bigram_total);
+      }
+      entry.codepoints_bound = KouniasBound(entry.unigram_total,
+        entry.bigram_total, max_partial_bigram_total,
+        entry.max_single_bound, entry.max_pair_bound);
     }
   }
-  */
-  return ComputeProbabilityInternal(union_def, best_lower);
+
+  entry.bound = ApplyFeatureTags(definition.feature_tags, entry.codepoints_bound);
+  return entry;
+}
+
+const BigramProbabilityCalculator::BigramSegmentCacheEntry&
+BigramProbabilityCalculator::GetOrComputeSegmentEntry(
+    absl::Span<const Segment> segments, segment_index_t segment_index) const {
+  std::optional<BigramSegmentCacheEntry>& cached_seg =
+      segment_cache_[segment_index];
+  if (!cached_seg.has_value()) {
+    cached_seg = ComputeSegmentEntry(segments.at(segment_index).Definition());
+  }
+  return *cached_seg;
+}
+
+ProbabilityBound BigramProbabilityCalculator::ComputeProbability(
+    absl::Span<const ift::encoder::Segment> segments,
+    segment_index_t segment_index) const {
+  return GetOrComputeSegmentEntry(segments, segment_index).bound;
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
     absl::Span<const Segment> segments,
     const SegmentSet& segment_indices) const {
-  if (segment_indices.size() == 1) {
-    segment_index_t s = *segment_indices.min();
-    return ComputeProbability(segments, s);
+  if (segment_indices.empty()) {
+    return ProbabilityBound(1.0, 1.0);
   }
-  // This assumes that segments are all disjoint, which is enforced in
+  if (segment_indices.size() == 1) {
+    return ComputeProbability(segments, *segment_indices.min());
+  }
+
+  // Note: this assumes that segments are all disjoint, which is enforced in
   // ClosureGlyphSegmenter::CodepointToGlyphSegments().
+
+  // Like ComputeSegmentEntry() this also utilizes kounias bounds to compute
+  // a probability bound. As a starting point we use the various totals
+  // collected per segment in the segment_cache_. These are then augmented
+  // with any missing inter segment codepoint pairs.
+
   double best_lower = 0.0;
+  double unigram_total = 0.0;
+  double bigram_total = 0.0;
+  double max_single_bound = 0.0;
+  double max_pair_bound = 0.0;
+  CodepointSet all_codepoints;
+  bool has_feature_tags = false;
+  size_t num_partial_totals = 0;
+
+  InlinedVector<const BigramSegmentCacheEntry*, 8> entries;
+  entries.reserve(segment_indices.size());
+
   for (segment_index_t s : segment_indices) {
-    double segment_lower_bound =
-        ComputeProbability(segments, s).Min();
-    best_lower = std::max(best_lower, segment_lower_bound);
-    if (best_lower >= 1.0) {
+    const BigramSegmentCacheEntry& entry =
+        GetOrComputeSegmentEntry(segments, s);
+
+    // Note: entry is stable since the entry cache is only invalidated/resized
+    // via InvalidateSegmentProbabilities() or ResetSegmentProbabilities(...)
+    entries.push_back(&entry);
+    best_lower = std::max(best_lower, entry.codepoints_bound.Min());
+    if (best_lower >= 1.0 || entry.saturated) {
       // Since this is a union the bound must be [1, 1]
       return ProbabilityBound(1.0, 1.0);
     }
+
+    const auto& segment = segments.at(s);
+    if (!segment.Definition().feature_tags.empty()) {
+      has_feature_tags = true;
+    }
+
+    all_codepoints.union_set(segment.Definition().codepoints);
+    unigram_total += entry.unigram_total;
+    bigram_total += entry.bigram_total;
+    max_single_bound = std::max(max_single_bound, entry.max_single_bound);
+    max_pair_bound = std::max(max_pair_bound, entry.max_pair_bound);
+    num_partial_totals += entry.partial_totals.size();
   }
 
-  SubsetDefinition union_def;
-  for (segment_index_t s : segment_indices) {
-    union_def.Union(segments[s].Definition());
+  btree_set<hb_tag_t> feature_tags;
+  if (has_feature_tags) {
+    for (segment_index_t s : segment_indices) {
+      const auto& seg_tags = segments.at(s).Definition().feature_tags;
+      feature_tags.insert(seg_tags.begin(), seg_tags.end());
+    }
   }
 
-  return ComputeProbabilityInternal(union_def, best_lower);
+  auto& cache_entry = cache_[all_codepoints];
+  if (cache_entry.has_value()) {
+    return ApplyLowerBoundAndFeatureTags(feature_tags, best_lower, *cache_entry);
+  }
+
+  InlinedVector<double, 256> partial_totals;
+  partial_totals.reserve(num_partial_totals);
+  InlinedVector<size_t, 8> offsets;
+  offsets.reserve(entries.size());
+
+  for (const auto* entry : entries) {
+    offsets.push_back(partial_totals.size());
+    partial_totals.insert(partial_totals.end(), entry->partial_totals.begin(),
+                          entry->partial_totals.end());
+  }
+
+  // All of the bigram sums within each segment are already captured in the
+  // cached segment entries; we only need to accumulate the cross-segment pairs for:
+  // - partial totals
+  // - max pair bound
+  // - bigram totals
+  size_t num_segments = entries.size();
+  for (size_t a = 0; a < num_segments; a++) {
+    size_t n_a = entries[a]->cps.size();
+    if (n_a == 0) {
+      continue;
+    }
+    for (size_t b = a + 1; b < num_segments; b++) {
+      size_t n_b = entries[b]->cps.size();
+      if (n_b == 0) {
+        continue;
+      }
+
+      // Iterate the smaller segment on the outer loop so the inner loop has a
+      // larger trip count and accumulates outer partial totals in a register.
+      size_t outer_idx = (n_a <= n_b) ? a : b;
+      size_t inner_idx = (n_a <= n_b) ? b : a;
+      const BigramSegmentCacheEntry& outer = *entries[outer_idx];
+      const BigramSegmentCacheEntry& inner = *entries[inner_idx];
+      double* partials_outer = partial_totals.data() + offsets[outer_idx];
+      double* partials_inner = partial_totals.data() + offsets[inner_idx];
+      size_t n_outer = outer.cps.size();
+      size_t n_inner = inner.cps.size();
+
+      for (size_t i = 0; i < n_outer; i++) {
+        uint32_t cp_i = outer.cps[i];
+        double p_i = outer.unigram_probs[i];
+        double partial_i_delta = 0.0;
+        for (size_t j = 0; j < n_inner; j++) {
+          double p_j = inner.unigram_probs[j];
+          double Pij =
+              frequencies_.ProbabilityFor(cp_i, inner.cps[j], p_i, p_j);
+          bigram_total += Pij;
+          partial_i_delta += Pij;
+          partials_inner[j] += Pij;
+
+          max_pair_bound = std::max(p_i + p_j - Pij, max_pair_bound);
+          if (max_pair_bound >= 1.0) {
+            cache_entry = ProbabilityBound(1.0, 1.0);
+            return *cache_entry;
+          }
+        }
+        partials_outer[i] += partial_i_delta;
+      }
+    }
+  }
+
+  double max_partial_bigram_total = 0.0;
+  for (double partial_total : partial_totals) {
+    max_partial_bigram_total =
+        std::max(partial_total, max_partial_bigram_total);
+  }
+
+  cache_entry = KouniasBound(unigram_total, bigram_total,
+    max_partial_bigram_total, max_single_bound, max_pair_bound);
+
+  return ApplyLowerBoundAndFeatureTags(feature_tags, best_lower, *cache_entry);
 }
 
 ProbabilityBound BigramProbabilityCalculator::ComputeConjunctiveProbability(

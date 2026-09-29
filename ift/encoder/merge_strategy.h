@@ -8,8 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
+#include "ift/common/try.h"
 #include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
@@ -165,6 +167,13 @@ class MergeStrategy {
   uint32_t MinimumGroupSize() const { return min_group_size_; }
   uint32_t PatchSizeMinBytes() const { return patch_size_min_bytes_; }
   uint32_t PatchSizeMaxBytes() const { return patch_size_max_bytes_; }
+
+  absl::Status ResetSegmentProbabilities(size_t num_segments) const {
+    for (const auto& profile : ProbabilityProfiles()) {
+      TRY(profile.Calculator())->ResetSegmentProbabilities(num_segments);
+    }
+    return absl::OkStatus();
+  }
 
   absl::StatusOr<const freq::ProbabilityCalculator*> ProbabilityCalculator(
       size_t profile_index) const {

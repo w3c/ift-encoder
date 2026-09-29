@@ -22,21 +22,27 @@ TEST(UnigramProbabilityCalculatorTest, ComputeProbability) {
   SubsetDefinition def1;
   def1.codepoints = {1, 2};
 
+  SubsetDefinition def2;
+  def2.codepoints = {1, 3};
+
+  std::vector<Segment> segments = {
+    {{1, 2}},
+    {{1, 3}},
+  };
+  calculator.ResetSegmentProbabilities(segments.size());
+
   double p1 = 10.0 / 20.0;
   double p2 = 20.0 / 20.0;
   double expected_prob1 = 1.0 - (1.0 - p1) * (1.0 - p2);
 
-  ProbabilityBound bound1 = calculator.ComputeProbability(def1);
+  ProbabilityBound bound1 = calculator.ComputeProbability(segments, 0);
   EXPECT_DOUBLE_EQ(bound1.Min(), expected_prob1);
   EXPECT_DOUBLE_EQ(bound1.Max(), expected_prob1);
-
-  SubsetDefinition def2;
-  def2.codepoints = {1, 3};
 
   double p3 = 5.0 / 20.0;
   double expected_prob2 = 1.0 - (1.0 - p1) * (1.0 - p3);
 
-  ProbabilityBound bound2 = calculator.ComputeProbability(def2);
+  ProbabilityBound bound2 = calculator.ComputeProbability(segments, 1);
   EXPECT_DOUBLE_EQ(bound2.Min(), expected_prob2);
   EXPECT_DOUBLE_EQ(bound2.Max(), expected_prob2);
 }
@@ -49,14 +55,17 @@ TEST(UnigramProbabilityCalculatorTest, ComputeMergedProbability) {
 
   UnigramProbabilityCalculator calculator(builder.Build());
 
-  Segment s1 {{1}};
-  Segment s3 {{3}};
+  std::vector<Segment> segments {
+    {{1}},
+    {{3}},
+  };
+  calculator.ResetSegmentProbabilities(segments.size());
 
   double p1 = 10.0 / 20.0;
   double p3 = 5.0 / 20.0;
   double expected_prob1 = 1.0 - (1.0 - p1) * (1.0 - p3);
 
-  ProbabilityBound bound = calculator.ComputeMergedProbability({&s1, &s3});
+  ProbabilityBound bound = calculator.ComputeMergedProbability(segments, {0, 1});
   EXPECT_DOUBLE_EQ(bound.Min(), expected_prob1);
   EXPECT_DOUBLE_EQ(bound.Max(), expected_prob1);
 }

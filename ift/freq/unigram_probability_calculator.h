@@ -25,15 +25,14 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
     return frequencies_.Name();
   }
 
-  ProbabilityBound ComputeProbability(
-      const ift::encoder::SubsetDefinition& definition) const override;
+  ProbabilityBound ComputeProbability(uint32_t codepoint) const override {
+    double p = frequencies_.ProbabilityFor(codepoint);
+    return {p, p};
+  }
 
   ProbabilityBound ComputeProbability(
       absl::Span<const ift::encoder::Segment> segments,
       ift::encoder::segment_index_t segment_index) const override;
-
-  ProbabilityBound ComputeMergedProbability(
-      const std::vector<const ift::encoder::Segment*>& segments) const override;
 
   ProbabilityBound ComputeMergedProbability(
       absl::Span<const ift::encoder::Segment> segments,
@@ -56,10 +55,12 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
   }
 
  private:
+  ProbabilityBound ComputeProbability(
+      const ift::encoder::SubsetDefinition& definition) const;
 
   UnicodeFrequencies frequencies_;
   mutable LruCache<ift::common::CodepointSet, std::optional<double>> cache_;
-  mutable SegmentProbabilityCache segment_cache_;
+  mutable SegmentProbabilityCache<ProbabilityBound> segment_cache_;
 };
 
 }  // namespace ift::freq

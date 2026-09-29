@@ -273,10 +273,18 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
   std::vector<ProbabilityBound> out(subset_definitions.size(),
                                     ProbabilityBound::Zero());
+
+  std::vector<Segment> segment_list;
+  for (const auto& def : subset_definitions) {
+    segment_list.emplace_back(def);
+  }
+
   for (const auto& [segments, strategy] : merge_groups) {
     if (!strategy.UseCosts()) {
       continue;
     }
+
+    TRYV(strategy.ResetSegmentProbabilities(segment_list.size()));
 
     const auto& profiles = strategy.ProbabilityProfiles();
     if (profiles.empty()) {
@@ -288,7 +296,7 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
       double max = 0.0;
       for (const auto& profile : profiles) {
         ProbabilityBound p =
-            TRY(profile.Calculator())->ComputeProbability(subset_definitions[s]);
+            TRY(profile.Calculator())->ComputeProbability(segment_list, s);
         min += p.Min();
         max += p.Max();
       }
@@ -469,6 +477,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   std::vector<uint32_t> segment_index_map;
   std::vector<Segment> segments = PreGroupSegments(
       merge_groups, ordering, subset_definitions, segment_index_map);
+  size_t num_segments = segments.size();
   VLOG(0) << segments.size() << " segments after pregrouping.";
 
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
@@ -499,6 +508,9 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
           "Duplicate merge groups are not allowed.");
     }
     with_shared[remapped] = remapped_full;
+
+    // Reset segment caches since segments may have been re-ordered by the sort.
+    TRYV(strategy.ResetSegmentProbabilities(num_segments));
   }
 
   merge_groups = std::move(new_merge_groups);
@@ -718,7 +730,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
         continue;
       }
-      double Pcp = probability_calculator->ComputeProbability({cp}).Value();
+      double Pcp = probability_calculator->ComputeProbability(cp).Value();
       ideal_cost += Pcp * incremental_size;
     }
 

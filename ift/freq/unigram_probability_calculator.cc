@@ -52,18 +52,6 @@ ProbabilityBound UnigramProbabilityCalculator::ComputeProbability(
 }
 
 ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
-    const std::vector<const Segment*>& segments) const {
-  // Note: this assumes that all segments are disjoint. Which we enforce for
-  // the inputs to cost based merging.
-  double probability_of_none = 1.0;
-  for (const auto* s : segments) {
-    probability_of_none *= (1.0 - ComputeProbability(s->Definition()).Min());
-  }
-  double p = 1.0 - probability_of_none;
-  return {p, p};
-}
-
-ProbabilityBound UnigramProbabilityCalculator::ComputeMergedProbability(
     absl::Span<const Segment> segments,
     const SegmentSet& segment_indices) const {
   // Note: this assumes that all segments are disjoint. Which we enforce for
