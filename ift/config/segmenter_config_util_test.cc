@@ -8,6 +8,7 @@
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/data_file_resolver.h"
 #include "ift/common/int_set.h"
+#include "ift/common/test_font_loader.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/bigram_probability_calculator.h"
@@ -16,7 +17,10 @@
 
 using ift::config::CostConfiguration;
 using ift::config::Features;
+using ift::config::FROM_FREQ_DATA;
+using ift::config::FROM_MERGE_GROUPS;
 using ift::config::MergeGroup;
+using ift::config::NONE;
 using ift::config::SegmenterConfig;
 
 using absl::btree_map;
@@ -25,6 +29,7 @@ using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
 using ift::common::SegmentSet;
+using ift::common::TestFontLoader;
 using ift::config::SegmenterConfigUtil;
 using ift::encoder::MergeStrategy;
 using ProbabilityProfile = ift::encoder::MergeStrategy::ProbabilityProfile;
@@ -73,6 +78,10 @@ void SetLegacyInitFontThreshold(CostConfiguration& config, double value) {
 void SetLegacyInitFontProbabilityThreshold(CostConfiguration& config,
                                            double value) {
   config.set_initial_font_merge_probability_threshold(value);
+}
+
+void SetLegacyGenerateTableKeyedSegments(SegmenterConfig& config, bool value) {
+  config.set_generate_table_keyed_segments(value);
 }
 
 #pragma GCC diagnostic pop
@@ -756,6 +765,158 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_OptimizationSettings) {
   expected.SetBestCaseSizeReductionFraction(0.34);
 
   ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{{{2}, expected}}));
+}
+
+TEST_F(SegmenterConfigUtilTest, RunSegmenter_TableKeyedSegments_FromFreqData) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
+  config.set_brotli_quality(0);
+  config.set_brotli_quality_for_initial_font_merging(0);
+  AddSegment(config, 1, {0x43});
+  AddSegment(config, 2, {0x45, 0x47});
+  AddSegment(config, 3, {0x48});
+
+  auto* group = config.add_merge_groups();
+  // test_freq_data.riegeli covers 0x43, 0x44
+  AddFreqData(*group, "test_freq_data.riegeli");
+  // test_freq_data_2.riegeli covers 0x45, 0x47
+  AddFreqData(*group, "test_freq_data_2.riegeli");
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  // Expect 3 table-keyed segments:
+  // 0: test_freq_data.riegeli ({0x43})
+  // 1: test_freq_data_2.riegeli ({0x45, 0x47})
+  // 2: uncovered ({0x48})
+  const auto& plan = result->plan;
+  ASSERT_EQ(plan.non_glyph_segments_size(), 3);
+
+  {
+    uint32_t id = plan.non_glyph_segments(0).values(0);
+    const auto& seg = plan.segments().at(id);
+    ASSERT_EQ(seg.codepoints().values_size(), 1);
+    EXPECT_EQ(seg.codepoints().values(0), 0x43);
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(1).values(0);
+    const auto& seg = plan.segments().at(id);
+    ASSERT_EQ(seg.codepoints().values_size(), 2);
+    EXPECT_EQ(seg.codepoints().values(0), 0x45);
+    EXPECT_EQ(seg.codepoints().values(1), 0x47);
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(2).values(0);
+    const auto& seg = plan.segments().at(id);
+    ASSERT_EQ(seg.codepoints().values_size(), 1);
+    EXPECT_EQ(seg.codepoints().values(0), 0x48);
+  }
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_TableKeyedSegments_FromMergeGroups) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  config.set_generate_table_keyed_segments_mode(FROM_MERGE_GROUPS);
+  config.set_brotli_quality(0);
+  config.set_brotli_quality_for_initial_font_merging(0);
+  AddSegment(config, 1, {0x43});
+  AddSegment(config, 2, {0x45, 0x47});
+  AddSegment(config, 3, {0x48});
+
+  auto* group = config.add_merge_groups();
+  AddFreqData(*group, "test_freq_data.riegeli");
+  AddFreqData(*group, "test_freq_data_2.riegeli");
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  // Expect 2 table-keyed segments:
+  // 0: merge group ({0x43, 0x45, 0x47})
+  // 1: uncovered ({0x48})
+  const auto& plan = result->plan;
+  ASSERT_EQ(plan.non_glyph_segments_size(), 2);
+
+  {
+    uint32_t id = plan.non_glyph_segments(0).values(0);
+    const auto& seg = plan.segments().at(id);
+    ASSERT_EQ(seg.codepoints().values_size(), 3);
+    EXPECT_EQ(seg.codepoints().values(0), 0x43);
+    EXPECT_EQ(seg.codepoints().values(1), 0x45);
+    EXPECT_EQ(seg.codepoints().values(2), 0x47);
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(1).values(0);
+    const auto& seg = plan.segments().at(id);
+    ASSERT_EQ(seg.codepoints().values_size(), 1);
+    EXPECT_EQ(seg.codepoints().values(0), 0x48);
+  }
+}
+
+TEST_F(SegmenterConfigUtilTest, RunSegmenter_TableKeyedSegments_LegacyField) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  SetLegacyGenerateTableKeyedSegments(config, true);
+  config.set_brotli_quality(0);
+  config.set_brotli_quality_for_initial_font_merging(0);
+  AddSegment(config, 1, {0x43});
+
+  auto* group = config.add_merge_groups();
+  AddFreqData(*group, "test_freq_data.riegeli");
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->plan.non_glyph_segments_size(), 1);
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_BothLegacyAndModeTableKeyedSegmentsIsInvalid) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  SetLegacyGenerateTableKeyedSegments(config, true);
+  config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(
+    SegmenterConfigUtilTest,
+    RunSegmenter_TableKeyedSegments_FromFreqData_MixedFeatureAndCodepointsFails) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
+  config.set_brotli_quality(0);
+  config.set_brotli_quality_for_initial_font_merging(0);
+  AddSegment(config, 1, {0x43});
+  (*config.mutable_segments())[1].mutable_features()->add_values("smcp");
+
+  auto* group = config.add_merge_groups();
+  AddFreqData(*group, "test_freq_data.riegeli");
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
 }
 
 // TODO test for feature segment auto generation.

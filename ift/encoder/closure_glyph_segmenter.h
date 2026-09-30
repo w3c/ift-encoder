@@ -85,12 +85,14 @@ class ClosureGlyphSegmenter {
                             uint32_t& fallback_glyphs_size,
                             uint32_t& all_glyphs_size) const;
 
-  static void AddTableKeyedSegments(
+  static absl::Status AddTableKeyedSegments(
       ift::config::SegmentationPlan& plan,
       const absl::btree_map<ift::common::SegmentSet, MergeStrategy>&
           merge_groups,
       const std::vector<SubsetDefinition>& segments,
-      const SubsetDefinition& init_segment);
+      const SubsetDefinition& init_segment,
+      ift::config::TableKeyedSegmentMode mode =
+          ift::config::FROM_MERGE_GROUPS);
 
   uint32_t brotli_quality() const { return brotli_quality_; }
   uint32_t init_font_merging_brotli_quality() const {

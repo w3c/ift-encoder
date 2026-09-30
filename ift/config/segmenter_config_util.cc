@@ -158,6 +158,23 @@ static bool HasLegacyFrequencyData(const CostConfiguration& config) {
          !config.built_in_freq_data_name().empty();
 }
 
+static StatusOr<TableKeyedSegmentMode> ResolveTableKeyedSegmentMode(
+    const SegmenterConfig& config) {
+  if (config.has_generate_table_keyed_segments() &&
+      config.has_generate_table_keyed_segments_mode()) {
+    return absl::InvalidArgumentError(
+        "Segmenter config must not specify both "
+        "'generate_table_keyed_segments_mode' and the deprecated "
+        "'generate_table_keyed_segments' field.");
+  }
+
+  if (config.has_generate_table_keyed_segments()) {
+    return config.generate_table_keyed_segments() ? FROM_MERGE_GROUPS : NONE;
+  }
+
+  return config.generate_table_keyed_segments_mode();
+}
+
 #pragma GCC diagnostic pop
 
 StatusOr<MergeStrategy::ProbabilityProfile>
@@ -384,6 +401,9 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
 StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
     hb_face_t* face, const SegmenterConfig& config) {
+  TableKeyedSegmentMode table_keyed_mode =
+      TRY(ResolveTableKeyedSegmentMode(config));
+
   CodepointSet font_codepoints = FontHelper::ToCodepointsSet(face);
   btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(face);
   SubsetDefinition init_segment =
@@ -403,10 +423,8 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
 
   SegmentationPlan plan = segmentation.ToSegmentationPlanProto();
 
-  if (config.generate_table_keyed_segments()) {
-    ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
-                                                 init_segment);
-  }
+  TRYV(ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment, table_keyed_mode));
 
   SegmentationPlan combined = config.base_segmentation_plan();
   combined.MergeFrom(plan);

@@ -36,9 +36,12 @@
 #include "ift/freq/probability_calculator.h"
 #include "ift/glyph_keyed_diff.h"
 
+using ift::config::FROM_FREQ_DATA;
+using ift::config::FROM_MERGE_GROUPS;
 using ift::config::MOVE_TO_INIT_FONT;
 using ift::config::SegmentationPlan;
 using ift::config::SegmentsProto;
+using ift::config::TableKeyedSegmentMode;
 using ift::config::UnmappedGlyphHandling;
 
 using absl::btree_map;
@@ -763,24 +766,16 @@ Status ClosureGlyphSegmenter::FallbackCost(
   return absl::OkStatus();
 }
 
-void ClosureGlyphSegmenter::AddTableKeyedSegments(
-    SegmentationPlan& plan,
+static std::vector<SubsetDefinition> TableKeyedSegmentsFromMergeGroups(
     const btree_map<SegmentSet, MergeStrategy>& merge_groups,
     const std::vector<SubsetDefinition>& segments,
-    const SubsetDefinition& init_segment) {
+    const SubsetDefinition& init_segment,
+    const SegmentSet& feature_only_segments) {
   SegmentSet uncovered_segments;
   if (!segments.empty()) {
     uncovered_segments.insert_range(0, segments.size() - 1);
   }
-
-  SegmentSet feature_only_segments;
-  for (segment_index_t s = 0; s < segments.size(); s++) {
-    const auto& segment = segments.at(s);
-    if (!segment.feature_tags.empty() && segment.codepoints.empty()) {
-      feature_only_segments.insert(s);
-      uncovered_segments.erase(s);
-    }
-  }
+  uncovered_segments.subtract(feature_only_segments);
 
   std::vector<SubsetDefinition> table_keyed_segments;
   for (const auto& [segment_ids, _] : merge_groups) {
@@ -811,6 +806,90 @@ void ClosureGlyphSegmenter::AddTableKeyedSegments(
     table_keyed_segments.push_back(new_segment);
   }
 
+  return table_keyed_segments;
+}
+
+static StatusOr<std::vector<SubsetDefinition>> TableKeyedSegmentsFromFreqData(
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const std::vector<SubsetDefinition>& segments,
+    const SubsetDefinition& init_segment,
+    const SegmentSet& feature_only_segments) {
+  CodepointSet all_segment_codepoints;
+  for (segment_index_t s = 0; s < segments.size(); s++) {
+    if (feature_only_segments.contains(s)) {
+      continue;
+    }
+    const auto& segment = segments.at(s);
+    if (!segment.feature_tags.empty() && !segment.codepoints.empty()) {
+      return absl::InvalidArgumentError(
+          "Segments that mix features and codepoints are not supported in "
+          "FROM_FREQ_DATA mode.");
+    }
+    all_segment_codepoints.union_set(segment.codepoints);
+  }
+
+  std::vector<SubsetDefinition> table_keyed_segments;
+  CodepointSet uncovered_codepoints = all_segment_codepoints;
+  for (const auto& [_, strategy] : merge_groups) {
+    if (!strategy.UseCosts()) {
+      continue;
+    }
+    for (const auto& profile : strategy.ProbabilityProfiles()) {
+      const ProbabilityCalculator* calculator = TRY(profile.Calculator());
+      CodepointSet covered = calculator->CoveredCodepoints();
+      covered.intersect(all_segment_codepoints);
+      uncovered_codepoints.subtract(covered);
+
+      SubsetDefinition new_segment;
+      new_segment.codepoints = std::move(covered);
+      new_segment.Subtract(init_segment);
+      if (new_segment.Empty()) {
+        continue;
+      }
+      table_keyed_segments.push_back(std::move(new_segment));
+    }
+  }
+
+  if (!uncovered_codepoints.empty()) {
+    SubsetDefinition new_segment;
+    new_segment.codepoints = std::move(uncovered_codepoints);
+    new_segment.Subtract(init_segment);
+    if (!new_segment.Empty()) {
+      table_keyed_segments.push_back(std::move(new_segment));
+    }
+  }
+
+  return table_keyed_segments;
+}
+
+Status ClosureGlyphSegmenter::AddTableKeyedSegments(
+    SegmentationPlan& plan,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const std::vector<SubsetDefinition>& segments,
+    const SubsetDefinition& init_segment, TableKeyedSegmentMode mode) {
+  if (mode == ift::config::NONE) {
+    return absl::OkStatus();
+  }
+
+  SegmentSet feature_only_segments;
+  for (segment_index_t s = 0; s < segments.size(); s++) {
+    const auto& segment = segments.at(s);
+    if (!segment.feature_tags.empty() && segment.codepoints.empty()) {
+      feature_only_segments.insert(s);
+    }
+  }
+
+  std::vector<SubsetDefinition> table_keyed_segments;
+  if (mode == FROM_MERGE_GROUPS) {
+    table_keyed_segments = TableKeyedSegmentsFromMergeGroups(
+        merge_groups, segments, init_segment, feature_only_segments);
+  } else if (mode == FROM_FREQ_DATA) {
+    table_keyed_segments = TRY(TableKeyedSegmentsFromFreqData(
+        merge_groups, segments, init_segment, feature_only_segments));
+  } else {
+    return absl::InvalidArgumentError("Unknown TableKeyedSegmentMode.");
+  }
+
   if (!feature_only_segments.empty()) {
     SubsetDefinition new_segment;
     for (uint32_t s : feature_only_segments) {
@@ -836,6 +915,8 @@ void ClosureGlyphSegmenter::AddTableKeyedSegments(
     segment_ids->add_values(next_id);
     next_id++;
   }
+
+  return absl::OkStatus();
 }
 
 }  // namespace ift::encoder

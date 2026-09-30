@@ -900,7 +900,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     std::optional<std::string> primary_script,
     std::optional<int> quality_level) {
   SegmenterConfig config;
-  config.set_generate_table_keyed_segments(true);
+  config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
   config.set_generate_feature_segments(true);
 
   auto* base_plan = config.mutable_base_segmentation_plan();

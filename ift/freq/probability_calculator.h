@@ -17,6 +17,8 @@ class ProbabilityCalculator {
 
   virtual absl::string_view Name() const = 0;
 
+  virtual ift::common::CodepointSet CoveredCodepoints() const = 0;
+
   virtual ProbabilityBound ComputeProbability(uint32_t codepoint) const = 0;
 
   virtual ProbabilityBound ComputeProbability(
