@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -621,7 +622,7 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
 template <bool best_case>
 StatusOr<double> CandidateMerge::ComputeCostDelta(
     Merger& merger, const SegmentSet& merged_segments,
-    std::optional<GlyphSet> exclusive_gids) {
+    std::optional<GlyphSet> exclusive_gids, std::optional<double> delta_to_beat) {
   if (merged_segments.size() <= 1) {
     return 0;
   }
@@ -641,11 +642,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   // May have less conditions than modified as multiple conditions may merge
   // together as a result of updating their segments.
   //
-  // Map value is the set of glyphs and probability associated with the new
-  // condition.
+  // Map value is the set of glyphs and patch size metadata associated with the
+  // new condition.
   struct Info {
     GlyphSet glyphs;
-    double probability = 0.0;
     uint32_t largest_patch_size = 0;
     uint32_t combined_patch_size = 0;
   };
@@ -662,12 +662,15 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   std::vector<double> deltas;
   deltas.reserve(2 * modified_conditions.size() + 1);
 
+  double current_delta = 0.0;
+  bool has_unitary = false;
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
   for (const auto& [condition, glyphs] : modified_conditions) {
     uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
     double p = TRY(merger.AggregateProbability(*condition));
     double d = p * (patch_size + per_request_overhead);
     deltas.push_back(-d);
+    current_delta -= d;
     VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
             << ") -> " << d << " [removed patch " << condition->ToString()
             << "]";
@@ -678,17 +681,12 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       // Clear is exclusive flag so that de-dup happens properly
       updated = ActivationCondition::clear_exclusive(std::move(updated));
     }
+    if (!best_case && updated.IsUnitary()) {
+      has_unitary = true;
+    }
     auto [it, did_insert] = new_conditions.try_emplace(std::move(updated));
 
     auto& info = it->second;
-    if (did_insert) {
-      // Because we haven't actuated the merge yet (segments does not reflect
-      // it), MergedProbability() is needed to correctly compute the new
-      // probability.
-      info.probability = TRY(
-          merger.AggregateMergedProbability(it->first, base, merged_segments));
-    }
-
     if (!best_case) {
       info.glyphs.union_set(*glyphs);
     }
@@ -697,15 +695,36 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     info.combined_patch_size += patch_size;
   }
 
+  double initial_magnitude_sum = -current_delta;
+
+  bool fallback_changed =
+      !best_case && has_unitary && exclusive_gids.has_value() &&
+      context.glyph_groupings.UnmappedGlyphs().intersects(*exclusive_gids);
+  if (fallback_changed) {
+    GlyphSet new_fallback = context.glyph_groupings.UnmappedGlyphs();
+    new_fallback.subtract(*exclusive_gids);
+
+    // Fallback is always needed with 100% probability so delta is just the size
+    // difference (new - old). Since the fallback is needed with 100%
+    // probability under every calculator, it's aggregate probability is the
+    // number of probability profiles.
+    double fallback_probability = merger.MaxAggregateProbability();
+    double diff = (((double)TRY(patch_size_cache->GetPatchSize(new_fallback))) -
+                   ((double)TRY(patch_size_cache->GetPatchSize(
+                       context.glyph_groupings.UnmappedGlyphs())))) *
+                  fallback_probability;
+    VLOG(1) << "    + " << diff << " [fallback delta]";
+    deltas.push_back(diff);
+    current_delta += diff;
+    initial_magnitude_sum += std::abs(diff);
+  }
+
+  double initial_delta = current_delta;
+
   // Add in cost associated within the new conditions patch pairs.
-  bool fallback_changed = false;
   double best_case_reduction_fraction =
       merger.Strategy().BestCaseSizeReductionFraction();
   for (auto& [c, info] : new_conditions) {
-    // For modified conditions we assume the associated patch size does not
-    // change, only the probability associated with the condition changes.
-    double p = info.probability;
-
     uint32_t size = 0;
     if (best_case) {
       uint32_t extra = info.combined_patch_size - info.largest_patch_size;
@@ -722,10 +741,6 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
         info.glyphs.subtract(*exclusive_gids);
         if (c.IsUnitary()) {
           info.glyphs.union_set(*exclusive_gids);
-          if (context.glyph_groupings.UnmappedGlyphs().intersects(
-                  *exclusive_gids)) {
-            fallback_changed = true;
-          }
         }
         if (info.glyphs.empty()) {
           // Patch has no remaining glyphs, so don't add back any cost for it.
@@ -743,34 +758,43 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       }
     }
 
+    // Because we haven't actuated the merge yet (segments does not reflect
+    // it), AggregateMergedProbability() is needed to correctly compute the new
+    // probability.
+    double p = TRY(merger.AggregateMergedProbability(c, base, merged_segments));
     double s = (size + per_request_overhead);
     double d = p * s;
     VLOG(1) << "    + (" << p << " * " << s << ") -> " << d << " [new patch "
             << c.ToString() << "]";
     deltas.push_back(d);
-  }
+    current_delta += d;
 
-  if (fallback_changed) {
-    GlyphSet new_fallback = context.glyph_groupings.UnmappedGlyphs();
-    new_fallback.subtract(*exclusive_gids);
-
-    // Fallback is always needed with 100% probability so delta is just the size
-    // difference (new - old). Since the fallback is needed with 100%
-    // probability under every calculator, it's aggregate probability is the
-    // number of probability profiles.
-    double fallback_probability = merger.MaxAggregateProbability();
-    double diff = (((double)TRY(patch_size_cache->GetPatchSize(new_fallback))) -
-                   ((double)TRY(patch_size_cache->GetPatchSize(
-                       context.glyph_groupings.UnmappedGlyphs())))) *
-                  fallback_probability;
-    VLOG(1) << "    + " << diff << " [fallback delta]";
-    deltas.push_back(diff);
+    if (delta_to_beat.has_value() && current_delta > *delta_to_beat) {
+      // Bound the maximum possible FP rounding discrepancy between the unsorted
+      // running sum (current_delta) and the final sorted sum (SumDeltas).
+      double magnitude_sum =
+          initial_magnitude_sum + (current_delta - initial_delta);
+      double max_error = 2.0 * deltas.capacity() *
+                         std::numeric_limits<double>::epsilon() * magnitude_sum;
+      if (current_delta - max_error > *delta_to_beat) {
+        return absl::CancelledError();
+      }
+    }
   }
 
   double cost_delta = SumDeltas(deltas);
   VLOG(1) << "    = " << cost_delta;
   return cost_delta;
 }
+
+template StatusOr<double> CandidateMerge::ComputeCostDelta<true>(
+    Merger& merger, const SegmentSet& merged_segments,
+    std::optional<GlyphSet> exclusive_gids,
+    std::optional<double> delta_to_beat);
+template StatusOr<double> CandidateMerge::ComputeCostDelta<false>(
+    Merger& merger, const SegmentSet& merged_segments,
+    std::optional<GlyphSet> exclusive_gids,
+    std::optional<double> delta_to_beat);
 
 StatusOr<CandidateMerge::PatchMergeDetails>
 CandidateMerge::ComputePatchMergeDetails(
@@ -976,13 +1000,24 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
       merger.Context().InertSegments().contains(base_segment_index) &&
       segments_to_merge_are_inert;
 
-  if (merger.Strategy().UseCosts() && best_merge_candidate.has_value()) {
+  std::optional<double> delta_to_beat = std::nullopt;
+  if (best_merge_candidate.has_value()) {
+    delta_to_beat = best_merge_candidate->CostDelta();
+  }
+
+  if (merger.Strategy().UseCosts() && delta_to_beat.has_value()) {
     // Before doing a full assessment check a "best case" cost delta.
     // If that doesn't beat the current smallest there's no need to
     // do more indepth analysis.
-    double best_case_delta = TRY(ComputeCostDelta<true>(
-        merger, segments_to_merge_with_base, std::nullopt));
-    if (best_case_delta >= best_merge_candidate->CostDelta()) {
+    auto best_case_delta_status = ComputeCostDelta<true>(
+        merger, segments_to_merge_with_base, std::nullopt, delta_to_beat);
+    if (absl::IsCancelled(best_case_delta_status.status())) {
+      // Delta computation was ended early since it couldn't beat
+      // best_merge_candidate.
+      return std::nullopt;
+    }
+    double best_case_delta = TRY(best_case_delta_status);
+    if (best_case_delta >= *delta_to_beat) {
       // We can't possibly beat the current lowest delta.
       return std::nullopt;
     }
@@ -1036,12 +1071,17 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
   double cost_delta = 0.0;
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
-    cost_delta = TRY(ComputeCostDelta<false>(
-        merger, segments_to_merge_with_base, exclusive_gids));
+    auto cost_delta_status = ComputeCostDelta<false>(
+        merger, segments_to_merge_with_base, exclusive_gids, delta_to_beat);
+    if (absl::IsCancelled(cost_delta_status.status())) {
+      // Delta computation was ended early since it couldn't beat
+      // best_merge_candidate.
+      return std::nullopt;
+    }
+    cost_delta = TRY(cost_delta_status);
   }
 
-  if (best_merge_candidate.has_value() &&
-      cost_delta >= best_merge_candidate->CostDelta()) {
+  if (delta_to_beat.has_value() && cost_delta >= *delta_to_beat) {
     // Our delta is not smaller, don't bother returning a candidate.
     return std::nullopt;
   }
