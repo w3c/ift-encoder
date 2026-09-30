@@ -2483,8 +2483,9 @@ TEST_F(ClosureGlyphSegmenterTest,
 
   SubsetDefinition init_segment;
 
-  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
-                                               init_segment);
+  auto sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment);
+  ASSERT_TRUE(sc.ok()) << sc;
 
   ASSERT_EQ(plan.non_glyph_segments_size(), 3);
 
@@ -2528,14 +2529,139 @@ TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_SubtractInitSegment) {
   SubsetDefinition init_segment;
   init_segment.codepoints.insert('a');
 
-  ClosureGlyphSegmenter::AddTableKeyedSegments(plan, merge_groups, segments,
-                                               init_segment);
+  auto sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment);
+  ASSERT_TRUE(sc.ok()) << sc;
 
   ASSERT_EQ(plan.non_glyph_segments_size(), 1);
   uint32_t id = plan.non_glyph_segments(0).values(0);
   const auto& seg_proto = plan.segments().at(id);
   ASSERT_EQ(seg_proto.codepoints().values_size(), 1);
   EXPECT_EQ(seg_proto.codepoints().values(0), 'b');
+}
+
+TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_None) {
+  ift::config::SegmentationPlan plan;
+  btree_map<SegmentSet, MergeStrategy> merge_groups;
+  std::vector<SubsetDefinition> segments = {{'a'}, {'b'}};
+  merge_groups.insert({{0, 1}, MergeStrategy::Heuristic(100)});
+
+  SubsetDefinition init_segment;
+  auto sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment, ift::config::NONE);
+  ASSERT_TRUE(sc.ok()) << sc;
+  EXPECT_EQ(plan.non_glyph_segments_size(), 0);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, AddTableKeyedSegments_FromFreqData) {
+  ift::config::SegmentationPlan plan;
+
+  // Profile 1 covers 'a', 'b', 'f' (where 'f' is not in any input segment and
+  // 'a' is in init_segment).
+  UnicodeFrequencies freq_1{
+      {{'a', 'a'}, 100},
+      {{'b', 'b'}, 80},
+      {{'f', 'f'}, 50},
+  };
+  // Profile 2 overlaps with Profile 1 on 'b', and also covers 'c'.
+  UnicodeFrequencies freq_2{
+      {{'b', 'b'}, 90},
+      {{'c', 'c'}, 70},
+  };
+
+  MergeStrategy cost_strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq_1)), 0, 1);
+  cost_strategy.AddProbabilityProfile(
+      *ProbabilityProfile::Unigram(std::move(freq_2)));
+
+  // Input segments:
+  // s0: {'a', 'b'}
+  // s1: {'c', 'd'} ('c' covered by freq_2, 'd' uncovered)
+  // s2: {'e'} (in a heuristic merge group, uncovered by freq data)
+  // s3: feature-only {'smcp'}
+  SubsetDefinition feat_seg;
+  feat_seg.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  std::vector<SubsetDefinition> segments = {
+      {'a', 'b'},
+      {'c', 'd'},
+      {'e'},
+      feat_seg,
+  };
+
+  // Even if the merge group's segment_ids only lists {0}, FROM_FREQ_DATA bases
+  // table keyed segments on the frequency data sets across all input segments.
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0}, cost_strategy},
+      {{2}, MergeStrategy::Heuristic(100)},
+  };
+
+  SubsetDefinition init_segment{'a'};
+
+  auto sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment, ift::config::FROM_FREQ_DATA);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  // Expected table keyed segments:
+  // 0: freq_1 ({'a', 'b'} - {'a'} = {'b'})
+  // 1: freq_2 ({'b', 'c'})
+  // 2: uncovered ({'d', 'e'})
+  // 3: feature-only ({"smcp"})
+  ASSERT_EQ(plan.non_glyph_segments_size(), 4);
+
+  {
+    uint32_t id = plan.non_glyph_segments(0).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.codepoints().values_size(), 1);
+    EXPECT_EQ(seg_proto.codepoints().values(0), 'b');
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(1).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.codepoints().values_size(), 2);
+    EXPECT_EQ(seg_proto.codepoints().values(0), 'b');
+    EXPECT_EQ(seg_proto.codepoints().values(1), 'c');
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(2).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.codepoints().values_size(), 2);
+    EXPECT_EQ(seg_proto.codepoints().values(0), 'd');
+    EXPECT_EQ(seg_proto.codepoints().values(1), 'e');
+  }
+  {
+    uint32_t id = plan.non_glyph_segments(3).values(0);
+    const auto& seg_proto = plan.segments().at(id);
+    ASSERT_EQ(seg_proto.features().values_size(), 1);
+    EXPECT_EQ(seg_proto.features().values(0), "smcp");
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       AddTableKeyedSegments_FromFreqData_MixedFeatureAndCodepointsFails) {
+  ift::config::SegmentationPlan plan;
+  UnicodeFrequencies freq{{{'a', 'a'}, 100}};
+  MergeStrategy cost_strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq)), 0, 1);
+
+  SubsetDefinition mixed_seg;
+  mixed_seg.codepoints.insert('a');
+  mixed_seg.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  std::vector<SubsetDefinition> segments = {mixed_seg};
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0}, cost_strategy},
+  };
+
+  SubsetDefinition init_segment;
+  auto sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment, ift::config::FROM_FREQ_DATA);
+  EXPECT_TRUE(absl::IsInvalidArgument(sc)) << sc;
+
+  // Still supported in FROM_MERGE_GROUPS mode.
+  sc = ClosureGlyphSegmenter::AddTableKeyedSegments(
+      plan, merge_groups, segments, init_segment,
+      ift::config::FROM_MERGE_GROUPS);
+  EXPECT_TRUE(sc.ok()) << sc;
 }
 
 }  // namespace ift::encoder

@@ -33,6 +33,10 @@ class BigramProbabilityCalculator : public ProbabilityCalculator {
     return frequencies_.Name();
   }
 
+  ift::common::CodepointSet CoveredCodepoints() const override {
+    return frequencies_.CoveredCodepoints();
+  }
+
   ProbabilityBound ComputeProbability(uint32_t codepoint) const override {
     double p = frequencies_.ProbabilityFor(codepoint);
     return {p, p};

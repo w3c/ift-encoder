@@ -43,6 +43,22 @@ enum ConditionAnalysisMode {
   DEP_GRAPH_ONLY_WITH_SIMPLIFICATION = 4;
 }
 
+enum TableKeyedSegmentMode {
+  // No table keyed segments will be generated.
+  NONE = 0;
+
+  // One table keyed segment will be generated per merge group, plus a segment
+  // for any uncovered codepoints and a segment for any feature-only segments.
+  FROM_MERGE_GROUPS = 1;
+
+  // One table keyed segment will be generated per frequency data set specified
+  // across the merge groups, plus a segment for any uncovered codepoints and a
+  // segment for any feature-only segments.
+  //
+  // Segments that mix features and codepoints are not supported in this mode.
+  FROM_FREQ_DATA = 2;
+}
+
 // This messages provides the configuration details for util/gen_ift_segmentation_plan.cc
 //
 // The gen_ift_segmentation_plan tool is used to turn a series of codepoint/feature based
@@ -84,10 +100,16 @@ message SegmenterConfig {
   // is unable to determine activation conditions for.
   UnmappedGlyphHandling unmapped_glyph_handling = 2 [default = MOVE_TO_INIT_FONT];
 
+  // Deprecated: use generate_table_keyed_segments_mode instead.
+  //
   // If enabled then the generated segmentation plan will include a set of table keyed segments.
   // One table keyed segment will be generated per merge group, including the auto generated
   // ungrouped one.
-  bool generate_table_keyed_segments = 3 [default = false];
+  bool generate_table_keyed_segments = 3 [default = false, deprecated = true];
+
+  // Configures how table keyed segments are generated in the produced
+  // segmentation plan.
+  TableKeyedSegmentMode generate_table_keyed_segments_mode = 16 [default = NONE];
 
   // The set of segments the font is initially broken up into. The key in the map is an ID
   // used to refer to the segment in other parts of the config. Segments must be disjoint.
@@ -152,7 +174,7 @@ message SegmenterConfig {
   // for more informmation.
   ConditionAnalysisMode condition_analysis_mode = 15 [default = DEP_GRAPH_ONLY];
 
-  // next = 16
+  // next = 17
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group

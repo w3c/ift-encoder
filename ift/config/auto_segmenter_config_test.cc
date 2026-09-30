@@ -172,7 +172,6 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
   std::string config_string;
   TextFormat::PrintToString(*config_or, &config_string);
   ASSERT_EQ(config_string, R"(unmapped_glyph_handling: MOVE_TO_INIT_FONT
-generate_table_keyed_segments: true
 brotli_quality: 11
 brotli_quality_for_initial_font_merging: 9
 base_heuristic_config {
@@ -250,9 +249,9 @@ base_segmentation_plan {
   use_prefetch_lists: true
 }
 generate_feature_segments: true
-)"
-                           "condition_analysis_mode: DEP_GRAPH_ONLY\n"
-  );
+condition_analysis_mode: DEP_GRAPH_ONLY
+generate_table_keyed_segments_mode: FROM_FREQ_DATA
+)");
 }
 
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {

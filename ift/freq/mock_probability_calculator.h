@@ -18,6 +18,16 @@ class MockProbabilityCalculator : public ProbabilityCalculator {
     return "MockProbabilityCalculator";
   }
 
+  ift::common::CodepointSet CoveredCodepoints() const override {
+    ift::common::CodepointSet out;
+    for (const auto& [segment, prob] : segments_) {
+      if (prob > 0.0) {
+        out.union_set(segment.Definition().codepoints);
+      }
+    }
+    return out;
+  }
+
   ProbabilityBound ComputeProbability(uint32_t codepoint) const override {
     return ComputeProbability(ift::encoder::SubsetDefinition {codepoint});
   }

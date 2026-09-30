@@ -238,12 +238,14 @@ cc_test(
         "segmenter_config_util_test.cc",
     ],
     data = [
+        "//ift/common:testdata",
         "//util:testdata",
     ],
     deps = [
         ":segmenter_config_util",
         "//ift/common",
         "//ift/common:data_file_resolver",
+        "//ift/common:test_font_loader",
         "//ift/encoder:common",
         "//ift/encoder:merge_strategy",
         "//ift/freq",
