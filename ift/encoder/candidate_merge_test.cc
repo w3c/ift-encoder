@@ -1,5 +1,6 @@
 #include "ift/encoder/candidate_merge.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 
@@ -1064,6 +1065,134 @@ TEST_F(CandidateMergeTest, ComputeInitFontCostDelta_TracksSmallestDelta) {
   EXPECT_EQ(smallest_size_increases.at({g_b}), 50);
 
   EXPECT_LT(third_delta, first_delta);
+}
+
+TEST_F(CandidateMergeTest, ComputeCostDelta_EarlyExitAndBoundary) {
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'f'}},
+      {{'i'}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({74}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({69, 74}, 450);
+  context->patch_size_cache.reset(size_cache);
+
+  GlyphSet exclusive_gids = {69, 74};
+  auto exact_false = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids, std::nullopt);
+  ASSERT_TRUE(exact_false.ok()) << exact_false.status();
+  auto exact_true = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(exact_true.ok()) << exact_true.status();
+
+  // Well below the actual delta: should cancel early.
+  auto cancelled_false = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids, *exact_false - 10.0);
+  EXPECT_TRUE(absl::IsCancelled(cancelled_false.status()));
+  auto cancelled_true = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, *exact_true - 10.0);
+  EXPECT_TRUE(absl::IsCancelled(cancelled_true.status()));
+
+  // Within the FP rounding margin of the actual delta (e.g. equal to or 1 ULP
+  // below): should NOT cancel early, and should return the exact sorted sum.
+  auto boundary_false = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids,
+      std::nextafter(*exact_false, -INFINITY));
+  ASSERT_TRUE(boundary_false.ok()) << boundary_false.status();
+  EXPECT_EQ(*boundary_false, *exact_false);
+
+  auto boundary_true = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, std::nextafter(*exact_true, -INFINITY));
+  ASSERT_TRUE(boundary_true.ok()) << boundary_true.status();
+  EXPECT_EQ(*boundary_true, *exact_true);
+
+  // AssessSegmentMerge should reject at exact tie and accept 1 ULP above.
+  auto tied = CandidateMerge::AssessSegmentMerge(
+      merger, 0, {1}, CandidateMerge::BaselineCandidate(0, *exact_false));
+  ASSERT_TRUE(tied.ok()) << tied.status();
+  EXPECT_FALSE(tied->has_value());
+
+  auto better_by_1_ulp = CandidateMerge::AssessSegmentMerge(
+      merger, 0, {1},
+      CandidateMerge::BaselineCandidate(
+          0, std::nextafter(*exact_false, INFINITY)));
+  ASSERT_TRUE(better_by_1_ulp.ok()) << better_by_1_ulp.status();
+  ASSERT_TRUE(better_by_1_ulp->has_value());
+  EXPECT_EQ((*better_by_1_ulp)->CostDelta(), *exact_false);
+}
+
+TEST_F(CandidateMergeTest, ComputeCostDelta_FallbackChangedBeforeEarlyExit) {
+  std::vector<Segment> segments = {
+      {{0x54}},    // s0 -> gid 56
+      {{0x6C}},    // s1 -> gid 80
+      {{0x13C}},   // s2
+      {{0x21A}},   // s3
+      {{0xF6C3}},  // s4
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},   {{0x54, 0x54}, 50},   {{0x6C, 0x6C}, 75},
+      {{0x13C, 0x13C}, 10}, {{0x21A, 0x21A}, 10}, {{0xF6C3, 0xF6C3}, 10}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  // Include an unmapped glyph in exclusive_gids so fallback_changed is
+  // triggered and reduces the fallback patch size by 1000 bytes.
+  GlyphSet old_fallback = context->glyph_groupings.UnmappedGlyphs();
+  ASSERT_FALSE(old_fallback.empty());
+  glyph_id_t unmapped_gid = *old_fallback.min();
+  GlyphSet exclusive_gids = {56, 80, unmapped_gid};
+  GlyphSet new_fallback = old_fallback;
+  new_fallback.subtract(exclusive_gids);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({56}, 200);
+  size_cache->SetPatchSize({80}, 300);
+  size_cache->SetPatchSize(exclusive_gids, 450);
+  size_cache->SetPatchSize(old_fallback, 2000);
+  size_cache->SetPatchSize(new_fallback, 1000);
+  context->patch_size_cache.reset(size_cache);
+
+  auto exact_with_fallback = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids, std::nullopt);
+  ASSERT_TRUE(exact_with_fallback.ok()) << exact_with_fallback.status();
+
+  // Without the -1000 fallback delta applied prior to the second loop, the
+  // running delta during the second loop would be +1000 higher and would
+  // falsely exceed delta_to_beat = *exact_with_fallback + 100.
+  auto with_threshold = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids, *exact_with_fallback + 100.0);
+  ASSERT_TRUE(with_threshold.ok()) << with_threshold.status();
+  EXPECT_EQ(*with_threshold, *exact_with_fallback);
 }
 
 }  // namespace ift::encoder

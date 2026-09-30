@@ -143,10 +143,14 @@ struct CandidateMerge {
   //
   // If best_case is true then this will compute an estimated best possible cost
   // delta from the merge (computationally cheap) instead of the real delta.
+  //
+  // If delta_to_beat is provided and the cost delta is guaranteed to exceed
+  // delta_to_beat, computation will stop early and return CancelledError.
   template <bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      std::optional<common::GlyphSet> exclusive_gids);
+      std::optional<common::GlyphSet> exclusive_gids,
+      std::optional<double> delta_to_beat);
 
   // Computes the predicted change to the toal cost if moved_glyphs are
   // moved from patches into the initial font.
