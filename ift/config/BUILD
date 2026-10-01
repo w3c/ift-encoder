@@ -101,11 +101,13 @@ cc_library(
     ],
     deps = [
         ":load_codepoints",
+        ":segmentation_plan_cc_proto",
         ":segmenter_config_cc_proto",
         "//ift/common",
         "//ift/common:data_file_resolver",
         "//ift/common:try",
         "//ift/encoder:glyph_partition",
+        "//ift/feature_registry",
         "//ift/freq",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
