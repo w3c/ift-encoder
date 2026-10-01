@@ -35,8 +35,18 @@ class AutoSegmenterConfig {
   static absl::StatusOr<std::string> GetBaseScriptForLanguage(
       absl::string_view language);
 
- private:
-  AutoSegmenterConfig() = delete;
+ protected:
+  AutoSegmenterConfig() = default;
+
+  // Calculates an estimate of the number of table keyed patches needed
+  // for num_segments with a graph of max_depth.
+  //
+  // Assumes the use of prefetch lists.
+  static uint64_t EstimateTableKeyedPatchCount(uint32_t num_segments,
+                                               uint32_t max_depth);
+
+  static void ConfigureMaxDepth(uint32_t num_segments,
+                                SegmentationPlan& base_plan);
 };
 
 }  // namespace ift::config

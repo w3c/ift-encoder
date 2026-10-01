@@ -42,7 +42,8 @@ using ::testing::Eq;
 using ::testing::Not;
 using ::testing::UnorderedElementsAre;
 
-class AutoSegmenterConfigTest : public ::testing::Test {
+class AutoSegmenterConfigTest : public ::testing::Test,
+                                protected AutoSegmenterConfig {
  protected:
   AutoSegmenterConfigTest()
       : resolver(*ift::common::BazelDataFileResolver::CreateForTest()),
@@ -254,6 +255,17 @@ generate_table_keyed_segments_mode: FROM_FREQ_DATA
 )");
 }
 
+TEST_F(AutoSegmenterConfigTest, EstimateTableKeyedPatchCount) {
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(3, 3), 12);
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(3, 2), 6);
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(3, 1), 1);
+
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(4, 4), 32);
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(4, 3), 22);
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(4, 2), 8);
+  ASSERT_EQ(AutoSegmenterConfig::EstimateTableKeyedPatchCount(4, 1), 1);
+}
+
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptCyrillic) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
                                                        "Script_cyrillic");
@@ -289,6 +301,7 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_UnspecifiedPrimary) {
                                    kCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
               UnorderedElementsAre("Script_latin.riegeli"));
+  EXPECT_EQ(config_or->base_segmentation_plan().max_depth(), 4);
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
@@ -303,6 +316,7 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptCJK) {
                                    kUnifiedCJK, kFallback));
   EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
               UnorderedElementsAre("Script_CJK.riegeli@*"));
+  EXPECT_EQ(config_or->base_segmentation_plan().max_depth(), 6);
 }
 
 TEST_F(AutoSegmenterConfigTest, NotoSansJP_ScriptJapanese) {
@@ -490,6 +504,103 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
   EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(),
             0.005);
+}
+
+TEST_F(AutoSegmenterConfigTest, MaxDepthSelection) {
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  // The full font with Script_CJK has 7 scripts + 1 uncovered + 1 feature-only
+  // = 9 table keyed segments: unlimited is 2304 (> 2048), max_depth 6 reduces
+  // estimated patches to 1593.
+  auto config_full = AutoSegmenterConfig::GenerateConfig(
+      cjk_face_.get(), *resolver, "Script_CJK");
+  ASSERT_TRUE(config_full.ok()) << config_full.status();
+  EXPECT_EQ(config_full->base_segmentation_plan().max_depth(), 6);
+
+  // Collect only the codepoints covered by the 7 scripts used with Script_CJK.
+  CodepointSet covered_codepoints;
+  for (const auto& [ _, scripts ] :
+       {kEmojiLatinAndSymbols, kGreek, kCyrillic, kUnifiedCJK, kFallback}) {
+    for (const std::string& script : scripts) {
+      covered_codepoints.union_set(freq_list->at(script));
+    }
+  }
+  covered_codepoints.intersect(FontHelper::ToCodepointsSet(cjk_face_.get()));
+
+  // Removing uncovered codepoints leaves 7 scripts + 0 uncovered + 1
+  // feature-only = 8 table keyed segments: unlimited is 1024 (<= 2048), so
+  // max_depth is not set.
+  hb_subset_input_t* input_no_uncovered = hb_subset_input_create_or_fail();
+  for (hb_codepoint_t cp : covered_codepoints) {
+    hb_set_add(hb_subset_input_unicode_set(input_no_uncovered), cp);
+  }
+  hb_set_invert(hb_subset_input_set(input_no_uncovered,
+                                    HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
+  hb_face_unique_ptr subset_no_uncovered =
+      make_hb_face(hb_subset_or_fail(cjk_face_.get(), input_no_uncovered));
+  hb_subset_input_destroy(input_no_uncovered);
+
+  auto config_no_uncovered = AutoSegmenterConfig::GenerateConfig(
+      subset_no_uncovered.get(), *resolver, "Script_CJK");
+  ASSERT_TRUE(config_no_uncovered.ok()) << config_no_uncovered.status();
+  EXPECT_FALSE(config_no_uncovered->base_segmentation_plan().has_max_depth());
+
+  // Removing non-default layout features while keeping all codepoints leaves
+  // 7 scripts + 1 uncovered + 0 feature-only = 8 table keyed segments:
+  // unlimited is 1024 (<= 2048), so max_depth is not set.
+  hb_subset_input_t* input_no_features = hb_subset_input_create_or_fail();
+  hb_set_invert(hb_subset_input_unicode_set(input_no_features));
+  hb_set_clear(hb_subset_input_set(input_no_features,
+                                   HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
+  hb_face_unique_ptr subset_no_features =
+      make_hb_face(hb_subset_or_fail(cjk_face_.get(), input_no_features));
+  hb_subset_input_destroy(input_no_features);
+
+  auto config_no_features = AutoSegmenterConfig::GenerateConfig(
+      subset_no_features.get(), *resolver, "Script_CJK");
+  ASSERT_TRUE(config_no_features.ok()) << config_no_features.status();
+  EXPECT_FALSE(config_no_features->base_segmentation_plan().has_max_depth());
+
+
+}
+
+TEST_F(AutoSegmenterConfigTest, ConfigureMaxDepth) {
+  // Verify ConfigureMaxDepth thresholds and minimum max_depth floor of 3.
+  {
+    SegmentationPlan plan;
+    ConfigureMaxDepth(8, plan);
+    EXPECT_FALSE(plan.has_max_depth());
+  }
+  {
+    SegmentationPlan plan;
+    ConfigureMaxDepth(9, plan);
+    EXPECT_EQ(plan.max_depth(), 6);
+  }
+  {
+    SegmentationPlan plan;
+    ConfigureMaxDepth(10, plan);
+    EXPECT_EQ(plan.max_depth(), 5);
+  }
+  {
+    SegmentationPlan plan;
+    ConfigureMaxDepth(12, plan);
+    EXPECT_EQ(plan.max_depth(), 4);
+  }
+  {
+    SegmentationPlan plan;
+    ConfigureMaxDepth(20, plan);
+    EXPECT_EQ(plan.max_depth(), 3);
+  }
+  {
+    // Even when max_depth = 3 exceeds 2048 estimated patches (40 segments at
+    // max_depth 3 is 2380 patches), max_depth is not reduced below 3.
+    SegmentationPlan plan;
+    ConfigureMaxDepth(40, plan);
+    EXPECT_EQ(plan.max_depth(), 3);
+  }
 }
 
 }  // namespace
