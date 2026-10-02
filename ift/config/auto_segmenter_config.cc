@@ -624,7 +624,8 @@ StatusOr<std::string> AutoSegmenterConfig::GetBaseScriptForLanguage(
 
 static Status ApplyPrimaryScript(
     const flat_hash_map<std::string, CodepointSet>& freq_list,
-    std::string primary_script, btree_set<std::string>& detected_scripts) {
+    const CodepointSet& unicodes, std::string primary_script,
+    btree_set<std::string>& detected_scripts) {
   std::string primary_base_script = "";
   if (IsLanguage(primary_script)) {
     primary_base_script = TRY(FindFileName(
@@ -640,6 +641,12 @@ static Status ApplyPrimaryScript(
   primary_script = TRY(FindFileName(primary_script, freq_list));
   LOG(INFO) << "Primary script/language: " << primary_script;
   LOG(INFO) << "Primary base script is " << primary_base_script;
+
+  if (!freq_list.at(primary_script).intersects(unicodes)) {
+    LOG(INFO) << "Primary script/language " << primary_script
+              << " has no codepoints in the font, ignoring.";
+    return absl::OkStatus();
+  }
 
   // Primary script behaviour:
   // - base script if present is replaced by primary script.
@@ -1031,7 +1038,8 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // the cutoffs and premerging to keep the number of brotli ops within a
   // specific range.
 
-  TRYV(ApplyPrimaryScript(freq_list, primary_script.value_or("Script_latin"),
+  TRYV(ApplyPrimaryScript(freq_list, unicodes,
+                          primary_script.value_or("Script_latin"),
                           detected_scripts));
   std::string primary_script_file =
       TRY(FindFileName(primary_script.value_or("Script_latin"), freq_list));

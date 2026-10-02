@@ -424,7 +424,7 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
   SegmentationPlan plan = segmentation.ToSegmentationPlanProto();
 
   TRYV(ClosureGlyphSegmenter::AddTableKeyedSegments(
-      plan, merge_groups, segments, init_segment, table_keyed_mode));
+      plan, merge_groups, segments, segmentation.InitialFontSegment(), table_keyed_mode));
 
   SegmentationPlan combined = config.base_segmentation_plan();
   combined.MergeFrom(plan);

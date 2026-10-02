@@ -220,7 +220,10 @@ ProbabilityBound BigramProbabilityCalculator::ComputeMergedProbability(
       has_feature_tags = true;
     }
 
-    all_codepoints.union_set(segment.Definition().codepoints);
+    for (uint32_t u : entry.cps) {
+      all_codepoints.insert(u);
+    }
+
     unigram_total += entry.unigram_total;
     bigram_total += entry.bigram_total;
     max_single_bound = std::max(max_single_bound, entry.max_single_bound);
