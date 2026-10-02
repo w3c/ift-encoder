@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #include "absl/container/btree_map.h"
@@ -150,16 +151,11 @@ static Status Analysis(hb_face_t* font,
     num_profiles += strategy.ProbabilityProfiles().size();
   }
 
-  std::vector<BigramProbabilityCalculator> calculator_storage;
-  // Reserve up front, pointers into this vector are handed out below so it
-  // must not reallocate.
-  calculator_storage.reserve(num_profiles + 4); // +4 because CJK may be split int othe 4 sub scripts
-
+  std::vector<std::unique_ptr<BigramProbabilityCalculator>> calculator_storage;
   std::vector<const ProbabilityCalculator*> strategy_probability_calculators;
 
-  unsigned i = 0;
+  CodepointSet font_codepoints = FontHelper::ToCodepointsSet(font);
   for (auto& [_, strategy] : merge_groups) {
-    i++;
     if (!strategy.UseCosts()) {
       // Can only evaluate costs for strategies that utilize costs.
       continue;
@@ -183,9 +179,9 @@ static Status Analysis(hb_face_t* font,
           "Script_chinese-traditional.riegeli@*",
         };
         for (const char* name :names) {
-          auto freq = TRY(ift::config::LoadBuiltInFrequencies(name, *resolver.get()));
-          auto& calc = calculator_storage.emplace_back(std::move(freq));
-          strategy_probability_calculators.push_back(&calc);
+          auto freq = TRY(ift::config::LoadBuiltInFrequencies(name, *resolver.get(), font_codepoints));
+          auto& calc = calculator_storage.emplace_back(std::make_unique<BigramProbabilityCalculator>(std::move(freq)));
+          strategy_probability_calculators.push_back(calc.get());
         }
       } else if (UnigramProbabilityCalculator* unigram =
               dynamic_cast<UnigramProbabilityCalculator*>(calculator)) {
@@ -194,7 +190,7 @@ static Status Analysis(hb_face_t* font,
         // consistent and so unigram probability calculator should be upgraded to
         // a bigram
         calculator_storage.push_back(std::move(*unigram).ToBigramCalculator());
-        strategy_probability_calculators.push_back(&calculator_storage.back());
+        strategy_probability_calculators.push_back(calculator_storage.back().get());
       } else {
         strategy_probability_calculators.push_back(calculator);
       }
@@ -214,7 +210,6 @@ static Status Analysis(hb_face_t* font,
   double ift_patch_cost = 0.0;
   double ideal_patch_cost = 0.0;
 
-  i = 0;
   for (const auto& cost : costs) {
     if (ift_init_cost == 0.0) {
       ideal_init_cost = cost.ideal_init_cost;

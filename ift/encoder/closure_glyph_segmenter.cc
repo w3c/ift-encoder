@@ -600,14 +600,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     }
   }
 
-  if (init_font_changed) {
-    for (Merger& merger : mergers) {
-      // Any init font moves above can cause segment removals that affect other
-      // mergers, recompute the candiate segments for all mergers.
-      TRYV(merger.ReassignInitSubset());
-    }
-  }
-
   // Once we've gotten standard segments placed into the initial font as needed,
   // if requested any remaining fallback glyphs are also moved into the init
   // font.
@@ -619,6 +611,15 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
     new_def.gids.union_set(fallback_glyphs);
     TRYV(context.ReassignInitSubset(new_def));
+    init_font_changed = true;
+  }
+
+  if (init_font_changed) {
+    for (Merger& merger : mergers) {
+      // Any init font moves above can cause segment removals that affect other
+      // mergers, recompute the candiate segments for all mergers.
+      TRYV(merger.ReassignInitSubset());
+    }
   }
 
   if (merge_groups.empty()) {
@@ -696,6 +697,10 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       original_face, segmentation.InitialFontSegment(), 11));
   double non_ift_font_size =
       TRY(CandidateMerge::Woff2SizeOf(original_face, non_ift, 11));
+  double incremental_size =
+      non_ift_font_size / (double)non_ift.codepoints.size();
+  double init_font_ideal_size =
+      incremental_size * segmentation.InitialFontSegment().codepoints.size();
 
   // Use highest quality so we get the true cost.
   PatchSizeCacheImpl patch_sizer(original_face, 11);
@@ -725,10 +730,6 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     }
 
     double ideal_cost = 0.0;
-    double incremental_size =
-        non_ift_font_size / (double)non_ift.codepoints.size();
-    double init_font_ideal_size =
-        incremental_size * segmentation.InitialFontSegment().codepoints.size();
     for (unsigned cp : non_ift.codepoints) {
       if (segmentation.InitialFontSegment().codepoints.contains(cp)) {
         continue;

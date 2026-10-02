@@ -421,6 +421,67 @@ TEST_F(AutoSegmenterConfigTest, NotoSansJP_PrimaryScriptCoversWholeGroup) {
   }
 }
 
+TEST_F(AutoSegmenterConfigTest, PrimaryScriptNotInFont) {
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  // Explicitly specified primary script with no codepoints in the font.
+  CodepointSet no_arabic = FontHelper::ToCodepointsSet(face_.get());
+  no_arabic.subtract(freq_list->at("Script_arabic.riegeli"));
+  hb_face_unique_ptr no_arabic_subset = Subset(face_.get(), no_arabic);
+  ASSERT_TRUE(no_arabic_subset.get());
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      no_arabic_subset.get(), *resolver, "Script_arabic");
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(
+      GetScripts(*config_or),
+      UnorderedElementsAre(kLatin, kSymbols, kCyrillic, kGreek, kFallback));
+  EXPECT_TRUE(GetScriptsWithInitialMergeThreshold(*config_or).empty());
+
+  // Subset Roboto to only Cyrillic codepoints that are not in Latin, so the
+  // default primary script (Script_latin) has no codepoints in the font.
+  CodepointSet cyrillic_only = freq_list->at("Script_cyrillic.riegeli");
+  cyrillic_only.subtract(freq_list->at("Script_latin.riegeli"));
+  hb_face_unique_ptr cyrillic_subset = Subset(face_.get(), cyrillic_only);
+  ASSERT_TRUE(cyrillic_subset.get());
+
+  config_or =
+      AutoSegmenterConfig::GenerateConfig(cyrillic_subset.get(), *resolver);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(GetScripts(*config_or), UnorderedElementsAre(kCyrillic));
+  EXPECT_TRUE(GetScriptsWithInitialMergeThreshold(*config_or).empty());
+
+  // Subset Roboto to Latin codepoints that are not covered by Language_fr.
+  // Script_latin is detected, and since Language_fr has no codepoints in the
+  // subset, Language_fr should not be added and Script_latin should remain.
+  CodepointSet latin_without_fr = freq_list->at("Script_latin.riegeli");
+  latin_without_fr.subtract(freq_list->at("Language_fr.riegeli"));
+  hb_face_unique_ptr latin_no_fr_subset = Subset(face_.get(), latin_without_fr);
+  ASSERT_TRUE(latin_no_fr_subset.get());
+
+  config_or = AutoSegmenterConfig::GenerateConfig(latin_no_fr_subset.get(),
+                                                  *resolver, "Language_fr");
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(GetScripts(*config_or), Contains(kLatin));
+  EXPECT_THAT(GetScripts(*config_or), Not(Contains(kLanguageFr)));
+  EXPECT_TRUE(GetScriptsWithInitialMergeThreshold(*config_or).empty());
+
+  // Subset Roboto to a single Latin codepoint ('a'): DetectScripts requires
+  // > 1 unique codepoint, but ApplyPrimaryScript still adds Script_latin
+  // because its frequency data covers at least one codepoint in the font.
+  hb_face_unique_ptr single_latin_subset =
+      Subset(face_.get(), CodepointSet{'a'});
+  ASSERT_TRUE(single_latin_subset.get());
+
+  config_or =
+      AutoSegmenterConfig::GenerateConfig(single_latin_subset.get(), *resolver);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+  EXPECT_THAT(GetScripts(*config_or), UnorderedElementsAre(kLatin));
+  EXPECT_THAT(GetScriptsWithInitialMergeThreshold(*config_or),
+              UnorderedElementsAre("Script_latin.riegeli"));
+}
+
 TEST_F(AutoSegmenterConfigTest, Roboto_ScriptNotFound) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
                                                        "Script_foobar");

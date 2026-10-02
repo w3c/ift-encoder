@@ -54,8 +54,8 @@ class UnigramProbabilityCalculator : public ProbabilityCalculator {
     segment_cache_.Reset(num_segments);
   }
 
-  BigramProbabilityCalculator ToBigramCalculator() && {
-    return BigramProbabilityCalculator(std::move(frequencies_));
+  std::unique_ptr<BigramProbabilityCalculator> ToBigramCalculator() && {
+    return std::make_unique<BigramProbabilityCalculator>(std::move(frequencies_));
   }
 
  private:
