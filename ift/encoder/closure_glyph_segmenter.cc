@@ -478,19 +478,21 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
 
   // maps from index in subset_definitions to the new ordering.
   std::vector<uint32_t> segment_index_map;
-  std::vector<Segment> segments = PreGroupSegments(
+  std::vector<Segment> segment_defs = PreGroupSegments(
       merge_groups, ordering, subset_definitions, segment_index_map);
-  size_t num_segments = segments.size();
-  VLOG(0) << segments.size() << " segments after pregrouping.";
+  size_t num_segments = segment_defs.size();
+  VLOG(0) << segment_defs.size() << " segments after pregrouping.";
 
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
   group_index = 0;
   for (auto& [segments, strategy] : merge_groups) {
     SegmentSet remapped;
     SegmentSet remapped_full;
+    CodepointSet unique_codepoints;
     for (segment_index_t s : segments) {
       segment_index_t s_prime = segment_index_map[s];
       if (!shared_segments.contains(s)) {
+        unique_codepoints.union_set(segment_defs.at(s_prime).Definition().codepoints);
         remapped.insert(s_prime);
       }
       remapped_full.insert(s_prime);
@@ -502,7 +504,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
     }
 
     VLOG(0) << "  Merge group " << name << " has " << remapped.size()
-            << " segments.";
+            << " segments and " << unique_codepoints.size() << " codepoints.";
     group_index++;
 
     if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
@@ -517,7 +519,7 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   }
 
   merge_groups = std::move(new_merge_groups);
-  return segments;
+  return segment_defs;
 }
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
