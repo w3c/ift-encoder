@@ -2744,4 +2744,105 @@ TEST_F(ClosureGlyphSegmenterTest,
   }
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_CompositeConditionSkipsFinishedSegments) {
+  // s0 ('f' plus additional codepoints) already meets min_patch_size, so it is
+  // marked finished without merging. s1 ('i') has a composite condition
+  // (s0 AND s1) with s0, and s2 ('j') is an active segment after s1.
+  // When merging s1, the composite condition (s0 AND s1) must be skipped
+  // because s0 is already finished, so s1 merges forward with s2 instead of
+  // pulling s0 into s1.
+  std::vector<SubsetDefinition> segments = {
+      {'f', 'a', 'b', 'c', 'd', 'e', 'g', 'h'},
+      {'i'},
+      {'j'},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  uint32_t i_j_size = *patch_sizer.GetPatchSize({77, 78});
+
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto result = seg->CodepointToGlyphSegments(
+        roboto.get(), {}, segments, MergeStrategy::Heuristic(i_j_size));
+    ASSERT_TRUE(result.ok()) << result.status();
+    std::vector<SubsetDefinition> expected = {
+        segments[0],
+        {'i', 'j'},
+        {},
+    };
+    EXPECT_EQ(result->Segments(), expected);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_CompositeConditionOrdering) {
+  // s0 ({Aacute, 'f'}) participates in:
+  // - a 3-segment disjunctive condition (s0 OR s1 OR s2) for the acute accent
+  //   component shared by Aacute (0xC1), Eacute (0xC9), and Iacute (0xCD), and
+  // - a 2-segment conjunctive condition (s0 AND s3) for the 'fi'/'ffi'
+  //   ligatures with 'i' in s3.
+  // Both merges collapse their respective composite condition into s0's unitary
+  // patch, so the smaller 2-segment merge {0, 3} should be prioritized ahead of
+  // the 3-segment merge {0, 1, 2}.
+  std::vector<SubsetDefinition> segments = {
+      {0xC1, 'f'},
+      {0xC9},
+      {0xCD},
+      {'i'},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  // Exclusive glyphs of {0xC1, 'f', 'i'} are gid37 ('A'), gid74 ('f'),
+  // gid77 ('i'), gid444 ('fi'), gid446 ('ffi'), gid640 (Aacute).
+  uint32_t s0_s3_size = *patch_sizer.GetPatchSize({37, 74, 77, 444, 446, 640});
+
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto result = seg->CodepointToGlyphSegments(
+        roboto.get(), {}, segments, MergeStrategy::Heuristic(s0_s3_size));
+    ASSERT_TRUE(result.ok()) << result.status();
+    std::vector<SubsetDefinition> expected = {
+        {0xC1, 'f', 'i'},
+        {0xC9, 0xCD},
+        {},
+        {},
+    };
+    EXPECT_EQ(result->Segments(), expected);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_CompositeConditionStripsFeatureSegments) {
+  // In Roboto, 's' (s0) and 't' (s2) form a discretionary ligature (gid449)
+  // under 'dlig' (s3), giving condition (s0 AND s2 AND s3).
+  // When merging codepoint-only segment s0, feature-only segment s3 is stripped
+  // from the candidate triggering set, allowing s0 to merge directly with s2
+  // via the composite condition rather than falling back to merging with the
+  // unrelated adjacent segment s1 ('a').
+  SubsetDefinition dlig;
+  dlig.feature_tags.insert(HB_TAG('d', 'l', 'i', 'g'));
+  std::vector<SubsetDefinition> segments = {
+      {'s'},
+      {'a'},
+      {'t'},
+      dlig,
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  uint32_t s_t_size = *patch_sizer.GetPatchSize({87, 88});
+
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto result = seg->CodepointToGlyphSegments(
+        roboto.get(), {'f', 'F'}, segments,
+        MergeStrategy::Heuristic(s_t_size, s_t_size));
+    ASSERT_TRUE(result.ok()) << result.status();
+    std::vector<SubsetDefinition> expected = {
+        {'s', 't'},
+        {'a'},
+        {},
+        dlig,
+    };
+    EXPECT_EQ(result->Segments(), expected);
+  }
+}
+
 }  // namespace ift::encoder

@@ -843,45 +843,77 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryMergingABaseSegment(
 
 StatusOr<std::optional<InvalidationSet>> Merger::TryMergingACompositeCondition(
     segment_index_t base_segment_index) {
-  auto candidate_conditions =
-      context_->glyph_groupings.TriggeringSegmentToConditions(
-          base_segment_index);
-  ActivationCondition base_condition =
-      ActivationCondition::exclusive_segment(base_segment_index, UINT32_MAX);
+  const auto& segments = context_->SegmentationInfo().Segments();
+  const auto& base_def = segments.at(base_segment_index).Definition();
+  bool base_is_codepoint_only =
+      !base_def.codepoints.empty() && base_def.feature_tags.empty();
 
-  std::vector<ActivationCondition> sorted_conditions;
-  sorted_conditions.reserve(candidate_conditions.size());
-  sorted_conditions.insert(sorted_conditions.end(),
-                           candidate_conditions.begin(),
-                           candidate_conditions.end());
-  std::sort(sorted_conditions.begin(), sorted_conditions.end());
-
-  for (ActivationCondition next_condition : sorted_conditions) {
-    if (next_condition.IsFallback()) {
+  // Map from candidate triggering segment set to whether merging those segments
+  // collapses at least one composite condition into the unitary patch.
+  flat_hash_map<SegmentSet, bool> candidate_merges;
+  for (const ActivationCondition& next_condition :
+       context_->glyph_groupings.TriggeringSegmentToConditions(
+           base_segment_index)) {
+    if (next_condition.IsFallback() || next_condition.IsUnitary()) {
       // Merging the fallback will cause all segments to be merged into one,
-      // which is undesirable so don't consider the fallback.
-      continue;
-    }
-
-    if (next_condition < base_condition) {
-      // all conditions before base_condition are already processed, so we only
-      // want to search after base_condition.
+      // which is undesirable so don't consider the fallback. Unitary conditions
+      // only reference a single segment so there is nothing to merge.
       continue;
     }
 
     SegmentSet triggering_segments = next_condition.TriggeringSegments();
-    if (!triggering_segments.contains(base_segment_index) ||
-        !triggering_segments.is_subset_of(inscope_segments_)) {
+    if (base_is_codepoint_only) {
+      // Merge assessment does not allow mixing features and codepoints,
+      // so if the base has only codepoints then only merge the codepoint
+      // segments from the condition.
+      SegmentSet feature_only;
+      for (segment_index_t s : triggering_segments) {
+        const auto& def = segments.at(s).Definition();
+        if (def.codepoints.empty() && !def.feature_tags.empty()) {
+          feature_only.insert(s);
+        }
+      }
+      triggering_segments.subtract(feature_only);
+    }
+
+    if (triggering_segments.size() <= 1 ||
+        !triggering_segments.contains(base_segment_index) ||
+        !triggering_segments.is_subset_of(candidate_segments_)) {
       continue;
     }
 
+    bool is_unitary_after_merge =
+        next_condition
+            .ReplaceSegments(base_segment_index, triggering_segments)
+            .IsUnitary();
+    candidate_merges[std::move(triggering_segments)] |= is_unitary_after_merge;
+  }
+
+  // For ordering candidates we first prefer merges that result in an exclusive patch.
+  // Then we prefer smaller merges (in terms of number of segments), finally
+  // order by the segment set contents. The first candidate merge which satisfies
+  // the max patch size criteria is selected.
+  std::vector<std::pair<SegmentSet, bool>> ordered_candidates(
+      candidate_merges.begin(), candidate_merges.end());
+  std::sort(ordered_candidates.begin(), ordered_candidates.end(),
+            [](const auto& a, const auto& b) {
+              if (a.second != b.second) {
+                return a.second > b.second;
+              }
+              if (a.first.size() != b.first.size()) {
+                return a.first.size() < b.first.size();
+              }
+              return a.first < b.first;
+            });
+
+  for (const auto& [triggering_segments, _] : ordered_candidates) {
     auto modified = TRY(TryMerge(base_segment_index, triggering_segments));
     if (!modified.has_value()) {
       continue;
     }
 
     VLOG(0) << "  Merging segments from composite patch into segment "
-            << base_segment_index << ": " << next_condition.ToString();
+            << base_segment_index << ": " << triggering_segments.ToString();
     return modified;
   }
 
