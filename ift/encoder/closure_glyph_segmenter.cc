@@ -22,6 +22,7 @@
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/common/woff2.h"
+#include "ift/config/auto_segmenter_config.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -38,6 +39,7 @@
 
 using ift::config::FROM_FREQ_DATA;
 using ift::config::FROM_MERGE_GROUPS;
+using ift::config::kDefaultNetworkCost;
 using ift::config::MOVE_TO_INIT_FONT;
 using ift::config::SegmentationPlan;
 using ift::config::SegmentsProto;
@@ -707,6 +709,30 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
   // Use highest quality so we get the true cost.
   PatchSizeCacheImpl patch_sizer(original_face, 11);
 
+  CodepointSet covered_codepoints;
+  for (const ProbabilityCalculator* probability_calculator :
+       probability_calculators) {
+    covered_codepoints.union_set(probability_calculator->CoveredCodepoints());
+  }
+
+  SegmentSet covered_segments;
+  for (segment_index_t s = 0; s < segmentation.Segments().size(); s++) {
+    if (segmentation.Segments().at(s).codepoints.intersects(
+            covered_codepoints)) {
+      covered_segments.insert(s);
+    }
+  }
+
+  double uncovered_patch_cost = 0;
+  for (const auto& c : segmentation.Conditions()) {
+    if (c.Intersects(covered_segments)) {
+      continue;
+    }
+    const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
+    double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
+    uncovered_patch_cost += patch_size + kDefaultNetworkCost;
+  }
+
   std::vector<SegmentationCost> out;
   for (const ProbabilityCalculator* probability_calculator :
        probability_calculators) {
@@ -728,7 +754,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       double Pc = TRY(c.Probability(segments, *probability_calculator));
       const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
       double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
-      total_cost += Pc * (patch_size + 75);
+      total_cost += Pc * (patch_size + kDefaultNetworkCost);
     }
 
     double ideal_cost = 0.0;
@@ -744,6 +770,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
         .name = std::string(probability_calculator->Name()),
         .ift_init_cost = init_font_size,
         .ift_patch_cost = total_cost,
+        .uncovered_ift_patch_cost = uncovered_patch_cost,
         .non_ift_total_cost = non_ift_font_size,
         .ideal_init_cost = init_font_ideal_size,
         .ideal_patch_cost = ideal_cost,

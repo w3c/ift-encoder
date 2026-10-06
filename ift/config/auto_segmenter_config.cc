@@ -49,9 +49,6 @@ static constexpr uint32_t kSmallestMaxDepth = 3;
 // used to reduce the number of patches.
 static constexpr uint64_t kMaxTableKeyedPatches = 2048;
 
-// Default cost (bytes) associated with making a network request.
-static constexpr uint32_t kDefaultNetworkCost = 200;
-
 // Two scripts are considered to be overlapping if the codepoints they share
 // account for at least this fraction of the total probability mass of at
 // least one of the two scripts.
