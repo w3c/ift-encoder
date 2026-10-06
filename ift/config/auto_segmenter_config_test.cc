@@ -177,6 +177,7 @@ brotli_quality: 11
 brotli_quality_for_initial_font_merging: 9
 base_heuristic_config {
   min_patch_size: 2500
+  max_patch_size: 20000
 }
 base_cost_config {
   network_overhead_cost: 200
@@ -186,6 +187,7 @@ base_cost_config {
 }
 ungrouped_config {
   min_patch_size: 2500
+  max_patch_size: 20000
 }
 preprocess_merging_group_size_for_ungrouped: 12
 merge_groups {

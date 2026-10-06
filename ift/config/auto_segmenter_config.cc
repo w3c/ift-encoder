@@ -54,6 +54,10 @@ static constexpr uint64_t kMaxTableKeyedPatches = 2048;
 // least one of the two scripts.
 static constexpr double kScriptOverlapThreshold = 0.10;
 
+// Default min and max patch sizes (in bytes) for heuristic merging.
+static constexpr uint32_t kHeuristicMinPatchSize = 2500;
+static constexpr uint32_t kHeuristicMaxPatchSize = 20000;
+
 // clang-format off
 // Quality Table:
 // Quality | bigrams | simplificiation | init brotli | non init brotli | init font merge threshold | opt cut off | preprocess merging threshold
@@ -663,7 +667,8 @@ static Status ApplyPrimaryScript(
 
 static void ApplyQualityLevelTo(Quality quality,
                                 HeuristicConfiguration& config) {
-  config.set_min_patch_size(2500);
+  config.set_min_patch_size(kHeuristicMinPatchSize);
+  config.set_max_patch_size(kHeuristicMaxPatchSize);
 }
 
 static void ApplyQualityLevelTo(Quality quality, CostConfiguration& config) {
