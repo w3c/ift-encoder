@@ -13,6 +13,8 @@
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
+#include "ift/encoder/merger.h"
+#include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/mock_probability_calculator.h"
@@ -2840,6 +2842,127 @@ TEST_F(ClosureGlyphSegmenterTest,
         {'a'},
         {},
         dlig,
+    };
+    EXPECT_EQ(result->Segments(), expected);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_BaseSegmentSkipsEmptyExclusiveGlyphs) {
+  // s1 and s3 both contain 'c' (gid71), so gid71 has condition (s1 OR s3) and
+  // s1 has an empty exclusive glyph set. s3 is outside the merge group {0, 1, 2}
+  // so (s1 OR s3) cannot be merged as a composite condition.
+  // With no max_patch_size limit, if TryMergingABaseSegment did not skip
+  // segments with empty exclusive glyphs, it would merge s1 ('c') into s0 ('a')
+  // (leaving s0's exclusive patch size unchanged at 1 glyph) and then also
+  // merge s2 ('b'), producing {'a', 'b', 'c'}. Skipping s1 merges only s0 and
+  // s2 ('b') to reach min_patch_size.
+  std::vector<SubsetDefinition> segments = {
+      {'a'},
+      {'c'},
+      {'b'},
+      {'c'},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  uint32_t a_b_size = *patch_sizer.GetPatchSize({69, 70});
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1, 2}, MergeStrategy::Heuristic(a_b_size)},
+  };
+
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto result =
+        seg->CodepointToGlyphSegments(roboto.get(), {}, segments, merge_groups);
+    ASSERT_TRUE(result.ok()) << result.status();
+    std::vector<SubsetDefinition> expected = {
+        {'a', 'b'},
+        {'c'},
+        {},
+        {'c'},
+    };
+    EXPECT_EQ(result->Segments(), expected);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest, HeuristicStrategy_BatchesInertBaseSegments) {
+  // Set up 8 inert segments (s0..s7) where the first 6 segments (s0..s5) are
+  // needed to reach min_patch_size, leaving s6 and s7 to merge together.
+  std::vector<Segment> segments = {
+      {{'a'}}, {{'b'}}, {{'c'}}, {{'d'}}, {{'e'}}, {{'g'}}, {{'h'}}, {{'j'}},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  // Glyphs for 'a', 'b', 'c', 'd', 'e', 'g' are 69, 70, 71, 72, 73, 75.
+  uint32_t target_min_size =
+      *patch_sizer.GetPatchSize({69, 70, 71, 72, 73, 75});
+
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter_dep_graph_only.unmapped_glyph_handling(),
+      segmenter_dep_graph_only.condition_analysis_mode(),
+      segmenter_dep_graph_only.brotli_quality(),
+      segmenter_dep_graph_only.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  SegmentSet all_segments{0, 1, 2, 3, 4, 5, 6, 7};
+  Merger merger = *Merger::New(
+      *context, MergeStrategy::Heuristic(target_min_size), all_segments,
+      all_segments);
+
+  // First TryNextMerge() should batch all of {1, 2, 3, 4, 5} into s0 in a
+  // single merge operation, stopping at the exact segment (s5) that reaches
+  // target_min_size.
+  auto modified = merger.TryNextMerge();
+  ASSERT_TRUE(modified.ok()) << modified.status();
+  ASSERT_TRUE(modified->has_value());
+  EXPECT_EQ((*modified)->base_segment, 0);
+  EXPECT_EQ((*modified)->segments, (SegmentSet{0, 1, 2, 3, 4, 5}));
+  ASSERT_TRUE(context->ReprocessChanged(**modified).ok());
+
+  // Second TryNextMerge() should merge {7} into s6 in a single operation.
+  modified = merger.TryNextMerge();
+  ASSERT_TRUE(modified.ok()) << modified.status();
+  ASSERT_TRUE(modified->has_value());
+  EXPECT_EQ((*modified)->base_segment, 6);
+  EXPECT_EQ((*modified)->segments, (SegmentSet{6, 7}));
+  ASSERT_TRUE(context->ReprocessChanged(**modified).ok());
+
+  // No further merges remain.
+  modified = merger.TryNextMerge();
+  ASSERT_TRUE(modified.ok()) << modified.status();
+  EXPECT_FALSE(modified->has_value());
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_BatchesInertBaseSegmentsSkipsOversized) {
+  // s0..s5 are inert segments, where s2 contains many codepoints so that adding
+  // s2 to s0 exceeds max_patch_size. Batching into s0 should merge s1, skip
+  // oversized s2, and continue batching s3 and s4 to reach min_patch_size.
+  std::vector<SubsetDefinition> segments = {
+      {'a'},
+      {'b'},
+      {'k', 'm', 'n', 'o', 'p', 'q', 'r', 'u', 'v', 'w', 'x', 'y', 'z'},
+      {'c'},
+      {'d'},
+      {'e'},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  // Glyphs for 'a', 'b', 'c', 'd' are 69, 70, 71, 72.
+  uint32_t a_b_c_d_size = *patch_sizer.GetPatchSize({69, 70, 71, 72});
+
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto result = seg->CodepointToGlyphSegments(
+        roboto.get(), {}, segments,
+        MergeStrategy::Heuristic(a_b_c_d_size, a_b_c_d_size));
+    ASSERT_TRUE(result.ok()) << result.status();
+    std::vector<SubsetDefinition> expected = {
+        {'a', 'b', 'c', 'd'},
+        {},
+        segments[2],
+        {},
+        {},
+        {'e'},
     };
     EXPECT_EQ(result->Segments(), expected);
   }
