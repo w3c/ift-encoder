@@ -2698,4 +2698,50 @@ TEST_F(ClosureGlyphSegmenterTest,
   EXPECT_TRUE(sc.ok()) << sc;
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       HeuristicStrategy_EnforcesMaxPatchSizeOnNonExclusivePatches) {
+  // s0 ('i') and s1 ('l') each form ligatures with 'f' in s2:
+  //   s0 AND s2 -> {444, 446} (fi, ffi)
+  //   s1 AND s2 -> {445, 447} (fl, ffl)
+  // s2 also contains enough additional codepoints so that merging with s2
+  // directly always exceeds max_patch_size.
+  std::vector<SubsetDefinition> segments = {
+      {'i'},
+      {'l'},
+      {'f', 'a', 'b', 'c', 'd', 'e', 'g', 'h', 'j', 'k', 'm', 'n', 'o', 'p'},
+  };
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
+  uint32_t merged_exclusive_size = *patch_sizer.GetPatchSize({77, 80});
+  uint32_t merged_non_exclusive_size =
+      *patch_sizer.GetPatchSize({444, 445, 446, 447});
+  ASSERT_LT(merged_exclusive_size, merged_non_exclusive_size);
+
+  // When max_patch_size allows the merged exclusive patch {77, 80} but is
+  // smaller than the combined non-exclusive patch {444, 445, 446, 447}, s0 and
+  // s1 must not be merged.
+  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+    auto not_merged = seg->CodepointToGlyphSegments(
+        roboto.get(), {}, segments,
+        MergeStrategy::Heuristic(merged_exclusive_size,
+                                 merged_non_exclusive_size - 1));
+    ASSERT_TRUE(not_merged.ok()) << not_merged.status();
+    EXPECT_EQ(not_merged->Segments(), segments);
+
+    // Increasing max_patch_size to accommodate the combined non-exclusive
+    // patch allows s0 and s1 to merge.
+    auto merged = seg->CodepointToGlyphSegments(
+        roboto.get(), {}, segments,
+        MergeStrategy::Heuristic(merged_exclusive_size,
+                                 merged_non_exclusive_size));
+    ASSERT_TRUE(merged.ok()) << merged.status();
+    std::vector<SubsetDefinition> expected_merged = {
+        {'i', 'l'},
+        {},
+        segments[2],
+    };
+    EXPECT_EQ(merged->Segments(), expected_merged);
+  }
+}
+
 }  // namespace ift::encoder

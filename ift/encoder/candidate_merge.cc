@@ -964,6 +964,84 @@ StatusOr<double> CandidateMerge::PatchMergeDetails::ComputePatchMergeCostDelta(
   return cost_delta;
 }
 
+static StatusOr<bool> ExceedsMaxPatchSize(
+    const Merger& merger, segment_index_t base_segment_index,
+    const SegmentSet& merged_segments,
+    const std::optional<GlyphSet>& exclusive_gids, uint32_t& new_patch_size) {
+  uint32_t max_patch_size = merger.Strategy().PatchSizeMaxBytes();
+  if (exclusive_gids.has_value() && new_patch_size > max_patch_size) {
+    VLOG(0) << "  Merged exclusive patch for " << base_segment_index
+            << " is too big (" << new_patch_size << " > " << max_patch_size
+            << "), skipping.";
+    return true;
+  }
+
+  flat_hash_map<const ActivationCondition*, const GlyphSet*>
+      modified_conditions;
+  TRYV(FindModifiedConditions(merger, merged_segments, modified_conditions));
+
+  struct ConditionGlyphs {
+    GlyphSet glyphs;
+    uint32_t max_input_glyph_count = 0;
+  };
+  flat_hash_map<ActivationCondition, ConditionGlyphs> new_conditions;
+  new_conditions.reserve(modified_conditions.size());
+
+  for (const auto& [condition, glyphs] : modified_conditions) {
+    ActivationCondition updated =
+        condition->ReplaceSegments(base_segment_index, merged_segments);
+    if (updated.IsExclusive()) {
+      updated = ActivationCondition::clear_exclusive(std::move(updated));
+    }
+    auto& entry = new_conditions[std::move(updated)];
+    entry.glyphs.union_set(*glyphs);
+    entry.max_input_glyph_count =
+        std::max<uint32_t>(entry.max_input_glyph_count, glyphs->size());
+  }
+
+  const auto& patch_size_cache = merger.Context().patch_size_cache;
+  if (!exclusive_gids.has_value()) {
+    auto unitary_it = new_conditions.find(
+        ActivationCondition::or_segments({base_segment_index}, 0));
+    if (unitary_it != new_conditions.end()) {
+      new_patch_size =
+          TRY(patch_size_cache->GetPatchSize(unitary_it->second.glyphs));
+      if (new_patch_size > max_patch_size) {
+        VLOG(0) << "  Merged exclusive patch for " << base_segment_index
+                << " is too big (" << new_patch_size << " > " << max_patch_size
+                << "), skipping.";
+        return true;
+      }
+    }
+  }
+
+  for (auto& [condition, entry] : new_conditions) {
+    if (condition.IsUnitary()) {
+      continue;
+    }
+
+    if (exclusive_gids.has_value()) {
+      entry.glyphs.subtract(*exclusive_gids);
+    }
+
+    if (entry.glyphs.size() <= entry.max_input_glyph_count) {
+      // This non-exclusive condition did not grow in glyph count as a result
+      // of the merge.
+      continue;
+    }
+
+    uint32_t size = TRY(patch_size_cache->GetPatchSize(entry.glyphs));
+    if (size > max_patch_size) {
+      VLOG(0) << "  Merged non-exclusive patch " << condition.ToString()
+              << " is too big (" << size << " > " << max_patch_size
+              << "), skipping.";
+      return true;
+    }
+  }
+
+  return false;
+}
+
 StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
     Merger& merger, segment_index_t base_segment_index,
     const SegmentSet& segments_to_merge_,
@@ -1038,8 +1116,7 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
 
   uint32_t new_patch_size = 0;
   std::optional<GlyphSet> exclusive_gids;
-  if (!merger.Strategy().UseCosts() ||
-      !merger.Context().IsPureDepGraphAnalysisMode()) {
+  if (!merger.Context().IsPureDepGraphAnalysisMode()) {
     if (!segments_to_merge_are_inert) {
       // When we're not in pure depgraph mode then glyph conditions are
       // incomplete. To help improve accuracy run a closure to find the new set
@@ -1063,11 +1140,6 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
         TRY(merger.Context().patch_size_cache->GetPatchSize(*exclusive_gids));
   }
 
-  if (!merger.Strategy().UseCosts() &&
-      new_patch_size > merger.Strategy().PatchSizeMaxBytes()) {
-    return std::nullopt;
-  }
-
   double cost_delta = 0.0;
   if (merger.Strategy().UseCosts()) {
     // Cost delta values are only needed when using cost based merge strategy.
@@ -1079,6 +1151,10 @@ StatusOr<std::optional<CandidateMerge>> CandidateMerge::AssessSegmentMerge(
       return std::nullopt;
     }
     cost_delta = TRY(cost_delta_status);
+  } else if (TRY(ExceedsMaxPatchSize(merger, base_segment_index,
+                              segments_to_merge_with_base, exclusive_gids,
+                              new_patch_size))) {
+    return std::nullopt;
   }
 
   if (delta_to_beat.has_value() && cost_delta >= *delta_to_beat) {

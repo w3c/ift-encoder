@@ -1195,4 +1195,112 @@ TEST_F(CandidateMergeTest, ComputeCostDelta_FallbackChangedBeforeEarlyExit) {
   EXPECT_EQ(*with_threshold, *exact_with_fallback);
 }
 
+TEST_F(CandidateMergeTest, AssessMerge_Heuristic_NonExclusiveMaxPatchSize) {
+  // s0: 'a' -> {69}
+  // s1: 'i' -> {77}, s1 AND s3 -> {444, 446}
+  // s2: 'l' -> {80}, s2 AND s3 -> {445, 447}
+  // s3: 'f' -> {74}
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'i'}},
+      {{'l'}},
+      {{'f'}},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger =
+      *Merger::New(*context, MergeStrategy::Heuristic(100, 500), all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69, 77}, 300);
+  size_cache->SetPatchSize({77, 80}, 300);
+  size_cache->SetPatchSize({444, 446}, 600);
+  size_cache->SetPatchSize({445, 447}, 200);
+  size_cache->SetPatchSize({444, 445, 446, 447}, 600);
+  context->patch_size_cache.reset(size_cache);
+
+  // Case 1: Merging s1 ('i') and s2 ('l') keeps the exclusive patch {77, 80}
+  // under max_patch_size (300 <= 500), but collapses (s1 AND s3) and
+  // (s2 AND s3) into {444, 445, 446, 447} which exceeds max_patch_size
+  // (600 > 500). Should be rejected.
+  auto r = CandidateMerge::AssessSegmentMerge(merger, 1, {2}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_FALSE(r->has_value());
+
+  // Case 2: Merging s0 ('a') and s1 ('i') updates (s1 AND s3) to (s0 AND s3)
+  // without growing its glyph set {444, 446}. Even though {444, 446} is
+  // > 500 bytes, it did not grow as a result of the merge, so the merge should
+  // be allowed.
+  r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->has_value());
+
+  // Case 3: When the collapsed non-exclusive patch {444, 445, 446, 447} fits
+  // within max_patch_size (450 <= 500), merging s1 and s2 succeeds.
+  size_cache->SetPatchSize({444, 445, 446, 447}, 450);
+  r = CandidateMerge::AssessSegmentMerge(merger, 1, {2}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->has_value());
+}
+
+TEST_F(CandidateMergeTest,
+       AssessMerge_Heuristic_PureDepGraphModeSkipsClosure) {
+  // s0: 'i' -> {77}, s0 AND s2 -> {444, 446}
+  // s1: 'l' -> {80}, s1 AND s2 -> {445, 447}
+  // s2: 'f' -> {74}
+  std::vector<Segment> segments = {
+      {{'i'}},
+      {{'l'}},
+      {{'f'}},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, DEP_GRAPH_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger =
+      *Merger::New(*context, MergeStrategy::Heuristic(100, 500), all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({77, 80}, 600);
+  size_cache->SetPatchSize({444, 445, 446, 447}, 450);
+  context->patch_size_cache.reset(size_cache);
+
+  uint64_t hits_before = context->glyph_closure_cache->CacheHits();
+  uint64_t misses_before = context->glyph_closure_cache->CacheMisses();
+
+  // Case 1: Merged unitary patch {77, 80} exceeds max_patch_size (600 > 500).
+  auto r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_FALSE(r->has_value());
+
+  // Case 2: Merged unitary patch fits (300 <= 500), but collapsed non-exclusive
+  // patch {444, 445, 446, 447} exceeds max_patch_size (600 > 500).
+  size_cache->SetPatchSize({77, 80}, 300);
+  size_cache->SetPatchSize({444, 445, 446, 447}, 600);
+  r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_FALSE(r->has_value());
+
+  // Case 3: Both fit within max_patch_size.
+  size_cache->SetPatchSize({444, 445, 446, 447}, 450);
+  r = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r.ok()) << r.status();
+  ASSERT_TRUE(r->has_value());
+
+  // In pure dep-graph mode, AssessSegmentMerge should never invoke
+  // AnalyzeSegment / GlyphClosureCache.
+  EXPECT_EQ(context->glyph_closure_cache->CacheHits(), hits_before);
+  EXPECT_EQ(context->glyph_closure_cache->CacheMisses(), misses_before);
+}
+
 }  // namespace ift::encoder
