@@ -12,6 +12,9 @@
 
 namespace ift::config {
 
+// Default cost (bytes) associated with making a network request.
+static constexpr uint32_t kDefaultNetworkCost = 200;
+
 class AutoSegmenterConfig {
  public:
   // Analyzes the provided font face and generates an appropriate segmenter

@@ -9,6 +9,7 @@
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 #include "ift/common/try.h"
+#include "ift/config/auto_segmenter_config.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
@@ -23,6 +24,7 @@ using ift::config::CLOSURE_ONLY;
 using ift::config::DEP_GRAPH_ONLY;
 using ift::config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION;
 using ift::config::FIND_CONDITIONS;
+using ift::config::kDefaultNetworkCost;
 using ift::config::MOVE_TO_INIT_FONT;
 using ift::config::PATCH;
 
@@ -1335,6 +1337,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_GT(base_cost[0].ift_init_cost, 1000);
   ASSERT_EQ(base_cost[0].ift_init_cost, base_cost[0].non_ift_total_cost);
   ASSERT_EQ(base_cost[0].ift_init_cost, base_cost[0].ideal_init_cost);
+  ASSERT_EQ(base_cost[0].uncovered_ift_patch_cost, 0);
 
   // Add some patches
   GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
@@ -1357,6 +1360,37 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_GT(with_patches_cost[0].ift_patch_cost, base_cost[0].ift_patch_cost);
   ASSERT_LT(with_patches_cost[0].ideal_patch_cost,
             with_patches_cost[0].ift_patch_cost);
+  ASSERT_EQ(with_patches_cost[0].uncovered_ift_patch_cost, 0);
+
+  // Add uncovered segments ('f' and 'g' are not in frequencies).
+  GlyphSegmentation segmentation3({'a', 'b', 'c'}, {}, {});
+  sc = GlyphSegmentation::ConditionsToSegmentation(
+      {
+          {ActivationCondition::exclusive_segment(0, 0), {100, 101, 102}},
+          {ActivationCondition::exclusive_segment(2, 0), {103, 104}},
+          {ActivationCondition::and_segments({0, 2}, 0), {105}},
+          {ActivationCondition::and_segments({2, 3}, 0), {106, 107}},
+      },
+      {}, segmentation3);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  std::vector<SubsetDefinition> segments3{
+      {'d'},
+      {'e'},
+      {'f'},
+      {'g'},
+  };
+  segmentation3.CopySegments(segments3);
+
+  PatchSizeCacheImpl patch_sizer(roboto.get(), 11);
+  double expected_uncovered_cost =
+      (double)*patch_sizer.GetPatchSize({103, 104}) + kDefaultNetworkCost +
+      (double)*patch_sizer.GetPatchSize({106, 107}) + kDefaultNetworkCost;
+
+  std::vector<SegmentationCost> with_uncovered_cost =
+      *segmenter.TotalCosts(roboto.get(), segmentation3, {&calculator});
+  ASSERT_EQ(with_uncovered_cost[0].uncovered_ift_patch_cost,
+            expected_uncovered_cost);
 }
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {

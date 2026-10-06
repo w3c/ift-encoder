@@ -23,6 +23,7 @@ struct SegmentationCost {
   std::string name;
   double ift_init_cost;
   double ift_patch_cost;
+  double uncovered_ift_patch_cost;
 
   double non_ift_total_cost;
 

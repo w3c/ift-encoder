@@ -208,6 +208,7 @@ static Status Analysis(hb_face_t* font,
   double non_ift_total_cost = 0.0;
   double ideal_init_cost = 0.0;
   double ift_patch_cost = 0.0;
+  double uncovered_ift_patch_cost = 0.0;
   double ideal_patch_cost = 0.0;
 
   for (const auto& cost : costs) {
@@ -215,6 +216,7 @@ static Status Analysis(hb_face_t* font,
       ideal_init_cost = cost.ideal_init_cost;
       ift_init_cost = cost.ift_init_cost;
       non_ift_total_cost = cost.non_ift_total_cost;
+      uncovered_ift_patch_cost = cost.uncovered_ift_patch_cost;
     }
 
     ift_patch_cost += cost.ift_patch_cost;
@@ -231,6 +233,8 @@ static Status Analysis(hb_face_t* font,
             << std::endl;
   std::cerr << "ift_total_cost = " << (uint64_t)(ift_init_cost + ift_patch_cost)
             << std::endl;
+  std::cerr << "uncovered_ift_patch_cost = "
+            << (uint64_t)uncovered_ift_patch_cost << std::endl;
   std::cerr << "ideal_total_cost = "
             << (uint64_t)(ideal_init_cost + ideal_patch_cost) << std::endl;
 
