@@ -201,6 +201,29 @@ class Merger {
   absl::StatusOr<std::optional<InvalidationSet>> TryMergingABaseSegment(
       segment_index_t base_segment_index);
 
+  struct InertProbe {
+    ift::common::SegmentSet batch;
+    ift::common::GlyphSet glyphs;
+    ift::common::SegmentSet::const_iterator next_it;
+    size_t added_count = 0;
+    bool hit_non_inert = false;
+  };
+
+  bool CanMergeAsBaseSegment(segment_index_t base_segment_index,
+                             segment_index_t candidate) const;
+
+  InertProbe CollectInertProbe(
+      segment_index_t base_segment_index,
+      const ift::common::SegmentSet& accepted_batch,
+      const ift::common::GlyphSet& accepted_glyphs,
+      ift::common::SegmentSet::const_iterator start_it,
+      size_t max_to_add) const;
+
+  absl::StatusOr<ift::common::SegmentSet> FindInertBatchToMerge(
+      segment_index_t base_segment_index,
+      const ift::common::GlyphSet& base_glyphs, uint32_t base_patch_size,
+      ift::common::SegmentSet::const_iterator& next_segment_it);
+
   absl::StatusOr<std::optional<InvalidationSet>> TryMergingACompositeCondition(
       segment_index_t base_segment_index);
 

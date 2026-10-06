@@ -381,6 +381,7 @@ cc_test(
         ":common",
         ":encoder",
         ":merge_strategy",
+        ":segmentation_context",
         "//ift/common",
         "//ift/common:data_file_resolver",
         "//ift/common:test_font_loader",
