@@ -1679,8 +1679,10 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
-      // Group 1
-      {'c', 'd'},
+      // Group 1 ('a' is shared and assigned here as it has higher probability
+      // in Group 1: 1.0 > 0.0)
+      {'a', 'c', 'd'},
+      {},
       {},
       {'e'},
       {'f'},
@@ -1693,8 +1695,6 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
       {},
       {'m', 'n'},
       {},
-      // Shared
-      {'a'},
       // Ungrouped
       {'b'},
       {'g'},
@@ -1703,31 +1703,94 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups) {
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid71, gid72 }
+p0: { gid69, gid71, gid72 }
 p1: { gid73 }
 p2: { gid74 }
 p3: { gid83 }
 p4: { gid76, gid77, gid78 }
 p5: { gid79, gid80 }
 p6: { gid81, gid82 }
-p7: { gid69 }
-p8: { gid70 }
-p9: { gid75 }
-p10: { gid444, gid446 }
-p11: { gid445, gid447 }
+p7: { gid70 }
+p8: { gid75 }
+p9: { gid444, gid446 }
+p10: { gid445, gid447 }
 if (s0) then p0
-if (s2) then p1
-if (s3) then p2
-if (s4) then p3
-if (s5) then p4
-if (s8) then p5
-if (s10) then p6
-if (s12) then p7
-if (s13) then p8
-if (s14) then p9
-if (s3 AND s5) then p10
-if (s3 AND s8) then p11
+if (s3) then p1
+if (s4) then p2
+if (s5) then p3
+if (s6) then p4
+if (s9) then p5
+if (s11) then p6
+if (s13) then p7
+if (s14) then p8
+if (s4 AND s6) then p9
+if (s4 AND s9) then p10
 )");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       MultipleMergeGroups_SharedAssignedToHighestProbability) {
+  // Group 1 has two profiles:
+  // - 'a' has probabilities 0.95 and 0.05 (max = 0.95, avg = 0.50).
+  // - 'b' has probabilities 0.20 and 0.20 (max = 0.20, avg = 0.20).
+  // - 'c' has probabilities 0.96 and 0.06 (max = 0.96, avg = 0.51).
+  UnicodeFrequencies group1_freq1{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 20},
+      {{'c', 'c'}, 96},
+  };
+  UnicodeFrequencies group1_freq2{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 5},
+      {{'b', 'b'}, 20},
+      {{'c', 'c'}, 6},
+  };
+
+  // Group 2 has one profile:
+  // - 'a' has probability 0.60 (higher than Group 1's average 0.50, but lower
+  //   than Group 1's max 0.95, so 'a' is assigned to Group 1).
+  // - 'b' has probability 0.95 (higher than Group 1's max 0.20, so 'b' is
+  //   assigned to Group 2).
+  // - 'd' has probability 0.95.
+  UnicodeFrequencies group2_freq{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 60},
+      {{'b', 'b'}, 95},
+      {{'d', 'd'}, 95},
+  };
+
+  MergeStrategy group1_strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(group1_freq1)), 75, 1);
+  group1_strategy.AddProbabilityProfile(
+      *ProbabilityProfile::Unigram(std::move(group1_freq2)));
+
+  MergeStrategy group2_strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(group2_freq)), 75, 1);
+
+  // 'a' (0) and 'b' (1) are shared between both merge groups.
+  btree_map<SegmentSet, MergeStrategy> merge_groups{
+      {{0, 1, 2}, group1_strategy},
+      {{0, 1, 3}, group2_strategy},
+  };
+
+  auto segmentation = CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, merge_groups);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // In Group 1: 'c' (avg 0.51) is ordered ahead of 'a' (avg 0.50), and they
+  // merge together.
+  // In Group 2: 'b' (0.95) and 'd' (0.95) are assigned to Group 2 and merge
+  // together.
+  std::vector<SubsetDefinition> expected_segments = {
+      // Group 1
+      {'a', 'c'},
+      {},
+      // Group 2
+      {'b', 'd'},
+      {},
+  };
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
 }
 
 TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
@@ -1741,8 +1804,7 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
       {{'l', 'l'}, 4},   {{'m', 'm'}, 3},   {{'n', 'n'}, 2},
   };
 
-  // {a} is shared
-  // {b, g} is ungrouped
+  // {a, b} are shared.
   auto profile1 = *ProbabilityProfile::Unigram(std::move(group1_freq));
   profile1.init_font_merge_threshold = -70;
   MergeStrategy s1 = MergeStrategy::CostBased(std::move(profile1), 75, 1);
@@ -1782,6 +1844,8 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
   // s1) are still candidates to be moved to the init font.
   std::vector<SubsetDefinition> expected_segments = {
       // Group 1
+      {},  // a
+      {},  // b
       {},  // c
       {},  // d
       {'e'},
@@ -1796,9 +1860,6 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_InitFontMove) {
       {'m', 'n'},
       {},  // n
       {'o'},
-      // Shared
-      {},  // a
-      {},  // b
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -1813,16 +1874,120 @@ p5: { gid81, gid82 }
 p6: { gid83 }
 p7: { gid444, gid446 }
 p8: { gid445, gid447 }
-if (s2) then p0
-if (s3) then p1
-if (s4) then p2
-if (s5) then p3
-if (s8) then p4
-if (s10) then p5
-if (s12) then p6
-if (s3 AND s5) then p7
-if (s3 AND s8) then p8
+if (s4) then p0
+if (s5) then p1
+if (s6) then p2
+if (s7) then p3
+if (s10) then p4
+if (s12) then p5
+if (s14) then p6
+if (s5 AND s7) then p7
+if (s5 AND s10) then p8
 )");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       MultipleMergeGroups_SharedPrioritizesInitFontMergeGroup) {
+  // 'a' and 'b' are shared between the two merge groups:
+  // - In low_prob_freq, 'a' has probability 0.85 and 'b' has probability 0.05.
+  // - In high_prob_freq, 'a' has probability 1.00 and 'b' has probability 0.95.
+  // Even though 'a' and 'b' have higher probability in the group without init
+  // font merging, they are assigned to whichever group has init font merging
+  // enabled.
+  auto low_prob_freq = []() {
+    return UnicodeFrequencies{
+        {{' ', ' '}, 100},
+        {{'a', 'a'}, 85},
+        {{'b', 'b'}, 5},
+        {{'c', 'c'}, 86},
+    };
+  };
+  auto high_prob_freq = []() {
+    return UnicodeFrequencies{
+        {{' ', ' '}, 100},
+        {{'a', 'a'}, 100},
+        {{'b', 'b'}, 95},
+        {{'d', 'd'}, 95},
+    };
+  };
+
+  // Case 1: Group 1 ({0, 1, 2}) has init font merging enabled, Group 2
+  // ({0, 1, 3}) does not.
+  {
+    auto profile1 = *ProbabilityProfile::Unigram(low_prob_freq());
+    profile1.init_font_merge_threshold = -300;
+    MergeStrategy s1 = MergeStrategy::CostBased(std::move(profile1), 75, 1);
+
+    auto profile2 = *ProbabilityProfile::Unigram(high_prob_freq());
+    MergeStrategy s2 = MergeStrategy::CostBased(std::move(profile2), 75, 1);
+
+    btree_map<SegmentSet, MergeStrategy> merge_groups{
+        {{0, 1, 2}, s1},
+        {{0, 1, 3}, s2},
+    };
+
+    auto segmentation = CodepointToGlyphSegments(
+        roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, merge_groups);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    // 'a' and 'b' are assigned to Group 1 ('c' has 0.86 > 'a' 0.85, so 'a' and
+    // 'c' merge in Group 1, and 'b' stays in Group 1), leaving only 'd' in
+    // Group 2.
+    std::vector<SubsetDefinition> expected_segments = {
+        // Group 1
+        {'a', 'c'},
+        {},
+        {'b'},
+        // Group 2
+        {'d'},
+    };
+    EXPECT_EQ(segmentation->Segments(), expected_segments);
+  }
+
+  // Case 2: Group 1 ({0, 1, 2}) does NOT have init font merging enabled,
+  // Group 2 ({0, 1, 3}) DOES.
+  {
+    auto non_init_freq = UnicodeFrequencies{
+        {{' ', ' '}, 100},
+        {{'a', 'a'}, 100},
+        {{'b', 'b'}, 95},
+        {{'c', 'c'}, 95},
+    };
+    auto init_freq = UnicodeFrequencies{
+        {{' ', ' '}, 100},
+        {{'a', 'a'}, 85},
+        {{'b', 'b'}, 5},
+        {{'d', 'd'}, 86},
+    };
+
+    auto profile1 = *ProbabilityProfile::Unigram(std::move(non_init_freq));
+    MergeStrategy s1 = MergeStrategy::CostBased(std::move(profile1), 75, 1);
+
+    auto profile2 = *ProbabilityProfile::Unigram(std::move(init_freq));
+    profile2.init_font_merge_threshold = -300;
+    MergeStrategy s2 = MergeStrategy::CostBased(std::move(profile2), 75, 1);
+
+    btree_map<SegmentSet, MergeStrategy> merge_groups{
+        {{0, 1, 2}, s1},
+        {{0, 1, 3}, s2},
+    };
+
+    auto segmentation = CodepointToGlyphSegments(
+        roboto.get(), {}, {{'a'}, {'b'}, {'c'}, {'d'}}, merge_groups);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    // 'a' and 'b' are assigned to Group 2 ({0, 1, 3}) despite Group 1 ({0, 1,
+    // 2}) coming first and having higher probabilities for both 'a' and 'b'.
+    std::vector<SubsetDefinition> expected_segments = {
+        // Group 1
+        {'c'},
+        // Group 2
+        {'a', 'd'},
+        {},
+        {'b'},
+    };
+    EXPECT_EQ(segmentation->Segments(), expected_segments);
+  }
 }
 
 TEST_F(ClosureGlyphSegmenterTest, MultipleProfiles_InitFontMove) {
@@ -2301,14 +2466,71 @@ TEST_F(ClosureGlyphSegmenterTest, MultipleMergeGroups_PreGrouping) {
 
   // d, a are above the pregrouping threshold so aren't grouped.
   // e, b, f, c, and g are below so are grouped into sets of 3.
-  // h, i are shared between merge groups so don't participate in pregrouping.
+  // h, i are shared between merge groups and have higher probability in Group 1
+  // than in Group 2 (heuristic = 0.0), so they are assigned to Group 1 and
+  // participate in Group 1's pregrouping.
   std::vector<SubsetDefinition> expected_segments = {
       // Group 1
       {'d'},
       {'a'},
       {'e', 'b', 'f'},  // pre merge
-      {'c', 'g'},       // pre merge
-      // Shared
+      {'c', 'g', 'h'},  // pre merge
+      {'i'},
+  };
+  ASSERT_EQ(segmentation->Segments(), expected_segments);
+  ASSERT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0 }
+p0: { gid72 }
+p1: { gid69 }
+p2: { gid70, gid73, gid74 }
+p3: { gid71, gid75, gid76 }
+p4: { gid77 }
+p5: { gid444, gid446 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+if (s3) then p3
+if (s4) then p4
+if (s2 AND s4) then p5
+)");
+
+  // When h and i have higher probability in Group 2 (which has no
+  // pregrouping), they are assigned to Group 2 and do not get pregrouped with
+  // Group 1.
+  UnicodeFrequencies freq2{
+      {{' ', ' '}, 100},
+      {{'h', 'h'}, 20},
+      {{'i', 'i'}, 10},
+  };
+  MergeStrategy costs2 = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(freq2)), 0, 1);
+  btree_map<SegmentSet, MergeStrategy> merge_groups_2{
+      {{0, 1, 2, 3, 4, 5, 6, 7, 8}, costs},
+      {{7, 8}, costs2},
+  };
+
+  segmentation = CodepointToGlyphSegments(roboto.get(), {},
+                                          {
+                                              {'a'},
+                                              {'b'},
+                                              {'c'},
+                                              {'d'},
+                                              {'e'},
+                                              {'f'},
+                                              {'g'},
+                                              {'h'},
+                                              {'i'},
+                                          },
+                                          merge_groups_2);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  expected_segments = {
+      // Group 1
+      {'d'},
+      {'a'},
+      {'e', 'b', 'f'},  // pre merge
+      {'c', 'g'},       // pre merge (stops at Group 1 boundary)
+      // Group 2
       {'h'},
       {'i'},
   };

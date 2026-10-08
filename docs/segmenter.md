@@ -262,9 +262,11 @@ one or more *merge groups*, where each merge group defines a set of segments and
 merging strategy.
 
 During merging analysis, merge groups are isolated from each other: each merge group is processed
-independently and only evaluates candidate merges among the segments and patches exclusively assigned
-to that group. Any segment that belongs to more than one merge group is classified as a shared
-segment and excluded from merge candidate selection across all groups.
+independently and only evaluates candidate merges among the segments and patches assigned to that
+group. Any segment that belongs to more than one merge group is assigned to a single merge group,
+prioritizing merge groups with initial font merging enabled and then selecting the merge group in
+which it has the highest probability (using the maximum probability across a group's frequency data
+sets).
 
 Isolating merge groups from each other serves two purposes:
 * For disjoint scripts (for example Latin and Cyrillic), separating them into distinct merge groups
@@ -276,8 +278,9 @@ When generating a segmenter configuration automatically, scripts whose shared co
 a significant fraction of their probability mass (such as CJK scripts sharing unified Han ideographs,
 or Latin and Emoji sharing common ASCII digits and symbols) are clustered into a single unified merge
 group. Grouping overlapping scripts together ensures that their shared codepoints are cost-merged
-within that group instead of being isolated as shared segments or falling back to heuristic merging.
-Conversely, scripts with negligible or no overlap are placed into separate merge groups.
+against all of those scripts' frequency data sets, whereas scripts with negligible or no overlap are
+placed into separate merge groups (with any minor shared codepoints assigned to whichever merge
+group has initial font merging enabled or gives them the highest probability).
 
 ### Multi-Dataset Cost Function
 

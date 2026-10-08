@@ -261,56 +261,79 @@ static void ClassifySegments(
   }
 }
 
-// Computes a single representative probability for each segment which is used
-// to order segments within their merge group.
+// Computes the merge group assignment and representative probability for each
+// segment.
 //
 // A strategy may have more than one probability calculator (one per frequency
-// data set), in which case the average probability across that strategies
-// calculators is used. Averaging (instead of summing) keeps the value in
-// [0, 1] so that it remains comparable to the strategies pre closure
-// probability threshold, and comparable to the values computed for other
-// strategies which may have a different number of calculators.
+// data set), in which case the average probability across that strategy's
+// calculators is used to order segments within the group. Averaging (instead of
+// summing) keeps the value in [0, 1] so that it remains comparable to the
+// strategy's pre-closure probability threshold.
 //
-// A segment can be present in more than one merge group (shared segments), for
-// those the largest of the per strategy averages is used.
-static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
+// Input merge groups are allowed to share segments, but for merge processing
+// we want the merge groups to be disjoint so this resolves merge group overlap
+// by moving shared segments to a single merge group, prioritizing merge groups
+// with initial font merging enabled and then selecting the merge group in which
+// the segment has the highest probability.
+struct SegmentGroupAssignment {
+  std::optional<uint32_t> group_index;
+  bool has_init_font_merge = false;
+  ProbabilityBound probability = ProbabilityBound::Zero();
+  double max_profile_probability = 0.0;
+};
+
+static StatusOr<std::vector<SegmentGroupAssignment>> AssignSegmentsToGroups(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
-  std::vector<ProbabilityBound> out(subset_definitions.size(),
-                                    ProbabilityBound::Zero());
+  std::vector<SegmentGroupAssignment> out(subset_definitions.size());
 
   std::vector<Segment> segment_list;
+  segment_list.reserve(subset_definitions.size());
   for (const auto& def : subset_definitions) {
     segment_list.emplace_back(def);
   }
 
+  uint32_t group_index = 0;
   for (const auto& [segments, strategy] : merge_groups) {
-    if (!strategy.UseCosts()) {
-      continue;
-    }
-
-    TRYV(strategy.ResetSegmentProbabilities(segment_list.size()));
-
     const auto& profiles = strategy.ProbabilityProfiles();
-    if (profiles.empty()) {
-      continue;
+    bool has_profiles = strategy.UseCosts() && !profiles.empty();
+    bool has_init_font_merge =
+        strategy.UseCosts() && strategy.HasInitFontMerge();
+    if (has_profiles) {
+      TRYV(strategy.ResetSegmentProbabilities(segment_list.size()));
     }
 
     for (segment_index_t s : segments) {
-      double min = 0.0;
-      double max = 0.0;
-      for (const auto& profile : profiles) {
-        ProbabilityBound p =
-            TRY(profile.Calculator())->ComputeProbability(segment_list, s);
-        min += p.Min();
-        max += p.Max();
+      ProbabilityBound average = ProbabilityBound::Zero();
+      double max_profile_prob = 0.0;
+      if (has_profiles) {
+        double min = 0.0;
+        double max = 0.0;
+        for (const auto& profile : profiles) {
+          ProbabilityBound p =
+              TRY(profile.Calculator())->ComputeProbability(segment_list, s);
+          min += p.Min();
+          max += p.Max();
+          max_profile_prob = std::max(max_profile_prob, p.Value());
+        }
+        average =
+            ProbabilityBound(min / profiles.size(), max / profiles.size());
       }
 
-      ProbabilityBound average(min / profiles.size(), max / profiles.size());
-      if (average.Value() > out[s].Value()) {
-        out[s] = average;
+      if (!out[s].group_index.has_value() ||
+          std::make_tuple(has_init_font_merge, max_profile_prob,
+                          average.Value()) >
+              std::make_tuple(out[s].has_init_font_merge,
+                              out[s].max_profile_probability,
+                              out[s].probability.Value())) {
+        out[s].group_index = group_index;
+        out[s].has_init_font_merge = has_init_font_merge;
+        out[s].probability = average;
+        out[s].max_profile_probability = max_profile_prob;
       }
     }
+
+    group_index++;
   }
   return out;
 }
@@ -344,22 +367,19 @@ static std::vector<Segment> PreGroupSegments(
   segment_index_map.resize(subset_definitions.size());
   std::vector<Segment> segments;
 
+  std::vector<const MergeStrategy*> strategies;
+  strategies.reserve(merge_groups.size());
+  for (const auto& [group_segments, strategy] : merge_groups) {
+    strategies.push_back(&strategy);
+  }
+
   unsigned i = 0;
-  unsigned last_group_index = 0;
-  auto merge_group_it = merge_groups.begin();
   auto ordering_it = ordering.begin();
 
   while (ordering_it != ordering.end()) {
     const auto& o = *ordering_it;
-    if (o.group_index != last_group_index &&
-        merge_group_it != merge_groups.end()) {
-      merge_group_it++;
-    }
-
-    const MergeStrategy* strategy = nullptr;
-    if (merge_group_it != merge_groups.end()) {
-      strategy = &(merge_group_it->second);
-    }
+    const MergeStrategy* strategy =
+        o.group_index < strategies.size() ? strategies[o.group_index] : nullptr;
 
     Segment segment = Segment{subset_definitions[o.original_index]};
     ordering_it++;
@@ -396,7 +416,6 @@ static std::vector<Segment> PreGroupSegments(
       }
     }
 
-    last_group_index = o.group_index;
     segments.push_back(segment);
     i++;
   }
@@ -415,8 +434,11 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   // merge group 1 segments
   // ...
   // merge group n segments
-  // shared segments
   // ungrouped segments
+  //
+  // Segments present in multiple merge groups are assigned to a single merge
+  // group, prioritizing merge groups with initial font merging enabled and then
+  // selecting the merge group in which they have the highest probability.
   //
   // Within a group segments are sorted by probability (determined by that
   // groups frequency data) descending (with original ordering breaking ties).
@@ -438,40 +460,16 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
           << "  " << ungrouped_segments.size()
           << " segments that are ungrouped";
 
-  std::vector<ProbabilityBound> segment_probabilities =
-      TRY(ComputeSegmentProbabilities(subset_definitions, merge_groups));
+  std::vector<SegmentGroupAssignment> assignments =
+      TRY(AssignSegmentsToGroups(subset_definitions, merge_groups));
   std::vector<SegmentOrdering> ordering;
-  uint32_t group_index = 0;
-  for (const auto& [segments, strategy] : merge_groups) {
-    for (uint32_t s : segments) {
-      if (shared_segments.contains(s)) {
-        // shared segments are placed separately
-        continue;
-      }
-
-      ordering.push_back({
-          .group_index = group_index,
-          .probability = segment_probabilities[s],
-          .original_index = s,
-      });
-    }
-
-    group_index++;
-  }
-
-  for (segment_index_t s : shared_segments) {
+  ordering.reserve(subset_definitions.size());
+  uint32_t ungrouped_group_index = merge_groups.size();
+  for (segment_index_t s = 0; s < subset_definitions.size(); s++) {
     ordering.push_back({
-        .group_index = group_index,
-        .probability = segment_probabilities[s],
-        .original_index = s,
-    });
-  }
-
-  group_index++;
-  for (segment_index_t s : ungrouped_segments) {
-    ordering.push_back({
-        .group_index = group_index,
-        .probability = ProbabilityBound::Zero(),
+        .group_index =
+            assignments[s].group_index.value_or(ungrouped_group_index),
+        .probability = assignments[s].probability,
         .original_index = s,
     });
   }
@@ -486,14 +484,14 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
   VLOG(0) << segment_defs.size() << " segments after pregrouping.";
 
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
-  group_index = 0;
+  uint32_t group_index = 0;
   for (auto& [segments, strategy] : merge_groups) {
     SegmentSet remapped;
     SegmentSet remapped_full;
     CodepointSet unique_codepoints;
     for (segment_index_t s : segments) {
       segment_index_t s_prime = segment_index_map[s];
-      if (!shared_segments.contains(s)) {
+      if (assignments[s].group_index == group_index) {
         unique_codepoints.union_set(segment_defs.at(s_prime).Definition().codepoints);
         remapped.insert(s_prime);
       }
@@ -509,15 +507,19 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
             << " segments and " << unique_codepoints.size() << " codepoints.";
     group_index++;
 
+    if (!segments.empty() && remapped.empty() && !strategy.HasInitFontMerge()) {
+      continue;
+    }
+
+    // Reset segment caches since segments may have been re-ordered by the sort.
+    TRYV(strategy.ResetSegmentProbabilities(num_segments));
+
     if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
              .second) {
       return absl::InvalidArgumentError(
           "Duplicate merge groups are not allowed.");
     }
     with_shared[remapped] = remapped_full;
-
-    // Reset segment caches since segments may have been re-ordered by the sort.
-    TRYV(strategy.ResetSegmentProbabilities(num_segments));
   }
 
   merge_groups = std::move(new_merge_groups);
