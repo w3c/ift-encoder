@@ -106,4 +106,22 @@ TEST_F(BrotliPatchingTest, StitchingWithBase) {
   EXPECT_EQ(Span<const char>(patched), Span<const char>(subset_b_));
 }
 
+TEST_F(BrotliPatchingTest, DiffAndPatchWithSmallerDerived) {
+  // Regression test for unsigned underflow in reserve() when derived < base.
+  // Load a larger font as base and smaller subset as derived.
+  FontData full_font =
+      *loader_->LoadFontData("ift/common/testdata/Roboto-Regular.ttf");
+  EXPECT_GT(full_font.size(), subset_a_.size());
+
+  FontData patch;
+  EXPECT_EQ(diff_->Diff(full_font, subset_a_, &patch), absl::OkStatus());
+
+  EXPECT_GT(patch.size(), 0);
+  EXPECT_LT(patch.size(), full_font.size());
+
+  FontData patched;
+  EXPECT_EQ(patch_->Patch(full_font, patch, &patched), absl::OkStatus());
+  EXPECT_EQ(Span<const char>(patched), Span<const char>(subset_a_));
+}
+
 }  // namespace ift::common

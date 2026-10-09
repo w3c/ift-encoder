@@ -19,7 +19,11 @@ Status BrotliBinaryDiff::Diff(const FontData& font_base,
                               const FontData& font_derived,
                               FontData* patch /* OUT */) const {
   std::vector<uint8_t> sink;
-  sink.reserve(2 * (font_derived.size() - font_base.size()));
+  size_t base_size = font_base.size();
+  size_t derived_size = font_derived.size();
+  if (derived_size > base_size) {
+    sink.reserve(2 * (derived_size - base_size));
+  }
 
   Status sc = Diff(font_base, font_derived.str(), 0, true, sink);
 
