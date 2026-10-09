@@ -509,15 +509,15 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
             << " segments and " << unique_codepoints.size() << " codepoints.";
     group_index++;
 
+    // Reset segment caches since segments may have been re-ordered by the sort.
+    TRYV(strategy.ResetSegmentProbabilities(num_segments));
+
     if (!new_merge_groups.insert(std::make_pair(remapped, std::move(strategy)))
              .second) {
       return absl::InvalidArgumentError(
           "Duplicate merge groups are not allowed.");
     }
     with_shared[remapped] = remapped_full;
-
-    // Reset segment caches since segments may have been re-ordered by the sort.
-    TRYV(strategy.ResetSegmentProbabilities(num_segments));
   }
 
   merge_groups = std::move(new_merge_groups);
