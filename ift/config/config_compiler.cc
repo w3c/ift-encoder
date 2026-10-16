@@ -17,6 +17,7 @@
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/compiler.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/unicode_range_compiler.h"
 
 using absl::flat_hash_map;
 using absl::Status;
@@ -30,6 +31,7 @@ using ift::encoder::ActivationCondition;
 using ift::encoder::Compiler;
 using ift::encoder::design_space_t;
 using ift::encoder::SubsetDefinition;
+using ift::encoder::UnicodeRangeCompiler;
 
 namespace ift::config {
 
@@ -57,18 +59,8 @@ static ActivationCondition FromProto(
                                                   condition.activated_patch());
 }
 
-Status ConfigCompiler::Configure(const SegmentationPlan& plan,
-                                 Compiler& compiler) {
-  // First configure the glyph keyed segments, including features deps
-  for (const auto& [id, gids] : plan.glyph_patches()) {
-    TRYV(compiler.AddGlyphDataPatch(id, Values(gids)));
-  }
-
-  std::vector<ActivationCondition> activation_conditions;
-  for (const auto& c : plan.glyph_patch_conditions()) {
-    activation_conditions.push_back(FromProto(c));
-  }
-
+static flat_hash_map<uint32_t, SubsetDefinition> ParseSegments(
+    const SegmentationPlan& plan) {
   flat_hash_map<uint32_t, SubsetDefinition> segments;
   for (const auto& [id, set] : plan.segments()) {
     auto& segment = segments[id];
@@ -79,15 +71,12 @@ Status ConfigCompiler::Configure(const SegmentationPlan& plan,
       segment.feature_tags.insert(FontHelper::ToTag(tag));
     }
   }
+  return segments;
+}
 
-  auto condition_entries =
-      TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
-          activation_conditions, segments));
-  for (const auto& entry : condition_entries) {
-    TRYV(compiler.AddGlyphDataPatchCondition(entry));
-  }
-
-  // Initial subset definition
+static StatusOr<SubsetDefinition> ParseInitSubset(
+    const SegmentationPlan& plan,
+    const flat_hash_map<uint32_t, SubsetDefinition>& segments) {
   auto init_codepoints = Values(plan.initial_codepoints());
   auto init_glyphs = Values(plan.initial_glyphs());
   auto init_features = TagValues(plan.initial_features());
@@ -112,6 +101,32 @@ Status ConfigCompiler::Configure(const SegmentationPlan& plan,
 
   init_subset.feature_tags = init_features;
   init_subset.design_space = init_design_space;
+  return init_subset;
+}
+
+Status ConfigCompiler::Configure(const SegmentationPlan& plan,
+                                 Compiler& compiler) {
+  // First configure the glyph keyed segments, including features deps
+  for (const auto& [id, gids] : plan.glyph_patches()) {
+    TRYV(compiler.AddGlyphDataPatch(id, Values(gids)));
+  }
+
+  std::vector<ActivationCondition> activation_conditions;
+  for (const auto& c : plan.glyph_patch_conditions()) {
+    activation_conditions.push_back(FromProto(c));
+  }
+
+  flat_hash_map<uint32_t, SubsetDefinition> segments = ParseSegments(plan);
+
+  auto condition_entries =
+      TRY(ActivationCondition::ActivationConditionsToPatchMapEntries(
+          activation_conditions, segments));
+  for (const auto& entry : condition_entries) {
+    TRYV(compiler.AddGlyphDataPatchCondition(entry));
+  }
+
+  // Initial subset definition
+  SubsetDefinition init_subset = TRY(ParseInitSubset(plan, segments));
   TRYV(compiler.SetInitSubsetFromDef(init_subset));
 
   // Next configure the table keyed segments
@@ -164,6 +179,43 @@ Status ConfigCompiler::Configure(const SegmentationPlan& plan,
       compiler.SetOverrideUrlTemplatePrefix(prefix);
     }
   }
+
+  return absl::OkStatus();
+}
+
+Status ConfigCompiler::Configure(const SegmentationPlan& plan,
+                                 UnicodeRangeCompiler& compiler) {
+  if (!plan.non_glyph_codepoint_segmentation().empty() ||
+      !plan.non_glyph_feature_segmentation().empty() ||
+      !plan.non_glyph_design_space_segmentation().empty() ||
+      !plan.non_glyph_segments().empty()) {
+    return absl::InvalidArgumentError(
+        "Non-glyph (table-keyed) segmentation is not supported by "
+        "UnicodeRangeCompiler.");
+  }
+
+  for (const auto& [id, gids] : plan.glyph_patches()) {
+    TRYV(compiler.AddGlyphDataPatch(id, Values(gids)));
+  }
+
+  flat_hash_map<uint32_t, SubsetDefinition> segments = ParseSegments(plan);
+  for (const auto& [id, segment] : segments) {
+    TRYV(compiler.AddSegment(id, segment));
+  }
+
+  for (const auto& c : plan.glyph_patch_conditions()) {
+    if (c.required_segments_size() != 1 ||
+        c.required_segments(0).values_size() != 1) {
+      return absl::InvalidArgumentError(
+          "All glyph_patch_conditions in a unicode-range plan must be "
+          "exclusive single-segment conditions.");
+    }
+    uint32_t segment_id = c.required_segments(0).values(0);
+    TRYV(compiler.AddGlyphPatchCondition(segment_id, c.activated_patch()));
+  }
+
+  SubsetDefinition init_subset = TRY(ParseInitSubset(plan, segments));
+  TRYV(compiler.SetInitSubsetFromDef(init_subset));
 
   return absl::OkStatus();
 }

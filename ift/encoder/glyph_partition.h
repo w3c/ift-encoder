@@ -24,7 +24,7 @@ class GlyphPartition {
   GlyphPartition& operator=(const GlyphPartition& other);
 
   // Merge all of the sets that intersect glyphs into a single set.
-  absl::Status Union(const ift::common::GlyphSet& glyphs);
+  absl::Status Union(const ift::common::IntSet& glyphs);
 
   // Merge the sets containing glyph1 and glyph2 together.
   absl::Status Union(glyph_id_t glyph1, glyph_id_t glyph2);
@@ -34,6 +34,9 @@ class GlyphPartition {
 
   // Returns a representative member of the group that glyph belongs too.
   absl::StatusOr<glyph_id_t> Find(glyph_id_t glyph) const;
+
+  // Returns true if all of the given glyphs belong to the same group.
+  absl::StatusOr<bool> InSameGroup(const ift::common::IntSet& glyphs) const;
 
   // Returns all members of the group the glyph belongs too.
   absl::StatusOr<const ift::common::GlyphSet&> GlyphsFor(

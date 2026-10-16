@@ -41,6 +41,37 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "font2ur",
+    srcs = [
+        "font2ur.cc",
+    ],
+    deps = [
+        ":auto_config_flags",
+        ":path_util",
+        "//ift/common",
+        "//ift/common:data_file_resolver",
+        "//ift/common:try",
+        "//ift/config:auto_segmenter_config",
+        "//ift/config:config_compiler",
+        "//ift/config:load_codepoints",
+        "//ift/config:segmentation_plan_cc_proto",
+        "//ift/config:segmenter_config_cc_proto",
+        "//ift/config:segmenter_config_util",
+        "//ift/encoder",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/flags:usage",
+        "@abseil-cpp//absl/log:globals",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@harfbuzz",
+        "@protobuf",
+    ],
+)
+
 cc_library(
     name = "path_util",
     srcs = ["path_util.cc"],

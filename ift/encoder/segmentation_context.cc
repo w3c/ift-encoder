@@ -29,10 +29,12 @@ using ift::common::SegmentSet;
 namespace ift::encoder {
 
 Status SegmentationContext::ValidateSegmentation(
-    const GlyphSegmentation& segmentation) const {
+    const GlyphSegmentation& segmentation,
+    absl::Span<const freq::ProbabilityCalculator* const>
+        probability_calculators) const {
   GlyphSet visited;
   const auto& initial_closure = segmentation.InitialFontGlyphClosure();
-  for (const auto& [id, gids] : segmentation.GidSegments()) {
+  auto check_disjoint = [&](const GlyphSet& gids) -> Status {
     for (glyph_id_t gid : gids) {
       if (initial_closure.contains(gid)) {
         return absl::FailedPreconditionError(absl::StrCat(
@@ -44,6 +46,53 @@ Status SegmentationContext::ValidateSegmentation(
       }
       visited.insert(gid);
     }
+    return absl::OkStatus();
+  };
+
+  for (const auto& [id, gids] : segmentation.GidSegments()) {
+    TRYV(check_disjoint(gids));
+  }
+
+  if (target_mode_ == config::UNICODE_RANGE) {
+    for (const auto& condition : segmentation.Conditions()) {
+      if (!condition.IsExclusive()) {
+        return absl::FailedPreconditionError(absl::StrCat(
+            "Non-exclusive condition found in UNICODE_RANGE mode: ",
+            condition.ToString()));
+      }
+    }
+
+    for (const freq::ProbabilityCalculator* calculator :
+         probability_calculators) {
+      calculator->ResetSegmentProbabilities(
+          segmentation_info_->Segments().size());
+    }
+
+    // In unicode range mode not all conditions get record into segmentation, so
+    // check disjointness across the non-exclusive patches which were skipped.
+    TRYV(check_disjoint(glyph_groupings.UnmappedGlyphs()));
+    size_t unreachable_glyph_count = glyph_groupings.UnmappedGlyphs().size();
+    for (const auto& cond : glyph_groupings.OrderedConditions()) {
+      if (cond.IsExclusive()) {
+        continue;
+      }
+      const GlyphSet& gids = glyph_groupings.ConditionsAndGlyphs().at(cond);
+      TRYV(check_disjoint(gids));
+      unreachable_glyph_count += gids.size();
+
+      double max_prob = 0.0;
+      for (const freq::ProbabilityCalculator* calculator :
+           probability_calculators) {
+        double prob =
+            TRY(cond.Probability(segmentation_info_->Segments(), *calculator));
+        if (prob > max_prob) {
+          max_prob = prob;
+        }
+      }
+      VLOG(0) << "Unreachable condition " << cond.ToString() << " => "
+              << gids.ToString() << " (max probability = " << max_prob << ")";
+    }
+    VLOG(0) << "Total unreachable glyphs: " << unreachable_glyph_count;
   }
 
   GlyphSet full_minus_initial = segmentation_info_->FullClosure();
@@ -202,6 +251,14 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
 
   TRYV(segmentation_info_->ReassignInitSubset(*glyph_closure_cache, new_def));
 
+  if (target_mode_ == config::UNICODE_RANGE) {
+    estimated_compression_ratio_ = std::nullopt;
+    estimated_woff2_base_overhead_ = std::nullopt;
+    patch_size_cache = NewPatchSizeCache(original_face.get(), brotli_quality_);
+    patch_size_cache_for_init_font = NewPatchSizeCache(
+        original_face.get(), init_font_brotli_quality_);
+  }
+
   if (dependency_closure_.has_value()) {
     // Dep closure doesn't need the expanded affected set, as it will traverse
     // from the input segments to find the affected subgraph.
@@ -243,6 +300,20 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   TRYV(GroupGlyphs(changed_gids, segments_with_changed_defs));
 
   return absl::OkStatus();
+}
+
+Status SegmentationContext::ResetSegments(std::vector<Segment> segments) {
+  segmentation_info_->ResetSegments(std::move(segments));
+  if (dependency_closure_.has_value()) {
+    TRYV((*dependency_closure_)->SegmentsReset());
+  }
+  uint32_t glyph_count = hb_face_get_glyph_count(original_face.get());
+  glyph_condition_set = GlyphConditionSet(glyph_count);
+  glyph_groupings = GlyphGroupings(
+      glyph_count,
+      condition_analysis_mode_ == config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION);
+  inert_segments_.clear();
+  return ReprocessAll();
 }
 
 static void PrintDiff(absl::string_view set_name, const GlyphSet& closure,
@@ -326,7 +397,8 @@ SegmentationContext::InitializeSegmentationContext(
     UnmappedGlyphHandling unmapped_glyph_handling,
     ConditionAnalysisMode condition_analysis_mode, uint32_t brotli_quality,
     uint32_t init_font_brotli_quality,
-    std::shared_ptr<DataFileResolver> resolver) {
+    std::shared_ptr<DataFileResolver> resolver,
+    ift::config::TargetMode target_mode) {
   if (!hb_face_get_glyph_count(face)) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
   }
@@ -339,7 +411,7 @@ SegmentationContext::InitializeSegmentationContext(
   SegmentationContext context = TRY(SegmentationContext::Create(
       face, initial_segment, segments, unmapped_glyph_handling,
       condition_analysis_mode, brotli_quality, init_font_brotli_quality,
-      std::move(resolver)));
+      std::move(resolver), target_mode));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

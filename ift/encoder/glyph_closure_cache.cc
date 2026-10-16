@@ -41,7 +41,6 @@ GlyphClosureCache::GlyphClosureCache(hb_face_t* original_face,
                                      dep_graph::UnicodeEdges unicode_edges)
     : original_face_(make_hb_face(hb_face_reference(original_face))),
       preprocessed_face_(std::move(preprocessed_face)),
-      gid_to_unicode_(FontHelper::GidToUnicodeMap(preprocessed_face_.get())),
       unicode_edges_(std::move(unicode_edges)) {}
 
 StatusOr<GlyphSet> GlyphClosureCache::SegmentClosure(
@@ -249,21 +248,7 @@ Status GlyphClosureCache::AnalyzeSegment(
 
 CodepointSet GlyphClosureCache::CodepointsForGlyphs(
     const GlyphSet& glyphs) const {
-  // Codepoints can map to glyphs via either standard cmap mappings, or via
-  // variation selectors this method captures both.
-  CodepointSet unicodes;
-  for (glyph_id_t gid : glyphs) {
-    auto unicode = gid_to_unicode_.find(gid);
-    if (unicode != gid_to_unicode_.end()) {
-      unicodes.union_set(unicode->second);
-    }
-
-    auto vs_unicodes = unicode_edges_.gid_to_vs.find(gid);
-    if (vs_unicodes != unicode_edges_.gid_to_vs.end()) {
-      unicodes.union_set(vs_unicodes->second);
-    }
-  }
-  return unicodes;
+  return unicode_edges_.CodepointsForGlyphs(glyphs);
 }
 
 StatusOr<SubsetDefinition> GlyphClosureCache::ExpandClosure(

@@ -42,12 +42,17 @@ class ClosureGlyphSegmenter {
       uint32_t brotli_quality, uint32_t init_font_merging_brotli_quality,
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
-      std::shared_ptr<ift::common::DataFileResolver> resolver)
+      std::shared_ptr<ift::common::DataFileResolver> resolver,
+      ift::config::TargetMode target_mode = ift::config::IFT,
+      double disjoint_conditions_probability_threshold = 0.0)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
         unmapped_glyph_handling_(unmapped_glyph_handling),
         condition_analysis_mode_(condition_analysis_mode),
-        resolver_(std::move(resolver)) {}
+        resolver_(std::move(resolver)),
+        target_mode_(target_mode),
+        disjoint_conditions_probability_threshold_(
+            disjoint_conditions_probability_threshold) {}
 
   /*
    * Analyzes a set of codepoint segments using a subsetter closure and computes
@@ -105,13 +110,24 @@ class ClosureGlyphSegmenter {
   ift::config::ConditionAnalysisMode condition_analysis_mode() const {
     return condition_analysis_mode_;
   }
+  ift::config::TargetMode target_mode() const { return target_mode_; }
+  double disjoint_conditions_probability_threshold() const {
+    return disjoint_conditions_probability_threshold_;
+  }
 
  private:
+  absl::Status ValidateInput(
+      const std::vector<SubsetDefinition>& subset_definitions,
+      const absl::btree_map<ift::common::SegmentSet, MergeStrategy>&
+          merge_groups) const;
+
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
   ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
   std::shared_ptr<ift::common::DataFileResolver> resolver_;
+  ift::config::TargetMode target_mode_;
+  double disjoint_conditions_probability_threshold_;
 };
 
 }  // namespace ift::encoder

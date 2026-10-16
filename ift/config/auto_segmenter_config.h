@@ -28,10 +28,14 @@ class AutoSegmenterConfig {
   //                quality tradeoff. Lower values have shorter segmenting
   //                times, high values have longer segmenting times but
   //                typically results in better segmentation quality.
+  //
+  // target_mode: the target format mode for the generated segmentation config
+  //              (IFT or UNICODE_RANGE). Defaults to IFT.
   static absl::StatusOr<SegmenterConfig> GenerateConfig(
       hb_face_t* face, const ift::common::DataFileResolver& resolver,
       std::optional<std::string> primary_script = std::nullopt,
-      std::optional<int> quality_level = std::nullopt);
+      std::optional<int> quality_level = std::nullopt,
+      TargetMode target_mode = IFT);
 
   // Returns the base script for a given language.
   // For example, "Language_fr" -> "Script_latin".

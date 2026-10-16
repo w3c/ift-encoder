@@ -18,6 +18,7 @@ using absl::StatusOr;
 using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
 using ift::common::FontHelper;
+using ift::common::GlyphSet;
 using ift::common::hb_font_unique_ptr;
 using ift::common::hb_set_unique_ptr;
 using ift::common::make_hb_font;
@@ -223,6 +224,14 @@ void UnicodeEdges::ComputeUVSEdges(
   }
 }
 
+UnicodeEdges UnicodeEdges::ComputeCmapAndUVSEdges(hb_face_t* face) {
+  UnicodeEdges result;
+  result.unicode_to_gid = UnicodeToGid(face);
+  result.gid_to_unicode = FontHelper::GidToUnicodeMap(face);
+  ComputeUVSEdges(face, result.unicode_to_gid, result);
+  return result;
+}
+
 StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
     hb_face_t* face, const DataFileResolver& resolver) {
   std::string unicode_data_path = TRY(resolver.GetUnicodeDataPath());
@@ -230,18 +239,32 @@ StatusOr<UnicodeEdges> UnicodeEdges::ComputeUnicodeDependencyEdges(
       TRY(resolver.GetDerivedNormalizationPropsPath());
 
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
-  UnicodeEdges result;
+  UnicodeEdges result = ComputeCmapAndUVSEdges(face);
   CodepointSet full_composition_exclusions;
   TRYV(ParseDerivedNormalizationProps(derived_props_path,
                                       full_composition_exclusions));
   TRYV(ParseUnicodeData(unicode_data_path, unicodes,
                         full_composition_exclusions, result));
 
-  // Compute UVS edges
-  result.unicode_to_gid = UnicodeToGid(face);
-  ComputeUVSEdges(face, result.unicode_to_gid, result);
-
   return result;
+}
+
+CodepointSet UnicodeEdges::CodepointsForGlyphs(const GlyphSet& glyphs) const {
+  // Codepoints can map to glyphs via either standard cmap mappings, or via
+  // variation selectors this method captures both.
+  CodepointSet unicodes;
+  for (encoder::glyph_id_t gid : glyphs) {
+    auto unicode = gid_to_unicode.find(gid);
+    if (unicode != gid_to_unicode.end()) {
+      unicodes.union_set(unicode->second);
+    }
+
+    auto vs_unicodes = gid_to_vs.find(gid);
+    if (vs_unicodes != gid_to_vs.end()) {
+      unicodes.union_set(vs_unicodes->second);
+    }
+  }
+  return unicodes;
 }
 
 }  // namespace ift::dep_graph

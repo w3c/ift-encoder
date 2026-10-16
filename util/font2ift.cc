@@ -149,6 +149,11 @@ Status write_output(const Compiler::Encoding& encoding) {
 
 StatusOr<SegmentationPlan> CreateSegmentationPlan(
     hb_face_t* font, std::shared_ptr<DataFileResolver> resolver) {
+  if (absl::GetFlag(FLAGS_auto_config_unicode_range)) {
+    return absl::InvalidArgumentError(
+        "auto_config_unicode_range is not supported by font2ift.");
+  }
+
   SegmentationPlan plan;
   if (absl::GetFlag(FLAGS_plan).empty() ||
       absl::GetFlag(FLAGS_plan) == "auto") {

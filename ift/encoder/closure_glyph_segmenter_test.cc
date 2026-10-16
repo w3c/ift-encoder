@@ -16,6 +16,7 @@
 #include "ift/encoder/merger.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/subset_definition.h"
+#include "ift/encoder/woff2_patch_size_cache.h"
 #include "ift/freq/bigram_probability_calculator.h"
 #include "ift/freq/mock_probability_calculator.h"
 #include "ift/freq/unicode_frequencies.h"
@@ -2966,6 +2967,387 @@ TEST_F(ClosureGlyphSegmenterTest,
     };
     EXPECT_EQ(result->Segments(), expected);
   }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRangeValidation_RejectsMoveToInitFont) {
+  ClosureGlyphSegmenter seg(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY, resolver,
+                            ift::config::UNICODE_RANGE);
+  auto result = seg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRangeValidation_RejectsFeatureSegments) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                            ift::config::UNICODE_RANGE);
+  SubsetDefinition smcp;
+  smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+  auto result =
+      seg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, smcp});
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRangeValidation_RejectsInitFontMerging) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                            ift::config::UNICODE_RANGE);
+  MergeStrategy strategy = MergeStrategy::CostBased(ProbabilityProfile(
+      std::make_shared<MockProbabilityCalculator>(
+          std::vector<std::pair<Segment, double>>{}),
+      -50.0));
+  auto result = seg.CodepointToGlyphSegments(roboto.get(), {'a'},
+                                             {{'b'}, {'c'}}, strategy);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(ClosureGlyphSegmenterTest, UnicodeRangeValidation_RejectsPatchMerging) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                            ift::config::UNICODE_RANGE);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      ProbabilityProfile(std::make_shared<MockProbabilityCalculator>(
+          std::vector<std::pair<Segment, double>>{})));
+  strategy.SetUsePatchMerges(true);
+  auto result = seg.CodepointToGlyphSegments(roboto.get(), {'a'},
+                                             {{'b'}, {'c'}}, strategy);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRangeValidation_RejectsInvalidThreshold) {
+  ClosureGlyphSegmenter seg_neg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                                ift::config::UNICODE_RANGE, -0.1);
+  auto result =
+      seg_neg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+
+  ClosureGlyphSegmenter seg_gt1(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                                ift::config::UNICODE_RANGE, 1.1);
+  result =
+      seg_gt1.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_AndAndOrConditions) {
+  std::vector<SubsetDefinition> segments = {
+      {'b'}, {'f'}, {'i'}, {'c', 'd'}, {'d', 'e'}};
+
+  for (auto analysis_mode :
+       {CLOSURE_ONLY, CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
+        DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+                              ift::config::UNICODE_RANGE);
+    auto segmentation =
+        seg.CodepointToGlyphSegments(roboto.get(), {'a'}, segments);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    // 'f' (s1) and 'i' (s2) merge due to conjunctive ligature condition.
+    // {'c', 'd'} (s3) and {'d', 'e'} (s4) merge due to disjunctive condition.
+    std::vector<SubsetDefinition> expected_segments = {
+        {'b'}, {'f', 'i'}, {}, {'c', 'd', 'e'}, {}};
+    EXPECT_EQ(segmentation->Segments(), expected_segments);
+
+    for (const auto& cond : segmentation->Conditions()) {
+      EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+    }
+
+    EXPECT_EQ(segmentation->ToString(),
+              R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid74, gid77, gid444, gid446 }
+p2: { gid71, gid72, gid73 }
+if (s0) then p0
+if (s1) then p1
+if (s3) then p2
+)");
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_ComplexConditions) {
+  for (auto analysis_mode :
+       {CLOSURE_ONLY, CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
+        DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+                              ift::config::UNICODE_RANGE);
+    auto segmentation = seg.CodepointToGlyphSegments(
+        noto_nastaliq_urdu.get(), {},
+        {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}});
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    std::vector<SubsetDefinition> expected_segments = {
+        {0x20}, {0x62a, 0x62b, 0x62c, 0x62d}, {}, {}, {}};
+    EXPECT_EQ(segmentation->Segments(), expected_segments);
+
+    for (const auto& cond : segmentation->Conditions()) {
+      EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+    }
+    EXPECT_EQ(segmentation->Conditions().size(), 2);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_ProbabilityThreshold) {
+  // Configure probabilities:
+  // 'f' (0.8) and 'i' (0.7) -> P(f AND i) = 0.56 >= 0.2 (merged)
+  // 0xc1 (0.05) and 0x106 (0.01) -> P(0xc1 OR 0x106) = 0.0595 < 0.2 (skipped)
+  auto calc = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'f'}), 0.8},
+          {Segment({'i'}), 0.7},
+          {Segment({'f', 'i'}), 0.94},
+          {Segment({0xc1}), 0.05},
+          {Segment({0x106}), 0.01},
+          {Segment({0xc1, 0x106}), 0.0595},
+      });
+  MergeStrategy strategy =
+      MergeStrategy::CostBased(ProbabilityProfile(calc),
+                               /*network_overhead_cost=*/0,
+                               /*min_group_size=*/1);
+  strategy.SetOptimizationCutoffFraction(1.0);
+  strategy.SetUsePatchMerges(false);
+
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
+                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                            ift::config::UNICODE_RANGE,
+                            /*disjoint_conditions_probability_threshold=*/0.2);
+
+  auto segmentation = seg.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{'f'}, {'i'}, {0xc1}, {0x106}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  // 'f' and 'i' were merged into s0; 0xc1 (s1) and 0x106 (s2) were not merged,
+  // and their non-exclusive shared patch {gid117, gid169, gid667} was omitted.
+  std::vector<SubsetDefinition> expected_segments = {
+      {'f', 'i'}, {0xc1}, {0x106}};
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+
+  for (const auto& cond : segmentation->Conditions()) {
+    EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+  }
+
+  EXPECT_EQ(segmentation->ToString(),
+            R"(initial font: { gid0, gid69 }
+p0: { gid74, gid77, gid141, gid444, gid446, gid609, gid679 }
+p1: { gid37, gid640 }
+p2: { gid39, gid700 }
+if (s0) then p0
+if (s1) then p1
+if (s2) then p2
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_InitialSegmentCodepointsAndFeatures) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
+                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                            ift::config::UNICODE_RANGE);
+  SubsetDefinition init;
+  init.codepoints = {'f'};
+  init.gids = {70};  // 'b'
+  init.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
+
+  // Since 'f' is in initial_segment (included in all subsets), 'i' can stay in
+  // its own segment and its exclusive patch includes the fi ligatures + smcp
+  // variants without needing 'i' to merge with another segment.
+  auto segmentation =
+      seg.CodepointToGlyphSegments(roboto.get(), init, {{'i'}, {'c'}});
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {{'i'}, {'c'}};
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+  EXPECT_TRUE(segmentation->InitialFontSegment().codepoints.contains('f'));
+  EXPECT_TRUE(segmentation->InitialFontSegment().gids.contains(70));
+  EXPECT_TRUE(segmentation->InitialFontSegment().feature_tags.contains(
+      HB_TAG('s', 'm', 'c', 'p')));
+
+  auto plan = segmentation->ToSegmentationPlanProto();
+  EXPECT_EQ(plan.glyph_patch_conditions_size(), 2);
+  EXPECT_GT(plan.initial_codepoints().values_size(), 0);
+  EXPECT_GT(plan.initial_glyphs().values_size(), 0);
+  EXPECT_EQ(plan.initial_features().values_size(), 1);
+  EXPECT_EQ(plan.initial_features().values(0), "smcp");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_SpansMultipleMergeGroups) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
+                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                            ift::config::UNICODE_RANGE);
+
+  // s0 ('f') and s1 ('i') are non-shared in Group 0 and interact via 'fi'.
+  // s2 ('l') and s3 (0xC1) are non-shared in Group 1; 'l' interacts with 'f'
+  // across Group 0 and Group 1 via 'fl'.
+  // s4 (0x106) is shared between Group 0 and Group 1 and interacts with 0xC1
+  // via the acute accent component.
+  // MakeActivationConditionsDisjoint only merges within the non-shared segments
+  // of each group, so 'f' and 'i' merge into {'f', 'i'}, while cross-group
+  // ('f' + 'l') and shared-segment (0xC1 + 0x106) interactions are not merged.
+  std::vector<SubsetDefinition> segments = {
+      {'f'}, {'i'}, {'l'}, {0xC1}, {0x106}};
+
+  auto calc_0 = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'f'}), 0.5},
+          {Segment({'i'}), 0.4},
+          {Segment({'f', 'i'}), 0.7},
+          {Segment({0x106}), 0.1},
+      });
+  auto calc_1 = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'l'}), 0.4},
+          {Segment({0xC1}), 0.3},
+          {Segment({'l', 0xC1}), 1.0},
+          {Segment({0x106}), 0.1},
+      });
+
+  MergeStrategy strategy_0 = MergeStrategy::CostBased(
+      ProbabilityProfile(calc_0), /*network_overhead_cost=*/0,
+      /*min_group_size=*/1);
+  strategy_0.SetUsePatchMerges(false);
+
+  MergeStrategy strategy_1 = MergeStrategy::CostBased(
+      ProbabilityProfile(calc_1), /*network_overhead_cost=*/0,
+      /*min_group_size=*/1);
+  strategy_1.SetUsePatchMerges(false);
+
+  btree_map<SegmentSet, MergeStrategy> merge_groups = {
+      {{0, 1, 4}, strategy_0},
+      {{2, 3, 4}, strategy_1},
+  };
+
+  auto segmentation =
+      seg.CodepointToGlyphSegments(roboto.get(), {'a'}, segments, merge_groups);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {'f', 'i'}, {'l'}, {0xC1}, {0x106}};
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_ReordersByNewProbability) {
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
+                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                            ift::config::UNICODE_RANGE);
+
+  // Initially {'b'} (0.5) > {'f'} (0.4) > {'i'} (0.3) > {'c'} (0.1).
+  // After MakeActivationConditionsDisjoint merges {'f'} and {'i'} into
+  // {'f', 'i'} (0.65), {'f', 'i'} has the highest probability and is reordered
+  // to s0 ahead of {'b'} (s1) and {'c'} (s2).
+  auto calc = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'b'}), 0.5},
+          {Segment({'f'}), 0.4},
+          {Segment({'i'}), 0.3},
+          {Segment({'c'}), 0.1},
+          {Segment({'f', 'i'}), 0.65},
+          {Segment({'b', 'f', 'i'}), 1.0},
+          {Segment({'c', 'f', 'i'}), 1.0},
+          {Segment({'b', 'c'}), 1.0},
+      });
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      ProbabilityProfile(calc), /*network_overhead_cost=*/0,
+      /*min_group_size=*/1);
+  strategy.SetUsePatchMerges(false);
+
+  auto segmentation = seg.CodepointToGlyphSegments(
+      roboto.get(), {'a'}, {{'b'}, {'f'}, {'i'}, {'c'}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {'f', 'i'}, {'b'}, {'c'}};
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_Woff2PatchSizeCostFunction) {
+  // 'b' and 'c' do not interact in Roboto. With P('b') = 0.6, P('c') = 0.6,
+  // P({'b', 'c'}) = 0.84, and network_overhead_cost = 0:
+  // - In IFT mode, glyph-keyed patches only have a small patch header, so
+  //   0.6 * size('b') + 0.6 * size('c') < 0.84 * size({'b', 'c'}) and the
+  //   segments remain separate.
+  // - In UNICODE_RANGE mode, each patch is a standalone WOFF2 font subset that
+  //   includes shared font table overhead (~1.4KB), so merging deduplicates the
+  //   shared table overhead and reduces total expected bytes for both
+  //   brotli_quality > 0 (Woff2PatchSizeCache) and brotli_quality == 0
+  //   (EstimatedWoff2PatchSizeCache).
+  auto calc = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'b'}), 0.6},
+          {Segment({'c'}), 0.6},
+          {Segment({'b', 'c'}), 0.84},
+      });
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      ProbabilityProfile(calc), /*network_overhead_cost=*/0,
+      /*min_group_size=*/1);
+  strategy.SetUsePatchMerges(false);
+
+  {
+    ClosureGlyphSegmenter ift_seg(1, 1, FIND_CONDITIONS,
+                                  CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                                  ift::config::IFT);
+    auto ift_segmentation = ift_seg.CodepointToGlyphSegments(
+        roboto.get(), {'a'}, {{'b'}, {'c'}}, strategy);
+    ASSERT_TRUE(ift_segmentation.ok()) << ift_segmentation.status();
+    std::vector<SubsetDefinition> expected_ift = {{'b'}, {'c'}};
+    EXPECT_EQ(ift_segmentation->Segments(), expected_ift);
+  }
+
+  for (uint32_t quality : {0u, 1u}) {
+    ClosureGlyphSegmenter ur_seg(quality, quality, FIND_CONDITIONS,
+                                 CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                                 ift::config::UNICODE_RANGE);
+    auto ur_segmentation = ur_seg.CodepointToGlyphSegments(
+        roboto.get(), {'a'}, {{'b'}, {'c'}}, strategy);
+    ASSERT_TRUE(ur_segmentation.ok()) << ur_segmentation.status();
+    std::vector<SubsetDefinition> expected_ur = {{'b', 'c'}, {}};
+    EXPECT_EQ(ur_segmentation->Segments(), expected_ur)
+        << "quality=" << quality;
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_TotalCosts) {
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 95}, {{'b', 'b'}, 50}, {{'c', 'c'}, 25},
+  };
+  UnigramProbabilityCalculator calculator(std::move(frequencies));
+
+  GlyphSegmentation segmentation({'a'}, {}, {});
+  auto sc = GlyphSegmentation::ConditionsToSegmentation(
+      {
+          {ActivationCondition::exclusive_segment(0, 0), {70}},
+          {ActivationCondition::exclusive_segment(1, 0), {71}},
+      },
+      {}, segmentation);
+  ASSERT_TRUE(sc.ok()) << sc;
+  segmentation.CopySegments({{'b'}, {'c'}});
+
+  ClosureGlyphSegmenter ift_seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                                ift::config::IFT);
+  std::vector<SegmentationCost> ift_costs =
+      *ift_seg.TotalCosts(roboto.get(), segmentation, {&calculator});
+
+  ClosureGlyphSegmenter ur_seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+                               ift::config::UNICODE_RANGE);
+  std::vector<SegmentationCost> ur_costs =
+      *ur_seg.TotalCosts(roboto.get(), segmentation, {&calculator});
+
+  EXPECT_EQ(ur_costs[0].ift_init_cost, 0.0);
+  EXPECT_EQ(ur_costs[0].ideal_init_cost, 0.0);
+  EXPECT_GT(ur_costs[0].ift_patch_cost, ift_costs[0].ift_patch_cost);
+
+  SubsetDefinition base_subset = segmentation.InitialFontSegment();
+  base_subset.gids.union_set(segmentation.InitialFontGlyphClosure());
+  Woff2PatchSizeCache woff2_sizer(roboto.get(), base_subset, 11);
+  double size_0 = (double)*woff2_sizer.GetPatchSize({70});
+  double size_1 = (double)*woff2_sizer.GetPatchSize({71});
+  double p_b = calculator.ComputeProbability('b').Value();
+  double p_c = calculator.ComputeProbability('c').Value();
+  double expected_patch_cost = p_b * (size_0 + kDefaultNetworkCost) +
+                               p_c * (size_1 + kDefaultNetworkCost);
+  EXPECT_NEAR(ur_costs[0].ift_patch_cost, expected_patch_cost, 1e-6);
 }
 
 }  // namespace ift::encoder

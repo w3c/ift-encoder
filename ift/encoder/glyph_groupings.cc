@@ -123,36 +123,25 @@ Status GlyphGroupings::AddGlyphsToExclusiveGroup(
 
 // Converts this grouping into a finalized GlyphSegmentation.
 StatusOr<GlyphSegmentation> GlyphGroupings::ToGlyphSegmentation(
-    const RequestedSegmentationInformation& segmentation_info) const {
+    const RequestedSegmentationInformation& segmentation_info,
+    bool exclusive_only) const {
   GlyphSegmentation segmentation(
       segmentation_info.InitFontSegmentWithoutDefaults(),
       segmentation_info.InitFontGlyphs(), unmapped_glyphs_);
   segmentation.CopySegments(segmentation_info.SegmentSubsetDefinitions());
 
-  // Recreate the glyph groups based on ConditionsAndGlyphs() which reflects
-  // the final state (including patch combinations).
-  btree_map<SegmentSet, GlyphSet> and_glyph_groups;
-  btree_map<SegmentSet, GlyphSet> or_glyph_groups;
-  btree_map<segment_index_t, GlyphSet> exclusive_glyph_groups;
-  for (const auto& [condition, glyphs] : ConditionsAndGlyphs()) {
-    if (condition.IsExclusive()) {
-      exclusive_glyph_groups[*condition.TriggeringSegments().begin()] = glyphs;
-    } else if (condition.conditions().size() == 1) {
-      SegmentSet segments = condition.TriggeringSegments();
-      or_glyph_groups[segments] = glyphs;
-    } else {
-      SegmentSet segments = condition.TriggeringSegments();
-      and_glyph_groups[segments] = glyphs;
-    }
-  }
-
   // The fallback patch isn't stored in ConditionAndGlyphs() so add it in
   // manually.
   SegmentSet fallback_segments;
   btree_map<ActivationCondition, GlyphSet> conditions_with_fallback;
-  conditions_with_fallback.insert(ConditionsAndGlyphs().begin(),
-                                  ConditionsAndGlyphs().end());
-  if (!unmapped_glyphs_.empty()) {
+  for (const auto& [condition, glyphs] : ConditionsAndGlyphs()) {
+    if (exclusive_only && !condition.IsExclusive()) {
+      continue;
+    }
+    conditions_with_fallback.insert({condition, glyphs});
+  }
+
+  if (!exclusive_only && !unmapped_glyphs_.empty()) {
     fallback_segments = segmentation_info.NonEmptySegments();
 
     ActivationCondition non_fallback_cond =

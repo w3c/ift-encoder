@@ -8,10 +8,12 @@ cc_library(
     srcs = [
         "closure_glyph_segmenter.cc",
         "compiler.cc",
+        "unicode_range_compiler.cc",
     ],
     hdrs = [
         "closure_glyph_segmenter.h",
         "compiler.h",
+        "unicode_range_compiler.h",
     ],
     visibility = [
         "//visibility:public",
@@ -30,6 +32,7 @@ cc_library(
         "//ift/config:common_cc_proto",
         "//ift/config:segmentation_plan_cc_proto",
         "//ift/config:segmenter_config_cc_proto",
+        "//ift/dep_graph:unicode_edges",
         "//ift/feature_registry",
         "//ift/freq",
         "//ift/freq:common",
@@ -43,6 +46,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
         "@harfbuzz",
     ],
 )
@@ -82,6 +86,7 @@ cc_library(
         "glyph_groupings.cc",
         "merger.cc",
         "segmentation_context.cc",
+        "woff2_patch_size_cache.cc",
     ],
     hdrs = [
         "candidate_merge.h",
@@ -95,6 +100,10 @@ cc_library(
         "merger.h",
         "patch_size_cache.h",
         "segmentation_context.h",
+        "woff2_patch_size_cache.h",
+    ],
+    visibility = [
+        "//ift/config:__pkg__",
     ],
     deps = [
         ":activation_condition",
@@ -108,6 +117,7 @@ cc_library(
         "//ift/common:try",
         "//ift/config:segmenter_config_cc_proto",
         "//ift/dep_graph",
+        "//ift/dep_graph:unicode_edges",
         "//ift/feature_registry",
         "//ift/freq",
         "//ift/freq:common",
@@ -136,6 +146,7 @@ cc_library(
         "requested_segmentation_information.h",
     ],
     visibility = [
+        "//ift/config:__pkg__",
         "//ift/dep_graph:__pkg__",
     ],
     deps = [
@@ -270,6 +281,30 @@ cc_test(
         "@abseil-cpp//absl/types:span",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "unicode_range_compiler_test",
+    size = "small",
+    srcs = [
+        "unicode_range_compiler_test.cc",
+    ],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":common",
+        ":encoder",
+        "//ift/common",
+        "//ift/common:data_file_resolver",
+        "//ift/common:test_font_loader",
+        "//ift/config:config_compiler",
+        "//ift/config:segmentation_plan_cc_proto",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
@@ -533,6 +568,25 @@ cc_test(
         "//ift/common:test_font_loader",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "woff2_patch_size_cache_test",
+    size = "small",
+    srcs = ["woff2_patch_size_cache_test.cc"],
+    data = [
+        "//ift/common:testdata",
+    ],
+    deps = [
+        ":common",
+        ":segmentation_context",
+        ":segmentation_info",
+        "//ift/common",
+        "//ift/common:test_font_loader",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 

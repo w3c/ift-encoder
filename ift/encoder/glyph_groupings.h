@@ -150,7 +150,8 @@ class GlyphGroupings {
 
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
-      const RequestedSegmentationInformation& segmentation_info) const;
+      const RequestedSegmentationInformation& segmentation_info,
+      bool exclusive_only = false) const;
 
   std::optional<ActivationCondition> GlyphToCondition(glyph_id_t gid) const {
     auto it = conditions_and_glyphs_.GlyphToCondition().find(gid);

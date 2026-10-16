@@ -35,6 +35,10 @@ ABSL_FLAG(int, quality, 0,
           "The quality level to use. A value of 0 means auto pick. Valid "
           "values are 1-8.");
 
+ABSL_FLAG(bool, unicode_range, false,
+          "If true, generate a segmenter config with target_mode set to "
+          "UNICODE_RANGE instead of IFT.");
+
 ABSL_FLAG(
     int, verbosity, 0,
     "Log verbosity level from. 0 is least verbose, higher values are more.");
@@ -60,9 +64,11 @@ static Status Main(const std::vector<char*> args) {
   if (!absl::GetFlag(FLAGS_primary_script).empty()) {
     primary_script = absl::GetFlag(FLAGS_primary_script);
   }
+  ift::config::TargetMode target_mode = absl::GetFlag(FLAGS_unicode_range)
+                                            ? ift::config::UNICODE_RANGE
+                                            : ift::config::IFT;
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), *resolver, primary_script,
-      quality_level));
+      font.get(), *resolver, primary_script, quality_level, target_mode));
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {
@@ -79,7 +85,7 @@ int main(int argc, char** argv) {
       "Generates a segmenter config to use with a font.\n"
       "\n"
       "Usage: gen_ift_segmenter_config --font=\"myfont.ttf\" [--quality=n] "
-      "[--primary_script=Script_foo]\n");
+      "[--primary_script=Script_foo] [--unicode_range]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);

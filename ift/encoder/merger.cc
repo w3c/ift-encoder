@@ -501,8 +501,14 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
   //  way of invalidating any pairs that are changed by each merge operation.
   TRYV(CollectExclusiveCandidateMerges(base_segment_index,
                                        smallest_candidate_merge));
-  TRYV(CollectCompositeCandidateMerges(base_segment_index,
-                                       smallest_candidate_merge));
+
+  if (context_->GetTargetMode() != config::UNICODE_RANGE) {
+    // Under unicode range composite conditions get dropped, so no benefit
+    // to trying to merge around them.
+    TRYV(CollectCompositeCandidateMerges(base_segment_index,
+                                         smallest_candidate_merge));
+  }
+
   if (!smallest_candidate_merge.has_value()) {
     return std::nullopt;
   }
@@ -788,10 +794,15 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithHeuristic(
     return std::nullopt;
   }
 
-  auto modified = TRY(TryMergingACompositeCondition(base_segment_index));
-  if (modified.has_value()) {
-    // Return to the parent method so it can reanalyze and reform groups
-    return *modified;
+  std::optional<InvalidationSet> modified = std::nullopt;
+  if (context_->GetTargetMode() != config::UNICODE_RANGE) {
+    // Under unicode range composite conditions get dropped, so no benefit
+    // to trying to merge around them.
+    modified = TRY(TryMergingACompositeCondition(base_segment_index));
+    if (modified.has_value()) {
+      // Return to the parent method so it can reanalyze and reform groups
+      return *modified;
+    }
   }
 
   modified = TRY(TryMergingABaseSegment(base_segment_index));

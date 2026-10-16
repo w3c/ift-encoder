@@ -59,6 +59,18 @@ enum TableKeyedSegmentMode {
   FROM_FREQ_DATA = 2;
 }
 
+enum TargetMode {
+  // Produces a segmentation plan suitable for Incremental Font Transfer (IFT).
+  IFT = 0;
+
+  // [EXPERIMENTAL] Produces a segmentation plan suitable for serving font subsets via
+  // @font-face unicode-range.
+  //
+  // Implementation of this is still in progress and performance of produced unicode ranges
+  // hasn't been verified yet.
+  UNICODE_RANGE = 1;
+}
+
 // This messages provides the configuration details for util/gen_ift_segmentation_plan.cc
 //
 // The gen_ift_segmentation_plan tool is used to turn a series of codepoint/feature based
@@ -94,10 +106,17 @@ message SegmenterConfig {
 
   // Specifies the set of codepoints and layout feature tags that should be placed into the
   // initial font, and hence be always available.
+  //
+  // When target_mode is UNICODE_RANGE, there is no separate initial font; instead, any
+  // codepoints, glyphs, and layout features specified here (along with default layout features)
+  // are included in all subsets.
   SegmentProto initial_segment = 1;
 
   // Specifies what to do with unmapped glyphs. Unmapped glyphs are glyphs in which the analysis
   // is unable to determine activation conditions for.
+  //
+  // When target_mode is UNICODE_RANGE, this must be set to either FIND_CONDITIONS or PATCH
+  // (MOVE_TO_INIT_FONT is invalid).
   UnmappedGlyphHandling unmapped_glyph_handling = 2 [default = MOVE_TO_INIT_FONT];
 
   // Deprecated: use generate_table_keyed_segments_mode instead.
@@ -105,10 +124,14 @@ message SegmenterConfig {
   // If enabled then the generated segmentation plan will include a set of table keyed segments.
   // One table keyed segment will be generated per merge group, including the auto generated
   // ungrouped one.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must be false).
   bool generate_table_keyed_segments = 3 [default = false, deprecated = true];
 
   // Configures how table keyed segments are generated in the produced
   // segmentation plan.
+  //
+  // When target_mode is UNICODE_RANGE, this must be set to NONE.
   TableKeyedSegmentMode generate_table_keyed_segments_mode = 16 [default = NONE];
 
   // The set of segments the font is initially broken up into. The key in the map is an ID
@@ -116,15 +139,22 @@ message SegmenterConfig {
   //
   // If this is not specified then a segmentation where each codepoint in the font is placed
   // into it's own segment will be used. In this case each segment id is the value of
-  // the codepoint in that segment
+  // the codepoint in that segment.
+  //
+  // When target_mode is UNICODE_RANGE, segments must not contain layout features.
   map<uint32, SegmentProto> segments = 4;
 
   // When utilizing automated segment generation ('segments' is unspecified), this provides
   // a list of feature groups that should be added to the automated segment list. Each group
   // will be one segment. These use their own id space separate from segments.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must be empty).
   map<uint32, Features> feature_segments = 5;
 
-  // If true and feature_segments is not specified then TODO...
+  // If true and feature_segments is not specified then a segment will be generated for each
+  // non-default layout feature in the font.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must be false).
   bool generate_feature_segments = 14;
 
   // When generating compressed patches (to evaluate their size) this is the brotli quality
@@ -174,7 +204,20 @@ message SegmenterConfig {
   // for more informmation.
   ConditionAnalysisMode condition_analysis_mode = 15 [default = DEP_GRAPH_ONLY];
 
-  // next = 17
+  // Configures the target mode for the generated segmentation plan.
+  TargetMode target_mode = 17 [default = IFT];
+
+  // When target_mode is UNICODE_RANGE, non-exclusive activation conditions are
+  // made disjoint by merging their triggering segments together prior to the
+  // main merging phase. If a non-exclusive activation condition has a
+  // probability below this threshold, it will be skipped and won't cause its
+  // triggering segments to be merged. Any remaining non-exclusive patches are
+  // omitted from the final segmentation plan.
+  //
+  // Value is from [0, 1].
+  double disjoint_conditions_probability_threshold = 18 [default = 0.0];
+
+  // next = 19
 }
 
 // For a given set of segments this configures how merging will be performed. Each merge group
@@ -246,6 +289,8 @@ message FrequencyDataConfig {
   // Init font merging is evaluated per frequency data set: infrequently used languages should not
   // have their high frequency characters forced into the initial font, so only the data sets which
   // set this will contribute segments to the initial font.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must not be set).
   double initial_font_merge_threshold = 4;
 
   // Segments below this probability (as computed by this data set) will not be considered for
@@ -316,6 +361,8 @@ message CostConfiguration {
   // If the cost delta (bytes) to move a segment into the initial font is less than this value then,
   // it will be moved into the initial font. If this is left unset then nothing will be moved to the
   // init font for this group.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must not be set).
   double initial_font_merge_threshold = 7 [deprecated = true];
 
   // Deprecated: use FrequencyDataConfig.initial_font_merge_probability_threshold instead.
@@ -371,6 +418,8 @@ message CostConfiguration {
   //
   // Enabling patch merging will typically result in lower overall costs, but will increase the total
   // segmentation time due to larger number of patch comparisons made.
+  //
+  // Invalid when target_mode is UNICODE_RANGE (must be false).
   bool experimental_use_patch_merges = 10 [default = false];
 }
 

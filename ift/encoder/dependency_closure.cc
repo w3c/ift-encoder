@@ -87,6 +87,17 @@ Status DependencyClosure::SegmentsMerged(segment_index_t base_segment,
   return absl::OkStatus();
 }
 
+Status DependencyClosure::SegmentsReset() {
+  VLOG(1) << "DependencyClosure::SegmentsReset()";
+  incoming_edges_cache_[0].reset();
+  init_font_nodes_.clear();
+  node_condition_cache_.clear();
+  for (auto& cache : phase_node_condition_cache_) {
+    cache.clear();
+  }
+  return InitNodeConditionsCache(SegmentSet::all());
+}
+
 Status DependencyClosure::InitNodeConditionsCache(
     const common::SegmentSet& changed_segments) {
   TRYV(UpdateAllNodeConditions(changed_segments));

@@ -237,4 +237,21 @@ TEST_F(GlyphPartitionTest, UnionOtherUnion_Invalid) {
   ASSERT_TRUE(absl::IsInvalidArgument(gu2.Union(gu1)));
 }
 
+TEST_F(GlyphPartitionTest, InSameGroup) {
+  GlyphPartition gu(10);
+
+  ASSERT_TRUE(*gu.InSameGroup({}));
+  ASSERT_TRUE(*gu.InSameGroup({1}));
+  ASSERT_FALSE(*gu.InSameGroup({1, 3}));
+
+  ASSERT_TRUE(gu.Union({1, 3, 5}).ok());
+  ASSERT_TRUE(*gu.InSameGroup({1, 3}));
+  ASSERT_TRUE(*gu.InSameGroup({1, 3, 5}));
+  ASSERT_FALSE(*gu.InSameGroup({1, 3, 4}));
+  ASSERT_FALSE(*gu.InSameGroup({2, 4}));
+
+  ASSERT_FALSE(gu.InSameGroup({10}).ok());
+  ASSERT_FALSE(gu.InSameGroup({1, 3, 10}).ok());
+}
+
 }  // namespace ift::encoder

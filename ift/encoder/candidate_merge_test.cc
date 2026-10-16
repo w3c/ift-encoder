@@ -1303,4 +1303,67 @@ TEST_F(CandidateMergeTest,
   EXPECT_EQ(context->glyph_closure_cache->CacheMisses(), misses_before);
 }
 
+TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_UnicodeRangeIgnoresNonExclusivePatches) {
+  // s0: 'a' -> {69}
+  // s1: 'f' -> {74}
+  // s2: 'i' -> {77}
+  // Non-exclusive patch (s1 AND s2): 'f' + 'i' -> {444, 446}
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'f'}},
+      {{'i'}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver,
+                                  ift::config::UNICODE_RANGE);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver,
+      ift::config::UNICODE_RANGE);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({}, 100);
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({74}, 300);
+  size_cache->SetPatchSize({77}, 250);
+  size_cache->SetPatchSize({444, 446}, 150);
+  size_cache->SetPatchSize({69, 74}, 450);
+  size_cache->SetPatchSize({74, 77, 444, 446}, 600);
+  context->patch_size_cache.reset(size_cache);
+
+  // Case 1: Merging s0 ('a') and s1 ('f') modifies (s1 AND s2) -> (s0 AND s2),
+  // which remains non-exclusive. In UNICODE_RANGE mode non-exclusive patches
+  // are dropped, so the cost delta only reflects removing {a} and {f} and
+  // adding {a, f}.
+  double p_a_or_f = 0.50 + 0.75 - 0.50 * 0.75;
+  double expected_delta_a_f = -0.50 * (200 + 75) - 0.75 * (300 + 75) +
+                              p_a_or_f * (450 + 75);
+  auto r_a_f = CandidateMerge::AssessSegmentMerge(merger, 0, {1}, std::nullopt);
+  ASSERT_TRUE(r_a_f.ok()) << r_a_f.status();
+  ASSERT_TRUE(r_a_f->has_value());
+  EXPECT_NEAR((*r_a_f)->CostDelta(), expected_delta_a_f, 1e-9);
+
+  // Case 2: Merging s1 ('f') and s2 ('i') turns the previously non-exclusive
+  // patch {444, 446} into part of the new exclusive patch {74, 77, 444, 446}.
+  // Since {444, 446} was non-exclusive prior to the merge, its pre-merge cost
+  // is not subtracted, while the post-merge exclusive patch includes it.
+  double p_f_or_i = 0.75 + 0.95 - 0.75 * 0.95;
+  double expected_delta_f_i = -0.75 * (300 + 75) - 0.95 * (250 + 75) +
+                              p_f_or_i * (600 + 75);
+  auto r_f_i = CandidateMerge::AssessSegmentMerge(merger, 1, {2}, std::nullopt);
+  ASSERT_TRUE(r_f_i.ok()) << r_f_i.status();
+  ASSERT_TRUE(r_f_i->has_value());
+  EXPECT_NEAR((*r_f_i)->CostDelta(), expected_delta_f_i, 1e-9);
+}
+
 }  // namespace ift::encoder

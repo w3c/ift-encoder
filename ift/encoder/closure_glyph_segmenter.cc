@@ -241,24 +241,36 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   return absl::OkStatus();
 }
 
-static void ClassifySegments(
+static size_t ClassifySegments(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const btree_map<SegmentSet, SegmentSet>& with_shared, bool ignore_empty,
     SegmentSet& ungrouped_segments, SegmentSet& shared_segments) {
   std::vector<uint32_t> group_count(subset_definitions.size());
   for (const auto& [segments, strategy] : merge_groups) {
-    for (unsigned s : segments) {
+    const SegmentSet& group_segments =
+        with_shared.contains(segments) ? with_shared.at(segments) : segments;
+    for (unsigned s : group_segments) {
+      if (ignore_empty && subset_definitions[s].Empty()) {
+        continue;
+      }
       group_count[s]++;
     }
   }
 
+  size_t active_segments = 0;
   for (unsigned s = 0; s < subset_definitions.size(); s++) {
+    if (ignore_empty && subset_definitions[s].Empty()) {
+      continue;
+    }
+    active_segments++;
     if (group_count[s] == 0) {
       ungrouped_segments.insert(s);
     } else if (group_count[s] > 1) {
       shared_segments.insert(s);
     }
   }
+  return active_segments;
 }
 
 // Computes a single representative probability for each segment which is used
@@ -275,7 +287,9 @@ static void ClassifySegments(
 // those the largest of the per strategy averages is used.
 static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     const std::vector<SubsetDefinition>& subset_definitions,
-    const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    const btree_map<SegmentSet, SegmentSet>& with_shared
+  ) {
   std::vector<ProbabilityBound> out(subset_definitions.size(),
                                     ProbabilityBound::Zero());
 
@@ -284,7 +298,7 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
     segment_list.emplace_back(def);
   }
 
-  for (const auto& [segments, strategy] : merge_groups) {
+  for (const auto& [merge_group_segments, strategy] : merge_groups) {
     if (!strategy.UseCosts()) {
       continue;
     }
@@ -296,7 +310,12 @@ static StatusOr<std::vector<ProbabilityBound>> ComputeSegmentProbabilities(
       continue;
     }
 
-    for (segment_index_t s : segments) {
+    const SegmentSet& in_merge_group =
+        with_shared.contains(merge_group_segments)
+            ? with_shared.at(merge_group_segments)
+            : merge_group_segments;
+
+    for (segment_index_t s : in_merge_group) {
       double min = 0.0;
       double max = 0.0;
       for (const auto& profile : profiles) {
@@ -340,7 +359,7 @@ static std::vector<Segment> PreGroupSegments(
     const btree_map<SegmentSet, MergeStrategy>& merge_groups,
     const std::vector<SegmentOrdering>& ordering,
     const std::vector<SubsetDefinition>& subset_definitions,
-    std::vector<uint32_t>& segment_index_map) {
+    bool pregroup_segments, std::vector<uint32_t>& segment_index_map) {
   segment_index_map.resize(subset_definitions.size());
   std::vector<Segment> segments;
 
@@ -364,13 +383,17 @@ static std::vector<Segment> PreGroupSegments(
     Segment segment = Segment{subset_definitions[o.original_index]};
     ordering_it++;
 
+    if (!pregroup_segments && segment.Definition().Empty()) {
+      continue;
+    }
+
     // Don't pregroup feature segments, these generally have broad interactions
     // and pre-grouping them blindly can cause poor outcomes.
     bool is_feature_segment = !segment.Definition().feature_tags.empty();
 
     segment_index_map[o.original_index] = i;
 
-    if (strategy != nullptr && !is_feature_segment &&
+    if (pregroup_segments && strategy != nullptr && !is_feature_segment &&
         strategy->PreClosureGroupSize() > 1 &&
         o.probability.Value() <= strategy->PreClosureProbabilityThreshold()) {
       uint32_t remaining = strategy->PreClosureGroupSize() - 1;
@@ -409,7 +432,8 @@ static std::vector<Segment> PreGroupSegments(
 static StatusOr<std::vector<Segment>> ToOrderedSegments(
     const std::vector<SubsetDefinition>& subset_definitions,
     btree_map<SegmentSet, MergeStrategy>& merge_groups,
-    btree_map<SegmentSet, SegmentSet>& with_shared) {
+    btree_map<SegmentSet, SegmentSet>& with_shared,
+    bool pregroup_segments = true) {
   // This generates the following ordering:
   //
   // merge group 1 segments
@@ -425,21 +449,37 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
 
   SegmentSet ungrouped_segments;
   SegmentSet shared_segments;
-  ClassifySegments(subset_definitions, merge_groups, ungrouped_segments,
-                   shared_segments);
+  size_t active_segments =
+      ClassifySegments(subset_definitions, merge_groups, with_shared,
+                       !pregroup_segments, ungrouped_segments, shared_segments);
 
-  VLOG(0) << "Segment classification: " << std::endl
-          << "  "
-          << subset_definitions.size() - ungrouped_segments.size() -
+  size_t grouped_codepoint_count = 0;
+  size_t ungrouped_codepoint_count = 0;
+  size_t shared_codepoint_count = 0;
+  for (uint32_t s = 0; s < subset_definitions.size(); s++) {
+    uint32_t count = subset_definitions.at(s).codepoints.size();
+    if (ungrouped_segments.contains(s)) {
+      ungrouped_codepoint_count += count;
+    } else if (shared_segments.contains(s)) {
+      shared_codepoint_count += count;
+    } else {
+      grouped_codepoint_count += count;
+    }
+  }
+
+
+  VLOG(0) << "Segment classification: ";
+  VLOG(0) << "  "
+          << active_segments - ungrouped_segments.size() -
                  shared_segments.size()
-          << " segments in exactly one merge groups" << std::endl
-          << "  " << shared_segments.size()
-          << " segments that in two or more merge groups" << std::endl
-          << "  " << ungrouped_segments.size()
-          << " segments that are ungrouped";
+          << " segments and " << grouped_codepoint_count << " codepoints in exactly one merge groups";
+  VLOG(0) << "  " << shared_segments.size()
+          << " segments and " << shared_codepoint_count << " codepoints that in two or more merge groups";
+  VLOG(0) << "  " << ungrouped_segments.size() << " segments and " << ungrouped_codepoint_count << " codepoints that are ungrouped";
 
   std::vector<ProbabilityBound> segment_probabilities =
-      TRY(ComputeSegmentProbabilities(subset_definitions, merge_groups));
+      TRY(ComputeSegmentProbabilities(subset_definitions, merge_groups, with_shared));
+
   std::vector<SegmentOrdering> ordering;
   uint32_t group_index = 0;
   for (const auto& [segments, strategy] : merge_groups) {
@@ -480,18 +520,27 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
 
   // maps from index in subset_definitions to the new ordering.
   std::vector<uint32_t> segment_index_map;
-  std::vector<Segment> segment_defs = PreGroupSegments(
-      merge_groups, ordering, subset_definitions, segment_index_map);
+  std::vector<Segment> segment_defs =
+      PreGroupSegments(merge_groups, ordering, subset_definitions,
+                       pregroup_segments, segment_index_map);
   size_t num_segments = segment_defs.size();
-  VLOG(0) << segment_defs.size() << " segments after pregrouping.";
+  if (pregroup_segments) {
+    VLOG(0) << "Segments pregrouped, " << segment_defs.size() << " remain:";
+  }
 
   btree_map<SegmentSet, MergeStrategy> new_merge_groups;
   group_index = 0;
+  btree_map<SegmentSet, SegmentSet> new_with_shared;
   for (auto& [segments, strategy] : merge_groups) {
+    const SegmentSet& group_segments =
+        with_shared.contains(segments) ? with_shared.at(segments) : segments;
     SegmentSet remapped;
     SegmentSet remapped_full;
     CodepointSet unique_codepoints;
-    for (segment_index_t s : segments) {
+    for (segment_index_t s : group_segments) {
+      if (!pregroup_segments && subset_definitions[s].Empty()) {
+        continue;
+      }
       segment_index_t s_prime = segment_index_map[s];
       if (!shared_segments.contains(s)) {
         unique_codepoints.union_set(segment_defs.at(s_prime).Definition().codepoints);
@@ -517,10 +566,11 @@ static StatusOr<std::vector<Segment>> ToOrderedSegments(
       return absl::InvalidArgumentError(
           "Duplicate merge groups are not allowed.");
     }
-    with_shared[remapped] = remapped_full;
+    new_with_shared[remapped] = remapped_full;
   }
 
   merge_groups = std::move(new_merge_groups);
+  with_shared = std::move(new_with_shared);
   return segment_defs;
 }
 
@@ -552,21 +602,240 @@ StatusOr<std::vector<Merger>> ToMergers(
 }
 
 static StatusOr<GlyphSegmentation> ToFinalSegmentation(
-    SegmentationContext& context,
-    UnmappedGlyphHandling unmapped_glyph_handling) {
+    SegmentationContext& context, Span<const Merger> mergers) {
   context.LogClosureStatistics();
-  return context.ToGlyphSegmentation();
+  std::vector<const ProbabilityCalculator*> calculators;
+  for (const Merger& merger : mergers) {
+    if (!merger.Strategy().UseCosts()) {
+      continue;
+    }
+    for (const auto& profile : merger.Strategy().ProbabilityProfiles()) {
+      calculators.push_back(TRY(profile.Calculator()));
+    }
+  }
+  return context.ToGlyphSegmentation(calculators);
+}
+
+Status ClosureGlyphSegmenter::ValidateInput(
+    const std::vector<SubsetDefinition>& subset_definitions,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups) const {
+  if (disjoint_conditions_probability_threshold_ < 0.0 ||
+      disjoint_conditions_probability_threshold_ > 1.0) {
+    return absl::InvalidArgumentError(
+        "disjoint_conditions_probability_threshold must be in [0.0, 1.0].");
+  }
+
+  if (target_mode_ == ift::config::UNICODE_RANGE) {
+    if (unmapped_glyph_handling_ != ift::config::FIND_CONDITIONS &&
+        unmapped_glyph_handling_ != ift::config::PATCH) {
+      return absl::InvalidArgumentError(
+          "unmapped_glyph_handling must be FIND_CONDITIONS or PATCH when "
+          "target_mode is UNICODE_RANGE.");
+    }
+
+    for (const auto& def : subset_definitions) {
+      if (!def.feature_tags.empty()) {
+        return absl::InvalidArgumentError(
+            "Input subset definitions must not contain layout features when "
+            "target_mode is UNICODE_RANGE.");
+      }
+    }
+
+    for (const auto& [segments, strategy] : merge_groups) {
+      if (strategy.UseCosts() && strategy.HasInitFontMerge()) {
+        return absl::InvalidArgumentError(
+            "Initial font merging must not be enabled when target_mode is "
+            "UNICODE_RANGE.");
+      }
+      if (strategy.UsePatchMerges()) {
+        return absl::InvalidArgumentError(
+            "Patch merging must be disabled when target_mode is "
+            "UNICODE_RANGE.");
+      }
+    }
+  }
+
+  for (const auto& [segments, strategy] : merge_groups) {
+    if (strategy.UseCosts()) {
+      TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
+    }
+  }
+
+  return absl::OkStatus();
+}
+
+static void LogMergeForDisjointConditions(
+    const ActivationCondition& condition,
+    std::optional<double> condition_probability = std::nullopt) {
+  if (condition_probability.has_value()) {
+    VLOG(0) << "  Merging segments "
+            << condition.TriggeringSegments().size() << " segments "
+            << "(probability = " << *condition_probability << ")";
+  } else {
+    VLOG(0) << "  Merging segments "
+            << condition.TriggeringSegments().size() << " segments";
+  }
+}
+
+static StatusOr<bool> ShouldMergeForDisjointConditions(
+    const SegmentationContext& context, const ActivationCondition& condition,
+    double probability_threshold,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+  if (condition.IsExclusive() || condition.IsFallback()) {
+    return false;
+  }
+  if (merge_groups.empty()) {
+    LogMergeForDisjointConditions(condition);
+    return true;
+  }
+
+  const MergeStrategy* matching_strategy = nullptr;
+  for (const auto& [merge_group_segments, strategy] : merge_groups) {
+    if (condition.TriggeringSegments().is_subset_of(merge_group_segments)) {
+      matching_strategy = &strategy;
+      break;
+    }
+  }
+  if (matching_strategy == nullptr) {
+    return false;
+  }
+
+  if (!matching_strategy->UseCosts() ||
+      matching_strategy->ProbabilityProfiles().empty()) {
+    LogMergeForDisjointConditions(condition);
+    return true;
+  }
+
+  double total_prob = 0.0;
+  for (const auto& profile : matching_strategy->ProbabilityProfiles()) {
+    total_prob +=
+        TRY(condition.Probability(context.SegmentationInfo().Segments(),
+                                  *TRY(profile.Calculator())));
+  }
+  double avg_prob =
+      total_prob / (double)matching_strategy->ProbabilityProfiles().size();
+  if (probability_threshold <= 0.0 || avg_prob > probability_threshold) {
+    LogMergeForDisjointConditions(condition, avg_prob);
+    return true;
+  }
+  return false;
+}
+
+static StatusOr<GlyphPartition> PartitionInteractingSegments(
+    const SegmentationContext& context, double probability_threshold,
+    const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
+  size_t num_segments = context.SegmentationInfo().Segments().size();
+  for (const auto& [_, strategy] : merge_groups) {
+    if (strategy.UseCosts()) {
+      TRYV(strategy.ResetSegmentProbabilities(num_segments));
+    }
+  }
+
+  size_t skipped_conditions = 0;
+  GlyphSet skipped_glyphs;
+  GlyphPartition segment_partition(num_segments);
+  for (const auto& condition : context.glyph_groupings.OrderedConditions()) {
+    SegmentSet triggering = condition.TriggeringSegments();
+    if (condition.IsExclusive() || condition.IsFallback() || triggering.size() <= 1) {
+      continue;
+    }
+
+    if (TRY(segment_partition.InSameGroup(triggering))) {
+      // These segments are already planned to be merged.
+      continue;
+    }
+
+    if (!TRY(ShouldMergeForDisjointConditions(
+            context, condition, probability_threshold, merge_groups))) {
+      skipped_conditions++;
+      skipped_glyphs.union_set(
+          context.glyph_groupings.ConditionsAndGlyphs().at(condition));
+      continue;
+    }
+
+    TRYV(segment_partition.Union(triggering));
+  }
+
+  VLOG(0) << "  Skipped merging for " << skipped_conditions
+          << " conditions and " << skipped_glyphs.size() << " glyphs.";
+  return segment_partition;
+}
+
+static Status MergeInteractingSegmentSet(
+    SegmentationContext& context, const SegmentSet& interacting_segments,
+    segment_index_t base_segment, const SubsetDefinition& merged_def) {
+  SegmentSet to_merge = interacting_segments;
+  to_merge.erase(base_segment);
+
+  GlyphSet gid_conditions_to_update;
+  for (segment_index_t s : to_merge) {
+    gid_conditions_to_update.union_set(
+        context.glyph_condition_set.GlyphsWithSegment(s));
+  }
+
+  Segment merged_segment{merged_def};
+  context.AssignMergedSegment(base_segment, to_merge, merged_segment,
+                              /*is_inert=*/false);
+  TRYV(context.InvalidateGlyphInformationForMerge(
+      gid_conditions_to_update, interacting_segments, base_segment));
+  return context.ReprocessChanged(
+      InvalidationSet(gid_conditions_to_update, to_merge, base_segment));
+}
+
+static Status MergeInteractingSegmentSets(
+    SegmentationContext& context,
+    Span<const GlyphSet> interacting_segment_sets) {
+  for (const GlyphSet& raw_segment_set : interacting_segment_sets) {
+    SegmentSet interacting_segments;
+    interacting_segments.union_set(raw_segment_set);
+
+    segment_index_t base_segment = *interacting_segments.min();
+    SubsetDefinition merged_def;
+    for (segment_index_t s : interacting_segments) {
+      merged_def.Union(
+          context.SegmentationInfo().Segments().at(s).Definition());
+    }
+
+    TRYV(MergeInteractingSegmentSet(context, interacting_segments, base_segment,
+                                    merged_def));
+  }
+
+  return absl::OkStatus();
+}
+
+static Status MakeActivationConditionsDisjoint(
+    SegmentationContext& context,
+    double disjoint_conditions_probability_threshold,
+    btree_map<SegmentSet, MergeStrategy>& merge_groups,
+    btree_map<SegmentSet, SegmentSet>& with_shared) {
+
+  VLOG(0) << "Making activation conditions disjoint for unicode range.";
+  size_t num_segments = context.SegmentationInfo().Segments().size();
+  if (num_segments <= 1) {
+    return absl::OkStatus();
+  }
+
+  GlyphPartition segment_partition = TRY(PartitionInteractingSegments(
+      context, disjoint_conditions_probability_threshold, merge_groups));
+  auto interacting_segment_sets = TRY(segment_partition.NonIdentityGroups());
+  if (!interacting_segment_sets.empty()) {
+    TRYV(MergeInteractingSegmentSets(context, interacting_segment_sets));
+    if (!merge_groups.empty()) {
+      std::vector<Segment> ordered_segments = TRY(ToOrderedSegments(
+          context.SegmentationInfo().SegmentSubsetDefinitions(), merge_groups,
+          with_shared, /*pregroup_segments=*/false));
+      TRYV(context.ResetSegments(std::move(ordered_segments)));
+    }
+  }
+
+  return absl::OkStatus();
 }
 
 StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     hb_face_t* face, SubsetDefinition initial_segment,
     const std::vector<SubsetDefinition>& subset_definitions,
     btree_map<SegmentSet, MergeStrategy> merge_groups) const {
-  for (const auto& [segments, strategy] : merge_groups) {
-    if (strategy.UseCosts()) {
-      TRYV(CheckForDisjointCodepoints(subset_definitions, segments));
-    }
-  }
+  TRYV(ValidateInput(subset_definitions, merge_groups));
 
   hb_face_unique_ptr normalized_face = TRY(FontHelper::Normalize(face));
   face = normalized_face.get();
@@ -579,7 +848,11 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       TRY(SegmentationContext::InitializeSegmentationContext(
           face, initial_segment, std::move(segments), unmapped_glyph_handling_,
           condition_analysis_mode_, brotli_quality_,
-          init_font_merging_brotli_quality_, resolver_));
+          init_font_merging_brotli_quality_, resolver_, target_mode_));
+
+  if (target_mode_ == ift::config::UNICODE_RANGE) {
+    TRYV(MakeActivationConditionsDisjoint(context, disjoint_conditions_probability_threshold_, merge_groups, with_shared));
+  }
 
   std::vector<Merger> mergers =
       TRY(ToMergers(context, with_shared, merge_groups));
@@ -628,7 +901,10 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
 
   if (merge_groups.empty()) {
     // No merging will be needed so we're done.
-    return ToFinalSegmentation(context, unmapped_glyph_handling_);
+    if (target_mode_ == ift::config::UNICODE_RANGE) {
+      TRYV(ValidateIncrementalGroupings(face, context));
+    }
+    return ToFinalSegmentation(context, mergers);
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
@@ -678,7 +954,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         merger.LogMergedSizeHistogram();
       }
 
-      return ToFinalSegmentation(context, unmapped_glyph_handling_);
+      return ToFinalSegmentation(context, mergers);
     }
 
     TRYV(context.ReprocessChanged(std::move(*maybe_modified)));
@@ -697,17 +973,31 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     non_ift.Union(def);
   }
 
-  double init_font_size = TRY(CandidateMerge::Woff2SizeOf(
-      original_face, segmentation.InitialFontSegment(), 11));
+  double init_font_size = 0.0;
+  if (target_mode_ != ift::config::UNICODE_RANGE) {
+    init_font_size = TRY(CandidateMerge::Woff2SizeOf(
+        original_face, segmentation.InitialFontSegment(), 11));
+  }
   double non_ift_font_size =
       TRY(CandidateMerge::Woff2SizeOf(original_face, non_ift, 11));
   double incremental_size =
       non_ift_font_size / (double)non_ift.codepoints.size();
   double init_font_ideal_size =
-      incremental_size * segmentation.InitialFontSegment().codepoints.size();
+      (target_mode_ == ift::config::UNICODE_RANGE)
+          ? 0.0
+          : incremental_size *
+                segmentation.InitialFontSegment().codepoints.size();
 
   // Use highest quality so we get the true cost.
-  PatchSizeCacheImpl patch_sizer(original_face, 11);
+  std::unique_ptr<PatchSizeCache> patch_sizer;
+  if (target_mode_ == ift::config::UNICODE_RANGE) {
+    SubsetDefinition base_subset = segmentation.InitialFontSegment();
+    base_subset.gids.union_set(segmentation.InitialFontGlyphClosure());
+    patch_sizer = std::make_unique<Woff2PatchSizeCache>(
+        original_face, std::move(base_subset), 11);
+  } else {
+    patch_sizer = std::make_unique<PatchSizeCacheImpl>(original_face, 11);
+  }
 
   CodepointSet covered_codepoints;
   for (const ProbabilityCalculator* probability_calculator :
@@ -729,7 +1019,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
       continue;
     }
     const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
-    double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
+    double patch_size = (double)TRY(patch_sizer->GetPatchSize(gids));
     uncovered_patch_cost += patch_size + kDefaultNetworkCost;
   }
 
@@ -753,7 +1043,7 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     for (const auto& c : segmentation.Conditions()) {
       double Pc = TRY(c.Probability(segments, *probability_calculator));
       const GlyphSet& gids = segmentation.GidSegments().at(c.activated());
-      double patch_size = (double)TRY(patch_sizer.GetPatchSize(gids));
+      double patch_size = (double)TRY(patch_sizer->GetPatchSize(gids));
       total_cost += Pc * (patch_size + kDefaultNetworkCost);
     }
 

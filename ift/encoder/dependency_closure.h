@@ -119,6 +119,8 @@ class DependencyClosure {
   absl::Status SegmentsMerged(segment_index_t base_segment,
                               const ift::common::SegmentSet& segments);
 
+  absl::Status SegmentsReset();
+
   // The collection of SegmentsThatInteractWith(...) methods are used to
   // locate segments that have interactions with unicodes/features/glyphs.
   //

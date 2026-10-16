@@ -354,6 +354,14 @@ SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
     const btree_set<hb_tag_t>& font_features,
     std::vector<SubsetDefinition>& segments) {
+  if (config.target_mode() == UNICODE_RANGE &&
+      (!config.feature_segments().empty() ||
+       config.generate_feature_segments())) {
+    return absl::InvalidArgumentError(
+        "Feature segments are not supported when target_mode is "
+        "UNICODE_RANGE.");
+  }
+
   SubsetDefinition initial_segment =
       SegmentProtoToSubsetDefinition(config.initial_segment());
 
@@ -403,6 +411,11 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
     hb_face_t* face, const SegmenterConfig& config) {
   TableKeyedSegmentMode table_keyed_mode =
       TRY(ResolveTableKeyedSegmentMode(config));
+  if (config.target_mode() == UNICODE_RANGE && table_keyed_mode != NONE) {
+    return absl::InvalidArgumentError(
+        "Table-keyed segments are not supported when target_mode is "
+        "UNICODE_RANGE.");
+  }
 
   CodepointSet font_codepoints = FontHelper::ToCodepointsSet(face);
   btree_set<hb_tag_t> font_features = FontHelper::GetFeatureTags(face);
@@ -416,7 +429,8 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
       config.unmapped_glyph_handling(), config.condition_analysis_mode(),
-      resolver_);
+      resolver_, config.target_mode(),
+      config.disjoint_conditions_probability_threshold());
 
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(
       face, init_segment, segments, merge_groups));

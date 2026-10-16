@@ -24,6 +24,8 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
+#include "ift/encoder/woff2_patch_size_cache.h"
+#include "ift/freq/probability_calculator.h"
 
 namespace ift::encoder {
 
@@ -52,7 +54,8 @@ class SegmentationContext {
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
-      std::shared_ptr<ift::common::DataFileResolver> resolver) {
+      std::shared_ptr<ift::common::DataFileResolver> resolver,
+      ift::config::TargetMode target_mode = ift::config::IFT) {
     // TODO(garretrieger): argument list is getting long, switch to a builder
     // pattern for construction.
 
@@ -66,7 +69,7 @@ class SegmentationContext {
     SegmentationContext context(
         face, unmapped_glyph_handling, condition_analysis_mode, brotli_quality,
         init_font_brotli_quality, std::move(closure_cache),
-        std::move(segmentation_info), std::move(resolver));
+        std::move(segmentation_info), std::move(resolver), target_mode);
 
     TRYV(context.InitDependencyClosure());
     return context;
@@ -85,7 +88,8 @@ class SegmentationContext {
         original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(),
         condition_analysis_mode_, brotli_quality_, init_font_brotli_quality_,
         std::move(closure_cache), std::move(segmentation_info), resolver_,
-        estimated_compression_ratio_);
+        target_mode_, estimated_compression_ratio_,
+        estimated_woff2_base_overhead_);
 
     TRYV(context.InitDependencyClosure());
     return std::move(context);
@@ -103,7 +107,8 @@ class SegmentationContext {
       ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
-      std::shared_ptr<ift::common::DataFileResolver> resolver);
+      std::shared_ptr<ift::common::DataFileResolver> resolver,
+      ift::config::TargetMode target_mode = ift::config::IFT);
 
  private:
   SegmentationContext(
@@ -114,11 +119,11 @@ class SegmentationContext {
       std::unique_ptr<GlyphClosureCache> closure_cache,
       std::unique_ptr<RequestedSegmentationInformation> segmentation_info,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
-      std::optional<double> estimated_compression_ratio = std::nullopt)
+      ift::config::TargetMode target_mode = ift::config::IFT,
+      std::optional<double> estimated_compression_ratio = std::nullopt,
+      std::optional<uint32_t> estimated_woff2_base_overhead = std::nullopt)
       : estimated_compression_ratio_(estimated_compression_ratio),
-        patch_size_cache(NewPatchSizeCache(face, brotli_quality)),
-        patch_size_cache_for_init_font(
-            NewPatchSizeCache(face, init_font_brotli_quality)),
+        estimated_woff2_base_overhead_(estimated_woff2_base_overhead),
         glyph_closure_cache(std::move(closure_cache)),
         original_face(ift::common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(std::move(segmentation_info)),
@@ -130,7 +135,12 @@ class SegmentationContext {
         brotli_quality_(brotli_quality),
         init_font_brotli_quality_(init_font_brotli_quality),
         condition_analysis_mode_(condition_analysis_mode),
-        resolver_(std::move(resolver)) {}
+        target_mode_(target_mode),
+        resolver_(std::move(resolver)) {
+    patch_size_cache = NewPatchSizeCache(face, brotli_quality);
+    patch_size_cache_for_init_font =
+        NewPatchSizeCache(face, init_font_brotli_quality);
+  }
 
   absl::Status InitDependencyClosure() {
     if (UsingDepGraph()) {
@@ -144,12 +154,16 @@ class SegmentationContext {
  public:
   unsigned BrotliQuality() const { return brotli_quality_; }
 
+  ift::config::TargetMode GetTargetMode() const { return target_mode_; }
+
   // Convert the information in this context into a finalized GlyphSegmentation
   // representation.
-  absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
-    GlyphSegmentation segmentation =
-        TRY(glyph_groupings.ToGlyphSegmentation(*segmentation_info_));
-    TRYV(ValidateSegmentation(segmentation));
+  absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
+      absl::Span<const freq::ProbabilityCalculator* const>
+          probability_calculators = {}) const {
+    GlyphSegmentation segmentation = TRY(glyph_groupings.ToGlyphSegmentation(
+        *segmentation_info_, target_mode_ == config::UNICODE_RANGE));
+    TRYV(ValidateSegmentation(segmentation, probability_calculators));
     return segmentation;
   }
 
@@ -265,6 +279,12 @@ class SegmentationContext {
    */
   absl::Status ReassignInitSubset(SubsetDefinition new_def);
 
+  /*
+   * Replaces the segment list, invalidates all condition and grouping
+   * information, and fully reprocesses all segments.
+   */
+  absl::Status ResetSegments(std::vector<Segment> segments);
+
   // Regenerates glyphs conditions and groupings for the set of things specified
   // in invalidation.
   //
@@ -313,7 +333,9 @@ class SegmentationContext {
    * - Fully covers the full closure.
    */
   absl::Status ValidateSegmentation(
-      const GlyphSegmentation& segmentation) const;
+      const GlyphSegmentation& segmentation,
+      absl::Span<const freq::ProbabilityCalculator* const>
+          probability_calculators = {}) const;
 
   // If the merging strategy specifies a minimum cost threshold, this computes
   // the segment where we should stop computing optimized merges. This is
@@ -324,6 +346,30 @@ class SegmentationContext {
   // TODO XXXX make this return StatusOr<...>
   std::unique_ptr<PatchSizeCache> NewPatchSizeCache(hb_face_t* face,
                                                     uint32_t brotli_quality) {
+    if (target_mode_ == config::UNICODE_RANGE) {
+      SubsetDefinition base_subset = segmentation_info_->InitFontSegment();
+      base_subset.gids.union_set(segmentation_info_->InitFontGlyphs());
+      if (brotli_quality == 0) {
+        if (!estimated_compression_ratio_.has_value() ||
+            !estimated_woff2_base_overhead_.has_value()) {
+          auto params = EstimatedWoff2PatchSizeCache::EstimateParameters(
+              face, base_subset);
+          if (params.ok()) {
+            estimated_woff2_base_overhead_ = params->first;
+            estimated_compression_ratio_ = params->second;
+          }
+        }
+        if (estimated_compression_ratio_.has_value() &&
+            estimated_woff2_base_overhead_.has_value()) {
+          return EstimatedWoff2PatchSizeCache::New(
+              face, *estimated_woff2_base_overhead_,
+              *estimated_compression_ratio_);
+        }
+      }
+      return std::make_unique<Woff2PatchSizeCache>(
+          face, std::move(base_subset), brotli_quality);
+    }
+
     if (brotli_quality == 0) {
       if (!estimated_compression_ratio_.has_value()) {
         auto r = EstimatedPatchSizeCache::EstimateCompressionRatio(face);
@@ -343,6 +389,7 @@ class SegmentationContext {
 
  private:
   std::optional<double> estimated_compression_ratio_;
+  std::optional<uint32_t> estimated_woff2_base_overhead_;
 
  public:
   // Caches and logging
@@ -373,6 +420,7 @@ class SegmentationContext {
   unsigned init_font_brotli_quality_;
 
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
+  ift::config::TargetMode target_mode_;
   std::shared_ptr<ift::common::DataFileResolver> resolver_;
 };
 

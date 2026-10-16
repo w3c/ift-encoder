@@ -64,6 +64,20 @@ RequestedSegmentationInformation::RequestedSegmentationInformation(
   }
 }
 
+void RequestedSegmentationInformation::ResetSegments(
+    std::vector<Segment> segments) {
+  segments_ = std::move(segments);
+  codepoint_to_segments_.clear();
+  for (size_t i = 0; i < segments_.size(); ++i) {
+    auto& s = segments_[i];
+    if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
+      s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+    }
+    AddToIndex(i, s.Definition().codepoints);
+  }
+  segments_disjoint_ = CheckSegmentsAreDisjoint(init_font_segment_, segments_);
+}
+
 SegmentSet RequestedSegmentationInformation::SegmentsForCodepoints(
     const CodepointSet& codepoints) const {
   SegmentSet result;

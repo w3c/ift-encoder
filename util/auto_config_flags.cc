@@ -19,3 +19,8 @@ ABSL_FLAG(
     "when multiple scripts overlap (eg. like with CJK) merging will "
     "prioritize optimizing against the primary script/language instead of "
     "all overlapping scripts equally.");
+
+ABSL_FLAG(
+    bool, auto_config_unicode_range, false,
+    "When auto_config is enabled, generate a segmenter config with target_mode "
+    "set to UNICODE_RANGE instead of IFT.");

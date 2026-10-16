@@ -76,7 +76,6 @@ class GlyphClosureCache {
       glyph_closure_cache_;
   uint64_t glyph_closure_cache_hit_ = 0;
   uint64_t glyph_closure_cache_miss_ = 0;
-  absl::flat_hash_map<uint32_t, common::CodepointSet> gid_to_unicode_;
   dep_graph::UnicodeEdges unicode_edges_;
 };
 

@@ -121,8 +121,12 @@ static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font,
     if (!absl::GetFlag(FLAGS_auto_config_primary_script).empty()) {
       primary_script = absl::GetFlag(FLAGS_auto_config_primary_script);
     }
-    return AutoSegmenterConfig::GenerateConfig(
-        font, resolver, primary_script, quality_level);
+    ift::config::TargetMode target_mode =
+        absl::GetFlag(FLAGS_auto_config_unicode_range)
+            ? ift::config::UNICODE_RANGE
+            : ift::config::IFT;
+    return AutoSegmenterConfig::GenerateConfig(font, resolver, primary_script,
+                                               quality_level, target_mode);
   }
 
   FontData config_text =
@@ -143,6 +147,7 @@ StatusOr<hb_face_unique_ptr> LoadFont(const char* filename) {
 static Status Analysis(hb_face_t* font,
                        btree_map<SegmentSet, MergeStrategy>&& merge_groups,
                        const GlyphSegmentation& segmentation,
+                       ift::config::TargetMode target_mode,
                        std::shared_ptr<DataFileResolver> resolver) {
   // A strategy may have more than one probability profile associated with it,
   // each one is analyzed separately.
@@ -197,7 +202,8 @@ static Status Analysis(hb_face_t* font,
     }
   }
 
-  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver,
+                                  target_mode);
   auto costs = TRY(segmenter.TotalCosts(font, segmentation,
                                         strategy_probability_calculators));
 
@@ -309,7 +315,8 @@ static Status Main(const std::vector<char*> args) {
         config.brotli_quality(),
         config.brotli_quality_for_initial_font_merging(),
         config.unmapped_glyph_handling(), config.condition_analysis_mode(),
-        resolver);
+        resolver, config.target_mode(),
+        config.disjoint_conditions_probability_threshold());
     TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }
 
@@ -319,7 +326,7 @@ static Status Main(const std::vector<char*> args) {
 
   std::cerr << ">> Analysis" << std::endl;
   return Analysis(font.get(), std::move(result.merge_groups), segmentation,
-                  resolver);
+                  config.target_mode(), resolver);
 }
 
 int main(int argc, char** argv) {

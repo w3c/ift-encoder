@@ -919,4 +919,137 @@ TEST_F(
   EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
 }
 
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_UnicodeRange_RejectsTableKeyedSegments) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+
+  SegmenterConfig config;
+  config.set_target_mode(ift::config::UNICODE_RANGE);
+  config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+  config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
+  AddSegment(config, 1, {0x43});
+
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+  auto result = util.RunSegmenter(face.get(), config);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+
+  config.set_generate_table_keyed_segments_mode(FROM_MERGE_GROUPS);
+  result = util.RunSegmenter(face.get(), config);
+  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_UnicodeRange_RejectsFeatureSegments) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    config.set_generate_feature_segments(true);
+    AddSegment(config, 1, {0x43});
+
+    std::vector<SubsetDefinition> segments_out;
+    auto groups =
+        util.ConfigToMergeGroups(config, {0x43}, {}, segments_out);
+    EXPECT_TRUE(absl::IsInvalidArgument(groups.status())) << groups.status();
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    Features features;
+    features.add_values("smcp");
+    (*config.mutable_feature_segments())[1] = features;
+    AddSegment(config, 1, {0x43});
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    AddSegment(config, 1, {0x43});
+    (*config.mutable_segments())[1].mutable_features()->add_values("smcp");
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_UnicodeRange_ValidatesSegmenterConstraints) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+
+  // Default unmapped_glyph_handling (MOVE_TO_INIT_FONT) is rejected.
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    AddSegment(config, 1, {0x43});
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  // Initial font merging is rejected.
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    AddSegment(config, 1, {0x43});
+    auto* group = config.add_merge_groups();
+    AddFreqData(*group, "test_freq_data.riegeli");
+    group->mutable_cost_config()
+        ->mutable_frequency_data(0)
+        ->set_initial_font_merge_threshold(-50.0);
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  // Patch merging is rejected.
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    AddSegment(config, 1, {0x43});
+    auto* group = config.add_merge_groups();
+    AddFreqData(*group, "test_freq_data.riegeli");
+    group->mutable_cost_config()->set_experimental_use_patch_merges(true);
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  // Valid UNICODE_RANGE config succeeds.
+  {
+    SegmenterConfig config;
+    config.set_target_mode(ift::config::UNICODE_RANGE);
+    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
+    config.set_brotli_quality(0);
+    config.set_brotli_quality_for_initial_font_merging(0);
+    AddSegment(config, 1, {0x43});
+    auto* group = config.add_merge_groups();
+    AddFreqData(*group, "test_freq_data.riegeli");
+
+    auto result = util.RunSegmenter(face.get(), config);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(result->plan.non_glyph_segments_size(), 0);
+  }
+}
+
 // TODO test for feature segment auto generation.

@@ -50,6 +50,8 @@ class RequestedSegmentationInformation {
     return base_segment.Definition().codepoints.size();
   }
 
+  void ResetSegments(std::vector<Segment> segments);
+
   absl::Status ReassignInitSubset(GlyphClosureCache& closure_cache,
                                   const SubsetDefinition& new_def) {
     // TODO XXXXX Can we avoid aggressively expanding the init closure?

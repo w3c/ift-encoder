@@ -33,10 +33,17 @@ struct UnicodeEdges {
   absl::flat_hash_map<hb_codepoint_t, std::vector<VariationSelectorEdge>>
       variation_selector;
   absl::flat_hash_map<hb_codepoint_t, encoder::glyph_id_t> unicode_to_gid;
+  absl::flat_hash_map<encoder::glyph_id_t, ift::common::CodepointSet>
+      gid_to_unicode;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::CodepointSet> gid_to_vs;
 
   static absl::StatusOr<UnicodeEdges> ComputeUnicodeDependencyEdges(
       hb_face_t* face, const ift::common::DataFileResolver& resolver);
+
+  static UnicodeEdges ComputeCmapAndUVSEdges(hb_face_t* face);
+
+  ift::common::CodepointSet CodepointsForGlyphs(
+      const ift::common::GlyphSet& glyphs) const;
 
  private:
   static void ComputeUVSEdges(

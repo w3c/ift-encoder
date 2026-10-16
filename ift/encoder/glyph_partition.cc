@@ -14,6 +14,7 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using ift::common::GlyphSet;
+using ift::common::IntSet;
 
 namespace ift::encoder {
 
@@ -41,7 +42,7 @@ GlyphPartition& GlyphPartition::operator=(const GlyphPartition& other) {
   return *this;
 }
 
-Status GlyphPartition::Union(const GlyphSet& glyphs) {
+Status GlyphPartition::Union(const IntSet& glyphs) {
   if (glyphs.empty()) {
     return absl::OkStatus();
   }
@@ -120,6 +121,23 @@ StatusOr<glyph_id_t> GlyphPartition::Find(glyph_id_t glyph) const {
     parent_[glyph] = TRY(Find(parent_[glyph]));
   }
   return parent_[glyph];
+}
+
+StatusOr<bool> GlyphPartition::InSameGroup(const IntSet& glyphs) const {
+  if (glyphs.empty()) {
+    return true;
+  }
+
+  auto it = glyphs.begin();
+  glyph_id_t first_rep = TRY(Find(*it));
+  ++it;
+
+  for (; it != glyphs.end(); ++it) {
+    if (TRY(Find(*it)) != first_rep) {
+      return false;
+    }
+  }
+  return true;
 }
 
 StatusOr<const GlyphSet&> GlyphPartition::GlyphsFor(glyph_id_t glyph) const {
