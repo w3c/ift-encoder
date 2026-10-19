@@ -1628,4 +1628,152 @@ TEST_F(CandidateMergeTest,
             g_grave);
 }
 
+TEST_F(CandidateMergeTest, ComputeCostDelta_InertPairFastPathAndPreCheck) {
+  // s0: 'a' -> {69}, s1: 'b' -> {70}, s2: 'c' -> {71} (all inert in Roboto).
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'b'}},
+      {{'c'}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 80}, {{'b', 'b'}, 5}, {{'c', 'c'}, 75}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+  ASSERT_TRUE(context->InertSegments().contains(0));
+  ASSERT_TRUE(context->InertSegments().contains(1));
+  ASSERT_TRUE(context->InertSegments().contains(2));
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({70}, 300);
+  size_cache->SetPatchSize({71}, 240);
+  size_cache->SetPatchSize({69, 71}, 320);
+  context->patch_size_cache.reset(size_cache);
+
+  // First evaluation warms the per-segment exclusive patch size cache for s0
+  // and s2.
+  size_cache->ResetCallCount();
+  auto best_case_0_2 = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 2}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(best_case_0_2.ok()) << best_case_0_2.status();
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 2);
+
+  // Expected best-case merged size for {0, 2}: max(200, 240) + min(200, 240)/2
+  // = 240 + 100 = 340.
+  double p_0_or_2 = 0.80 + 0.75 - 0.80 * 0.75;
+  double expected_best_0_2 =
+      -0.80 * (200 + 75) - 0.75 * (240 + 75) + p_0_or_2 * (340 + 75);
+  EXPECT_NEAR(*best_case_0_2, expected_best_0_2, 1e-9);
+
+  // Subsequent best-case evaluation of {0, 2} hits the per-segment size cache
+  // with zero calls to PatchSizeCache::GetPatchSize.
+  size_cache->ResetCallCount();
+  auto best_case_0_2_cached = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 2}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(best_case_0_2_cached.ok()) << best_case_0_2_cached.status();
+  EXPECT_EQ(*best_case_0_2_cached, *best_case_0_2);
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 0);
+
+  // Evaluating {0, 1} with delta_to_beat = 0.0: s0 (p=0.80, size=200) and
+  // s1 (p=0.05, size=300) has best-case merged size 300 + 100 = 400. Even at
+  // the lower-bound probability max(0.80, 0.05) = 0.80, the delta is
+  // 0.80*(400+75) - 0.80*(200+75) - 0.05*(300+75) = 160 - 18.75 = +141.25 > 0,
+  // so the O(1) pre-check cancels immediately.
+  auto cancelled_precheck =
+      CandidateMerge::ComputeCostDelta<true>(merger, {0, 1}, std::nullopt, 0.0);
+  EXPECT_TRUE(absl::IsCancelled(cancelled_precheck.status()));
+
+  // Exact evaluation of {0, 2} via the inert fast-path.
+  GlyphSet exclusive_0_2 = {69, 71};
+  auto exact_0_2 = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 2}, exclusive_0_2, std::nullopt);
+  ASSERT_TRUE(exact_0_2.ok()) << exact_0_2.status();
+  double expected_exact_0_2 =
+      -0.80 * (200 + 75) - 0.75 * (240 + 75) + p_0_or_2 * (320 + 75);
+  EXPECT_NEAR(*exact_0_2, expected_exact_0_2, 1e-9);
+
+  // Boundary check: 1 ULP below exact_0_2 does not cancel early.
+  auto boundary_0_2 = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 2}, exclusive_0_2, std::nextafter(*exact_0_2, -INFINITY));
+  ASSERT_TRUE(boundary_0_2.ok()) << boundary_0_2.status();
+  EXPECT_EQ(*boundary_0_2, *exact_0_2);
+
+  // Applying the inert merge of {0, 2} invalidates s0's cached metadata while
+  // keeping s1's cached exclusive patch size intact.
+  auto candidate =
+      CandidateMerge::AssessSegmentMerge(merger, 0, {2}, std::nullopt);
+  ASSERT_TRUE(candidate.ok()) << candidate.status();
+  ASSERT_TRUE(candidate->has_value());
+  ASSERT_TRUE((*candidate)->Apply(merger).ok());
+
+  size_cache->ResetCallCount();
+  EXPECT_EQ(*merger.ExclusivePatchSize(1), 300u);
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 0);
+  EXPECT_EQ(*merger.ExclusivePatchSize(0), 320u);
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 1);
+  EXPECT_NEAR(*merger.AggregateProbability(0), p_0_or_2, 1e-9);
+}
+
+TEST_F(CandidateMergeTest,
+       ComputeCostDelta_InertPairFastPath_UnicodeRangeMode) {
+  std::vector<Segment> segments = {
+      {{'a'}},  // gid 69
+      {{'c'}},  // gid 71
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 80}, {{'c', 'c'}, 75}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver,
+                                  ift::config::UNICODE_RANGE);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver,
+      ift::config::UNICODE_RANGE);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({}, 100);
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({71}, 240);
+  size_cache->SetPatchSize({69, 71}, 320);
+  context->patch_size_cache.reset(size_cache);
+
+  // In UNICODE_RANGE mode, base_overhead = 100 is subtracted before computing
+  // incremental sizes: inc_0 = 200 - 100 = 100, inc_1 = 240 - 100 = 140,
+  // extra = min(100, 140) * 0.5 = 50, so best-case merged size = 240 + 50 = 290.
+  double p_0_or_1 = 0.80 + 0.75 - 0.80 * 0.75;
+  double expected_best =
+      -0.80 * (200 + 75) - 0.75 * (240 + 75) + p_0_or_1 * (290 + 75);
+  auto best_delta = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(best_delta.ok()) << best_delta.status();
+  EXPECT_NEAR(*best_delta, expected_best, 1e-9);
+
+  GlyphSet exclusive_gids = {69, 71};
+  double expected_exact =
+      -0.80 * (200 + 75) - 0.75 * (240 + 75) + p_0_or_1 * (320 + 75);
+  auto exact_delta = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, exclusive_gids, std::nullopt);
+  ASSERT_TRUE(exact_delta.ok()) << exact_delta.status();
+  EXPECT_NEAR(*exact_delta, expected_exact, 1e-9);
+}
+
 }  // namespace ift::encoder

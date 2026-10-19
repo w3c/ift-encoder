@@ -1,6 +1,7 @@
 #include "ift/encoder/candidate_merge.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -11,6 +12,7 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "ift/common/compat_id.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
@@ -43,7 +45,7 @@ using ift::common::GlyphSet;
 using ift::common::SegmentSet;
 using ift::common::Woff2;
 
-static double SumDeltas(std::vector<double>& deltas) {
+static double SumDeltas(absl::Span<double> deltas) {
   // Delta lists often come from hash containers which do not have stable
   // ordering. Since floating point addition is not associative we need
   // to first sort into a determnistic order or risk the sum result being
@@ -65,6 +67,21 @@ static double SumDeltas(std::vector<double>& deltas) {
     total += delta;
   }
   return total;
+}
+
+static double SumDeltas(std::vector<double>& deltas) {
+  return SumDeltas(absl::MakeSpan(deltas));
+}
+
+// Bounds the maximum possible floating-point rounding discrepancy between an
+// unsorted running sum (current_delta) of up to max_terms elements and the
+// final sorted sum produced by SumDeltas().
+static double MaxSumError(size_t max_terms, double initial_magnitude_sum,
+                          double initial_delta, double current_delta) {
+  double magnitude_sum =
+      initial_magnitude_sum + (current_delta - initial_delta);
+  return 2.0 * max_terms * std::numeric_limits<double>::epsilon() *
+         magnitude_sum;
 }
 
 StatusOr<bool> CandidateMerge::IsPatchTooSmall(
@@ -176,6 +193,7 @@ Status CandidateMerge::ApplyPatchMerge(Merger& merger) {
 
   // CombinePatches() will do invalidation as needed, so nothing else needs to
   // be done to apply this merge.
+  merger.InvalidateExclusivePatchSizes();
   return merger.Context().glyph_groupings.CombinePatches(*patch_merge_glyphs_,
                                                          {});
 }
@@ -619,6 +637,104 @@ StatusOr<double> CandidateMerge::ComputeBestCaseInitFontCostDelta(
 }
 
 template <bool best_case>
+static StatusOr<double> ComputeInertPairCostDelta(
+    Merger& merger, const SegmentSet& merged_segments, segment_index_t u,
+    segment_index_t v, uint32_t size_u, uint32_t size_v,
+    const std::optional<GlyphSet>& exclusive_gids,
+    std::optional<double> delta_to_beat) {
+  const auto& context = merger.Context();
+  const auto& patch_size_cache = context.patch_size_cache;
+  const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
+  const uint32_t base_overhead = TRY(merger.BasePatchOverhead());
+
+  double prob_u = TRY(merger.AggregateProbability(u));
+  double prob_v = TRY(merger.AggregateProbability(v));
+  double d_u = prob_u * (size_u + per_request_overhead);
+  double d_v = prob_v * (size_v + per_request_overhead);
+
+  uint32_t inc_u = (size_u > base_overhead) ? (size_u - base_overhead) : 0;
+  uint32_t inc_v = (size_v > base_overhead) ? (size_v - base_overhead) : 0;
+  uint32_t largest_patch_size = std::max(size_u, size_v);
+  uint32_t extra_raw = std::min(inc_u, inc_v);
+
+  uint32_t size = 0;
+  if (best_case) {
+    double best_case_reduction_fraction =
+        merger.Strategy().BestCaseSizeReductionFraction();
+    uint32_t extra =
+        std::max((uint32_t)(extra_raw * best_case_reduction_fraction),
+                 Merger::BEST_CASE_MERGE_SIZE_DELTA);
+    size = largest_patch_size + extra;
+  } else {
+    const GlyphSet* glyphs_for_size = nullptr;
+    GlyphSet combined_glyphs;
+    const auto& glyphs_u = context.glyph_groupings.ExclusiveGlyphs(u);
+    const auto& glyphs_v = context.glyph_groupings.ExclusiveGlyphs(v);
+    if (exclusive_gids.has_value() && glyphs_u.is_subset_of(*exclusive_gids) &&
+        glyphs_v.is_subset_of(*exclusive_gids)) {
+      glyphs_for_size = &*exclusive_gids;
+    } else {
+      combined_glyphs = glyphs_u;
+      combined_glyphs.union_set(glyphs_v);
+      if (exclusive_gids.has_value()) {
+        combined_glyphs.union_set(*exclusive_gids);
+      }
+      glyphs_for_size = &combined_glyphs;
+    }
+    if (glyphs_for_size->empty()) {
+      std::array<double, 2> deltas = {-d_u, -d_v};
+      return SumDeltas(absl::MakeSpan(deltas));
+    }
+    size = TRY(patch_size_cache->GetPatchSize(*glyphs_for_size));
+    if (merger.ShouldRecordMergedSizeReductions() && extra_raw != 0) {
+      int32_t extra_actual = ((int32_t)size) - largest_patch_size;
+      merger.RecordMergedSizeReduction((double)extra_actual /
+                                       (double)extra_raw);
+    }
+  }
+
+  double s = (size + per_request_overhead);
+  double initial_delta = -d_u - d_v;
+  double initial_magnitude_sum = -initial_delta;
+
+  if (best_case && delta_to_beat.has_value()) {
+    // We can cheaply compute a lower bound to the post merge probability.
+    // Since delta = added - removed, delta will be most negative
+    // with a lower probability for the merged patch. Thus if
+    // if the lower bound cannot beat the threshold then this case
+    // can be rejected.
+    double min_prob_u = TRY(merger.MinAggregateProbability(u));
+    double min_prob_v = TRY(merger.MinAggregateProbability(v));
+    double min_merged_prob = std::max(min_prob_u, min_prob_v);
+    double min_d_merged = min_merged_prob * s;
+    double min_current_delta = initial_delta + min_d_merged;
+    if (min_current_delta > *delta_to_beat) {
+      double max_error = MaxSumError(3, initial_magnitude_sum, initial_delta,
+                                     min_current_delta);
+      if (min_current_delta - max_error > *delta_to_beat) {
+        return absl::CancelledError();
+      }
+    }
+  }
+
+  double p = TRY(merger.AggregateMergedProbability(merged_segments));
+  double d_merged = p * s;
+  double current_delta = initial_delta + d_merged;
+  if (delta_to_beat.has_value() && current_delta > *delta_to_beat) {
+    double max_error =
+        MaxSumError(3, initial_magnitude_sum, initial_delta, current_delta);
+    if (current_delta - max_error > *delta_to_beat) {
+      return absl::CancelledError();
+    }
+  }
+
+  std::array<double, 3> deltas = {-d_u, -d_v, d_merged};
+  double cost_delta = SumDeltas(absl::MakeSpan(deltas));
+  VLOG(1) << "    = " << cost_delta;
+  return cost_delta;
+}
+
+template <bool best_case>
 StatusOr<double> CandidateMerge::ComputeCostDelta(
     Merger& merger, const SegmentSet& merged_segments,
     std::optional<GlyphSet> exclusive_gids, std::optional<double> delta_to_beat) {
@@ -627,6 +743,28 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   }
 
   VLOG(1) << "cost delta for merge of " << merged_segments.ToString() << " = ";
+
+  const auto& context = merger.Context();
+  const bool unicode_range_mode =
+      (context.GetTargetMode() == config::UNICODE_RANGE);
+
+  if (merged_segments.size() == 2) {
+    segment_index_t u = *merged_segments.min();
+    segment_index_t v = *merged_segments.max();
+    if (context.InertSegments().contains(u) &&
+        context.InertSegments().contains(v)) {
+      uint32_t size_u = TRY(merger.ExclusivePatchSize(u));
+      uint32_t size_v = TRY(merger.ExclusivePatchSize(v));
+      if (size_u > 0 && size_v > 0 &&
+          (best_case || unicode_range_mode || !exclusive_gids.has_value() ||
+           !context.glyph_groupings.UnmappedGlyphs().intersects(
+               *exclusive_gids))) {
+        return ComputeInertPairCostDelta<best_case>(
+            merger, merged_segments, u, v, size_u, size_v, exclusive_gids,
+            delta_to_beat);
+      }
+    }
+  }
 
   // These are conditions which will be modified by applying the merge. These
   // are conditions that intersect merged_segments.
@@ -653,12 +791,8 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   new_conditions.reserve(modified_conditions.size());
 
   segment_index_t base = *merged_segments.min();
-  const auto& context = merger.Context();
-  const bool unicode_range_mode =
-      (context.GetTargetMode() == config::UNICODE_RANGE);
   const auto& patch_size_cache = context.patch_size_cache;
-  uint32_t base_overhead =
-      unicode_range_mode ? TRY(patch_size_cache->GetPatchSize({})) : 0;
+  uint32_t base_overhead = TRY(merger.BasePatchOverhead());
 
   // Cost delta contributions are collected here and summed at the end rather
   // than accumulated as we go. modified_conditions and new_conditions are both
@@ -795,12 +929,8 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     current_delta += d;
 
     if (delta_to_beat.has_value() && current_delta > *delta_to_beat) {
-      // Bound the maximum possible FP rounding discrepancy between the unsorted
-      // running sum (current_delta) and the final sorted sum (SumDeltas).
-      double magnitude_sum =
-          initial_magnitude_sum + (current_delta - initial_delta);
-      double max_error = 2.0 * deltas.capacity() *
-                         std::numeric_limits<double>::epsilon() * magnitude_sum;
+      double max_error = MaxSumError(deltas.capacity(), initial_magnitude_sum,
+                                     initial_delta, current_delta);
       if (current_delta - max_error > *delta_to_beat) {
         return absl::CancelledError();
       }
