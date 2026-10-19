@@ -2,7 +2,10 @@
 #define IFT_ENCODER_MERGER_H_
 
 #include <cstdint>
+#include <optional>
+#include <vector>
 
+#include "absl/flags/declare.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/candidate_merge.h"
@@ -10,6 +13,8 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/types.h"
+
+ABSL_DECLARE_FLAG(bool, experimental_all_pairs_merging);
 
 namespace ift::encoder {
 
@@ -94,6 +99,8 @@ class Merger {
 
   bool ShouldRecordMergedSizeReductions() const;
 
+  bool UseAllPairsMerging() const;
+
   void LogMergedSizeHistogram() const;
 
   // The total cost of a segmentation is defined as the sum of the costs
@@ -118,11 +125,63 @@ class Merger {
   // Computes the aggregate probability for the segment at segment_index, using
   // cached segment probabilities when available.
   absl::StatusOr<double> AggregateProbability(
-      segment_index_t segment_index) const;
+      segment_index_t segment_index) const {
+    if (segment_index < cached_agg_prob_.size() &&
+        cached_agg_prob_[segment_index] >= 0.0) {
+      return cached_agg_prob_[segment_index];
+    }
+    return ComputeAndCacheAggregateProbability(segment_index);
+  }
+
+  // Computes the lower-bound aggregate probability (sum of ProbabilityBound::Min
+  // across profiles) for the segment at segment_index, using cached segment
+  // probabilities when available.
+  absl::StatusOr<double> MinAggregateProbability(
+      segment_index_t segment_index) const {
+    if (segment_index < cached_min_agg_prob_.size() &&
+        cached_min_agg_prob_[segment_index] >= 0.0) {
+      return cached_min_agg_prob_[segment_index];
+    }
+    TRYV(ComputeAndCacheAggregateProbability(segment_index));
+    return cached_min_agg_prob_.at(segment_index);
+  }
+
+  // Returns the cached patch size in bytes of the exclusive glyph set for
+  // segment_index (or 0 if segment_index has no exclusive glyphs).
+  absl::StatusOr<uint32_t> ExclusivePatchSize(
+      segment_index_t segment_index) const {
+    if (!exclusive_sizes_dirty_ &&
+        cached_patch_size_cache_ == context_->patch_size_cache.get() &&
+        segment_index < cached_exclusive_size_.size() &&
+        cached_exclusive_size_[segment_index] != UINT32_MAX) {
+      return cached_exclusive_size_[segment_index];
+    }
+    return ComputeAndCacheExclusivePatchSize(segment_index);
+  }
+
+  // Returns the base patch overhead in bytes (0 in IFT mode; the cached empty
+  // subset WOFF2 size in UNICODE_RANGE mode).
+  absl::StatusOr<uint32_t> BasePatchOverhead() const {
+    if (context_->GetTargetMode() != config::UNICODE_RANGE) {
+      return 0;
+    }
+    if (!exclusive_sizes_dirty_ &&
+        cached_patch_size_cache_ == context_->patch_size_cache.get() &&
+        cached_base_overhead_.has_value()) {
+      return *cached_base_overhead_;
+    }
+    return ComputeAndCacheBasePatchOverhead();
+  }
+
+  void InvalidateExclusivePatchSizes() { exclusive_sizes_dirty_ = true; }
 
   // Computes the aggregate probability of condition being activated.
   absl::StatusOr<double> AggregateProbability(
       const ActivationCondition& condition) const;
+
+  // Computes the aggregate probability of the union of merged_segments.
+  absl::StatusOr<double> AggregateMergedProbability(
+      const ift::common::SegmentSet& merged_segments) const;
 
   // Same as AggregateProbability(condition), but computes the probability of
   // condition as it would be if merged_segment_index has been replaced by
@@ -162,6 +221,12 @@ class Merger {
   absl::StatusOr<std::optional<InvalidationSet>> TryNextPatchMerge();
 
   absl::Status ResetSegmentProbabilities() const;
+  absl::StatusOr<double> ComputeAndCacheAggregateProbability(
+      segment_index_t segment_index) const;
+  absl::StatusOr<uint32_t> ComputeAndCacheExclusivePatchSize(
+      segment_index_t segment_index) const;
+  absl::StatusOr<uint32_t> ComputeAndCacheBasePatchOverhead() const;
+  void EnsurePatchSizeCacheValid() const;
   absl::Status InitOptimizationCutoff();
   absl::StatusOr<segment_index_t> ComputeSegmentCutoff() const;
 
@@ -273,6 +338,15 @@ class Merger {
 
   // Percent reduction of data beyond the single largest input patch.
   absl::btree_map<int32_t, uint32_t> merged_size_reduction_histogram_;
+
+  // Per-segment cached aggregate probability, lower-bound aggregate
+  // probability, and exclusive patch size in bytes.
+  mutable std::vector<double> cached_agg_prob_;
+  mutable std::vector<double> cached_min_agg_prob_;
+  mutable std::vector<uint32_t> cached_exclusive_size_;
+  mutable std::optional<uint32_t> cached_base_overhead_;
+  mutable const PatchSizeCache* cached_patch_size_cache_ = nullptr;
+  mutable bool exclusive_sizes_dirty_ = true;
 };
 
 }  // namespace ift::encoder

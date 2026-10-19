@@ -25,21 +25,78 @@ ABSL_FLAG(bool, record_merged_size_reductions, false,
           "When enabled the merger will record the percent size reductions of "
           "each assessed merge.");
 
+ABSL_FLAG(bool, experimental_all_pairs_merging, false,
+          "When enabled the cost-based merger considers all segment pairs "
+          "globally instead of only pairs with the current highest probability "
+          "base segment.");
+
 namespace ift::encoder {
 
 bool Merger::ShouldRecordMergedSizeReductions() const {
   return absl::GetFlag(FLAGS_record_merged_size_reductions);
 }
 
-StatusOr<double> Merger::AggregateProbability(
+bool Merger::UseAllPairsMerging() const {
+  return strategy_.UseCosts() &&
+         absl::GetFlag(FLAGS_experimental_all_pairs_merging);
+}
+
+StatusOr<double> Merger::ComputeAndCacheAggregateProbability(
     segment_index_t segment_index) const {
   double total = 0.0;
+  double min_total = 0.0;
+  const auto& segments = Context().SegmentationInfo().Segments();
   for (const auto& profile : strategy_.ProbabilityProfiles()) {
-    total += TRY(profile.Calculator())
-                 ->ComputeProbability(Context().SegmentationInfo().Segments(), segment_index)
-                 .Value();
+    auto bound =
+        TRY(profile.Calculator())->ComputeProbability(segments, segment_index);
+    total += bound.Value();
+    min_total += bound.Min();
+  }
+  if (segment_index < cached_agg_prob_.size()) {
+    cached_agg_prob_[segment_index] = total;
+    cached_min_agg_prob_[segment_index] = min_total;
   }
   return total;
+}
+
+void Merger::EnsurePatchSizeCacheValid() const {
+  if (exclusive_sizes_dirty_ ||
+      cached_patch_size_cache_ != context_->patch_size_cache.get()) {
+    size_t num_segments = Context().SegmentationInfo().Segments().size();
+    cached_exclusive_size_.assign(num_segments, UINT32_MAX);
+    cached_base_overhead_ = std::nullopt;
+    cached_patch_size_cache_ = context_->patch_size_cache.get();
+    exclusive_sizes_dirty_ = false;
+  }
+}
+
+StatusOr<uint32_t> Merger::ComputeAndCacheExclusivePatchSize(
+    segment_index_t segment_index) const {
+  EnsurePatchSizeCacheValid();
+  if (segment_index < cached_exclusive_size_.size() &&
+      cached_exclusive_size_[segment_index] != UINT32_MAX) {
+    return cached_exclusive_size_[segment_index];
+  }
+
+  const auto& glyphs = context_->glyph_groupings.ExclusiveGlyphs(segment_index);
+  uint32_t size = 0;
+  if (!glyphs.empty()) {
+    size = TRY(context_->patch_size_cache->GetPatchSize(glyphs));
+  }
+  if (segment_index < cached_exclusive_size_.size()) {
+    cached_exclusive_size_[segment_index] = size;
+  }
+  return size;
+}
+
+StatusOr<uint32_t> Merger::ComputeAndCacheBasePatchOverhead() const {
+  EnsurePatchSizeCacheValid();
+  if (cached_base_overhead_.has_value()) {
+    return *cached_base_overhead_;
+  }
+  uint32_t overhead = TRY(context_->patch_size_cache->GetPatchSize({}));
+  cached_base_overhead_ = overhead;
+  return overhead;
 }
 
 StatusOr<double> Merger::AggregateProbability(
@@ -48,6 +105,18 @@ StatusOr<double> Merger::AggregateProbability(
   double total = 0.0;
   for (const auto& profile : strategy_.ProbabilityProfiles()) {
     total += TRY(condition.Probability(segments, *TRY(profile.Calculator())));
+  }
+  return total;
+}
+
+StatusOr<double> Merger::AggregateMergedProbability(
+    const SegmentSet& merged_segments) const {
+  const auto& segments = Context().SegmentationInfo().Segments();
+  double total = 0.0;
+  for (const auto& profile : strategy_.ProbabilityProfiles()) {
+    total += TRY(profile.Calculator())
+                 ->ComputeMergedProbability(segments, merged_segments)
+                 .Value();
   }
   return total;
 }
@@ -336,6 +405,12 @@ Status Merger::MoveSegmentsToInitFont(size_t profile_index) {
 
 Status Merger::ResetSegmentProbabilities() const {
   size_t num_segments = Context().SegmentationInfo().Segments().size();
+  cached_agg_prob_.assign(num_segments, -1.0);
+  cached_min_agg_prob_.assign(num_segments, -1.0);
+  cached_exclusive_size_.assign(num_segments, UINT32_MAX);
+  cached_base_overhead_ = std::nullopt;
+  cached_patch_size_cache_ = context_->patch_size_cache.get();
+  exclusive_sizes_dirty_ = false;
   return strategy_.ResetSegmentProbabilities(num_segments);
 }
 
@@ -359,6 +434,18 @@ uint32_t Merger::AssignMergedSegment(segment_index_t base,
     if (calc.ok()) {
       (*calc)->InvalidateSegmentProbabilities(invalidated);
     }
+  }
+  for (segment_index_t s : invalidated) {
+    if (s < cached_agg_prob_.size()) {
+      cached_agg_prob_[s] = -1.0;
+      cached_min_agg_prob_[s] = -1.0;
+    }
+    if (s < cached_exclusive_size_.size()) {
+      cached_exclusive_size_[s] = UINT32_MAX;
+    }
+  }
+  if (!is_inert) {
+    exclusive_sizes_dirty_ = true;
   }
   candidate_segments_.subtract(to_merge);
   candidate_segments_.insert(base);
@@ -425,12 +512,12 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
   double total_cost = 0.0;
   double overhead = strategy_.NetworkOverheadCost();
   for (segment_index_t s : candidate_segments_) {
-    auto segment_glyphs = context_->glyph_groupings.ExclusiveGlyphs(s);
-    if (segment_glyphs.empty()) {
+    uint32_t patch_size = TRY(ExclusivePatchSize(s));
+    if (patch_size == 0) {
       continue;
     }
 
-    double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
+    double size = patch_size;
     double probability = TRY(AggregateProbability(s));
     total_cost += probability * (size + overhead);
   }
@@ -440,12 +527,12 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
   for (auto it = candidate_segments_.rbegin(); it != candidate_segments_.rend();
        it++) {
     segment_index_t s = *it;
-    auto segment_glyphs = context_->glyph_groupings.ExclusiveGlyphs(s);
-    if (segment_glyphs.empty()) {
+    uint32_t patch_size = TRY(ExclusivePatchSize(s));
+    if (patch_size == 0) {
       continue;
     }
 
-    double size = TRY(context_->patch_size_cache->GetPatchSize(segment_glyphs));
+    double size = patch_size;
     double probability = TRY(AggregateProbability(s));
     cutoff_tail_cost -= probability * (size + overhead);
     if (cutoff_tail_cost < 0.0) {
@@ -632,11 +719,7 @@ double Merger::BestCaseInertProbabilityThreshold(
 Status Merger::CollectExclusiveCandidateMerges(
     uint32_t base_segment_index,
     std::optional<CandidateMerge>& smallest_candidate_merge) {
-  auto base_glyphs =
-      context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
-  uint32_t base_size =
-      TRY(Context().patch_size_cache->GetPatchSize(base_glyphs));
-
+  uint32_t base_size = TRY(ExclusivePatchSize(base_segment_index));
   double base_probability = TRY(AggregateProbability(base_segment_index));
 
   double inert_threshold = -1.0;
