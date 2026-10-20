@@ -19,25 +19,63 @@
 using absl::btree_set;
 using absl::Status;
 using absl::StatusOr;
+using ift::common::GlyphSet;
 using ift::common::SegmentSet;
 
 namespace ift::encoder {
 
-void AllPairsMerger::AssignMergedSegment(segment_index_t base,
+void AllPairsMerger::AssignMergedSegment(const Merger& merger,
+                                         segment_index_t base,
                                          const SegmentSet& to_merge) {
-  if (!initialized_) {
+  if (!initialized_ || phase_1_complete_) {
     return;
   }
+
+  SegmentSet merged_segments = to_merge;
+  merged_segments.insert(base);
+  const auto& groupings = merger.Context().glyph_groupings;
+  const auto& pre_comb_map = groupings.ConditionsAndGlyphsPreCombination();
+
+  for (segment_index_t s : merged_segments) {
+    // precombination representative affected glyphs are recorded this will
+    // let us locate any conditions involved with those glyphs post-merge.
+    for (const auto& c :
+         groupings.TriggeringSegmentToConditionsPreCombination(s)) {
+      if (c.IsFallback()) {
+        continue;
+      }
+      if (auto rep = pre_comb_map.at(c).min(); rep.has_value()) {
+        dirty_glyphs_.insert(*rep);
+      }
+    }
+
+    // Also record any segments involved in conditions directly impacted by the merge.
+    for (const auto& c :
+         groupings.TriggeringSegmentToConditions(s)) {
+      if (c.IsFallback()) {
+        continue;
+      }
+      if (!c.IsExclusive()) {
+        dirty_segments_.union_set(c.TriggeringSegments());
+      }
+    }
+  }
+
   for (segment_index_t s : to_merge) {
     RemoveActiveSegment(s);
     segment_epoch_.at(s) = UINT32_MAX;
+    dirty_segments_.erase(s);
+    dirty_bases_.erase(s);
   }
   // base's glyph groupings are not finalized until after Apply() (and
   // ReprocessChanged() for non-inert merges) completes, so remove it for now;
   // the next TryNextAllPairsMerge() call will re-insert it via
-  // UpdateActiveSegment().
+  // RefreshDirtySegments().
   RemoveActiveSegment(base);
-  segment_epoch_.at(base) = ++current_epoch_;
+  segment_epoch_.at(base) = UINT32_MAX;
+
+  dirty_segments_.insert(base);
+  dirty_bases_.insert(base);
 }
 
 void AllPairsMerger::RemoveActiveSegment(segment_index_t s) {
@@ -56,8 +94,14 @@ Status AllPairsMerger::UpdateActiveSegment(Merger& merger, segment_index_t s) {
   }
   uint32_t size = TRY(merger.ExclusivePatchSize(s));
   if (size == 0) {
+    // TODO(garretrieger): active_segments_by_prob is currently restricted to
+    // just segments with exclusive patches which in turn means we
+    // only consider exclusive segment pairs for merging, should we
+    // consider all segment pairs? or keep this as is relying on composite
+    // condition candidates.
     return absl::OkStatus();
   }
+
   double prob = TRY(merger.AggregateProbability(s));
   active_segments_by_prob_.insert(ProbOrderedSegment{prob, s});
   active_segment_prob_.at(s) = prob;
@@ -160,9 +204,18 @@ Status AllPairsMerger::QueueCompositeCandidates(
       segment_index_t u = *triggering_segments.min();
       segment_index_t v = *triggering_segments.max();
       if (IsActiveProbSegment(u) && IsActiveProbSegment(v)) {
-        // Pair of active exclusive segments is already handled by exclusive
-        // pair queuing.
-        continue;
+        ProbOrderedSegment pos_u{*active_segment_prob_.at(u), u};
+        ProbOrderedSegment pos_v{*active_segment_prob_.at(v), v};
+        const ProbOrderedSegment& high = (pos_u < pos_v) ? pos_u : pos_v;
+        const ProbOrderedSegment& low = (pos_u < pos_v) ? pos_v : pos_u;
+        uint32_t high_size = TRY(merger.ExclusivePatchSize(high.segment_index));
+        double inert_threshold = merger.BestCaseInertProbabilityThreshold(
+            high_size, high.probability, 0.0);
+        if (low.probability > inert_threshold) {
+          // Pair of active exclusive segments above the inert threshold is
+          // already handled by exclusive pair queuing.
+          continue;
+        }
       }
     }
 
@@ -176,6 +229,51 @@ Status AllPairsMerger::QueueCompositeCandidates(
   return absl::OkStatus();
 }
 
+Status AllPairsMerger::QueueAllCandidates(
+    Merger& merger, const std::optional<SegmentSet>& dirty_segments) {
+  if (!dirty_segments.has_value()) {
+    for (auto u_it = active_segments_by_prob_.begin();
+         u_it != active_segments_by_prob_.end(); ++u_it) {
+      TRYV(QueueLowerRankedExclusivePairs(merger, u_it));
+    }
+  } else {
+    for (segment_index_t d : *dirty_segments) {
+      if (!IsActiveProbSegment(d)) {
+        continue;
+      }
+      double d_prob = *active_segment_prob_.at(d);
+      auto d_it = active_segments_by_prob_.find(ProbOrderedSegment{d_prob, d});
+      if (d_it == active_segments_by_prob_.end()) {
+        return absl::InternalError(
+            "Active probability segment missing from ordered set.");
+      }
+
+      bool d_is_inert = merger.Context().InertSegments().contains(d);
+      for (auto u_it = active_segments_by_prob_.begin(); u_it != d_it; ++u_it) {
+        segment_index_t u = u_it->segment_index;
+        if (dirty_segments->contains(u)) {
+          // Pair {u, d} is already queued when processing u's lower-ranked
+          // partners.
+          continue;
+        }
+        if (d_is_inert) {
+          uint32_t u_size = TRY(merger.ExclusivePatchSize(u));
+          double inert_threshold = merger.BestCaseInertProbabilityThreshold(
+              u_size, u_it->probability, 0.0);
+          if (d_prob <= inert_threshold) {
+            continue;
+          }
+        }
+        TRYV(QueueBestCaseCandidate(merger, SegmentSet{u, d}));
+      }
+
+      TRYV(QueueLowerRankedExclusivePairs(merger, d_it));
+    }
+  }
+
+  return QueueCompositeCandidates(merger, dirty_segments);
+}
+
 Status AllPairsMerger::InitPhase1(Merger& merger) {
   size_t num_segments = merger.Context().SegmentationInfo().Segments().size();
   current_epoch_ = 0;
@@ -183,6 +281,9 @@ Status AllPairsMerger::InitPhase1(Merger& merger) {
   for (segment_index_t s : merger.CandidateSegments()) {
     segment_epoch_.at(s) = 0;
   }
+  dirty_segments_.clear();
+  dirty_bases_.clear();
+  dirty_glyphs_.clear();
   active_segments_by_prob_.clear();
   active_segment_prob_.assign(num_segments, std::nullopt);
   queue_ = {};
@@ -194,13 +295,48 @@ Status AllPairsMerger::InitPhase1(Merger& merger) {
     TRYV(UpdateActiveSegment(merger, s));
   }
 
-  for (auto u_it = active_segments_by_prob_.begin();
-       u_it != active_segments_by_prob_.end(); ++u_it) {
-    TRYV(QueueLowerRankedExclusivePairs(merger, u_it));
+  TRYV(QueueAllCandidates(merger));
+  initialized_ = true;
+  return absl::OkStatus();
+}
+
+Status AllPairsMerger::RefreshDirtySegments(Merger& merger) {
+  const auto& groupings = merger.Context().glyph_groupings;
+  for (glyph_id_t gid : dirty_glyphs_) {
+    if (auto cond = groupings.GlyphToCondition(gid);
+        cond.has_value() && !cond->IsFallback()) {
+      dirty_segments_.union_set(cond->TriggeringSegments());
+    }
+  }
+  dirty_glyphs_.clear();
+
+  dirty_bases_.intersect(merger.CandidateSegments());
+  for (segment_index_t base : dirty_bases_) {
+    dirty_segments_.insert(base);
+    for (const auto& c : groupings.TriggeringSegmentToConditions(base)) {
+      if (!c.IsFallback() && !c.IsExclusive()) {
+        dirty_segments_.union_set(c.TriggeringSegments());
+      }
+    }
+    TRYV(UpdateActiveSegment(merger, base));
+  }
+  dirty_bases_.clear();
+
+  dirty_segments_.intersect(merger.CandidateSegments());
+  if (dirty_segments_.empty()) {
+    return absl::OkStatus();
   }
 
-  TRYV(QueueCompositeCandidates(merger));
-  initialized_ = true;
+  ++current_epoch_;
+  for (segment_index_t s : dirty_segments_) {
+    segment_epoch_.at(s) = current_epoch_;
+    if (IsActiveProbSegment(s) && groupings.ExclusiveGlyphs(s).empty()) {
+      RemoveActiveSegment(s);
+    }
+  }
+
+  TRYV(QueueAllCandidates(merger, dirty_segments_));
+  dirty_segments_.clear();
   return absl::OkStatus();
 }
 
@@ -221,6 +357,8 @@ StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
 
   if (!initialized_) {
     TRYV(InitPhase1(merger));
+  } else {
+    TRYV(RefreshDirtySegments(merger));
   }
 
   while (!queue_.empty()) {

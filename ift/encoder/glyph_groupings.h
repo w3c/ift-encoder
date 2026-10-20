@@ -110,6 +110,21 @@ class GlyphGroupings {
     return empty;
   }
 
+  // Returns a list of pre-combination conditions which include segment.
+  const absl::flat_hash_set<ActivationCondition>&
+  TriggeringSegmentToConditionsPreCombination(segment_index_t segment) const {
+    static absl::flat_hash_set<ActivationCondition> empty;
+    auto it = conditions_and_glyphs_pre_combination_
+                  .TriggeringSegmentToConditions()
+                  .find(segment);
+    if (it !=
+        conditions_and_glyphs_pre_combination_.TriggeringSegmentToConditions()
+            .end()) {
+      return it->second;
+    }
+    return empty;
+  }
+
   // Add a set of glyphs to an existing exclusive group (and_group of one
   // segment).
   absl::Status AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,

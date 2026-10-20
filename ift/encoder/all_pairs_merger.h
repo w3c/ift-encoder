@@ -25,14 +25,16 @@ class AllPairsMerger {
   absl::StatusOr<std::optional<InvalidationSet>> TryNextAllPairsMerge(
       Merger& merger);
 
-  void AssignMergedSegment(segment_index_t base,
+  void AssignMergedSegment(const Merger& merger, segment_index_t base,
                            const ift::common::SegmentSet& to_merge);
 
   void MarkFinished(segment_index_t s) {
-    if (!initialized_) {
+    if (!initialized_ || phase_1_complete_) {
       return;
     }
     RemoveActiveSegment(s);
+    segment_epoch_.at(s) = UINT32_MAX;
+    dirty_segments_.erase(s);
   }
 
  private:
@@ -81,6 +83,7 @@ class AllPairsMerger {
   };
 
   absl::Status InitPhase1(Merger& merger);
+  absl::Status RefreshDirtySegments(Merger& merger);
   bool IsCandidateStale(const QueuedCandidate& candidate) const;
   bool IsActiveProbSegment(segment_index_t s) const {
     return active_segment_prob_.at(s).has_value();
@@ -96,11 +99,18 @@ class AllPairsMerger {
       Merger& merger,
       const std::optional<ift::common::SegmentSet>& filter_segments =
           std::nullopt);
+  absl::Status QueueAllCandidates(
+      Merger& merger,
+      const std::optional<ift::common::SegmentSet>& dirty_segments =
+          std::nullopt);
 
   bool initialized_ = false;
   bool phase_1_complete_ = false;
   uint32_t current_epoch_ = 0;
   std::vector<uint32_t> segment_epoch_;
+  ift::common::SegmentSet dirty_segments_;
+  ift::common::SegmentSet dirty_bases_;
+  ift::common::GlyphSet dirty_glyphs_;
   absl::btree_set<ProbOrderedSegment> active_segments_by_prob_;
   std::vector<std::optional<double>> active_segment_prob_;
   std::priority_queue<QueuedCandidate, std::vector<QueuedCandidate>,
