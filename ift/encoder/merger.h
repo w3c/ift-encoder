@@ -8,6 +8,7 @@
 #include "absl/flags/declare.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/all_pairs_merger.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/invalidation_set.h"
 #include "ift/encoder/merge_strategy.h"
@@ -92,6 +93,28 @@ class Merger {
 
   uint32_t NumInscopeSegments() const { return inscope_segments_.size(); }
 
+  const ift::common::SegmentSet& InscopeSegments() const {
+    return inscope_segments_;
+  }
+
+  const ift::common::SegmentSet& CandidateSegments() const {
+    return candidate_segments_;
+  }
+
+  segment_index_t OptimizationCutoffSegment() const {
+    return optimization_cutoff_segment_;
+  }
+
+  // For a merge of an inert base patch with any other possible inert segment,
+  // this computes the minimum probability the other segment must have for it to
+  // be possible to produce a delta lower than lowest_cost_delta (regardless of
+  // it's probability or size).
+  //
+  // This assumes that P(base) >= P(other)
+  double BestCaseInertProbabilityThreshold(uint32_t base_patch_size,
+                                           double base_probability,
+                                           double lowest_cost_delta) const;
+
   void RecordMergedSizeReduction(double size_reduction) {
     int32_t reduction_percent = 100.0 * size_reduction;
     merged_size_reduction_histogram_[reduction_percent]++;
@@ -126,9 +149,8 @@ class Merger {
   // cached segment probabilities when available.
   absl::StatusOr<double> AggregateProbability(
       segment_index_t segment_index) const {
-    if (segment_index < cached_agg_prob_.size() &&
-        cached_agg_prob_[segment_index] >= 0.0) {
-      return cached_agg_prob_[segment_index];
+    if (cached_agg_prob_.at(segment_index) >= 0.0) {
+      return cached_agg_prob_.at(segment_index);
     }
     return ComputeAndCacheAggregateProbability(segment_index);
   }
@@ -138,9 +160,8 @@ class Merger {
   // probabilities when available.
   absl::StatusOr<double> MinAggregateProbability(
       segment_index_t segment_index) const {
-    if (segment_index < cached_min_agg_prob_.size() &&
-        cached_min_agg_prob_[segment_index] >= 0.0) {
-      return cached_min_agg_prob_[segment_index];
+    if (cached_min_agg_prob_.at(segment_index) >= 0.0) {
+      return cached_min_agg_prob_.at(segment_index);
     }
     TRYV(ComputeAndCacheAggregateProbability(segment_index));
     return cached_min_agg_prob_.at(segment_index);
@@ -152,9 +173,8 @@ class Merger {
       segment_index_t segment_index) const {
     if (!exclusive_sizes_dirty_ &&
         cached_patch_size_cache_ == context_->patch_size_cache.get() &&
-        segment_index < cached_exclusive_size_.size() &&
-        cached_exclusive_size_[segment_index] != UINT32_MAX) {
-      return cached_exclusive_size_[segment_index];
+        cached_exclusive_size_.at(segment_index) != UINT32_MAX) {
+      return cached_exclusive_size_.at(segment_index);
     }
     return ComputeAndCacheExclusivePatchSize(segment_index);
   }
@@ -291,20 +311,13 @@ class Merger {
       segment_index_t base_segment_index,
       const ift::common::SegmentSet& to_merge_segments_);
 
-  void MarkFinished(segment_index_t s) { candidate_segments_.erase(s); }
+  void MarkFinished(segment_index_t s) {
+    candidate_segments_.erase(s);
+    all_pairs_merger_.MarkFinished(s);
+  }
 
   absl::Status ApplyInitFontMove(const ift::common::GlyphSet& glyphs_to_move,
                                  double delta);
-
-  // For a merge of an inert base patch with any other possible inert segment,
-  // this computes the minimum probability the other segment must have for it to
-  // be possible to produce a delta lower than lowest_cost_delta (regardless of
-  // it's probability or size).
-  //
-  // This assumes that P(base) >= P(other)
-  double BestCaseInertProbabilityThreshold(uint32_t base_patch_size,
-                                           double base_probability,
-                                           double lowest_cost_delta) const;
 
   absl::StatusOr<ift::common::SegmentSet> InitFontApplyProbabilityThreshold(
       size_t profile_index = 0) const;
@@ -347,6 +360,8 @@ class Merger {
   mutable std::optional<uint32_t> cached_base_overhead_;
   mutable const PatchSizeCache* cached_patch_size_cache_ = nullptr;
   mutable bool exclusive_sizes_dirty_ = true;
+
+  AllPairsMerger all_pairs_merger_;
 };
 
 }  // namespace ift::encoder

@@ -198,10 +198,11 @@ Status CandidateMerge::ApplyPatchMerge(Merger& merger) {
                                                          {});
 }
 
-static bool WouldMixFeaturesAndCodepoints(
+bool CandidateMerge::WouldMixFeaturesAndCodepoints(
     const RequestedSegmentationInformation& segment_info,
     segment_index_t base_segment_index, const SegmentSet& segments) {
-  const auto& base = segment_info.Segments()[base_segment_index].Definition();
+  const auto& base =
+      segment_info.Segments().at(base_segment_index).Definition();
   bool base_codepoints_only =
       !base.codepoints.empty() && base.feature_tags.empty();
   bool base_features_only =
@@ -212,7 +213,7 @@ static bool WouldMixFeaturesAndCodepoints(
   }
 
   for (segment_index_t id : segments) {
-    const auto& s = segment_info.Segments()[id].Definition();
+    const auto& s = segment_info.Segments().at(id).Definition();
 
     if (base_codepoints_only && !s.feature_tags.empty()) {
       return true;

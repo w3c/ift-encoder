@@ -8,6 +8,7 @@
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/invalidation_set.h"
+#include "ift/encoder/requested_segmentation_information.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
@@ -190,6 +191,11 @@ struct CandidateMerge {
   static absl::StatusOr<uint32_t> Woff2SizeOf(hb_face_t* original_face,
                                               const SubsetDefinition& def,
                                               int quality);
+
+  static bool WouldMixFeaturesAndCodepoints(
+      const RequestedSegmentationInformation& segment_info,
+      segment_index_t base_segment_index,
+      const ift::common::SegmentSet& segments);
 
  private:
   static absl::Status ComputeInitFontGlyphDelta(
