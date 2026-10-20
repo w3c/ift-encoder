@@ -52,10 +52,8 @@ StatusOr<double> Merger::ComputeAndCacheAggregateProbability(
     total += bound.Value();
     min_total += bound.Min();
   }
-  if (segment_index < cached_agg_prob_.size()) {
-    cached_agg_prob_[segment_index] = total;
-    cached_min_agg_prob_[segment_index] = min_total;
-  }
+  cached_agg_prob_.at(segment_index) = total;
+  cached_min_agg_prob_.at(segment_index) = min_total;
   return total;
 }
 
@@ -73,9 +71,8 @@ void Merger::EnsurePatchSizeCacheValid() const {
 StatusOr<uint32_t> Merger::ComputeAndCacheExclusivePatchSize(
     segment_index_t segment_index) const {
   EnsurePatchSizeCacheValid();
-  if (segment_index < cached_exclusive_size_.size() &&
-      cached_exclusive_size_[segment_index] != UINT32_MAX) {
-    return cached_exclusive_size_[segment_index];
+  if (cached_exclusive_size_.at(segment_index) != UINT32_MAX) {
+    return cached_exclusive_size_.at(segment_index);
   }
 
   const auto& glyphs = context_->glyph_groupings.ExclusiveGlyphs(segment_index);
@@ -83,9 +80,7 @@ StatusOr<uint32_t> Merger::ComputeAndCacheExclusivePatchSize(
   if (!glyphs.empty()) {
     size = TRY(context_->patch_size_cache->GetPatchSize(glyphs));
   }
-  if (segment_index < cached_exclusive_size_.size()) {
-    cached_exclusive_size_[segment_index] = size;
-  }
+  cached_exclusive_size_.at(segment_index) = size;
   return size;
 }
 
@@ -144,6 +139,13 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
   // CJK) that will need special casing. Very broad strokes idea is to assess
   // cost for each script individually and use the sum of the individual costs
   // as the overall cost.
+
+  if (UseAllPairsMerging()) {
+    auto modified = TRY(all_pairs_merger_.TryNextAllPairsMerge(*this));
+    if (modified.has_value()) {
+      return *modified;
+    }
+  }
 
   while (true) {
     auto it = candidate_segments_.cbegin();
@@ -436,17 +438,14 @@ uint32_t Merger::AssignMergedSegment(segment_index_t base,
     }
   }
   for (segment_index_t s : invalidated) {
-    if (s < cached_agg_prob_.size()) {
-      cached_agg_prob_[s] = -1.0;
-      cached_min_agg_prob_[s] = -1.0;
-    }
-    if (s < cached_exclusive_size_.size()) {
-      cached_exclusive_size_[s] = UINT32_MAX;
-    }
+    cached_agg_prob_.at(s) = -1.0;
+    cached_min_agg_prob_.at(s) = -1.0;
+    cached_exclusive_size_.at(s) = UINT32_MAX;
   }
   if (!is_inert) {
     exclusive_sizes_dirty_ = true;
   }
+  all_pairs_merger_.AssignMergedSegment(base, to_merge);
   candidate_segments_.subtract(to_merge);
   candidate_segments_.insert(base);
   return Context().AssignMergedSegment(base, to_merge, merged_segment,

@@ -78,6 +78,7 @@ cc_library(
 cc_library(
     name = "segmentation_context",
     srcs = [
+        "all_pairs_merger.cc",
         "candidate_merge.cc",
         "complex_condition_finder.cc",
         "dependency_closure.cc",
@@ -89,6 +90,7 @@ cc_library(
         "woff2_patch_size_cache.cc",
     ],
     hdrs = [
+        "all_pairs_merger.h",
         "candidate_merge.h",
         "complex_condition_finder.h",
         "condition_to_glyphs_index.h",
