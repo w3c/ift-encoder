@@ -22,6 +22,23 @@ class Merger;
 // lazy two-stage (best-case lower bound -> exact) priority queue.
 class AllPairsMerger {
  public:
+  struct ProbOrderedSegment {
+    double probability;
+    segment_index_t segment_index;
+
+    bool operator<(const ProbOrderedSegment& other) const {
+      if (probability != other.probability) {
+        return probability > other.probability;
+      }
+      return segment_index < other.segment_index;
+    }
+
+    bool operator==(const ProbOrderedSegment& other) const {
+      return probability == other.probability &&
+             segment_index == other.segment_index;
+    }
+  };
+
   absl::StatusOr<std::optional<InvalidationSet>> TryNextAllPairsMerge(
       Merger& merger);
 
@@ -29,12 +46,17 @@ class AllPairsMerger {
                            const ift::common::SegmentSet& to_merge);
 
   void MarkFinished(segment_index_t s) {
-    if (!initialized_ || phase_1_complete_) {
+    if (!initialized_) {
       return;
     }
     RemoveActiveSegment(s);
     segment_epoch_.at(s) = UINT32_MAX;
     dirty_segments_.erase(s);
+    dirty_bases_.erase(s);
+  }
+
+  const absl::btree_set<ProbOrderedSegment>& ActiveSegmentsByProb() const {
+    return active_segments_by_prob_;
   }
 
  private:
@@ -65,23 +87,6 @@ class AllPairsMerger {
     };
   };
 
-  struct ProbOrderedSegment {
-    double probability;
-    segment_index_t segment_index;
-
-    bool operator<(const ProbOrderedSegment& other) const {
-      if (probability != other.probability) {
-        return probability > other.probability;
-      }
-      return segment_index < other.segment_index;
-    }
-
-    bool operator==(const ProbOrderedSegment& other) const {
-      return probability == other.probability &&
-             segment_index == other.segment_index;
-    }
-  };
-
   absl::Status InitPhase1(Merger& merger);
   absl::Status RefreshDirtySegments(Merger& merger);
   bool IsCandidateStale(const QueuedCandidate& candidate) const;
@@ -105,7 +110,6 @@ class AllPairsMerger {
           std::nullopt);
 
   bool initialized_ = false;
-  bool phase_1_complete_ = false;
   uint32_t current_epoch_ = 0;
   std::vector<uint32_t> segment_epoch_;
   ift::common::SegmentSet dirty_segments_;

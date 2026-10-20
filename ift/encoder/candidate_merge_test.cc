@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 
+#include "absl/flags/flag.h"
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
@@ -1774,6 +1775,266 @@ TEST_F(CandidateMergeTest,
       merger, {0, 1}, exclusive_gids, std::nullopt);
   ASSERT_TRUE(exact_delta.ok()) << exact_delta.status();
   EXPECT_NEAR(*exact_delta, expected_exact, 1e-9);
+}
+
+namespace {
+struct ScopedAllPairsMergingFlag {
+  explicit ScopedAllPairsMergingFlag(bool enabled)
+      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_merging)) {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, enabled);
+  }
+  ~ScopedAllPairsMergingFlag() {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, prev);
+  }
+  bool prev;
+};
+}  // namespace
+
+TEST_F(CandidateMergeTest, AllPairsMerging_AvoidsSingleBaseGreedyTrap) {
+  // s0 ('a', gid 69) has a marginally negative merge with s1 ('b', gid 70)
+  // (delta = -4.0), whereas s1 ('b', gid 70) and s2 ('c', gid 71) have a much
+  // stronger negative merge (delta = -201.25).
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'b'}},
+      {{'c'}},
+  };
+  std::vector<std::pair<Segment, double>> probabilities = {
+      {{{'a'}}, 0.90},
+      {{{'b'}}, 0.80},
+      {{{'c'}}, 0.79},
+      {{{'a', 'b'}}, 0.90},
+      {{{'b', 'c'}}, 0.80},
+      {{{'a', 'c'}}, 0.99},
+      {{{'a', 'b', 'c'}}, 0.99},
+  };
+
+  auto run_merger = [&](bool all_pairs) {
+    ScopedAllPairsMergingFlag flag_override(all_pairs);
+    ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+    auto context = SegmentationContext::InitializeSegmentationContext(
+        roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+        segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+        segmenter.init_font_merging_brotli_quality(), resolver);
+    EXPECT_TRUE(context.ok()) << context.status();
+
+    auto* size_cache = new MockPatchSizeCache();
+    size_cache->SetPatchSize({69}, 200);
+    size_cache->SetPatchSize({70}, 200);
+    size_cache->SetPatchSize({71}, 200);
+    size_cache->SetPatchSize({69, 70}, 440);
+    size_cache->SetPatchSize({70, 71}, 220);
+    size_cache->SetPatchSize({69, 71}, 450);
+    size_cache->SetPatchSize({69, 70, 71}, 650);
+    context->patch_size_cache.reset(size_cache);
+
+    auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
+    Merger merger = *Merger::New(
+        *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 1),
+        all, all);
+
+    while (true) {
+      auto modified = merger.TryNextMerge();
+      EXPECT_TRUE(modified.ok()) << modified.status();
+      if (!modified->has_value()) {
+        break;
+      }
+      EXPECT_TRUE(context->ReprocessChanged(**modified).ok());
+    }
+
+    std::vector<SubsetDefinition> result;
+    for (const auto& seg : context->SegmentationInfo().Segments()) {
+      result.push_back(seg.Definition());
+    }
+    return result;
+  };
+
+  // Single-base greedy mode merges {0, 1} first, trapping s2 unmerged.
+  std::vector<SubsetDefinition> single_base_result = run_merger(false);
+  std::vector<SubsetDefinition> expected_single_base = {
+      {'a', 'b'},
+      {},
+      {'c'},
+  };
+  EXPECT_EQ(single_base_result, expected_single_base);
+
+  // All-pairs mode merges {1, 2} first and leaves s0 separate.
+  std::vector<SubsetDefinition> all_pairs_result = run_merger(true);
+  std::vector<SubsetDefinition> expected_all_pairs = {
+      {'a'},
+      {'b', 'c'},
+      {},
+  };
+  EXPECT_EQ(all_pairs_result, expected_all_pairs);
+}
+
+TEST_F(CandidateMergeTest,
+       AllPairsMerging_Phase2ResumesPhase1AfterForcedMerge) {
+  // With min_group_size = 2:
+  // - s0 ('a', gid 69) and s1 ('b', gid 70) each have 1 codepoint; s2
+  //   ({'c', 'd'}, gids {71, 72}) already has 2 codepoints.
+  // - All initial 2-segment merges have positive cost deltas, so Phase 1 makes
+  //   no merges and Phase 2 forces s0 to merge with s1 (delta = +6.5).
+  // - Once s0 becomes {'a', 'b'}, merging s0 with s2 has a negative cost delta
+  //   (delta = -220.25). Even though both s0 and s2 now meet min_group_size = 2,
+  //   AllPairsMerger refreshes dirty segment s0 and resumes Phase 1 to apply
+  //   the cost-reducing merge {0, 2}.
+  ScopedAllPairsMergingFlag flag_override(true);
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'b'}},
+      {{'c', 'd'}},
+  };
+  std::vector<std::pair<Segment, double>> probabilities = {
+      {{{'a'}}, 0.80},
+      {{{'b'}}, 0.50},
+      {{{'c', 'd'}}, 0.75},
+      {{{'a', 'b'}}, 0.80},
+      {{{'a', 'c', 'd'}}, 0.95},
+      {{{'b', 'c', 'd'}}, 0.95},
+      {{{'a', 'b', 'c', 'd'}}, 0.80},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  auto* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({70}, 200);
+  size_cache->SetPatchSize({71, 72}, 240);
+  size_cache->SetPatchSize({69, 70}, 380);
+  size_cache->SetPatchSize({69, 71, 72}, 450);
+  size_cache->SetPatchSize({70, 71, 72}, 450);
+  size_cache->SetPatchSize({69, 70, 71, 72}, 400);
+  context->patch_size_cache.reset(size_cache);
+
+  auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
+  Merger merger = *Merger::New(
+      *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 2), all,
+      all);
+
+  // Step 1: Phase 1 finds no negative merges; Phase 2 forces {0, 1}.
+  auto step1 = merger.TryNextMerge();
+  ASSERT_TRUE(step1.ok()) << step1.status();
+  ASSERT_TRUE(step1->has_value());
+  EXPECT_EQ((*step1)->base_segment, 0u);
+  EXPECT_EQ((*step1)->segments, (SegmentSet{0, 1}));
+  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
+
+  // Step 2: Phase 1 resumes on dirty segment 0 and applies {0, 2}.
+  auto step2 = merger.TryNextMerge();
+  ASSERT_TRUE(step2.ok()) << step2.status();
+  ASSERT_TRUE(step2->has_value());
+  EXPECT_EQ((*step2)->base_segment, 0u);
+  EXPECT_EQ((*step2)->segments, (SegmentSet{0, 2}));
+  ASSERT_TRUE(context->ReprocessChanged(**step2).ok());
+
+  auto step3 = merger.TryNextMerge();
+  ASSERT_TRUE(step3.ok()) << step3.status();
+  EXPECT_FALSE(step3->has_value());
+}
+
+TEST_F(CandidateMergeTest,
+       AllPairsMerging_Phase2UsesAllPairsProbabilityOrdering) {
+  // Initial probabilities are descending:
+  // s0 ('a', 0.88), s1 ('b', 0.50), s2 ('c', 0.001), s3 ('d', 0.48),
+  // s4 ('e', 0.48).
+  // In Phase 1, {3, 4} merges into s3 with P({'d', 'e'}) = 0.66 > P(s1) = 0.50.
+  // In Phase 2 (min_group_size = 2), CollectExclusiveCandidateMerges iterates
+  // using AllPairsMerger's probability order (s3 at 0.66, then s1 at 0.50,
+  // then s2 at 0.001) rather than segment-index order:
+  // - s3 (0.66) is evaluated before s1 (0.50), so on an equal positive cost
+  //   delta (+1.54), s3 is selected over s1.
+  // - s2 (0.001) is visited after s3 and s1 and breaks early on
+  //   inert_threshold (0.0065).
+  ScopedAllPairsMergingFlag flag_override(true);
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'b'}},
+      {{'c'}},
+      {{'d'}},
+      {{'e'}},
+  };
+  std::vector<std::pair<Segment, double>> probabilities = {
+      {{{'a'}}, 0.88},
+      {{{'b'}}, 0.50},
+      {{{'c'}}, 0.001},
+      {{{'d'}}, 0.48},
+      {{{'e'}}, 0.48},
+      {{{'d', 'e'}}, 0.66},
+      {{{'a', 'b'}}, 0.88},
+      {{{'a', 'c'}}, 0.88},
+      {{{'a', 'd'}}, 0.88},
+      {{{'a', 'e'}}, 0.88},
+      {{{'a', 'd', 'e'}}, 0.88},
+      {{{'b', 'c'}}, 0.501},
+      {{{'b', 'd'}}, 0.80},
+      {{{'b', 'e'}}, 0.80},
+      {{{'b', 'd', 'e'}}, 0.85},
+      {{{'c', 'd'}}, 0.481},
+      {{{'c', 'e'}}, 0.481},
+      {{{'c', 'd', 'e'}}, 0.661},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  // Glyphs: 'a'=69, 'b'=70, 'c'=71, 'd'=72, 'e'=73.
+  auto* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 500);
+  size_cache->SetPatchSize({70}, 200);
+  size_cache->SetPatchSize({71}, 200);
+  size_cache->SetPatchSize({72}, 200);
+  size_cache->SetPatchSize({73}, 200);
+  // {3, 4} has negative best-case and exact cost delta in Phase 1:
+  // best-case: 0.66 * (300 + 75) - 2 * 0.48 * (200 + 75) = 247.5 - 264.0 = -16.5.
+  // exact: 0.66 * (200 + 75) - 264.0 = 181.5 - 264.0 = -82.5.
+  size_cache->SetPatchSize({72, 73}, 200);
+  // In Phase 2 for s0 (cost = 0.88 * 575 = 506.0):
+  // Both {0, 1} and {0, 3} have the exact same positive cost delta (+1.54):
+  // - With s3={'d', 'e'} (cost = 0.66 * 275 = 181.5):
+  //   size({69, 72, 73}) = 708 -> 0.88 * 783 - 506.0 - 181.5 = 689.04 - 687.5 = +1.54.
+  // - With s1={'b'} (cost = 0.50 * 275 = 137.5):
+  //   size({69, 70}) = 658 -> 0.88 * 733 - 506.0 - 137.5 = 645.04 - 643.5 = +1.54.
+  // Because s3 (0.66) precedes s1 (0.50) in AllPairsMerger's probability order,
+  // s3 is evaluated first and wins the tie.
+  size_cache->SetPatchSize({69, 72, 73}, 708);
+  size_cache->SetPatchSize({69, 70}, 658);
+  size_cache->SetPatchSize({69, 72}, 700);
+  size_cache->SetPatchSize({69, 73}, 700);
+  size_cache->SetPatchSize({70, 72}, 400);
+  size_cache->SetPatchSize({70, 73}, 400);
+  size_cache->SetPatchSize({70, 72, 73}, 400);
+  context->patch_size_cache.reset(size_cache);
+
+  auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
+  Merger merger = *Merger::New(
+      *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 2), all,
+      all);
+
+  // Step 1 (Phase 1): {3, 4} merges into s3.
+  auto step1 = merger.TryNextMerge();
+  ASSERT_TRUE(step1.ok()) << step1.status();
+  ASSERT_TRUE(step1->has_value());
+  EXPECT_EQ((*step1)->base_segment, 3u);
+  EXPECT_EQ((*step1)->segments, (SegmentSet{3, 4}));
+  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
+
+  // Step 2 (Phase 2): s0 merges with s3 (evaluated before s1 due to higher
+  // post-merge probability, and breaking before s2 on inert_threshold).
+  auto step2 = merger.TryNextMerge();
+  ASSERT_TRUE(step2.ok()) << step2.status();
+  ASSERT_TRUE(step2->has_value());
+  EXPECT_EQ((*step2)->base_segment, 0u);
+  EXPECT_EQ((*step2)->segments, (SegmentSet{0, 3}));
 }
 
 }  // namespace ift::encoder
