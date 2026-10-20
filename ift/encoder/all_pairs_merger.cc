@@ -27,7 +27,7 @@ namespace ift::encoder {
 void AllPairsMerger::AssignMergedSegment(const Merger& merger,
                                          segment_index_t base,
                                          const SegmentSet& to_merge) {
-  if (!initialized_ || phase_1_complete_) {
+  if (!initialized_) {
     return;
   }
 
@@ -195,7 +195,7 @@ Status AllPairsMerger::QueueCompositeCandidates(
       continue;
     }
 
-    if (!triggering_segments.intersects(merger.CandidateSegments()) ||
+    if (!triggering_segments.is_subset_of(merger.CandidateSegments()) ||
         !triggering_segments.is_subset_of(merger.InscopeSegments())) {
       continue;
     }
@@ -351,10 +351,6 @@ bool AllPairsMerger::IsCandidateStale(const QueuedCandidate& candidate) const {
 
 StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
     Merger& merger) {
-  if (phase_1_complete_) {
-    return std::nullopt;
-  }
-
   if (!initialized_) {
     TRYV(InitPhase1(merger));
   } else {
@@ -390,7 +386,6 @@ StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
     return TRY(top.evaluated_merge->Apply(merger));
   }
 
-  phase_1_complete_ = true;
   return std::nullopt;
 }
 

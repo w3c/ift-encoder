@@ -148,12 +148,16 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
   }
 
   while (true) {
-    auto it = candidate_segments_.cbegin();
-    if (it == candidate_segments_.cend()) {
+    segment_index_t base_segment_index;
+    if (UseAllPairsMerging() &&
+        !all_pairs_merger_.ActiveSegmentsByProb().empty()) {
+      base_segment_index =
+          all_pairs_merger_.ActiveSegmentsByProb().begin()->segment_index;
+    } else if (!candidate_segments_.empty()) {
+      base_segment_index = *candidate_segments_.cbegin();
+    } else {
       break;
     }
-
-    segment_index_t base_segment_index = *it;
 
     std::optional<InvalidationSet> modified;
     if (strategy_.UseCosts()) {
@@ -549,34 +553,10 @@ StatusOr<segment_index_t> Merger::ComputeSegmentCutoff() const {
 
 StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
     uint32_t base_segment_index) {
-  // TODO(garretrieger): what we are trying to solve here is effectively
-  // a partitioning problem (finding the partitioning with lowest cost) which is
-  // NP.
-  //
-  // To make this tractable we use a simplistic greedy approach were we
-  // iteratively select two (or more) segments to merge that lower the overall
-  // cost. Currently this selects candidates from two sources:
-  // 1. Start with the highest probability segment, evaluate the cost delta for
-  //    merging it with every other segment. Once no more merges are found,
-  //    move on to the next highest frequency.
-  // 2. Consider merging the groups of segments that are known to interact as
-  //    these might give slightly better results due to reduction of
-  //    conditional patches.
-  //
-  // This approach can likely be improved:
-  // - Consider all possible pairs instead of just pairs with the highest freq
-  //   item.
-  // - This could be made tractable by caching the pair wise cost deltas and
-  //   invaldidating specific ones as needed on each merge.
-  // - After forming an initial greedy based partition try to fine tune by
-  //   randomly moving codepoints between the segments to see if further cost
-  //   reductions can be realized. Can use a computaton budget to set a bound
-  //   on how much time is spent here.
-  //
-  // Lastly, currently lacking a good set of frequency data for all unicode
-  // codepoints this approach has not yet been thoroughly tested. Next steps
-  // would be to gather some frequency data, test this approach as is, and then
-  // refine it potentially using some of the proposals noted above.
+  // TODO(garretrieger): After forming an initial greedy based partition try
+  //   to fine tune by randomly moving codepoints between the segments to
+  //   see if further cost reductions can be realized. Can use a computaton
+  //   budget to set a bound on how much time is spent here.
 
   auto base_segment_glyphs =
       context_->glyph_groupings.ExclusiveGlyphs(base_segment_index);
@@ -592,6 +572,11 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
   bool min_group_size_met =
       base_segment.MeetsMinimumGroupSize(strategy_.MinimumGroupSize());
   if (min_group_size_met) {
+    if (UseAllPairsMerging()) {
+      // Negative cost delta merges have already been exhausted by
+      // AllPairsMerger.
+      return std::nullopt;
+    }
     // If min group size is met, then we will no longer consider merge's that
     // have a positive cost delta so start with an existing smallest candidate
     // set to cost delta 0 which will filter out positive cost delta candidates.
@@ -599,11 +584,6 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
         CandidateMerge::BaselineCandidate(base_segment_index, 0.0);
   }
 
-  // TODO(garretrieger): On each iteration we should consider all merge pairs
-  //  rather than limiting ourselves just to pairs involving a single
-  //  base_segment_index. This will take some care to keep it performant
-  //  however. We'd likely need a priority queue to cache deltas with a
-  //  way of invalidating any pairs that are changed by each merge operation.
   TRYV(CollectExclusiveCandidateMerges(base_segment_index,
                                        smallest_candidate_merge));
 
@@ -728,28 +708,28 @@ Status Merger::CollectExclusiveCandidateMerges(
         base_size, base_probability, smallest_candidate_merge->CostDelta());
   }
 
-  for (auto it = candidate_segments_.lower_bound(base_segment_index);
-       it != candidate_segments_.end(); it++) {
-    if (*it == base_segment_index) {
-      continue;
+  auto evaluate_candidate =
+      [&](segment_index_t segment_index) -> StatusOr<bool> {
+    if (segment_index == base_segment_index) {
+      return true;
     }
-
-    segment_index_t segment_index = *it;
 
     if (segment_index >= optimization_cutoff_segment_ &&
         smallest_candidate_merge.has_value()) {
       // We are at the optimization cutoff, so we won't evaluate any further
       // candidates beyond what is need to select at least one. Since a
       // candidate already exists, we can stop here.
-      return absl::OkStatus();
+      return false;
     }
 
-    if (context_->InertSegments().contains(segment_index) &&
-        TRY(AggregateProbability(segment_index)) <= inert_threshold) {
-      // Since we iteration is in probability order from highest to lowest, once
-      // one segment fails the threshold then we know all further ones will as
-      // well.
-      break;
+    if (context_->InertSegments().contains(segment_index)) {
+      double segment_probability = TRY(AggregateProbability(segment_index));
+      if (segment_probability <= inert_threshold) {
+        // Since iteration is in probability order from highest to lowest, once
+        // one segment fails the threshold then we know all further ones will as
+        // well.
+        return false;
+      }
     }
 
     auto segment_glyphs =
@@ -757,7 +737,7 @@ Status Merger::CollectExclusiveCandidateMerges(
     if (segment_glyphs.empty()) {
       // This segment has no exclusive glyphs, so no need to consider it for a
       // merge.
-      continue;
+      return true;
     }
 
     SegmentSet triggering_segments{segment_index};
@@ -768,6 +748,32 @@ Status Merger::CollectExclusiveCandidateMerges(
       smallest_candidate_merge = *candidate_merge;
       inert_threshold = BestCaseInertProbabilityThreshold(
           base_size, base_probability, smallest_candidate_merge->CostDelta());
+    }
+    return true;
+  };
+
+  if (UseAllPairsMerging()) {
+    for (const auto& entry : all_pairs_merger_.ActiveSegmentsByProb()) {
+      if (!TRY(evaluate_candidate(entry.segment_index))) {
+        break;
+      }
+    }
+    if (!smallest_candidate_merge.has_value()) {
+      for (auto it =
+               candidate_segments_.lower_bound(optimization_cutoff_segment_);
+           it != candidate_segments_.end(); ++it) {
+        if (!TRY(evaluate_candidate(*it))) {
+          break;
+        }
+      }
+    }
+    return absl::OkStatus();
+  }
+
+  for (auto it = candidate_segments_.lower_bound(base_segment_index);
+       it != candidate_segments_.end(); it++) {
+    if (!TRY(evaluate_candidate(*it))) {
+      break;
     }
   }
 
