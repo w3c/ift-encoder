@@ -1788,6 +1788,17 @@ struct ScopedAllPairsMergingFlag {
   }
   bool prev;
 };
+
+struct ScopedAllPairsNormalizationFlag {
+  explicit ScopedAllPairsNormalizationFlag(AllPairsNormalizationMode mode)
+      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_normalization)) {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_normalization, mode);
+  }
+  ~ScopedAllPairsNormalizationFlag() {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_normalization, prev);
+  }
+  AllPairsNormalizationMode prev;
+};
 }  // namespace
 
 TEST_F(CandidateMergeTest, AllPairsMerging_AvoidsSingleBaseGreedyTrap) {
@@ -2035,6 +2046,153 @@ TEST_F(CandidateMergeTest,
   ASSERT_TRUE(step2->has_value());
   EXPECT_EQ((*step2)->base_segment, 0u);
   EXPECT_EQ((*step2)->segments, (SegmentSet{0, 3}));
+}
+
+TEST_F(CandidateMergeTest, AllPairsMerging_NormalizationModes) {
+  AllPairsNormalizationMode parsed_mode = AllPairsNormalizationMode::kNone;
+  std::string parse_error;
+  EXPECT_TRUE(AbslParseFlag("none", &parsed_mode, &parse_error));
+  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kNone);
+  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "none");
+  EXPECT_TRUE(AbslParseFlag("segment", &parsed_mode, &parse_error));
+  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kSegment);
+  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "segment");
+  EXPECT_TRUE(AbslParseFlag("byte", &parsed_mode, &parse_error));
+  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kByte);
+  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "byte");
+  EXPECT_FALSE(AbslParseFlag("invalid", &parsed_mode, &parse_error));
+
+  // Set up three independent candidate merges with different segment counts
+  // and pre-merge byte footprints (network overhead = 75, P = 0.50):
+  // - {0, 1, 2} (aacute, eacute, cacute sharing acute component):
+  //   3 segments (divisor = 2), 1400 pre-merge bytes (400 + 400 + 400 + 200),
+  //   exact delta = -90.0 -> kNone: -90.0, kSegment: -45.0, kByte: -0.0643
+  // - {3, 4} ('d', 'b'):
+  //   2 segments (divisor = 1), 800 pre-merge bytes (600 + 200),
+  //   exact delta = -68.0 -> kNone: -68.0, kSegment: -68.0, kByte: -0.0850
+  // - {5, 6} ('p', 'q'):
+  //   2 segments (divisor = 1), 400 pre-merge bytes (200 + 200),
+  //   exact delta = -62.0 -> kNone: -62.0, kSegment: -62.0, kByte: -0.1550
+  std::vector<Segment> segments = {
+      {{0x00E1}},  // s0: aacute
+      {{0x00E9}},  // s1: eacute
+      {{0x0107}},  // s2: cacute
+      {{'d'}},     // s3
+      {{'b'}},     // s4
+      {{'p'}},     // s5
+      {{'q'}},     // s6
+  };
+
+  std::vector<std::pair<Segment, double>> probs = {
+      {{{0x00E1}}, 0.50},
+      {{{0x00E9}}, 0.50},
+      {{{0x0107}}, 0.50},
+      {{{'d'}}, 0.50},
+      {{{'b'}}, 0.50},
+      {{{'p'}}, 0.50},
+      {{{'q'}}, 0.50},
+      {{{0x00E1, 0x00E9, 0x0107}}, 0.50},
+      {{{'d', 'b'}}, 0.50},
+      {{{'p', 'q'}}, 0.50},
+  };
+  // Default all other merged combinations to probability 1.0 so their
+  // best-case cost deltas are strictly positive and never queued.
+  for (uint32_t mask = 1; mask < (1u << segments.size()); ++mask) {
+    SubsetDefinition def;
+    for (size_t i = 0; i < segments.size(); ++i) {
+      if (mask & (1u << i)) {
+        def.Union(segments[i].Definition());
+      }
+    }
+    probs.push_back({Segment(def), 1.0});
+  }
+
+  auto run_with_mode = [&](AllPairsNormalizationMode mode) {
+    ScopedAllPairsMergingFlag all_pairs_flag(true);
+    ScopedAllPairsNormalizationFlag norm_flag(mode);
+
+    ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+    auto context = SegmentationContext::InitializeSegmentationContext(
+        roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+        segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+        segmenter.init_font_merging_brotli_quality(), resolver);
+    EXPECT_TRUE(context.ok()) << context.status();
+
+    const auto& groupings = context->glyph_groupings;
+    GlyphSet g0 = groupings.ExclusiveGlyphs(0);
+    GlyphSet g1 = groupings.ExclusiveGlyphs(1);
+    GlyphSet g2 = groupings.ExclusiveGlyphs(2);
+    GlyphSet g3 = groupings.ExclusiveGlyphs(3);
+    GlyphSet g4 = groupings.ExclusiveGlyphs(4);
+    GlyphSet g5 = groupings.ExclusiveGlyphs(5);
+    GlyphSet g6 = groupings.ExclusiveGlyphs(6);
+    GlyphSet g_acute = groupings.ConditionsAndGlyphs().at(
+        ActivationCondition::or_segments({0, 1, 2}, 0));
+
+    GlyphSet g012 = g0;
+    g012.union_set(g1);
+    g012.union_set(g2);
+    g012.union_set(g_acute);
+    GlyphSet g34 = g3;
+    g34.union_set(g4);
+    GlyphSet g56 = g5;
+    g56.union_set(g6);
+
+    auto* size_cache = new MockPatchSizeCache();
+    size_cache->SetPatchSize(g0, 325);
+    size_cache->SetPatchSize(g1, 325);
+    size_cache->SetPatchSize(g2, 325);
+    size_cache->SetPatchSize(g_acute, 125);
+    size_cache->SetPatchSize(g012, 1145);
+
+    size_cache->SetPatchSize(g3, 525);
+    size_cache->SetPatchSize(g4, 125);
+    size_cache->SetPatchSize(g34, 589);
+
+    size_cache->SetPatchSize(g5, 125);
+    size_cache->SetPatchSize(g6, 125);
+    size_cache->SetPatchSize(g56, 201);
+    context->patch_size_cache.reset(size_cache);
+
+    MergeStrategy strategy = MergeStrategy::CostBased(
+        ProbabilityProfile(std::make_shared<MockProbabilityCalculator>(probs)),
+        75, 1);
+
+    Merger merger = *Merger::New(*context, strategy, all, all);
+    std::vector<SegmentSet> merge_order;
+    while (true) {
+      auto modified = merger.TryNextMerge();
+      EXPECT_TRUE(modified.ok()) << modified.status();
+      if (!modified->has_value()) {
+        break;
+      }
+      merge_order.push_back((*modified)->segments);
+      EXPECT_TRUE(context->ReprocessChanged(**modified).ok());
+    }
+    return merge_order;
+  };
+
+  std::vector<SegmentSet> expected_none = {
+      SegmentSet{0, 1, 2},
+      SegmentSet{3, 4},
+      SegmentSet{5, 6},
+  };
+  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kNone), expected_none);
+
+  std::vector<SegmentSet> expected_segment = {
+      SegmentSet{3, 4},
+      SegmentSet{5, 6},
+      SegmentSet{0, 1, 2},
+  };
+  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kSegment),
+            expected_segment);
+
+  std::vector<SegmentSet> expected_byte = {
+      SegmentSet{5, 6},
+      SegmentSet{3, 4},
+      SegmentSet{0, 1, 2},
+  };
+  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kByte), expected_byte);
 }
 
 }  // namespace ift::encoder
