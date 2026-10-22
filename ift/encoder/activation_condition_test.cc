@@ -659,4 +659,42 @@ TEST(ActivationConditionTest, HashCaching) {
   EXPECT_EQ(cond, cond_copy);
 }
 
+TEST(ActivationConditionTest, IsUnchangedByMerge) {
+  // Empty or singleton merge sets never change any condition.
+  EXPECT_TRUE(ActivationCondition::or_segments({1, 2}, 0).IsUnchangedByMerge({}));
+  EXPECT_TRUE(ActivationCondition::or_segments({1, 2}, 0).IsUnchangedByMerge({1}));
+  EXPECT_TRUE(ActivationCondition::True(0).IsUnchangedByMerge({1, 2}));
+
+  // Non-intersecting conditions are unchanged.
+  EXPECT_TRUE(ActivationCondition::or_segments({3, 4}, 0).IsUnchangedByMerge({1, 2}));
+  EXPECT_TRUE(ActivationCondition::and_segments({3, 4}, 0).IsUnchangedByMerge({1, 2}));
+
+  // Disjunctive condition that is a superset of the merge group is unchanged.
+  EXPECT_TRUE(ActivationCondition::or_segments({1, 2, 3}, 0).IsUnchangedByMerge({1, 2}));
+  EXPECT_TRUE(ActivationCondition::or_segments({1, 2}, 0).IsUnchangedByMerge({1, 2}));
+
+  // Disjunctive condition that partially intersects the merge group is changed.
+  EXPECT_FALSE(ActivationCondition::or_segments({1, 3}, 0).IsUnchangedByMerge({1, 2}));
+
+  // Conjunctive condition whose clauses are singletons can never have a
+  // 2+-element merge group as a subset.
+  EXPECT_FALSE(ActivationCondition::exclusive_segment(1, 0).IsUnchangedByMerge({1, 2}));
+  EXPECT_FALSE(ActivationCondition::and_segments({1, 2}, 0).IsUnchangedByMerge({1, 2}));
+  EXPECT_FALSE(ActivationCondition::and_segments({1, 3}, 0).IsUnchangedByMerge({1, 2}));
+
+  // Composite condition: unchanged if all intersecting subgroups contain the
+  // merge group as a subset.
+  EXPECT_TRUE(ActivationCondition::composite_condition({{1, 2, 3}, {4, 5}}, 0)
+                  .IsUnchangedByMerge({1, 2}));
+  EXPECT_TRUE(ActivationCondition::composite_condition({{1, 2}, {1, 2, 4}}, 0)
+                  .IsUnchangedByMerge({1, 2}));
+
+  // Composite condition: changed if any intersecting subgroup does not contain
+  // the entire merge group.
+  EXPECT_FALSE(ActivationCondition::composite_condition({{1, 3}, {4, 5}}, 0)
+                   .IsUnchangedByMerge({1, 2}));
+  EXPECT_FALSE(ActivationCondition::composite_condition({{1, 2, 3}, {2, 4}}, 0)
+                   .IsUnchangedByMerge({1, 2}));
+}
+
 }  // namespace ift::encoder

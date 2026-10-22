@@ -1165,18 +1165,12 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
             R"(initial font: { gid0 }
 p0: { gid3, gid9, gid155 }
 p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid157 }
-p3: { gid158 }
-p4: { gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid190, gid191 }
-p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
-p6: { gid11 }
+p2: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
+p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
-if (s3) then p3
-if ((s2 OR s3)) then p4
-if ((s0 OR s1 OR s2 OR s3)) then p5
-if ((s0 OR s1) AND s2) then p6
+if ((s0 OR s1 OR s2)) then p3
 )");
 
   // With simplification there's no more composite conditions:
@@ -1184,16 +1178,12 @@ if ((s0 OR s1) AND s2) then p6
             R"(initial font: { gid0 }
 p0: { gid3, gid9, gid155 }
 p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid11, gid157 }
-p3: { gid158 }
-p4: { gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid190, gid191 }
-p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
+p2: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
+p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
-if (s3) then p3
-if ((s2 OR s3)) then p4
-if ((s0 OR s1 OR s2 OR s3)) then p5
+if ((s0 OR s1 OR s2)) then p3
 )");
 }
 

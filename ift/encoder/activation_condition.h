@@ -124,6 +124,12 @@ class ActivationCondition {
   // Returns true if any of the condition groups intersects with 'segments'.
   bool Intersects(const common::SegmentSet& segments) const;
 
+  // Returns true if merging 'merged_segments' into a single segment does not
+  // change the effective activation condition (i.e. every disjunctive
+  // subgroup that intersects 'merged_segments' has 'merged_segments' as a
+  // subset).
+  bool IsUnchangedByMerge(const common::SegmentSet& merged_segments) const;
+
   // Generate a new condition which is a copy of this one but with all
   // occurences of 'segments' replaced with base_segment. New condition will be
   // simplified to remove any resulting redundancy.
