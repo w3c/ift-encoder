@@ -252,6 +252,22 @@ bool ActivationCondition::Intersects(const common::SegmentSet& segments) const {
   return false;
 }
 
+bool ActivationCondition::IsUnchangedByMerge(
+    const common::SegmentSet& merged_segments) const {
+  size_t merge_size = merged_segments.size();
+  if (merge_size <= 1) {
+    return true;
+  }
+  for (const auto& condition_group : conditions_) {
+    if (condition_group.intersects(merged_segments) &&
+        (condition_group.size() < merge_size ||
+         !merged_segments.is_subset_of(condition_group))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 ActivationCondition ActivationCondition::ReplaceSegments(
     segment_index_t base_segment, const SegmentSet& segments) const {
   if (IsPurelyConjunctive()) {

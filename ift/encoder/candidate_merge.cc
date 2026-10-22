@@ -783,6 +783,11 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   // Map value is the set of glyphs and patch size metadata associated with the
   // new condition.
   struct Info {
+    const ActivationCondition* first_condition = nullptr;
+    const GlyphSet* first_glyphs = nullptr;
+    uint32_t source_count = 0;
+    bool glyph_set_unchanged = false;
+    bool skip_new_condition = false;
     GlyphSet glyphs;
     uint32_t largest_patch_size = 0;
     uint32_t largest_incremental_size = 0;
@@ -804,6 +809,34 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   double current_delta = 0.0;
   bool has_unitary = false;
   const uint32_t per_request_overhead = merger.Strategy().NetworkOverheadCost();
+
+  auto add_removed_condition = [&](const ActivationCondition* condition,
+                                   const GlyphSet* glyphs,
+                                   Info& info) -> Status {
+    uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
+    if (!unicode_range_mode || condition->IsExclusive()) {
+      double p = TRY(merger.AggregateProbability(*condition));
+      double d = p * (patch_size + per_request_overhead);
+      deltas.push_back(-d);
+      current_delta -= d;
+      VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
+              << ") -> " << d << " [removed patch " << condition->ToString()
+              << "]";
+    }
+
+    if (!best_case && !info.glyph_set_unchanged) {
+      info.glyphs.union_set(*glyphs);
+    }
+
+    uint32_t incremental_size =
+        (patch_size > base_overhead) ? (patch_size - base_overhead) : 0;
+    info.largest_patch_size = std::max(info.largest_patch_size, patch_size);
+    info.largest_incremental_size =
+        std::max(info.largest_incremental_size, incremental_size);
+    info.combined_incremental_size += incremental_size;
+    return absl::OkStatus();
+  };
+
   for (const auto& [condition, glyphs] : modified_conditions) {
     ActivationCondition updated =
         condition->ReplaceSegments(base, merged_segments);
@@ -818,38 +851,58 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       continue;
     }
 
-    uint32_t patch_size = TRY(patch_size_cache->GetPatchSize(*glyphs));
-    if (!unicode_range_mode || condition->IsExclusive()) {
-      double p = TRY(merger.AggregateProbability(*condition));
-      double d = p * (patch_size + per_request_overhead);
-      deltas.push_back(-d);
-      current_delta -= d;
-      VLOG(1) << "    - (" << p << " * " << (patch_size + per_request_overhead)
-              << ") -> " << d << " [removed patch " << condition->ToString()
-              << "]";
-    }
-
     if (!best_case && updated.IsUnitary()) {
       has_unitary = true;
     }
     auto [it, did_insert] = new_conditions.try_emplace(std::move(updated));
 
     auto& info = it->second;
-    if (!best_case) {
-      info.glyphs.union_set(*glyphs);
+    if (did_insert) {
+      info.first_condition = condition;
+      info.first_glyphs = glyphs;
+      info.source_count = 1;
+      continue;
     }
 
-    uint32_t incremental_size =
-        (patch_size > base_overhead) ? (patch_size - base_overhead) : 0;
-    info.largest_patch_size = std::max(info.largest_patch_size, patch_size);
-    info.largest_incremental_size =
-        std::max(info.largest_incremental_size, incremental_size);
-    info.combined_incremental_size += incremental_size;
+    if (info.source_count == 1) {
+      TRYV(add_removed_condition(info.first_condition, info.first_glyphs,
+                                 info));
+    }
+    info.source_count++;
+    TRYV(add_removed_condition(condition, glyphs, info));
   }
 
   if (unicode_range_mode && !best_case && exclusive_gids.has_value() &&
       !exclusive_gids->empty()) {
     new_conditions.try_emplace(ActivationCondition::or_segments({base}, 0));
+  }
+
+  for (auto& [c, info] : new_conditions) {
+    if (info.source_count != 1) {
+      continue;
+    }
+    bool was_active_before_merge =
+        (!unicode_range_mode || info.first_condition->IsExclusive());
+    bool glyph_set_unchanged = true;
+    if (!best_case && exclusive_gids.has_value()) {
+      // Check if the provided exclusive gids will cause a change to this condition's glyphs.
+      // exclusive_gids are added to the unitary condition for this merge, and subtracted
+      // from everything else.
+      if (c.IsUnitary()) {
+        glyph_set_unchanged = exclusive_gids->is_subset_of(*info.first_glyphs);
+      } else {
+        glyph_set_unchanged = !info.first_glyphs->intersects(*exclusive_gids);
+      }
+    }
+    info.glyph_set_unchanged = glyph_set_unchanged;
+    if (glyph_set_unchanged &&
+        (best_case ||
+         (was_active_before_merge &&
+          info.first_condition->IsUnchangedByMerge(merged_segments)))) {
+      info.skip_new_condition = true;
+      continue;
+    }
+    TRYV(add_removed_condition(info.first_condition, info.first_glyphs, info));
   }
 
   double initial_magnitude_sum = -current_delta;
@@ -883,6 +936,10 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
   double best_case_reduction_fraction =
       merger.Strategy().BestCaseSizeReductionFraction();
   for (auto& [c, info] : new_conditions) {
+    if (info.skip_new_condition) {
+      continue;
+    }
+
     uint32_t size = 0;
     if (best_case) {
       uint32_t extra =
@@ -890,6 +947,8 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       extra = std::max((uint32_t)(extra * best_case_reduction_fraction),
                        Merger::BEST_CASE_MERGE_SIZE_DELTA);
       size = info.largest_patch_size + extra;
+    } else if (info.glyph_set_unchanged) {
+      size = info.largest_patch_size;
     } else {
       if (exclusive_gids.has_value()) {
         // When we do not have complete glyph conditions then exclusive_gids

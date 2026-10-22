@@ -2195,4 +2195,215 @@ TEST_F(CandidateMergeTest, AllPairsMerging_NormalizationModes) {
   EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kByte), expected_byte);
 }
 
+TEST_F(CandidateMergeTest, ComputeCostDelta_BestCaseSkipsUnchangedGlyphSetConditions) {
+  // s0: 'a' -> {69}
+  // s1: 'f' -> {74}
+  // s2: 'i' -> {77}
+  // s1 AND s2: 'f' + 'i' ligature -> {444, 446}
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'f'}},
+      {{'i'}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100}, {{'a', 'a'}, 50}, {{'f', 'f'}, 75}, {{'i', 'i'}, 95}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({74}, 300);
+  size_cache->SetPatchSize({444, 446}, 150);
+  context->patch_size_cache.reset(size_cache);
+
+  // When merging {0, 1} ('a' and 'f'):
+  // - {s0} and {s1} merge into {s0} (glyph sets change, source_count == 2).
+  // - (s1 AND s2) maps to (s0 AND s2). Its glyph set {444, 446} is unchanged.
+  // In best-case mode, the delta contribution for (s1 AND s2) is treated as 0,
+  // and its patch size {444, 446} is never queried.
+  size_cache->ResetCallCount();
+  auto best_case_delta = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(best_case_delta.ok()) << best_case_delta.status();
+
+  // Only the two merging exclusive patches {69} and {74} are queried for size.
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 2);
+
+  // Expected best-case delta: only reflects {69} and {74} merging into {s0}.
+  double p_a_or_f = 0.50 + 0.75 - 0.50 * 0.75;
+  // combined_incremental = (200 - 0) + (300 - 0) = 500, largest = 300.
+  // extra = max((500 - 300) * 0.5, 6) = 100.
+  // merged_size = 300 + 100 = 400.
+  double expected_delta = -0.50 * (200 + 75) - 0.75 * (300 + 75) +
+                          p_a_or_f * (400 + 75);
+  EXPECT_NEAR(*best_case_delta, expected_delta, 1e-9);
+}
+
+TEST_F(CandidateMergeTest, ComputeCostDelta_SkipsUnchangedEffectiveConditions) {
+  // s0: aacute (0x00E1)
+  // s1: eacute (0x00E9)
+  // s2: cacute (0x0107)
+  // All three share the acute accent glyphs {117, 169} via (s0 OR s1 OR s2).
+  // Because they have composite conditions, s0, s1, s2 are NOT inert.
+  std::vector<Segment> segments = {
+      {{0x00E1}},
+      {{0x00E9}},
+      {{0x0107}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{0x00E1, 0x00E1}, 50},
+      {{0x00E9, 0x00E9}, 75},
+      {{0x0107, 0x0107}, 95}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+  ASSERT_FALSE(context->InertSegments().contains(0));
+  ASSERT_FALSE(context->InertSegments().contains(1));
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  const auto& groupings = context->glyph_groupings;
+  GlyphSet g0 = groupings.ExclusiveGlyphs(0);
+  GlyphSet g1 = groupings.ExclusiveGlyphs(1);
+  GlyphSet g01 = g0;
+  g01.union_set(g1);
+  GlyphSet g_acute = groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::or_segments({0, 1, 2}, 0));
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize(g0, 200);
+  size_cache->SetPatchSize(g1, 300);
+  size_cache->SetPatchSize(g01, 450);
+  size_cache->SetPatchSize(g_acute, 500);  // Unchanged condition patch
+  context->patch_size_cache.reset(size_cache);
+
+  // When merging {0, 1}:
+  // (s0 OR s1 OR s2) has {0, 1} as a subset of its intersecting subgroup, so
+  // IsUnchangedByMerge({0, 1}) is true, and its glyph set g_acute does not
+  // change. Its cost delta is 0 in both best-case and exact mode, and g_acute's
+  // patch size is never queried.
+  size_cache->ResetCallCount();
+  auto best_delta = CandidateMerge::ComputeCostDelta<true>(
+      merger, {0, 1}, std::nullopt, std::nullopt);
+  ASSERT_TRUE(best_delta.ok()) << best_delta.status();
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 2);  // only g0 and g1
+
+  double p_0_or_1 = 0.50 + 0.75 - 0.50 * 0.75;
+  // best-case merged size: 300 + max((500 - 300) * 0.5, 6) = 400.
+  double expected_best =
+      -0.50 * (200 + 75) - 0.75 * (300 + 75) + p_0_or_1 * (400 + 75);
+  EXPECT_NEAR(*best_delta, expected_best, 1e-9);
+
+  size_cache->ResetCallCount();
+  auto exact_delta = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, g01, std::nullopt);
+  ASSERT_TRUE(exact_delta.ok()) << exact_delta.status();
+  // In exact mode: g0, g1, and g01 are queried; g_acute is NOT.
+  EXPECT_EQ(size_cache->GetPatchSizeCallCount(), 3);
+
+  double expected_exact =
+      -0.50 * (200 + 75) - 0.75 * (300 + 75) + p_0_or_1 * (450 + 75);
+  EXPECT_NEAR(*exact_delta, expected_exact, 1e-9);
+}
+
+TEST_F(CandidateMergeTest,
+       ComputeCostDelta_EvaluatesWhenUnchangedEffectiveConditionCollides) {
+  // s0: aacute (0x00E1)
+  // s1: eacute (0x00E9)
+  // s2: cacute (0x0107)
+  std::vector<Segment> segments = {
+      {{0x00E1}},
+      {{0x00E9}},
+      {{0x0107}},
+  };
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{0x00E1, 0x00E1}, 50},
+      {{0x00E9, 0x00E9}, 75},
+      {{0x0107, 0x0107}, 95}};
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  Merger merger = *Merger::New(
+      *context,
+      MergeStrategy::CostBased(
+          *ProbabilityProfile::Unigram(std::move(frequencies)), 75, 4),
+      all, all);
+
+  const auto& groupings = context->glyph_groupings;
+  GlyphSet g0 = groupings.ExclusiveGlyphs(0);
+  GlyphSet g1 = groupings.ExclusiveGlyphs(1);
+  GlyphSet g01 = g0;
+  g01.union_set(g1);
+  GlyphSet g_acute = groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::or_segments({0, 1, 2}, 0));
+
+  glyph_id_t gid_d = 72;  // in (s0 OR s2)
+  context->glyph_condition_set.AddOrCondition(gid_d, 0);
+  context->glyph_condition_set.AddOrCondition(gid_d, 2);
+
+  auto sc = context->glyph_groupings.GroupGlyphs(
+      context->SegmentationInfo(), context->glyph_condition_set,
+      *context->glyph_closure_cache, std::nullopt, {gid_d}, {0, 2}, false);
+  ASSERT_TRUE(sc.ok()) << sc;
+
+  GlyphSet g_acute_and_d = g_acute;
+  g_acute_and_d.insert(gid_d);
+
+  MockPatchSizeCache* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize(g0, 200);
+  size_cache->SetPatchSize(g1, 300);
+  size_cache->SetPatchSize(g01, 450);
+  size_cache->SetPatchSize(g_acute, 100);
+  size_cache->SetPatchSize({gid_d}, 150);
+  size_cache->SetPatchSize(g_acute_and_d, 220);
+  context->patch_size_cache.reset(size_cache);
+
+  // When merging {0, 1}:
+  // Even though (s0 OR s1 OR s2) individually has an unchanged effective
+  // condition, it merges into (s0 OR s2) where (s0 OR s2) already exists!
+  // So their glyph set becomes g_acute U {gid_d}. Both patches must be evaluated.
+  auto exact_delta = CandidateMerge::ComputeCostDelta<false>(
+      merger, {0, 1}, g01, std::nullopt);
+  ASSERT_TRUE(exact_delta.ok()) << exact_delta.status();
+
+  double p_0_or_1 = 0.50 + 0.75 - 0.50 * 0.75;
+  double p_0_or_2 = 0.50 + 0.95 - 0.50 * 0.95;
+  double p_0_or_1_or_2 = 1.0 - (1.0 - 0.50) * (1.0 - 0.75) * (1.0 - 0.95);
+  // Note that (s0 OR s1 OR s2) and (s0 OR s2) both have their old costs
+  // subtracted, and their combined patch g_acute U {gid_d} at post-merge
+  // condition (s0 OR s2) added. Since segment 0 post-merge represents {0, 1},
+  // the post-merge probability of (s0 OR s2) is P((s0 OR s1) OR s2) = p_0_or_1_or_2.
+  double expected_exact =
+      -0.50 * (200 + 75) - 0.75 * (300 + 75) + p_0_or_1 * (450 + 75)
+      - p_0_or_1_or_2 * (100 + 75) - p_0_or_2 * (150 + 75)
+      + p_0_or_1_or_2 * (220 + 75);
+  EXPECT_NEAR(*exact_delta, expected_exact, 1e-9);
+}
+
 }  // namespace ift::encoder
