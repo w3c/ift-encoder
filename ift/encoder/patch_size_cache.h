@@ -33,7 +33,8 @@ class PatchSizeCacheImpl : public PatchSizeCache {
                 {ift::common::FontHelper::kGlyf, ift::common::FontHelper::kGvar,
                  ift::common::FontHelper::kCFF, ift::common::FontHelper::kCFF2},
                 brotli_quality),
-        cache_() {}
+        cache_(),
+        brotli_quality_(brotli_quality) {}
 
   absl::StatusOr<uint32_t> GetPatchSize(
       const ift::common::GlyphSet& gids) override {
@@ -43,6 +44,7 @@ class PatchSizeCacheImpl : public PatchSizeCache {
     }
 
     brotli_call_count_++;
+    brotli_call_gids_ += gids.size();
     auto patch_data = TRY(differ_.CreatePatch(gids));
     uint32_t size = patch_data.size();
     cache_[gids] = size;
@@ -50,7 +52,8 @@ class PatchSizeCacheImpl : public PatchSizeCache {
   }
 
   void LogBrotliCallCount() const override {
-    VLOG(0) << "Total number of calls to brotli = " << brotli_call_count_;
+    VLOG(0) << "Total brotli ops (q" << brotli_quality_ <<  ") = " << brotli_call_count_;
+    VLOG(0) << "Total glyphs compressed with brotli (q" << brotli_quality_ << ") = " << brotli_call_gids_;
   }
 
  private:
@@ -58,7 +61,9 @@ class PatchSizeCacheImpl : public PatchSizeCache {
   ift::common::CompatId id_;
   GlyphKeyedDiff differ_;
   absl::flat_hash_map<ift::common::GlyphSet, uint32_t> cache_;
+  uint32_t brotli_quality_;
   uint64_t brotli_call_count_ = 0;
+  uint64_t brotli_call_gids_ = 0;
 };
 
 }  // namespace ift::encoder
