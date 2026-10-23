@@ -302,18 +302,9 @@ Status AllPairsMerger::QueueCompositeCandidates(
       segment_index_t u = *triggering_segments.min();
       segment_index_t v = *triggering_segments.max();
       if (IsActiveProbSegment(u) && IsActiveProbSegment(v)) {
-        ProbOrderedSegment pos_u{*active_segment_prob_.at(u), u};
-        ProbOrderedSegment pos_v{*active_segment_prob_.at(v), v};
-        const ProbOrderedSegment& high = (pos_u < pos_v) ? pos_u : pos_v;
-        const ProbOrderedSegment& low = (pos_u < pos_v) ? pos_v : pos_u;
-        uint32_t high_size = TRY(merger.ExclusivePatchSize(high.segment_index));
-        double inert_threshold = merger.BestCaseInertProbabilityThreshold(
-            high_size, high.probability, 0.0);
-        if (low.probability > inert_threshold) {
-          // Pair of active exclusive segments above the inert threshold is
-          // already handled by exclusive pair queuing.
-          continue;
-        }
+        // Pairs of active segments are already considered by QueueLowerRankedExclusivePairs()
+        // so don't need to check them again here.
+        continue;
       }
     }
 
