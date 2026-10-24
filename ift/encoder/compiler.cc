@@ -715,9 +715,11 @@ TableKeyedDiff* Compiler::GetTableKeyedDifferFor(ProcessingContext& context,
     // If only table keyed patches are used we can diff the whole font.
     if (exclude_ift) {
       return new TableKeyedDiff(compat_id, {"IFT ", "IFTX"},
-                                &context.table_diff_cache_);
+                                &context.table_diff_cache_,
+                                &context.binary_diff_);
     } else {
-      return new TableKeyedDiff(compat_id, &context.table_diff_cache_);
+      return new TableKeyedDiff(compat_id, &context.table_diff_cache_,
+                                &context.binary_diff_);
     }
   }
 
@@ -726,13 +728,14 @@ TableKeyedDiff* Compiler::GetTableKeyedDifferFor(ProcessingContext& context,
     // tables with variations will need to be replaced (gvar/CFF2), all other
     // glyph data tables are excluded.
     if (exclude_ift) {
-      return new TableKeyedDiff(compat_id,
-                                {"IFT ", "IFTX", "glyf", "loca", "CFF "},
-                                {"gvar", "CFF2"}, &context.table_diff_cache_);
+      return new TableKeyedDiff(
+          compat_id, {"IFT ", "IFTX", "glyf", "loca", "CFF "}, {"gvar", "CFF2"},
+          &context.table_diff_cache_, &context.binary_diff_);
     } else {
       return new TableKeyedDiff(compat_id, {"glyf", "loca", "CFF "},
                                 {"IFTX", "gvar", "CFF2"},
-                                &context.table_diff_cache_);
+                                &context.table_diff_cache_,
+                                &context.binary_diff_);
     }
   }
 
@@ -741,11 +744,11 @@ TableKeyedDiff* Compiler::GetTableKeyedDifferFor(ProcessingContext& context,
   if (exclude_ift) {
     return new TableKeyedDiff(
         compat_id, {"IFT ", "IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"}, {},
-        &context.table_diff_cache_);
+        &context.table_diff_cache_, &context.binary_diff_);
   } else {
-    return new TableKeyedDiff(compat_id,
-                              {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"},
-                              {}, &context.table_diff_cache_);
+    return new TableKeyedDiff(
+        compat_id, {"IFTX", "glyf", "loca", "gvar", "CFF ", "CFF2"}, {},
+        &context.table_diff_cache_, &context.binary_diff_);
   }
 }
 

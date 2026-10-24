@@ -35,7 +35,6 @@ using absl::flat_hash_map;
 using absl::flat_hash_set;
 using absl::Status;
 using absl::StatusOr;
-using ift::GlyphKeyedDiff;
 using ift::common::CodepointSet;
 using ift::common::CompatId;
 using ift::common::FontData;

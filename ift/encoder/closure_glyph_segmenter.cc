@@ -55,7 +55,6 @@ using absl::Span;
 using absl::Status;
 using absl::StatusOr;
 using absl::StrCat;
-using ift::GlyphKeyedDiff;
 using ift::common::CodepointSet;
 using ift::common::CompatId;
 using ift::common::FontData;
