@@ -28,6 +28,11 @@ ABSL_FLAG(ift::encoder::AllPairsNormalizationMode,
           "(divide by merged_segments.size() - 1), or 'byte' (divide by "
           "pre-merge patch bytes including network overhead).");
 
+ABSL_FLAG(bool, experimental_all_pairs_phase1_in_phase2, true,
+          "When enabled, Phase 1 all-pairs cost-reducing merging remains active "
+          "during Phase 2 minimum group size enforcement. When disabled, Phase "
+          "1 stops once Phase 2 begins.");
+
 using absl::btree_set;
 using absl::Status;
 using absl::StatusOr;
@@ -69,36 +74,39 @@ std::string AbslUnparseFlag(AllPairsNormalizationMode mode) {
 void AllPairsMerger::AssignMergedSegment(const Merger& merger,
                                          segment_index_t base,
                                          const SegmentSet& to_merge) {
-  if (!initialized_) {
+  if (phase_ == UNINITIALIZED) {
     return;
   }
 
   SegmentSet merged_segments = to_merge;
   merged_segments.insert(base);
-  const auto& groupings = merger.Context().glyph_groupings;
-  const auto& pre_comb_map = groupings.ConditionsAndGlyphsPreCombination();
 
-  for (segment_index_t s : merged_segments) {
-    // precombination representative affected glyphs are recorded this will
-    // let us locate any conditions involved with those glyphs post-merge.
-    for (const auto& c :
-         groupings.TriggeringSegmentToConditionsPreCombination(s)) {
-      if (c.IsFallback()) {
-        continue;
+  if (phase_ == MERGING) {
+    // Full dirty segment invalidation is only needed during merging.
+    const auto& groupings = merger.Context().glyph_groupings;
+    const auto& pre_comb_map = groupings.ConditionsAndGlyphsPreCombination();
+    for (segment_index_t s : merged_segments) {
+      // precombination representative affected glyphs are recorded this will
+      // let us locate any conditions involved with those glyphs post-merge.
+      for (const auto& c :
+           groupings.TriggeringSegmentToConditionsPreCombination(s)) {
+        if (c.IsFallback()) {
+          continue;
+        }
+        if (auto rep = pre_comb_map.at(c).min(); rep.has_value()) {
+          dirty_glyphs_.insert(*rep);
+        }
       }
-      if (auto rep = pre_comb_map.at(c).min(); rep.has_value()) {
-        dirty_glyphs_.insert(*rep);
-      }
-    }
 
-    // Also record any segments involved in conditions directly impacted by the merge.
-    for (const auto& c :
-         groupings.TriggeringSegmentToConditions(s)) {
-      if (c.IsFallback()) {
-        continue;
-      }
-      if (!c.IsExclusive()) {
-        dirty_segments_.union_set(c.TriggeringSegments());
+      // Also record any segments involved in conditions directly impacted by the merge.
+      for (const auto& c :
+           groupings.TriggeringSegmentToConditions(s)) {
+        if (c.IsFallback()) {
+          continue;
+        }
+        if (!c.IsExclusive()) {
+          dirty_segments_.union_set(c.TriggeringSegments());
+        }
       }
     }
   }
@@ -363,7 +371,11 @@ Status AllPairsMerger::QueueAllCandidates(
   return QueueCompositeCandidates(merger, dirty_segments);
 }
 
-Status AllPairsMerger::InitPhase1(Merger& merger) {
+Status AllPairsMerger::Initialize(Merger& merger) {
+  if (phase_ != UNINITIALIZED) {
+    return absl::InternalError("AllPairsMerger is already initialized.");
+  }
+
   size_t num_segments = merger.Context().SegmentationInfo().Segments().size();
   current_epoch_ = 0;
   segment_epoch_.assign(num_segments, UINT32_MAX);
@@ -385,7 +397,7 @@ Status AllPairsMerger::InitPhase1(Merger& merger) {
   }
 
   TRYV(QueueAllCandidates(merger));
-  initialized_ = true;
+  phase_ = MERGING;
   return absl::OkStatus();
 }
 
@@ -424,7 +436,9 @@ Status AllPairsMerger::RefreshDirtySegments(Merger& merger) {
     }
   }
 
-  TRYV(QueueAllCandidates(merger, dirty_segments_));
+  if (phase_ == MERGING) {
+    TRYV(QueueAllCandidates(merger, dirty_segments_));
+  }
   dirty_segments_.clear();
   return absl::OkStatus();
 }
@@ -440,8 +454,9 @@ bool AllPairsMerger::IsCandidateStale(const QueuedCandidate& candidate) const {
 
 StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
     Merger& merger) {
-  if (!initialized_) {
-    TRYV(InitPhase1(merger));
+
+  if (phase_ == UNINITIALIZED) {
+    TRYV(Initialize(merger));
   } else {
     TRYV(RefreshDirtySegments(merger));
   }
@@ -473,9 +488,12 @@ StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
       continue;
     }
 
-    return TRY(top.evaluated_merge->Apply(merger));
+    return top.evaluated_merge->Apply(merger);
   }
 
+  if (!absl::GetFlag(FLAGS_experimental_all_pairs_phase1_in_phase2)) {
+    phase_ = FINISHED;
+  }
   return std::nullopt;
 }
 
