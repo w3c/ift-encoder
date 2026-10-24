@@ -40,12 +40,16 @@ cc_library(
 cc_library(
     name = "shared_brotli_encoder",
     hdrs = [
+        "brotli_arena.h",
         "shared_brotli_encoder.h",
     ],
     visibility = [
         "//visibility:public",
     ],
     deps = [
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
         "@brotli//:brotli_inc",
         "@brotli//:brotlienc",
     ],

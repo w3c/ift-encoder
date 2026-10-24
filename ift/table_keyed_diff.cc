@@ -59,15 +59,17 @@ Status TableKeyedDiff::Diff(const FontData& font_base,
     }
 
     FontData table_patch;
+    const auto& differ =
+        binary_diff_ != nullptr ? *binary_diff_ : default_binary_diff_;
     if (cache_ == nullptr) {
-      TRYV(binary_diff_.Diff(base_table, derived_table, &table_patch));
+      TRYV(differ.Diff(base_table, derived_table, &table_patch));
     } else {
       TableDiffKey key(base_table, derived_table);
       std::optional<FontData>& cache_value = (*cache_)[key];
       if (cache_value.has_value()) {
         table_patch.shallow_copy(*cache_value);
       } else {
-        TRYV(binary_diff_.Diff(base_table, derived_table, &table_patch));
+        TRYV(differ.Diff(base_table, derived_table, &table_patch));
         FontData cached_patch;
         cached_patch.shallow_copy(table_patch);
         cache_value = std::move(cached_patch);

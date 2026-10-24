@@ -11,6 +11,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "hb-subset.h"
+#include "ift/common/brotli_binary_diff.h"
 #include "ift/common/compat_id.h"
 #include "ift/common/font_data.h"
 #include "ift/common/int_set.h"
@@ -446,6 +447,7 @@ class Compiler {
     absl::flat_hash_map<Jump, uint64_t> estimated_patch_sizes_;
     ift::common::IntSet built_table_keyed_patches_;
     ift::TableDiffCache table_diff_cache_;
+    ift::common::BrotliBinaryDiff binary_diff_{11};
 
     SubsetDefinition init_subset_;
 

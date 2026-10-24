@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "brotli/brotli_arena.h"
 #include "ift/common/binary_diff.h"
 #include "ift/common/font_data.h"
 
@@ -24,8 +25,15 @@ class BrotliBinaryDiff : public BinaryDiff {
                     unsigned stream_offset, bool is_last,
                     std::vector<uint8_t>& sink) const;
 
+  const brotli::BrotliArena& arena() const { return arena_; }
+
  private:
-  unsigned quality_;
+  const unsigned quality_;
+  mutable brotli::BrotliArena arena_;
+  mutable uint64_t total_input_bytes_ = 0;
+  mutable uint64_t total_dict_bytes_ = 0;
+  mutable uint64_t total_calls_ = 0;
+  mutable double total_time_ = 0;
 };
 
 }  // namespace ift::common

@@ -57,14 +57,20 @@ using TableDiffCache =
 /* Creates a per table brotli binary diff of two fonts. */
 class TableKeyedDiff : public ift::common::BinaryDiff {
  public:
-  explicit TableKeyedDiff(ift::common::CompatId base_compat_id,
-                          TableDiffCache* cache = nullptr)
-      : binary_diff_(11), base_compat_id_(base_compat_id), cache_(cache) {}
+  explicit TableKeyedDiff(
+      ift::common::CompatId base_compat_id, TableDiffCache* cache = nullptr,
+      const ift::common::BrotliBinaryDiff* binary_diff = nullptr)
+      : default_binary_diff_(11),
+        binary_diff_(binary_diff),
+        base_compat_id_(base_compat_id),
+        cache_(cache) {}
 
   TableKeyedDiff(ift::common::CompatId base_compat_id,
                  std::initializer_list<const char*> excluded_tags,
-                 TableDiffCache* cache = nullptr)
-      : binary_diff_(11),
+                 TableDiffCache* cache = nullptr,
+                 const ift::common::BrotliBinaryDiff* binary_diff = nullptr)
+      : default_binary_diff_(11),
+        binary_diff_(binary_diff),
         base_compat_id_(base_compat_id),
         excluded_tags_(),
         replaced_tags_(),
@@ -76,8 +82,10 @@ class TableKeyedDiff : public ift::common::BinaryDiff {
   TableKeyedDiff(ift::common::CompatId base_compat_id,
                  absl::btree_set<std::string> excluded_tags,
                  absl::btree_set<std::string> replaced_tags,
-                 TableDiffCache* cache = nullptr)
-      : binary_diff_(11),
+                 TableDiffCache* cache = nullptr,
+                 const ift::common::BrotliBinaryDiff* binary_diff = nullptr)
+      : default_binary_diff_(11),
+        binary_diff_(binary_diff),
         base_compat_id_(base_compat_id),
         excluded_tags_(std::move(excluded_tags)),
         replaced_tags_(std::move(replaced_tags)),
@@ -97,7 +105,8 @@ class TableKeyedDiff : public ift::common::BinaryDiff {
       const absl::flat_hash_set<hb_tag_t>& before,
       const absl::flat_hash_set<hb_tag_t>& after) const;
 
-  ift::common::BrotliBinaryDiff binary_diff_;
+  ift::common::BrotliBinaryDiff default_binary_diff_;
+  const ift::common::BrotliBinaryDiff* binary_diff_ = nullptr;
   ift::common::CompatId base_compat_id_;
   absl::btree_set<std::string> excluded_tags_;
   absl::btree_set<std::string> replaced_tags_;

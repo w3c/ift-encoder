@@ -253,6 +253,32 @@ TEST_F(TableKeyedDiffTest, CachedDiff) {
   ASSERT_EQ(patch1.string(), patch2.string());
 }
 
+TEST_F(TableKeyedDiffTest, SharedBrotliBinaryDiff) {
+  FontData before = FontHelper::BuildFont({
+      {tag1, "foo"},
+      {tag2, "bar"},
+  });
+
+  FontData after = FontHelper::BuildFont({
+      {tag1, "fooo"},
+      {tag2, "baar"},
+  });
+
+  BrotliBinaryDiff shared_brotli_diff(11);
+  TableKeyedDiff differ1(CompatId(1, 2, 3, 4), nullptr, &shared_brotli_diff);
+  TableKeyedDiff differ2(CompatId(1, 2, 3, 4), nullptr, &shared_brotli_diff);
+
+  FontData patch1;
+  auto sc1 = differ1.Diff(before, after, &patch1);
+  ASSERT_TRUE(sc1.ok()) << sc1;
+
+  FontData patch2;
+  auto sc2 = differ2.Diff(before, after, &patch2);
+  ASSERT_TRUE(sc2.ok()) << sc2;
+
+  ASSERT_EQ(patch1.string(), patch2.string());
+}
+
 /*
 TEST_F(TableKeyedDiffTest, FilteredDiff) {
   FontData before = FontHelper::BuildFont({

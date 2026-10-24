@@ -2,10 +2,12 @@
 #define BROTLI_SHARED_BROTLI_ENCODER_H_
 
 #include <memory>
+#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "brotli/brotli_arena.h"
 #include "brotli/encode.h"
 
 namespace brotli {
@@ -20,19 +22,25 @@ typedef std::unique_ptr<BrotliEncoderPreparedDictionary,
 /* A collection of utilities that ease using the existing brotli encoder API. */
 class SharedBrotliEncoder {
  public:
-  static DictionaryPointer CreateDictionary(absl::Span<const uint8_t> data) {
+  static DictionaryPointer CreateDictionary(absl::Span<const uint8_t> data,
+                                            BrotliArena* arena = nullptr) {
+    brotli_alloc_func alloc_func = arena ? &BrotliArena::Alloc : nullptr;
+    brotli_free_func free_func = arena ? &BrotliArena::Free : nullptr;
     return DictionaryPointer(
         BrotliEncoderPrepareDictionary(
             BROTLI_SHARED_DICTIONARY_RAW, data.size(), data.data(),
-            BROTLI_MAX_QUALITY, nullptr, nullptr, nullptr),
+            BROTLI_MAX_QUALITY, alloc_func, free_func, arena),
         &BrotliEncoderDestroyPreparedDictionary);
   }
 
   static EncoderStatePointer CreateEncoder(
       unsigned quality, size_t font_size, unsigned stream_offset,
-      const BrotliEncoderPreparedDictionary* dictionary) {
+      const BrotliEncoderPreparedDictionary* dictionary,
+      BrotliArena* arena = nullptr) {
+    brotli_alloc_func alloc_func = arena ? &BrotliArena::Alloc : nullptr;
+    brotli_free_func free_func = arena ? &BrotliArena::Free : nullptr;
     EncoderStatePointer state = EncoderStatePointer(
-        BrotliEncoderCreateInstance(nullptr, nullptr, nullptr),
+        BrotliEncoderCreateInstance(alloc_func, free_func, arena),
         &BrotliEncoderDestroyInstance);
 
     if (!BrotliEncoderSetParameter(state.get(), BROTLI_PARAM_QUALITY,
