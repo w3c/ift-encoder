@@ -59,7 +59,7 @@ class AllPairsMerger {
                            const ift::common::SegmentSet& to_merge);
 
   void MarkFinished(segment_index_t s) {
-    if (!initialized_) {
+    if (phase_ == UNINITIALIZED) {
       return;
     }
     RemoveActiveSegment(s);
@@ -101,7 +101,7 @@ class AllPairsMerger {
     };
   };
 
-  absl::Status InitPhase1(Merger& merger);
+  absl::Status Initialize(Merger& merger);
   absl::Status RefreshDirtySegments(Merger& merger);
   bool IsCandidateStale(const QueuedCandidate& candidate) const;
   bool IsActiveProbSegment(segment_index_t s) const {
@@ -125,7 +125,18 @@ class AllPairsMerger {
       const std::optional<ift::common::SegmentSet>& dirty_segments =
           std::nullopt);
 
-  bool initialized_ = false;
+  enum Phase {
+    // Merger has not yet been initialized as is not currently tracking
+    // merges.
+    UNINITIALIZED,
+    // Candidate merges remain to check.
+    MERGING,
+    // All candidate merges are exhausted, but active segments and prob ordering
+    // continues to be maintained.
+    FINISHED
+  };
+
+  Phase phase_ = UNINITIALIZED;
   uint32_t current_epoch_ = 0;
   std::vector<uint32_t> segment_epoch_;
   ift::common::SegmentSet dirty_segments_;
@@ -142,5 +153,6 @@ class AllPairsMerger {
 
 ABSL_DECLARE_FLAG(ift::encoder::AllPairsNormalizationMode,
                   experimental_all_pairs_normalization);
+ABSL_DECLARE_FLAG(bool, experimental_all_pairs_phase1_in_phase2);
 
 #endif  // IFT_ENCODER_ALL_PAIRS_MERGER_H_

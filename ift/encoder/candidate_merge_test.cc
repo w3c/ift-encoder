@@ -1799,6 +1799,17 @@ struct ScopedAllPairsNormalizationFlag {
   }
   AllPairsNormalizationMode prev;
 };
+
+struct ScopedAllPairsPhase1InPhase2Flag {
+  explicit ScopedAllPairsPhase1InPhase2Flag(bool enabled)
+      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_phase1_in_phase2)) {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_phase1_in_phase2, enabled);
+  }
+  ~ScopedAllPairsPhase1InPhase2Flag() {
+    absl::SetFlag(&FLAGS_experimental_all_pairs_phase1_in_phase2, prev);
+  }
+  bool prev;
+};
 }  // namespace
 
 TEST_F(CandidateMergeTest, AllPairsMerging_AvoidsSingleBaseGreedyTrap) {
@@ -1947,6 +1958,63 @@ TEST_F(CandidateMergeTest,
   auto step3 = merger.TryNextMerge();
   ASSERT_TRUE(step3.ok()) << step3.status();
   EXPECT_FALSE(step3->has_value());
+}
+
+TEST_F(CandidateMergeTest,
+       AllPairsMerging_Phase2DisablesPhase1WhenFlagFalse) {
+  ScopedAllPairsMergingFlag flag_override(true);
+  ScopedAllPairsPhase1InPhase2Flag phase1_override(false);
+  std::vector<Segment> segments = {
+      {{'a'}},
+      {{'b'}},
+      {{'c', 'd'}},
+  };
+  std::vector<std::pair<Segment, double>> probabilities = {
+      {{{'a'}}, 0.80},
+      {{{'b'}}, 0.50},
+      {{{'c', 'd'}}, 0.75},
+      {{{'a', 'b'}}, 0.80},
+      {{{'a', 'c', 'd'}}, 0.95},
+      {{{'b', 'c', 'd'}}, 0.95},
+      {{{'a', 'b', 'c', 'd'}}, 0.80},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  auto* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({70}, 200);
+  size_cache->SetPatchSize({71, 72}, 240);
+  size_cache->SetPatchSize({69, 70}, 380);
+  size_cache->SetPatchSize({69, 71, 72}, 450);
+  size_cache->SetPatchSize({70, 71, 72}, 450);
+  size_cache->SetPatchSize({69, 70, 71, 72}, 400);
+  context->patch_size_cache.reset(size_cache);
+
+  auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
+  Merger merger = *Merger::New(
+      *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 2), all,
+      all);
+
+  // Step 1: Phase 1 finds no negative merges; Phase 2 forces {0, 1}.
+  auto step1 = merger.TryNextMerge();
+  ASSERT_TRUE(step1.ok()) << step1.status();
+  ASSERT_TRUE(step1->has_value());
+  EXPECT_EQ((*step1)->base_segment, 0u);
+  EXPECT_EQ((*step1)->segments, (SegmentSet{0, 1}));
+  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
+
+  // Step 2: With experimental_all_pairs_phase1_in_phase2 = false, Phase 1 does
+  // not resume on dirty segment 0. Since both s0 and s2 now meet min_group_size = 2,
+  // no further merges are performed.
+  auto step2 = merger.TryNextMerge();
+  ASSERT_TRUE(step2.ok()) << step2.status();
+  EXPECT_FALSE(step2->has_value());
 }
 
 TEST_F(CandidateMergeTest,
