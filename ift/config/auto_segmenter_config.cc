@@ -351,7 +351,9 @@ static CodepointSet OverlapCodepoints(
 static Status GroupInteractingScripts(
     hb_face_t* face, const std::vector<std::string>& scripts,
     const std::vector<CodepointSet>& script_codepoints,
-    const ift::common::DataFileResolver& resolver, GlyphPartition& partition) {
+    const ift::common::DataFileResolver& resolver, GlyphPartition& partition,
+    const CodepointSet& default_codepoints,
+    const btree_set<hb_tag_t>& additional_default_features) {
   if (script_codepoints.size() <= 1) {
     return absl::OkStatus();
   }
@@ -360,6 +362,8 @@ static Status GroupInteractingScripts(
       TRY(GlyphClosureCache::Create(face, resolver));
 
   SubsetDefinition init_segment;
+  init_segment.codepoints = default_codepoints;
+  init_segment.feature_tags = additional_default_features;
   AddInitSubsetDefaults(init_segment);
 
   std::vector<Segment> segments;
@@ -420,7 +424,9 @@ static StatusOr<std::vector<std::vector<std::string>>> GroupOverlappingScripts(
     const btree_set<std::string>& detected_scripts,
     const flat_hash_map<std::string, CodepointSet>& freq_list,
     const CodepointSet& unicodes,
-    const ift::common::DataFileResolver& resolver) {
+    const ift::common::DataFileResolver& resolver,
+    const CodepointSet& default_codepoints,
+    const btree_set<hb_tag_t>& additional_default_features) {
   std::vector<std::string> scripts(detected_scripts.begin(),
                                    detected_scripts.end());
   std::vector<CodepointSet> codepoints;
@@ -507,7 +513,8 @@ static StatusOr<std::vector<std::vector<std::string>>> GroupOverlappingScripts(
 
   if (target_mode == UNICODE_RANGE) {
     TRYV(GroupInteractingScripts(face, scripts, codepoints, resolver,
-                                 partition));
+                                 partition, default_codepoints,
+                                 additional_default_features));
   }
 
   std::vector<std::vector<std::string>> groups;
@@ -1061,9 +1068,12 @@ static std::vector<CodepointSet> PlaceIgnoreOverlapCodepoints(
   return out;
 }
 
-static bool HasFeatureSegments(hb_face_t* face) {
+static bool HasFeatureSegments(
+    hb_face_t* face,
+    const btree_set<hb_tag_t>& additional_default_features) {
   for (hb_tag_t tag : FontHelper::GetFeatureTags(face)) {
-    if (!DefaultFeatureTags().contains(tag)) {
+    if (!DefaultFeatureTags().contains(tag) &&
+        !additional_default_features.contains(tag)) {
       return true;
     }
   }
@@ -1120,13 +1130,14 @@ uint64_t AutoSegmenterConfig::EstimateTableKeyedPatchCount(
 static uint32_t CountTableKeyedSegments(
     hb_face_t* face, const CodepointSet& unicodes,
     const flat_hash_map<std::string, CodepointSet>& freq_list,
-    const btree_set<std::string>& detected_scripts) {
+    const btree_set<std::string>& detected_scripts,
+    const btree_set<hb_tag_t>& additional_default_features) {
   uint32_t num_segments = detected_scripts.size();
   if (CoveredCodepoints(detected_scripts, freq_list, unicodes).size() <
       unicodes.size()) {
     num_segments++;
   }
-  if (HasFeatureSegments(face)) {
+  if (HasFeatureSegments(face, additional_default_features)) {
     num_segments++;
   }
   return num_segments;
@@ -1191,8 +1202,17 @@ static void AddMergeGroup(const std::vector<std::string>& scripts,
 StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     hb_face_t* face, const ift::common::DataFileResolver& resolver,
     std::optional<std::string> primary_script,
-    std::optional<int> quality_level, TargetMode target_mode) {
+    std::optional<int> quality_level, TargetMode target_mode,
+    const ift::common::CodepointSet& default_codepoints,
+    const absl::btree_set<hb_tag_t>& additional_default_features) {
   SegmenterConfig config;
+  for (hb_codepoint_t cp : default_codepoints) {
+    config.mutable_initial_segment()->mutable_codepoints()->add_values(cp);
+  }
+  for (hb_tag_t tag : additional_default_features) {
+    config.mutable_initial_segment()->mutable_features()->add_values(
+        FontHelper::ToString(tag));
+  }
   if (target_mode == UNICODE_RANGE) {
     config.set_target_mode(UNICODE_RANGE);
   } else {
@@ -1208,6 +1228,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   auto freq_list = TRY(BuiltInFrequenciesList(resolver));
   CodepointSet unicodes = FontHelper::ToCodepointsSet(face);
   uint32_t codepoint_count = unicodes.size();
+
+  CodepointSet non_init_unicodes = unicodes;
+  non_init_unicodes.subtract(default_codepoints);
 
   Quality quality = AutoPickQuality(codepoint_count);
 
@@ -1236,7 +1259,8 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
 
   if (target_mode != UNICODE_RANGE) {
     ConfigureMaxDepth(
-        CountTableKeyedSegments(face, unicodes, freq_list, detected_scripts),
+        CountTableKeyedSegments(face, non_init_unicodes, freq_list,
+                                detected_scripts, additional_default_features),
         *config.mutable_base_segmentation_plan());
   }
 
@@ -1245,13 +1269,17 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // shared codepoints are cost merged instead of falling back to heuristic
   // merging.
   auto script_groups = TRY(
-      GroupOverlappingScripts(face, target_mode, detected_scripts, freq_list, unicodes, resolver));
+      GroupOverlappingScripts(face, target_mode, detected_scripts, freq_list,
+                              non_init_unicodes, resolver, default_codepoints,
+                              additional_default_features));
 
   std::vector<CodepointSet> codepoints_added_to_group(script_groups.size());
   if (target_mode == UNICODE_RANGE) {
     // Any of ignore overlap codepoints may be in more than one merge group,
     // in unicode range mode we need to place thse into a single group.
-    codepoints_added_to_group = PlaceIgnoreOverlapCodepoints(target_mode, primary_script_file, script_groups, freq_list, unicodes);
+    codepoints_added_to_group = PlaceIgnoreOverlapCodepoints(
+        target_mode, primary_script_file, script_groups, freq_list,
+        non_init_unicodes);
   }
 
   for (uint32_t group_index = 0; group_index < script_groups.size(); group_index++) {
@@ -1261,7 +1289,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
                   primary_script_file) == script_group.end()) {
       AddMergeGroup(script_group,
         primary_script_file,
-        GroupCodepointSetOverride(group_index, script_group, freq_list, codepoints_added_to_group, unicodes),
+        GroupCodepointSetOverride(group_index, script_group, freq_list, codepoints_added_to_group, non_init_unicodes),
         config);
       continue;
     }
@@ -1272,7 +1300,7 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     // be treated as equally important as each of them, so instead give it a
     // merge group of its own.
     std::optional<CodepointSet> primary_script_override =
-      GroupCodepointSetOverride(group_index, {primary_script_file}, freq_list, codepoints_added_to_group, unicodes);
+      GroupCodepointSetOverride(group_index, {primary_script_file}, freq_list, codepoints_added_to_group, non_init_unicodes);
     AddMergeGroup({primary_script_file}, primary_script_file,
       primary_script_override,
       config);
@@ -1289,13 +1317,13 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     }
 
     CodepointSet remaining_codepoints =
-      GroupCodepointSetOverride(group_index, remaining_scripts, freq_list, codepoints_added_to_group, unicodes)
-      .value_or(CoveredCodepoints(remaining_scripts, freq_list, unicodes));
+      GroupCodepointSetOverride(group_index, remaining_scripts, freq_list, codepoints_added_to_group, non_init_unicodes)
+      .value_or(CoveredCodepoints(remaining_scripts, freq_list, non_init_unicodes));
 
     remaining_codepoints.subtract(
       primary_script_override.value_or(
         CoveredCodepoints(
-          std::vector<std::string>{primary_script_file}, freq_list, unicodes)));
+          std::vector<std::string>{primary_script_file}, freq_list, non_init_unicodes)));
 
     if (remaining_codepoints.empty()) {
       // The primary script covers everything the rest of the group does, no

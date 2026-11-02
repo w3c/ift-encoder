@@ -22,7 +22,7 @@ bazel run -c opt //util:font2ift -- \
 This will analyze the input font, decide how to segment it, and then produce the final IFT encoded font
 and patches.
 
-When utilizing auto config there are two optional flags which can be used to adjust the behaviour:
+When utilizing auto config there are optional flags which can be used to adjust the behaviour:
 * `--auto_config_primary_script`: this tells the config generator which language/script the font is intended
   to be used with. It has two effects: first the codepoints of the primary script are eligible to be moved
   into the initial font. Second for scripts with large overlaps, such as CJK, primary script selects which
@@ -34,6 +34,14 @@ When utilizing auto config there are two optional flags which can be used to adj
   effort is spent to improve the efficiency of the final IFT font. Values range from 1 to 8, where higher
   values increase encoding times but typically result in a more efficient end IFT font (ie. less bytes
   transferred by clients using it).
+
+* `--auto_config_additional_default_features`: Takes a comma-separated list of 4-character OpenType feature tags
+  (e.g. `smcp,dlig`) which are added to the initial font (`initial_segment.features`) in the produced segmenter
+  config so that those layout features are always available in the base font.
+
+* `--auto_config_default_codepoints`: Takes a comma-separated list of Unicode codepoints or codepoint ranges
+  (in hex with `0x` or `U+` prefix, or decimal, with `-` or `..` for ranges, e.g. `0x20,0x41-0x5A,U+FE00..U+FE0F`)
+  which are added to the initial font (`initial_segment.codepoints`) in the produced segmenter config.
 
 Example command line with optional flags:
 
@@ -84,8 +92,10 @@ There are two main options for generating a segmenter config:
    ```
 
    This analyzes the input font and tries to pick appropriate config values automatically. As discussed in
-   the previous "Producing IFT Encoded Fonts" section there is a configurable quality level. If needed
-   the auto generated config can be hand tweaked after generation.
+   the previous "Producing IFT Encoded Fonts" section there is a configurable quality level. Additional flags
+   including `--primary_script`, `--additional_default_features`, and `--default_codepoints` can also be
+   provided to control the initial font segment and script prioritization. If needed the auto generated config
+   can be hand tweaked after generation.
 
 ### Step 2: Generating Segmentation Plan
 

@@ -312,6 +312,39 @@ TEST_F(SegmenterConfigUtilTest, ConfigToMergeGroups_FeatureSegmentsInferred) {
 }
 
 TEST_F(SegmenterConfigUtilTest,
+       ConfigToMergeGroups_FeatureSegmentsInferred_InitFeaturesExcluded) {
+  SegmenterConfig config;
+  config.set_generate_feature_segments(true);
+  config.mutable_initial_segment()->mutable_features()->add_values("foo ");
+
+  CodepointSet font_codepoints{1, 2, 4};
+  btree_set<hb_tag_t> font_features{HB_TAG('f', 'o', 'o', ' '),
+                                    HB_TAG('b', 'a', 'r', ' '),
+                                    HB_TAG('c', 'u', 'r', 's')};
+
+  SegmenterConfigUtil util("", resolver);
+
+  std::vector<SubsetDefinition> segments_out;
+  auto groups = util.ConfigToMergeGroups(config, font_codepoints, font_features,
+                                         segments_out);
+  ASSERT_TRUE(groups.ok()) << groups.status();
+
+  SubsetDefinition bar;
+  bar.feature_tags = {
+      HB_TAG('b', 'a', 'r', ' '),
+  };
+
+  ASSERT_EQ(segments_out, (std::vector<SubsetDefinition>{
+                              bar,
+                              {1},
+                              {2},
+                              {4},
+                          }));
+
+  ASSERT_EQ(*groups, (btree_map<SegmentSet, MergeStrategy>{}));
+}
+
+TEST_F(SegmenterConfigUtilTest,
        ConfigToMergeGroups_SegmentsProvided_Heuristic) {
   // Minimal config with one heuristic merge group that covers everything.
   SegmenterConfig config;

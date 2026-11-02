@@ -80,7 +80,8 @@ std::vector<SubsetDefinition> SegmenterConfigUtil::ConfigToSegments(
   } else if (config.generate_feature_segments()) {
     uint32_t id = 0;
     for (hb_tag_t tag : font_features) {
-      if (DefaultFeatureTags().contains(tag)) {
+      if (DefaultFeatureTags().contains(tag) ||
+          init_segment.feature_tags.contains(tag)) {
         continue;
       }
       SubsetDefinition def;

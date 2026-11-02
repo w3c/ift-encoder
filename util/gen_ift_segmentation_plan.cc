@@ -112,21 +112,7 @@ using ift::freq::UnigramProbabilityCalculator;
 static StatusOr<SegmenterConfig> LoadConfig(hb_face_t* font,
                                             const DataFileResolver& resolver) {
   if (absl::GetFlag(FLAGS_config) == "auto") {
-    std::optional<int> quality_level = std::nullopt;
-    if (absl::GetFlag(FLAGS_auto_config_quality) > 0) {
-      quality_level = absl::GetFlag(FLAGS_auto_config_quality);
-    }
-
-    std::optional<std::string> primary_script = std::nullopt;
-    if (!absl::GetFlag(FLAGS_auto_config_primary_script).empty()) {
-      primary_script = absl::GetFlag(FLAGS_auto_config_primary_script);
-    }
-    ift::config::TargetMode target_mode =
-        absl::GetFlag(FLAGS_auto_config_unicode_range)
-            ? ift::config::UNICODE_RANGE
-            : ift::config::IFT;
-    return AutoSegmenterConfig::GenerateConfig(font, resolver, primary_script,
-                                               quality_level, target_mode);
+    return ift::util::GenerateAutoSegmenterConfigFromFlags(font, resolver);
   }
 
   FontData config_text =
