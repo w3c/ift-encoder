@@ -4,10 +4,12 @@
 #include <optional>
 #include <string>
 
+#include "absl/container/btree_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "hb.h"
 #include "ift/common/data_file_resolver.h"
+#include "ift/common/int_set.h"
 #include "ift/config/segmenter_config.pb.h"
 
 namespace ift::config {
@@ -31,11 +33,20 @@ class AutoSegmenterConfig {
   //
   // target_mode: the target format mode for the generated segmentation config
   //              (IFT or UNICODE_RANGE). Defaults to IFT.
+  //
+  // default_codepoints: optional set of codepoints to place into the initial
+  //                     font (initial_segment.codepoints).
+  //
+  // additional_default_features: optional set of layout feature tags to place
+  //                              into the initial font
+  //                              (initial_segment.features).
   static absl::StatusOr<SegmenterConfig> GenerateConfig(
       hb_face_t* face, const ift::common::DataFileResolver& resolver,
       std::optional<std::string> primary_script = std::nullopt,
       std::optional<int> quality_level = std::nullopt,
-      TargetMode target_mode = IFT);
+      TargetMode target_mode = IFT,
+      const ift::common::CodepointSet& default_codepoints = {},
+      const absl::btree_set<hb_tag_t>& additional_default_features = {});
 
   // Returns the base script for a given language.
   // For example, "Language_fr" -> "Script_latin".

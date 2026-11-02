@@ -15,6 +15,7 @@
 #include "ift/common/try.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/load_codepoints.h"
+#include "util/auto_config_flags.h"
 
 using ift::config::SegmenterConfig;
 
@@ -38,6 +39,17 @@ ABSL_FLAG(int, quality, 0,
 ABSL_FLAG(bool, unicode_range, false,
           "If true, generate a segmenter config with target_mode set to "
           "UNICODE_RANGE instead of IFT.");
+
+ABSL_FLAG(
+    std::vector<std::string>, additional_default_features, {},
+    "Comma-separated list of OpenType feature tags (e.g. smcp,dlig) to add to "
+    "the initial font in the produced segmenter config.");
+
+ABSL_FLAG(
+    std::vector<std::string>, default_codepoints, {},
+    "Comma-separated list of Unicode codepoints or ranges (in hex like 0x41 or "
+    "U+0041, or decimal, with ranges using - or .. like 0xFE00-0xFE0F) to add "
+    "to the initial font in the produced segmenter config.");
 
 ABSL_FLAG(
     int, verbosity, 0,
@@ -67,8 +79,13 @@ static Status Main(const std::vector<char*> args) {
   ift::config::TargetMode target_mode = absl::GetFlag(FLAGS_unicode_range)
                                             ? ift::config::UNICODE_RANGE
                                             : ift::config::IFT;
+  auto default_codepoints =
+      TRY(ift::util::ParseCodepointsFlag(absl::GetFlag(FLAGS_default_codepoints)));
+  auto additional_default_features = TRY(ift::util::ParseFeatureTagsFlag(
+      absl::GetFlag(FLAGS_additional_default_features)));
   auto config = TRY(AutoSegmenterConfig::GenerateConfig(
-      font.get(), *resolver, primary_script, quality_level, target_mode));
+      font.get(), *resolver, primary_script, quality_level, target_mode,
+      default_codepoints, additional_default_features));
 
   std::string output;
   if (!google::protobuf::TextFormat::PrintToString(config, &output)) {
@@ -85,7 +102,9 @@ int main(int argc, char** argv) {
       "Generates a segmenter config to use with a font.\n"
       "\n"
       "Usage: gen_ift_segmenter_config --font=\"myfont.ttf\" [--quality=n] "
-      "[--primary_script=Script_foo] [--unicode_range]\n");
+      "[--primary_script=Script_foo] [--unicode_range] "
+      "[--additional_default_features=tag1,tag2] "
+      "[--default_codepoints=cp1,cp2-cp3]\n");
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::SetGlobalVLogLevel(absl::GetFlag(FLAGS_verbosity));
   auto args = absl::ParseCommandLine(argc, argv);

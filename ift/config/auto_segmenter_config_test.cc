@@ -861,5 +861,140 @@ TEST_F(AutoSegmenterConfigTest, UnicodeRange_PrimaryScriptSplitting) {
   EXPECT_FALSE(remaining_covered->intersects(*japanese_covered));
 }
 
+TEST_F(AutoSegmenterConfigTest, Ift_DefaultCodepointsAndFeatures) {
+  CodepointSet default_cps{0x41, 0x42};
+  absl::btree_set<hb_tag_t> default_features{HB_TAG('s', 'm', 'c', 'p')};
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      face_.get(), *resolver, std::nullopt, std::nullopt, IFT, default_cps,
+      default_features);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(config_or->initial_segment().codepoints().values(),
+              UnorderedElementsAre(0x41, 0x42));
+  EXPECT_THAT(config_or->initial_segment().features().values(),
+              UnorderedElementsAre("smcp"));
+}
+
+TEST_F(AutoSegmenterConfigTest, MaxDepth_AllFeaturesInDefaultFeatures) {
+  ASSERT_TRUE(cjk_face_) << "NotoSansJP-Regular.ttf not found";
+
+  auto freq_list = BuiltInFrequenciesList(*resolver);
+  ASSERT_TRUE(freq_list.ok()) << freq_list.status();
+
+  // Collect only the codepoints covered by the 7 scripts used with Script_CJK.
+  CodepointSet covered_codepoints;
+  for (const auto& [ _, scripts ] :
+       {kEmojiLatinAndSymbols, kGreek, kCyrillic, kUnifiedCJK, kFallback}) {
+    for (const std::string& script : scripts) {
+      covered_codepoints.union_set(freq_list->at(script));
+    }
+  }
+  covered_codepoints.intersect(FontHelper::ToCodepointsSet(cjk_face_.get()));
+
+  // Font with no uncovered codepoints has 7 scripts + 1 feature-only = 8 table
+  // keyed segments (no max_depth).
+  // Now if we also put all non-default features in additional_default_features,
+  // table keyed segments becomes 7 (still no max_depth).
+  hb_subset_input_t* input_no_uncovered = hb_subset_input_create_or_fail();
+  for (hb_codepoint_t cp : covered_codepoints) {
+    hb_set_add(hb_subset_input_unicode_set(input_no_uncovered), cp);
+  }
+  hb_set_invert(hb_subset_input_set(input_no_uncovered,
+                                    HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
+  hb_face_unique_ptr subset_no_uncovered =
+      make_hb_face(hb_subset_or_fail(cjk_face_.get(), input_no_uncovered));
+  hb_subset_input_destroy(input_no_uncovered);
+
+  auto non_default_features =
+      FontHelper::GetNonDefaultFeatureTags(subset_no_uncovered.get());
+  ASSERT_FALSE(non_default_features.empty());
+
+  auto config = AutoSegmenterConfig::GenerateConfig(
+      subset_no_uncovered.get(), *resolver, "Script_CJK", std::nullopt, IFT, {},
+      non_default_features);
+  ASSERT_TRUE(config.ok()) << config.status();
+  EXPECT_FALSE(config->base_segmentation_plan().has_max_depth());
+}
+
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_UnspecifiedPrimary_UnicodeRange_DefaultCodepoints) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset {
+    0x20,  // Shared w/ All
+    0x301, // Shared w/ Latin + Cyrillic
+    // Latin
+    'A',
+    'B',
+    'C',
+    // Greek
+    0x384,
+    0x385,
+    0x394,
+    // Cyrillic
+    0x401,
+    0x402,
+    0x403,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_set_clear(
+      hb_subset_input_set(input, HB_SUBSET_SETS_LAYOUT_FEATURE_TAG));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  // Moving 0x20 and 0x301 to default_codepoints means they are in initial_segment
+  // and do not cause Latin + Cyrillic to group or 0x20 to need explicit segment_ids.
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE,
+      {0x20, 0x301});
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(config_or->initial_segment().codepoints().values(),
+              UnorderedElementsAre(0x20, 0x301));
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kLatin, kCyrillic, kGreek));
+  EXPECT_FALSE(GetSegmentIds(*config_or, kLatin.first).has_value());
+  EXPECT_FALSE(GetSegmentIds(*config_or, kCyrillic.first).has_value());
+  EXPECT_FALSE(GetSegmentIds(*config_or, kGreek.first).has_value());
+}
+
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_InteractingScripts_UnicodeRange_DefaultCodepoints) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Latin
+      'A',
+      'B',
+      'C',
+      // Greek (0x386 is a composite glyph using 'A' as a component)
+      0x384,
+      0x385,
+      0x386,
+      // Cyrillic
+      0x401,
+      0x402,
+      0x403,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  // Placing 'A' into default_codepoints means 'A' is in the initial segment
+  // (available in all subsets), so Greek and Latin no longer interact on 'A'.
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE,
+      {'A'});
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(config_or->initial_segment().codepoints().values(),
+              UnorderedElementsAre('A'));
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kGreek, kLatin, kCyrillic));
+}
+
 }  // namespace
 }  // namespace ift::config
