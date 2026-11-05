@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -348,15 +349,40 @@ static CodepointSet OverlapCodepoints(
   return result;
 }
 
+// Returns the codepoints in the font which are covered by the frequency data
+// of at least one of scripts.
+template <typename Container>
+static CodepointSet CoveredCodepoints(
+    const Container& scripts,
+    const flat_hash_map<std::string, CodepointSet>& freq_list,
+    const CodepointSet& unicodes) {
+  CodepointSet result;
+  for (const std::string& script : scripts) {
+    auto it = freq_list.find(script);
+    if (it == freq_list.end()) {
+      continue;
+    }
+    result.union_set(it->second);
+  }
+  result.intersect(unicodes);
+  return result;
+}
+
 static Status GroupInteractingScripts(
     hb_face_t* face, const std::vector<std::string>& scripts,
     const std::vector<CodepointSet>& script_codepoints,
+    const CodepointSet& ungrouped_codepoints,
     const ift::common::DataFileResolver& resolver, GlyphPartition& partition,
+    flat_hash_map<std::string, CodepointSet>& codepoints_added_to_script,
     const CodepointSet& default_codepoints,
     const btree_set<hb_tag_t>& additional_default_features) {
-  if (script_codepoints.size() <= 1) {
+  if (script_codepoints.empty() ||
+      (script_codepoints.size() == 1 && ungrouped_codepoints.empty())) {
     return absl::OkStatus();
   }
+
+  std::vector<hb_codepoint_t> ungrouped_list(ungrouped_codepoints.begin(),
+                                             ungrouped_codepoints.end());
 
   std::unique_ptr<GlyphClosureCache> closure_cache =
       TRY(GlyphClosureCache::Create(face, resolver));
@@ -367,9 +393,12 @@ static Status GroupInteractingScripts(
   AddInitSubsetDefaults(init_segment);
 
   std::vector<Segment> segments;
-  segments.reserve(script_codepoints.size());
+  segments.reserve(script_codepoints.size() + ungrouped_list.size());
   for (const CodepointSet& codepoints : script_codepoints) {
     segments.emplace_back(SubsetDefinition::Codepoints(codepoints));
+  }
+  for (hb_codepoint_t cp : ungrouped_list) {
+    segments.emplace_back(SubsetDefinition::Codepoints({cp}));
   }
 
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
@@ -379,6 +408,9 @@ static Status GroupInteractingScripts(
       TRY(DependencyClosure::Create(segmentation_info.get(), face, resolver,
                                     /*allow_context_glyph_analysis=*/true));
 
+  GlyphPartition ungrouped_partition(ungrouped_list.size());
+  flat_hash_map<uint32_t, IntSet> ungrouped_to_scripts;
+
   for (const auto& [gid, condition] : dependency_closure->AllGlyphConditions()) {
     if (condition.IsUnitary()) {
       continue;
@@ -386,9 +418,23 @@ static Status GroupInteractingScripts(
 
     GlyphSet triggering;
     triggering.union_set(condition.TriggeringSegments());
-    if (triggering.size() > 1) {
-      uint32_t first = *triggering.min();
-      for (uint32_t other : triggering) {
+    if (triggering.size() <= 1) {
+      continue;
+    }
+
+    IntSet triggering_scripts;
+    IntSet triggering_ungrouped;
+    for (uint32_t s : triggering) {
+      if (s < scripts.size()) {
+        triggering_scripts.insert(s);
+      } else {
+        triggering_ungrouped.insert(s - scripts.size());
+      }
+    }
+
+    if (triggering_scripts.size() > 1) {
+      uint32_t first = *triggering_scripts.min();
+      for (uint32_t other : triggering_scripts) {
         if (TRY(partition.Find(first)) != TRY(partition.Find(other))) {
           LOG(INFO) << "Grouping " << scripts[first] << " and "
                     << scripts[other]
@@ -397,6 +443,48 @@ static Status GroupInteractingScripts(
           TRYV(partition.Union(first, other));
         }
       }
+    }
+
+    if (triggering_ungrouped.size() > 1) {
+      TRYV(ungrouped_partition.Union(triggering_ungrouped));
+    }
+
+    if (!triggering_ungrouped.empty() && !triggering_scripts.empty()) {
+      for (uint32_t u : triggering_ungrouped) {
+        ungrouped_to_scripts[u].union_set(triggering_scripts);
+      }
+    }
+  }
+
+  absl::btree_map<uint32_t, CodepointSet> component_codepoints;
+  absl::btree_map<uint32_t, IntSet> component_scripts;
+  for (uint32_t u_idx = 0; u_idx < ungrouped_list.size(); ++u_idx) {
+    uint32_t rep = TRY(ungrouped_partition.Find(u_idx));
+    component_codepoints[rep].insert(ungrouped_list[u_idx]);
+    auto it = ungrouped_to_scripts.find(u_idx);
+    if (it != ungrouped_to_scripts.end()) {
+      component_scripts[rep].union_set(it->second);
+    }
+  }
+
+  for (const auto& [rep, scripts_in_component] : component_scripts) {
+    if (scripts_in_component.empty()) {
+      continue;
+    }
+    if (scripts_in_component.size() > 1) {
+      uint32_t first = *scripts_in_component.min();
+      for (uint32_t other : scripts_in_component) {
+        if (TRY(partition.Find(first)) != TRY(partition.Find(other))) {
+          LOG(INFO) << "Grouping " << scripts[first] << " and "
+                    << scripts[other]
+                    << " together due to interaction with ungrouped codepoints";
+          TRYV(partition.Union(first, other));
+        }
+      }
+    }
+    for (uint32_t script_idx : scripts_in_component) {
+      codepoints_added_to_script[scripts.at(script_idx)].union_set(
+          component_codepoints.at(rep));
     }
   }
 
@@ -425,6 +513,7 @@ static StatusOr<std::vector<std::vector<std::string>>> GroupOverlappingScripts(
     const flat_hash_map<std::string, CodepointSet>& freq_list,
     const CodepointSet& unicodes,
     const ift::common::DataFileResolver& resolver,
+    flat_hash_map<std::string, CodepointSet>& codepoints_added_to_script,
     const CodepointSet& default_codepoints,
     const btree_set<hb_tag_t>& additional_default_features) {
   std::vector<std::string> scripts(detected_scripts.begin(),
@@ -512,8 +601,13 @@ static StatusOr<std::vector<std::vector<std::string>>> GroupOverlappingScripts(
   }
 
   if (target_mode == UNICODE_RANGE) {
-    TRYV(GroupInteractingScripts(face, scripts, codepoints, resolver,
-                                 partition, default_codepoints,
+    CodepointSet ungrouped_codepoints = unicodes;
+    ungrouped_codepoints.subtract(
+        CoveredCodepoints(detected_scripts, freq_list, unicodes));
+    TRYV(GroupInteractingScripts(face, scripts, codepoints,
+                                 ungrouped_codepoints, resolver, partition,
+                                 codepoints_added_to_script,
+                                 default_codepoints,
                                  additional_default_features));
   }
 
@@ -965,44 +1059,28 @@ static Quality AutoPickQuality(uint32_t codepoint_count) {
   return TWO;
 }
 
-// Returns the codepoints in the font which are covered by the frequency data
-// of at least one of scripts.
-template <typename Container>
-static CodepointSet CoveredCodepoints(
-    const Container& scripts,
-    const flat_hash_map<std::string, CodepointSet>& freq_list,
-    const CodepointSet& unicodes) {
-  CodepointSet result;
-  for (const std::string& script : scripts) {
-    auto it = freq_list.find(script);
-    if (it == freq_list.end()) {
-      continue;
-    }
-    result.union_set(it->second);
-  }
-  result.intersect(unicodes);
-  return result;
-}
-
 static std::optional<CodepointSet> GroupCodepointSetOverride(
-    uint32_t group_index,
     const std::vector<std::string>& script_group,
     const flat_hash_map<std::string, CodepointSet>& freq_list,
-    const std::vector<CodepointSet>& codepoints_added_to_group,
+    const flat_hash_map<std::string, CodepointSet>& codepoints_added_to_script,
     const CodepointSet& unicodes) {
 
   CodepointSet group_codepoints =
         CoveredCodepoints(script_group, freq_list, unicodes);
 
-  CodepointSet added_codepoints = codepoints_added_to_group.at(group_index);
-  added_codepoints.intersect(group_codepoints);
+  flat_hash_set<std::string> group_scripts(script_group.begin(),
+                                           script_group.end());
 
+  CodepointSet added_codepoints;
   CodepointSet removed_codepoints;
-  for (uint32_t i = 0; i < codepoints_added_to_group.size(); i++) {
-    if (i != group_index) {
-      removed_codepoints.union_set(codepoints_added_to_group.at(i));
+  for (const auto& [script, codepoints] : codepoints_added_to_script) {
+    if (group_scripts.contains(script)) {
+      added_codepoints.union_set(codepoints);
+    } else {
+      removed_codepoints.union_set(codepoints);
     }
   }
+  removed_codepoints.subtract(added_codepoints);
   removed_codepoints.intersect(group_codepoints);
 
   if (added_codepoints.empty() && removed_codepoints.empty()) {
@@ -1015,14 +1093,15 @@ static std::optional<CodepointSet> GroupCodepointSetOverride(
   return group_codepoints;
 }
 
-// Return is a map from group index to ignore overlap codepoints which should
-// be placed exclusively in that group.
-static std::vector<CodepointSet> PlaceIgnoreOverlapCodepoints(
+// Populates codepoints_added_to_script with ignore-overlap codepoints placed
+// into their assigned winning script merge group.
+static void PlaceIgnoreOverlapCodepoints(
     TargetMode target_mode,
     const std::string& primary_script,
     const std::vector<std::vector<std::string>>& script_groups,
     const flat_hash_map<std::string, CodepointSet>& freq_list,
-    const CodepointSet& unicodes) {
+    const CodepointSet& unicodes,
+    flat_hash_map<std::string, CodepointSet>& codepoints_added_to_script) {
 
   CodepointSet to_be_moved;
   flat_hash_map<uint32_t, uint32_t> unicode_to_group;
@@ -1058,14 +1137,14 @@ static std::vector<CodepointSet> PlaceIgnoreOverlapCodepoints(
     group_index++;
   }
 
-  std::vector<CodepointSet> out(script_groups.size());
-
   for (hb_codepoint_t u : to_be_moved) {
     uint32_t group_index = unicode_to_group.at(u);
-    out.at(group_index).insert(u);
+    for (const std::string& script : script_groups.at(group_index)) {
+      if (freq_list.at(script).contains(u)) {
+        codepoints_added_to_script[script].insert(u);
+      }
+    }
   }
-
-  return out;
 }
 
 static bool HasFeatureSegments(
@@ -1268,28 +1347,31 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
   // overlap each other are placed into the same merge group so that their
   // shared codepoints are cost merged instead of falling back to heuristic
   // merging.
+  flat_hash_map<std::string, CodepointSet> codepoints_added_to_script;
   auto script_groups = TRY(
       GroupOverlappingScripts(face, target_mode, detected_scripts, freq_list,
-                              non_init_unicodes, resolver, default_codepoints,
+                              non_init_unicodes, resolver,
+                              codepoints_added_to_script,
+                              default_codepoints,
                               additional_default_features));
 
-  std::vector<CodepointSet> codepoints_added_to_group(script_groups.size());
   if (target_mode == UNICODE_RANGE) {
     // Any of ignore overlap codepoints may be in more than one merge group,
-    // in unicode range mode we need to place thse into a single group.
-    codepoints_added_to_group = PlaceIgnoreOverlapCodepoints(
+    // in unicode range mode we need to place these into a single group.
+    PlaceIgnoreOverlapCodepoints(
         target_mode, primary_script_file, script_groups, freq_list,
-        non_init_unicodes);
+        non_init_unicodes, codepoints_added_to_script);
   }
 
-  for (uint32_t group_index = 0; group_index < script_groups.size(); group_index++) {
-    const auto& script_group = script_groups.at(group_index);
+  for (const auto& script_group : script_groups) {
     if (!primary_script.has_value() || script_group.size() < 2 ||
         std::find(script_group.begin(), script_group.end(),
                   primary_script_file) == script_group.end()) {
       AddMergeGroup(script_group,
         primary_script_file,
-        GroupCodepointSetOverride(group_index, script_group, freq_list, codepoints_added_to_group, non_init_unicodes),
+        GroupCodepointSetOverride(script_group, freq_list,
+                                  codepoints_added_to_script,
+                                  non_init_unicodes),
         config);
       continue;
     }
@@ -1300,7 +1382,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     // be treated as equally important as each of them, so instead give it a
     // merge group of its own.
     std::optional<CodepointSet> primary_script_override =
-      GroupCodepointSetOverride(group_index, {primary_script_file}, freq_list, codepoints_added_to_group, non_init_unicodes);
+      GroupCodepointSetOverride({primary_script_file}, freq_list,
+                                codepoints_added_to_script,
+                                non_init_unicodes);
     AddMergeGroup({primary_script_file}, primary_script_file,
       primary_script_override,
       config);
@@ -1317,7 +1401,9 @@ StatusOr<SegmenterConfig> AutoSegmenterConfig::GenerateConfig(
     }
 
     CodepointSet remaining_codepoints =
-      GroupCodepointSetOverride(group_index, remaining_scripts, freq_list, codepoints_added_to_group, non_init_unicodes)
+      GroupCodepointSetOverride(remaining_scripts, freq_list,
+                                codepoints_added_to_script,
+                                non_init_unicodes)
       .value_or(CoveredCodepoints(remaining_scripts, freq_list, non_init_unicodes));
 
     remaining_codepoints.subtract(
