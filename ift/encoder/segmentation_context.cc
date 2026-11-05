@@ -1,8 +1,17 @@
 #include "ift/encoder/segmentation_context.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <sstream>
+#include <utility>
+#include <vector>
 
+#include "absl/container/btree_map.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
@@ -28,10 +37,35 @@ using ift::common::SegmentSet;
 
 namespace ift::encoder {
 
-Status SegmentationContext::ValidateSegmentation(
-    const GlyphSegmentation& segmentation,
+Status SegmentationContext::CacheInitialGlyphProbabilities(
     absl::Span<const freq::ProbabilityCalculator* const>
-        probability_calculators) const {
+        probability_calculators) {
+  initial_glyph_probabilities_.clear();
+  for (const freq::ProbabilityCalculator* calculator :
+       probability_calculators) {
+    calculator->ResetSegmentProbabilities(
+        segmentation_info_->Segments().size());
+  }
+
+  for (const auto& [cond, gids] : glyph_groupings.ConditionsAndGlyphs()) {
+    double max_prob = 0.0;
+    for (const freq::ProbabilityCalculator* calculator :
+         probability_calculators) {
+      double prob =
+          TRY(cond.Probability(segmentation_info_->Segments(), *calculator));
+      if (prob > max_prob) {
+        max_prob = prob;
+      }
+    }
+    for (glyph_id_t gid : gids) {
+      initial_glyph_probabilities_[gid] = max_prob;
+    }
+  }
+  return absl::OkStatus();
+}
+
+Status SegmentationContext::ValidateSegmentation(
+    const GlyphSegmentation& segmentation) const {
   GlyphSet visited;
   const auto& initial_closure = segmentation.InitialFontGlyphClosure();
   auto check_disjoint = [&](const GlyphSet& gids) -> Status {
@@ -62,37 +96,21 @@ Status SegmentationContext::ValidateSegmentation(
       }
     }
 
-    for (const freq::ProbabilityCalculator* calculator :
-         probability_calculators) {
-      calculator->ResetSegmentProbabilities(
-          segmentation_info_->Segments().size());
-    }
-
     // In unicode range mode not all conditions get record into segmentation, so
     // check disjointness across the non-exclusive patches which were skipped.
     TRYV(check_disjoint(glyph_groupings.UnmappedGlyphs()));
-    size_t unreachable_glyph_count = glyph_groupings.UnmappedGlyphs().size();
+    GlyphSet unreachable_glyphs = glyph_groupings.UnmappedGlyphs();
     for (const auto& cond : glyph_groupings.OrderedConditions()) {
       if (cond.IsExclusive()) {
         continue;
       }
       const GlyphSet& gids = glyph_groupings.ConditionsAndGlyphs().at(cond);
       TRYV(check_disjoint(gids));
-      unreachable_glyph_count += gids.size();
-
-      double max_prob = 0.0;
-      for (const freq::ProbabilityCalculator* calculator :
-           probability_calculators) {
-        double prob =
-            TRY(cond.Probability(segmentation_info_->Segments(), *calculator));
-        if (prob > max_prob) {
-          max_prob = prob;
-        }
-      }
-      VLOG(0) << "Unreachable condition " << cond.ToString() << " => "
-              << gids.ToString() << " (max probability = " << max_prob << ")";
+      unreachable_glyphs.union_set(gids);
     }
-    VLOG(0) << "Total unreachable glyphs: " << unreachable_glyph_count;
+
+    LogUnreachableGlyphs(unreachable_glyphs);
+    LogSegmentCodepointCountHistogram(segmentation);
   }
 
   GlyphSet full_minus_initial = segmentation_info_->FullClosure();
@@ -127,6 +145,72 @@ Status SegmentationContext::ValidateSegmentation(
   }
 
   return absl::OkStatus();
+}
+
+void SegmentationContext::LogUnreachableGlyphs(
+    const GlyphSet& unreachable_glyphs) const {
+  std::vector<std::pair<glyph_id_t, double>> ordered_glyphs;
+  ordered_glyphs.reserve(unreachable_glyphs.size());
+  for (glyph_id_t gid : unreachable_glyphs) {
+    double initial_prob = 0.0;
+    if (auto it = initial_glyph_probabilities_.find(gid);
+        it != initial_glyph_probabilities_.end()) {
+      initial_prob = it->second;
+    }
+    ordered_glyphs.emplace_back(gid, initial_prob);
+  }
+
+  std::sort(ordered_glyphs.begin(), ordered_glyphs.end(),
+            [](const auto& a, const auto& b) {
+              if (a.second != b.second) {
+                return a.second > b.second;
+              }
+              return a.first < b.first;
+            });
+
+  auto gid_to_unicode = common::FontHelper::GidToUnicodeMap(original_face.get());
+  for (const auto& [gid, initial_prob] : ordered_glyphs) {
+    std::string cp_str;
+    auto cp_it = gid_to_unicode.find(gid);
+    if (cp_it != gid_to_unicode.end() && !cp_it->second.empty()) {
+      if (cp_it->second.size() == 1) {
+        cp_str = absl::StrFormat("U+%X, ", *cp_it->second.min());
+      } else {
+        std::vector<std::string> hex_cps;
+        for (uint32_t cp : cp_it->second) {
+          hex_cps.push_back(absl::StrFormat("U+%X", cp));
+        }
+        cp_str =
+            absl::StrCat("{", absl::StrJoin(hex_cps, ", "), "}, ");
+      }
+    }
+
+    std::string gid_str = absl::StrFormat("g%u, ", gid);
+    std::string prob_str = absl::StrFormat("%.3g%%", initial_prob * 100.0);
+    VLOG(0) << absl::StrFormat("Unreachable glyph %-8s%-10sP = %-9s",
+                               gid_str, cp_str, prob_str);
+  }
+  VLOG(0) << "Total unreachable glyphs: " << unreachable_glyphs.size();
+}
+
+void SegmentationContext::LogSegmentCodepointCountHistogram(
+    const GlyphSegmentation& segmentation) const {
+  absl::btree_map<size_t, uint32_t> codepoint_count_histogram;
+  for (const auto& segment : segmentation.Segments()) {
+    if (segment.codepoints.empty()) {
+      continue;
+    }
+    codepoint_count_histogram[segment.codepoints.size()]++;
+  }
+
+  std::stringstream histogram_string;
+  histogram_string << "codepoint_count, segment_count" << std::endl;
+  for (const auto& [codepoint_count, segment_count] :
+       codepoint_count_histogram) {
+    histogram_string << codepoint_count << ", " << segment_count << std::endl;
+  }
+  VLOG(0) << "Segment Codepoint Count Histogram:" << std::endl
+          << histogram_string.str();
 }
 
 Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
