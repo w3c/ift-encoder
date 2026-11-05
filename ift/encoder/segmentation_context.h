@@ -90,6 +90,7 @@ class SegmentationContext {
         std::move(closure_cache), std::move(segmentation_info), resolver_,
         target_mode_, estimated_compression_ratio_,
         estimated_woff2_base_overhead_);
+    context.initial_glyph_probabilities_ = initial_glyph_probabilities_;
 
     TRYV(context.InitDependencyClosure());
     return std::move(context);
@@ -158,13 +159,22 @@ class SegmentationContext {
 
   // Convert the information in this context into a finalized GlyphSegmentation
   // representation.
-  absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
-      absl::Span<const freq::ProbabilityCalculator* const>
-          probability_calculators = {}) const {
+  absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation() const {
     GlyphSegmentation segmentation = TRY(glyph_groupings.ToGlyphSegmentation(
         *segmentation_info_, target_mode_ == config::UNICODE_RANGE));
-    TRYV(ValidateSegmentation(segmentation, probability_calculators));
+    TRYV(ValidateSegmentation(segmentation));
     return segmentation;
+  }
+
+  // Caches the initial segmentation probabilities per glyph based on the
+  // initial segment definitions and activation conditions.
+  absl::Status CacheInitialGlyphProbabilities(
+      absl::Span<const freq::ProbabilityCalculator* const>
+          probability_calculators);
+
+  const absl::flat_hash_map<glyph_id_t, double>& InitialGlyphProbabilities()
+      const {
+    return initial_glyph_probabilities_;
   }
 
   void LogClosureStatistics() const {
@@ -333,9 +343,13 @@ class SegmentationContext {
    * - Fully covers the full closure.
    */
   absl::Status ValidateSegmentation(
-      const GlyphSegmentation& segmentation,
-      absl::Span<const freq::ProbabilityCalculator* const>
-          probability_calculators = {}) const;
+      const GlyphSegmentation& segmentation) const;
+
+  void LogUnreachableGlyphs(
+      const ift::common::GlyphSet& unreachable_glyphs) const;
+
+  void LogSegmentCodepointCountHistogram(
+      const GlyphSegmentation& segmentation) const;
 
   // If the merging strategy specifies a minimum cost threshold, this computes
   // the segment where we should stop computing optimized merges. This is
@@ -422,6 +436,8 @@ class SegmentationContext {
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
   ift::config::TargetMode target_mode_;
   std::shared_ptr<ift::common::DataFileResolver> resolver_;
+
+  absl::flat_hash_map<glyph_id_t, double> initial_glyph_probabilities_;
 };
 
 }  // namespace ift::encoder

@@ -3139,6 +3139,46 @@ if (s2) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_InitialGlyphProbabilitiesCached) {
+  auto calc = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'f'}), 0.8},
+          {Segment({'i'}), 0.7},
+          {Segment({'f', 'i'}), 0.94},
+          {Segment({0xc1}), 0.05},
+          {Segment({0x106}), 0.01},
+          {Segment({0xc1, 0x106}), 0.0595},
+      });
+
+  std::vector<Segment> segments = {
+      Segment({'f'}), Segment({'i'}), Segment({0xc1}), Segment({0x106})};
+
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {'a'}, segments, FIND_CONDITIONS, CLOSURE_ONLY, 8, 8,
+      resolver, ift::config::UNICODE_RANGE);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  ASSERT_TRUE(context->CacheInitialGlyphProbabilities({calc.get()}).ok());
+  const auto& initial_probs = context->InitialGlyphProbabilities();
+
+  // Glyph 74 is 'f' (P = 0.8), glyph 77 is 'i' (P = 0.7).
+  // Glyph 444 is 'fi' ligature which has condition (s0 AND s1) -> P = 0.56.
+  EXPECT_NEAR(initial_probs.at(74), 0.8, 1e-6);
+  EXPECT_NEAR(initial_probs.at(77), 0.7, 1e-6);
+  EXPECT_NEAR(initial_probs.at(444), 0.56, 1e-6);
+
+  // Glyphs 117, 169, 667 are acute accent components with condition (s2 OR s3)
+  // -> P = 0.0595.
+  EXPECT_NEAR(initial_probs.at(117), 0.0595, 1e-6);
+  EXPECT_NEAR(initial_probs.at(169), 0.0595, 1e-6);
+  EXPECT_NEAR(initial_probs.at(667), 0.0595, 1e-6);
+
+  // Glyphs 37 ('Á' / 0xc1) and 39 ('Ć' / 0x106)
+  EXPECT_NEAR(initial_probs.at(37), 0.05, 1e-6);
+  EXPECT_NEAR(initial_probs.at(39), 0.01, 1e-6);
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_InitialSegmentCodepointsAndFeatures) {
   ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
                             CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,

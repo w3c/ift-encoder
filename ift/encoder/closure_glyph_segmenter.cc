@@ -601,18 +601,9 @@ StatusOr<std::vector<Merger>> ToMergers(
 }
 
 static StatusOr<GlyphSegmentation> ToFinalSegmentation(
-    SegmentationContext& context, Span<const Merger> mergers) {
+    SegmentationContext& context) {
   context.LogClosureStatistics();
-  std::vector<const ProbabilityCalculator*> calculators;
-  for (const Merger& merger : mergers) {
-    if (!merger.Strategy().UseCosts()) {
-      continue;
-    }
-    for (const auto& profile : merger.Strategy().ProbabilityProfiles()) {
-      calculators.push_back(TRY(profile.Calculator()));
-    }
-  }
-  return context.ToGlyphSegmentation(calculators);
+  return context.ToGlyphSegmentation();
 }
 
 Status ClosureGlyphSegmenter::ValidateInput(
@@ -850,6 +841,19 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
           init_font_merging_brotli_quality_, resolver_, target_mode_));
 
   if (target_mode_ == ift::config::UNICODE_RANGE) {
+    std::vector<const ProbabilityCalculator*> calculators;
+    for (const auto& [_, strategy] : merge_groups) {
+      if (!strategy.UseCosts()) {
+        continue;
+      }
+      for (const auto& profile : strategy.ProbabilityProfiles()) {
+        calculators.push_back(TRY(profile.Calculator()));
+      }
+    }
+    // Initial glyph probabilities are used at the end of segmentation to
+    // report probabilities of occurence for any broken glyphs.
+    TRYV(context.CacheInitialGlyphProbabilities(calculators));
+
     TRYV(MakeActivationConditionsDisjoint(context, disjoint_conditions_probability_threshold_, merge_groups, with_shared));
   }
 
@@ -903,7 +907,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     if (target_mode_ == ift::config::UNICODE_RANGE) {
       TRYV(ValidateIncrementalGroupings(face, context));
     }
-    return ToFinalSegmentation(context, mergers);
+    return ToFinalSegmentation(context);
   }
 
   // ### Iteratively merge segments and incrementally reprocess affected data.
@@ -953,7 +957,7 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         merger.LogMergedSizeHistogram();
       }
 
-      return ToFinalSegmentation(context, mergers);
+      return ToFinalSegmentation(context);
     }
 
     TRYV(context.ReprocessChanged(std::move(*maybe_modified)));
