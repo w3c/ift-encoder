@@ -996,5 +996,152 @@ TEST_F(AutoSegmenterConfigTest,
               UnorderedElementsAre(kGreek, kLatin, kCyrillic));
 }
 
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_UngroupedInteractingWithScript_UnicodeRange) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Latin
+      'A',
+      'B',
+      'C',
+      // Cyrillic
+      0x401,
+      0x402,
+      0x403,
+      // Greek Alpha (composite using 'A'; 1 Greek codepoint so ungrouped)
+      0x391,
+      // Math partial differential (1 Symbol codepoint so ungrouped; non-interacting)
+      0x2202,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kLatin, kCyrillic));
+
+  auto latin_covered = GetSegmentIds(*config_or, kLatin.first);
+  ASSERT_TRUE(latin_covered.has_value());
+  EXPECT_EQ(*latin_covered, CodepointSet({'A', 'B', 'C', 0x391}));
+  EXPECT_FALSE(GetSegmentIds(*config_or, kCyrillic.first).has_value());
+}
+
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_TransitiveUngroupedInteraction_UnicodeRange) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Latin
+      'A',
+      'B',
+      'C',
+      // Cyrillic (0x436 is Cyrillic small letter zhe)
+      0x401,
+      0x402,
+      0x436,
+      // Ungrouped codepoints (not in any script's frequency data):
+      // - 0x04c2 (uni04C2) is a composite glyph using 0x436 (in Cyrillic) and
+      //   0x02d8 (breve)
+      0x04c2,
+      // - 0x02d8 (breve) interacts with 0x04c2, and thus transitively with
+      //   Cyrillic
+      0x02d8,
+      // - 0x2202 (partialdiff) does not interact with anything
+      0x2202,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kLatin, kCyrillic));
+
+  auto cyrillic_covered = GetSegmentIds(*config_or, kCyrillic.first);
+  ASSERT_TRUE(cyrillic_covered.has_value());
+  EXPECT_EQ(*cyrillic_covered,
+            CodepointSet({0x02d8, 0x401, 0x402, 0x436, 0x04c2}));
+  EXPECT_FALSE(GetSegmentIds(*config_or, kLatin.first).has_value());
+}
+
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_UngroupedJoinsMultiScriptAndSplitsByPrimary_UnicodeRange) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Cyrillic
+      0x401,
+      0x436,  // Zhe
+      0x43b,  // El
+      // Latin (0x0102 is Abreve, composite of 'A' and breve 0x02d8)
+      'A',
+      'B',
+      0x0102,
+      // Ungrouped interacting only with Latin: Greek Alpha (uses 'A'; 1 Greek
+      // codepoint so Greek is not detected)
+      0x0391,
+      // Ungrouped interacting only with Cyrillic: uni04C6 (uses 0x43b and
+      // comma; not in any script frequency data)
+      0x04c6,
+      // Ungrouped interacting with both Cyrillic and Latin: uni04C2 (uses
+      // 0x436 in Cyrillic and breve 0x02d8 used by 0x0102 in Latin; not in any
+      // script frequency data)
+      0x04c2,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  // Without explicitly specifying primary_script, 0x04c2 causes Cyrillic and
+  // Latin to group. All three ungrouped codepoints are joined into
+  // Cyrillic+Latin.
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(GetScripts(*config_or), UnorderedElementsAre(kLatinCyrillic));
+  auto cyrillic_latin_covered =
+      GetSegmentIds(*config_or, kLatinCyrillic.first);
+  ASSERT_TRUE(cyrillic_latin_covered.has_value());
+  EXPECT_EQ(*cyrillic_latin_covered,
+            CodepointSet({'A', 'B', 0x0102, 0x0391, 0x401, 0x436, 0x43b,
+                          0x04c2, 0x04c6}));
+
+  // With primary_script = "Script_latin", Cyrillic+Latin splits into Latin and
+  // Cyrillic. Interacting ungrouped codepoints are assigned based on which
+  // script they interacted with:
+  // - 0x0391 interacted only with Latin -> Latin
+  // - 0x04c6 interacted only with Cyrillic -> Cyrillic
+  // - 0x04c2 interacted with both -> Latin (primary script takes precedence)
+  auto split_config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, "Script_latin", std::nullopt,
+      UNICODE_RANGE);
+  ASSERT_TRUE(split_config_or.ok()) << split_config_or.status();
+
+  EXPECT_THAT(GetScripts(*split_config_or),
+              UnorderedElementsAre(kLatin, kCyrillic));
+
+  auto latin_covered = GetSegmentIds(*split_config_or, kLatin.first);
+  ASSERT_TRUE(latin_covered.has_value());
+  EXPECT_EQ(*latin_covered,
+            CodepointSet({'A', 'B', 0x0102, 0x0391, 0x04c2}));
+
+  auto cyrillic_covered = GetSegmentIds(*split_config_or, kCyrillic.first);
+  ASSERT_TRUE(cyrillic_covered.has_value());
+  EXPECT_EQ(*cyrillic_covered, CodepointSet({0x401, 0x436, 0x43b, 0x04c6}));
+  EXPECT_FALSE(latin_covered->intersects(*cyrillic_covered));
+}
+
 }  // namespace
 }  // namespace ift::config
