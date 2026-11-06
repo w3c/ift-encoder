@@ -1366,4 +1366,266 @@ TEST_F(CandidateMergeTest, AssessMerge_CostDeltas_UnicodeRangeIgnoresNonExclusiv
   EXPECT_NEAR((*r_f_i)->CostDelta(), expected_delta_f_i, 1e-9);
 }
 
+namespace {
+
+class HighDefaultPatchSizeCache : public PatchSizeCache {
+ public:
+  explicit HighDefaultPatchSizeCache(uint32_t default_size)
+      : default_size_(default_size) {}
+
+  absl::StatusOr<uint32_t> GetPatchSize(
+      const ift::common::GlyphSet& gids) override {
+    auto it = patch_sizes_.find(gids);
+    if (it != patch_sizes_.end()) {
+      return it->second;
+    }
+    return default_size_;
+  }
+
+  void LogBrotliCallCount() const override {}
+
+  void SetPatchSize(const ift::common::GlyphSet& gids, uint32_t size) {
+    patch_sizes_[gids] = size;
+  }
+
+ private:
+  uint32_t default_size_;
+  absl::flat_hash_map<ift::common::GlyphSet, uint32_t> patch_sizes_;
+};
+
+}  // namespace
+
+TEST_F(CandidateMergeTest,
+       TryNextPatchMerge_ExcludesGlyphsThatBecameExclusiveDuringSegmentMerging) {
+
+  // s0 (aacute) and s1 (eacute) share acute accent glyphs via (s0 OR s1).
+  // s2 ('f'), s3 ('i'), s4 ('l') form composite ligature patches (s2 AND s3)
+  // and (s2 AND s4).
+  std::vector<Segment> segments = {
+      {{0x00E1}},  // aacute
+      {{0x00E9}},  // eacute
+      {{'f'}},
+      {{'i'}},
+      {{'l'}},
+  };
+
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{0x00E1, 0x00E1}, 90},
+      {{0x00E9, 0x00E9}, 90},
+      {{'f', 'f'}, 40},
+      {{'i', 'i'}, 40},
+      {{'l', 'l'}, 40},
+  };
+
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  GlyphSet g0 = context->glyph_groupings.ExclusiveGlyphs(0);
+  GlyphSet g1 = context->glyph_groupings.ExclusiveGlyphs(1);
+  ASSERT_FALSE(g0.empty());
+  ASSERT_FALSE(g1.empty());
+  ASSERT_TRUE(context->glyph_groupings.UnmappedGlyphs().empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::or_segments({0, 1}, 0)));
+  GlyphSet g_acute = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::or_segments({0, 1}, 0));
+  ASSERT_FALSE(g_acute.empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::and_segments({2, 3}, 0)));
+  GlyphSet g_fi = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::and_segments({2, 3}, 0));
+  ASSERT_FALSE(g_fi.empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::and_segments({2, 4}, 0)));
+  GlyphSet g_fl = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::and_segments({2, 4}, 0));
+  ASSERT_FALSE(g_fl.empty());
+
+  auto* size_cache = new HighDefaultPatchSizeCache(/*default_size=*/5000);
+  size_cache->SetPatchSize({}, 10);
+  for (const auto& [cond, glyphs] :
+       context->glyph_groupings.ConditionsAndGlyphs()) {
+    size_cache->SetPatchSize(glyphs, 30);
+  }
+
+  GlyphSet g01 = g0;
+  g01.union_set(g1);
+  g01.union_set(g_acute);
+  size_cache->SetPatchSize(g01, 40);
+
+  GlyphSet g_fi_fl = g_fi;
+  g_fi_fl.union_set(g_fl);
+  size_cache->SetPatchSize(g_fi_fl, 30);
+
+  // Make merging s0's post-merge exclusive patch with the composite patches
+  // strongly cost-reducing if s0 were ever leaked into TryNextPatchMerge().
+  GlyphSet g01_fi = g01;
+  g01_fi.union_set(g_fi);
+  size_cache->SetPatchSize(g01_fi, 40);
+  GlyphSet g01_fl = g01;
+  g01_fl.union_set(g_fl);
+  size_cache->SetPatchSize(g01_fl, 40);
+  GlyphSet g01_fi_fl = g01;
+  g01_fi_fl.union_set(g_fi_fl);
+  size_cache->SetPatchSize(g01_fi_fl, 40);
+
+  context->patch_size_cache.reset(size_cache);
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)),
+      /*network_overhead_cost=*/75,
+      /*min_group_size=*/1);
+  strategy.SetUsePatchMerges(true);
+  strategy.SetOptimizationCutoffFraction(0.0);
+
+  Merger merger = *Merger::New(*context, strategy, all, all);
+
+  // Step 1: Merges segments {0, 1} into segment 0.
+  auto step1 = merger.TryNextMerge();
+  ASSERT_TRUE(step1.ok()) << step1.status();
+  ASSERT_TRUE(step1->has_value());
+  EXPECT_EQ((*step1)->base_segment, 0u);
+  EXPECT_EQ((*step1)->segments, (SegmentSet{0, 1}));
+  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
+
+  // g_acute has now collapsed into the exclusive patch for segment 0.
+  EXPECT_EQ(context->glyph_groupings.ExclusiveGlyphs(0), g01);
+
+  // Step 2 & 3: Patch merging combines composite ligature patches.
+  auto step2 = merger.TryNextMerge();
+  ASSERT_TRUE(step2.ok()) << step2.status();
+  ASSERT_TRUE(step2->has_value());
+  ASSERT_TRUE(context->ReprocessChanged(**step2).ok());
+
+  auto step3 = merger.TryNextMerge();
+  ASSERT_TRUE(step3.ok()) << step3.status();
+  ASSERT_TRUE(step3->has_value());
+  ASSERT_TRUE(context->ReprocessChanged(**step3).ok());
+
+  // Step 4: No further merges remain. The exclusive patch for segment 0 must
+  // NOT be merged into any composite patch.
+  auto step4 = merger.TryNextMerge();
+  ASSERT_TRUE(step4.ok()) << step4.status();
+  EXPECT_FALSE(step4->has_value());
+
+  EXPECT_EQ(context->glyph_groupings.ExclusiveGlyphs(0), g01);
+  EXPECT_EQ(context->glyph_groupings.ConditionsAndGlyphs().at(
+                ActivationCondition::exclusive_segment(0, 0)),
+            g01);
+}
+
+TEST_F(CandidateMergeTest,
+       TryNextPatchMerge_ExcludesConditionSimplifiedToExclusiveDuringPatchMerging) {
+  std::vector<Segment> segments = {
+      {{'f', 'b'}},
+      {{'i', 'd'}},
+      {{'l', 'g'}},
+      {{0x00F2, 'h'}},  // ograve, 'h'
+      {{0x00F9, 'm'}},  // ugrave, 'm'
+  };
+
+  freq::UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{'f', 'f'}, 90},
+      {{'i', 'i'}, 80},
+      {{'l', 'l'}, 80},
+      {{0x00F2, 0x00F2}, 40},
+      {{0x00F9, 0x00F9}, 40},
+  };
+
+  ClosureGlyphSegmenter segmenter(
+      8, 8, PATCH, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
+
+  GlyphSet g0 = context->glyph_groupings.ExclusiveGlyphs(0);
+  ASSERT_FALSE(g0.empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::and_segments({0, 1}, 0)));
+  GlyphSet g_fi = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::and_segments({0, 1}, 0));
+  ASSERT_FALSE(g_fi.empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::and_segments({0, 2}, 0)));
+  GlyphSet g_fl = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::and_segments({0, 2}, 0));
+  ASSERT_FALSE(g_fl.empty());
+
+  ASSERT_TRUE(context->glyph_groupings.ConditionsAndGlyphs().contains(
+      ActivationCondition::or_segments({3, 4}, 0)));
+  GlyphSet g_grave = context->glyph_groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::or_segments({3, 4}, 0));
+  ASSERT_FALSE(g_grave.empty());
+
+  auto* size_cache = new HighDefaultPatchSizeCache(/*default_size=*/5000);
+  size_cache->SetPatchSize({}, 10);
+  for (const auto& [cond, glyphs] :
+       context->glyph_groupings.ConditionsAndGlyphs()) {
+    size_cache->SetPatchSize(glyphs, 30);
+  }
+
+  GlyphSet g_fi_fl = g_fi;
+  g_fi_fl.union_set(g_fl);
+  size_cache->SetPatchSize(g_fi_fl, 40);
+
+  GlyphSet g0_with_fi_fl = g0;
+  g0_with_fi_fl.union_set(g_fi_fl);
+  size_cache->SetPatchSize(g0_with_fi_fl, 40);
+
+  // Make merging the simplified exclusive condition if (s0) with (s3 OR s4)
+  // strongly cost-reducing if if (s0) were not excluded on subsequent calls.
+  GlyphSet g0_with_fi_fl_and_grave = g0_with_fi_fl;
+  g0_with_fi_fl_and_grave.union_set(g_grave);
+  size_cache->SetPatchSize(g0_with_fi_fl_and_grave, 40);
+
+  context->patch_size_cache.reset(size_cache);
+
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      *ProbabilityProfile::Unigram(std::move(frequencies)),
+      /*network_overhead_cost=*/75,
+      /*min_group_size=*/1);
+  strategy.SetUsePatchMerges(true);
+  strategy.SetOptimizationCutoffFraction(0.0);
+
+  Merger merger = *Merger::New(*context, strategy, all, all);
+
+  // Step 1: Merges (s0 AND s1) with (s0 AND s2). Under
+  // DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, NonCompositeSuperset() simplifies
+  // s0 AND (s1 OR s2) to exclusive condition if (s0) then p0.
+  auto step1 = merger.TryNextMerge();
+  ASSERT_TRUE(step1.ok()) << step1.status();
+  ASSERT_TRUE(step1->has_value());
+  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
+
+  EXPECT_EQ(context->glyph_groupings.ConditionsAndGlyphs().at(
+                ActivationCondition::exclusive_segment(0, 0)),
+            g0_with_fi_fl);
+
+  // Step 2: The simplified condition if (s0) is exclusive and must NOT be
+  // merged with if ((s3 OR s4)). No further patch merges remain.
+  auto step2 = merger.TryNextMerge();
+  ASSERT_TRUE(step2.ok()) << step2.status();
+  EXPECT_FALSE(step2->has_value());
+
+  EXPECT_EQ(context->glyph_groupings.ConditionsAndGlyphs().at(
+                ActivationCondition::exclusive_segment(0, 0)),
+            g0_with_fi_fl);
+  EXPECT_EQ(context->glyph_groupings.ConditionsAndGlyphs().at(
+                ActivationCondition::or_segments({3, 4}, 0)),
+            g_grave);
+}
+
 }  // namespace ift::encoder
