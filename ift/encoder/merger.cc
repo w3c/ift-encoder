@@ -108,12 +108,29 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
     return std::nullopt;
   }
 
+  if (!candidate_patch_merge_glyphs_.has_value()) {
+    candidate_patch_merge_glyphs_ = ComputeCandidatePatchMergeGlyphs(
+        *context_, strategy_, inscope_segments_);
+  }
+  if (candidate_patch_merge_glyphs_->empty()) {
+    return std::nullopt;
+  }
+
   // Work through the candidate composite conditions in order of descending
   // probability.
   std::vector<std::pair<ActivationCondition, double>> ordered_candidates;
-  for (const auto& [condition, glyphs] :
-       Context().glyph_groupings.ConditionsAndGlyphs()) {
-    if (!glyphs.intersects(candidate_patch_merge_glyphs_)) {
+  ActivationCondition last_exclusive =
+      ActivationCondition::exclusive_segment(UINT32_MAX, 0);
+  for (auto it = Context().glyph_groupings.OrderedConditions().lower_bound(
+           last_exclusive);
+       it != Context().glyph_groupings.OrderedConditions().end(); ++it) {
+    const auto& condition = *it;
+    if (condition.IsFallback() || condition.IsExclusive()) {
+      continue;
+    }
+    const GlyphSet& glyphs =
+        Context().glyph_groupings.ConditionsAndGlyphs().at(condition);
+    if (!glyphs.intersects(*candidate_patch_merge_glyphs_)) {
       continue;
     }
     ordered_candidates.emplace_back(condition,
@@ -136,7 +153,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
     if (!invalidation.has_value()) {
       // No merges left for this base, remove it from the candidate list.
       ordered_candidates.erase(ordered_candidates.begin());
-      candidate_patch_merge_glyphs_.subtract(base_glyphs);
+      candidate_patch_merge_glyphs_->subtract(base_glyphs);
     } else {
       return invalidation;
     }
@@ -325,6 +342,7 @@ Status Merger::ResetSegmentProbabilities() const {
 Status Merger::ReassignInitSubset() {
   candidate_segments_ =
       ComputeCandidateSegments(Context(), strategy_, inscope_segments_);
+  candidate_patch_merge_glyphs_ = std::nullopt;
   TRYV(ResetSegmentProbabilities());
   TRYV(InitOptimizationCutoff());
   return absl::OkStatus();
@@ -746,9 +764,10 @@ Status Merger::CollectCompositeCandidateMerges(
 
 GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
     SegmentationContext& context, const MergeStrategy& strategy,
-    const SegmentSet& candidate_segments, const SegmentSet& inscope_segments,
-    segment_index_t optimization_cutoff_segment) {
+    const SegmentSet& inscope_segments) {
   GlyphSet out;
+  SegmentSet active_inscope_segments =
+      ComputeCandidateSegments(context, strategy, inscope_segments);
 
   ActivationCondition last_exclusive =
       ActivationCondition::exclusive_segment(UINT32_MAX, 0);
@@ -763,7 +782,7 @@ GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
 
     SegmentSet triggering_segments = condition.TriggeringSegments();
 
-    if (!triggering_segments.intersects(candidate_segments) ||
+    if (!triggering_segments.intersects(active_inscope_segments) ||
         !triggering_segments.is_subset_of(inscope_segments)) {
       // all triggering segments must be inscope otherwise this merge crosses
       // merge group boundaries.
