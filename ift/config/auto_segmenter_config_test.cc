@@ -1153,5 +1153,80 @@ TEST_F(AutoSegmenterConfigTest,
   EXPECT_FALSE(latin_covered->intersects(*cyrillic_covered));
 }
 
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_InteractingScripts_SimplifiedCondition_UnicodeRange) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Latin (both 'i' and 0x0300 are in Script_latin.riegeli)
+      'b',
+      'c',
+      'i',
+      0x0300,
+      // Cyrillic (0x0486 is in Script_cyrillic.riegeli; in Roboto ccmp
+      // lookup, 'i' + {0x0300, 0x0486} triggers dotlessi, giving
+      // s_latin AND (s_latin OR s_cyrillic) which simplifies to s_latin)
+      0x0401,
+      0x0402,
+      0x0403,
+      0x0486,
+      // Non-interacting Greek
+      0x0384,
+      0x0385,
+      0x0394,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kLatinCyrillic, kGreek));
+}
+
+TEST_F(AutoSegmenterConfigTest,
+       Roboto_UngroupedInteractingWithScript_SimplifiedCondition_UnicodeRange) {
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_TRUE(input);
+  CodepointSet subset{
+      // Latin (both 'i' and 0x0300 are in Script_latin.riegeli)
+      'b',
+      'c',
+      'i',
+      0x0300,
+      // Non-interacting Cyrillic
+      0x0401,
+      0x0402,
+      0x0403,
+      // Ungrouped (not in any script's frequency data): 0x0485 triggers
+      // dotlessi with 'i' just like 0x0300, so the simplified condition for
+      // dotlessi is s_latin AND (s_latin OR s_0485) -> s_latin, masking the
+      // interaction between 0x0485 and Latin.
+      0x0485,
+      // Non-interacting ungrouped codepoint (stays separate / fallback)
+      0x2202,
+  };
+  subset.union_into(hb_subset_input_unicode_set(input));
+  hb_face_unique_ptr subset_face =
+      make_hb_face(hb_subset_or_fail(face_.get(), input));
+  hb_subset_input_destroy(input);
+
+  auto config_or = AutoSegmenterConfig::GenerateConfig(
+      subset_face.get(), *resolver, std::nullopt, std::nullopt, UNICODE_RANGE);
+  ASSERT_TRUE(config_or.ok()) << config_or.status();
+
+  EXPECT_THAT(GetScripts(*config_or),
+              UnorderedElementsAre(kLatin, kCyrillic));
+
+  auto latin_covered = GetSegmentIds(*config_or, kLatin.first);
+  ASSERT_TRUE(latin_covered.has_value());
+  EXPECT_EQ(*latin_covered, CodepointSet({'b', 'c', 'i', 0x0300, 0x0485}));
+  EXPECT_FALSE(GetSegmentIds(*config_or, kCyrillic.first).has_value());
+}
+
 }  // namespace
 }  // namespace ift::config

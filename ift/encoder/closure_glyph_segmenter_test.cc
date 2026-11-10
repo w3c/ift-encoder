@@ -2813,6 +2813,102 @@ if (s2) then p2
 }
 
 TEST_F(ClosureGlyphSegmenterTest,
+       UnicodeRange_MakeActivationConditionsDisjoint_SimplifiedConditions) {
+  // CLOSURE_ONLY is omitted because black-box closure cannot distinguish a
+  // simplified condition such as (s1 OR (s1 AND s2)) -> s1 from s1 alone.
+  for (auto analysis_mode :
+       {CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
+        DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+                              ift::config::UNICODE_RANGE);
+
+    // Case 1 (Or absorption):
+    // 0xFB01 (fi) and 0xFB03 (ffi) share segment s1 with 'f'. Ligature
+    // formation simplifies s1 OR (s1 AND s2) -> s1, masking the interaction with
+    // 'i' (s2).
+    auto segmentation = seg.CodepointToGlyphSegments(
+        roboto.get(), {'a'}, {{'b'}, {'f', 0xFB01, 0xFB03}, {'i'}});
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    std::vector<SubsetDefinition> expected_or_segments = {
+        {'b'}, {'f', 'i', 0xFB01, 0xFB03}, {}};
+    EXPECT_EQ(segmentation->Segments(), expected_or_segments);
+
+    for (const auto& cond : segmentation->Conditions()) {
+      EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+    }
+
+    EXPECT_EQ(segmentation->ToString(),
+              R"(initial font: { gid0, gid69 }
+p0: { gid70 }
+p1: { gid74, gid77, gid444, gid446 }
+if (s0) then p0
+if (s1) then p1
+)");
+
+    // Case 2 (And absorption):
+    // In Roboto's ccmp lookup, 'i' followed by {0x0300, 0x0485} triggers
+    // dotlessi. With {'i', 0x0300} in s1 and {0x0485} in s2, dotlessi's
+    // condition simplifies via s1 AND (s1 OR s2) -> s1, masking s2.
+    segmentation = seg.CodepointToGlyphSegments(
+        roboto.get(), {'b'}, {{'c'}, {'i', 0x0300}, {0x0485}});
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    std::vector<SubsetDefinition> expected_and_segments = {
+        {'c'}, {'i', 0x0300, 0x0485}, {}};
+    EXPECT_EQ(segmentation->Segments(), expected_and_segments);
+
+    for (const auto& cond : segmentation->Conditions()) {
+      EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+    }
+    EXPECT_EQ(segmentation->Conditions().size(), 2);
+  }
+}
+
+TEST_F(
+    ClosureGlyphSegmenterTest,
+    UnicodeRange_MakeActivationConditionsDisjoint_SimplifiedConditions_ProbabilityThreshold) {
+  // Configure probabilities:
+  // {'f', 0xFB02, 0xFB04} (0.8) and {'l'} (0.7) -> P(s0 AND s1) = 0.56 >= 0.2
+  // (should merge despite Or absorption simplifying s0 OR (s0 AND s1) -> s0).
+  // {'j', 0x0300} (0.05) and {0x0485} (0.01) -> P <= 0.0595 < 0.2 (below
+  // threshold; skipped).
+  auto calc = std::make_shared<MockProbabilityCalculator>(
+      std::vector<std::pair<Segment, double>>{
+          {Segment({'f', 0xFB02, 0xFB04}), 0.8},
+          {Segment({'l'}), 0.7},
+          {Segment({'f', 'l', 0xFB02, 0xFB04}), 0.94},
+          {Segment({'j', 0x0300}), 0.05},
+          {Segment({0x0485}), 0.01},
+          {Segment({'j', 0x0300, 0x0485}), 0.0595},
+      });
+  MergeStrategy strategy =
+      MergeStrategy::CostBased(ProbabilityProfile(calc),
+                               /*network_overhead_cost=*/0,
+                               /*min_group_size=*/1);
+  strategy.SetOptimizationCutoffFraction(1.0);
+  strategy.SetUsePatchMerges(false);
+
+  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
+                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+                            ift::config::UNICODE_RANGE,
+                            /*disjoint_conditions_probability_threshold=*/0.2);
+
+  auto segmentation = seg.CodepointToGlyphSegments(
+      roboto.get(), {'b'},
+      {{'f', 0xFB02, 0xFB04}, {'l'}, {'j', 0x0300}, {0x0485}}, strategy);
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+  std::vector<SubsetDefinition> expected_segments = {
+      {'f', 'l', 0xFB02, 0xFB04}, {'j', 0x0300}, {0x0485}};
+  EXPECT_EQ(segmentation->Segments(), expected_segments);
+
+  for (const auto& cond : segmentation->Conditions()) {
+    EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_InitialGlyphProbabilitiesCached) {
   auto calc = std::make_shared<MockProbabilityCalculator>(
       std::vector<std::pair<Segment, double>>{
