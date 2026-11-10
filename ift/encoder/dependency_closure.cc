@@ -73,14 +73,17 @@ Status DependencyClosure::InitNodeConditionsCache(
   node_conditions_with_segment_.clear();
   glyph_condition_cache_.clear();
   always_true_glyphs_.clear();
-  for (const auto& [n, condition] : node_condition_cache_) {
-    for (segment_index_t s : condition.TriggeringSegments()) {
+  glyph_interacting_segment_cache_.clear();
+  for (const auto& [n, v] : node_condition_cache_) {
+    for (segment_index_t s : v.condition.TriggeringSegments()) {
+      // TODO XXXX should this use interacting segments instead?
       node_conditions_with_segment_[s].insert(n);
     }
     if (n.IsGlyph() &&
         segmentation_info_->NonInitFontGlyphs().contains(n.Id())) {
-      glyph_condition_cache_.insert({n.Id(), condition});
-      if (condition.IsAlwaysTrue()) {
+      glyph_condition_cache_.insert({n.Id(), v.condition});
+      glyph_interacting_segment_cache_.insert({n.Id(), v.interacting_segments});
+      if (v.condition.IsAlwaysTrue()) {
         always_true_glyphs_.insert(n.Id());
       }
     }
@@ -103,7 +106,7 @@ void DependencyClosure::UpdateNodeConditionsCache(
       continue;
     }
 
-    for (segment_index_t s : it->second.TriggeringSegments()) {
+    for (segment_index_t s : it->second.condition.TriggeringSegments()) {
       auto it = node_conditions_with_segment_.find(s);
       if (it != node_conditions_with_segment_.end()) {
         it->second.erase(node);
@@ -111,19 +114,29 @@ void DependencyClosure::UpdateNodeConditionsCache(
     }
 
     ActivationCondition new_condition =
-        it->second.ReplaceSegments(base_segment, segments);
-    it->second = new_condition;
+        it->second.condition.ReplaceSegments(base_segment, segments);
+    it->second.condition = new_condition;
+
+    if (it->second.interacting_segments.intersects(segments)) {
+      SegmentSet new_segments = it->second.interacting_segments;
+      new_segments.subtract(segments);
+      new_segments.insert(base_segment);
+      it->second.interacting_segments = new_segments;
+    }
+
     if (node.IsGlyph() &&
         segmentation_info_->NonInitFontGlyphs().contains(node.Id())) {
       glyph_condition_cache_.erase(node.Id());
       glyph_condition_cache_.insert({node.Id(), new_condition});
+      glyph_interacting_segment_cache_.erase(node.Id());
+      glyph_interacting_segment_cache_.insert({node.Id(), it->second.interacting_segments});
     }
 
     if (!new_condition.IsUnitary()) {
       base_is_inert = false;
     }
 
-    for (segment_index_t s : it->second.TriggeringSegments()) {
+    for (segment_index_t s : it->second.condition.TriggeringSegments()) {
       node_conditions_with_segment_[s].insert(node);
     }
   }
@@ -209,17 +222,18 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     if (it == node_condition_cache_.end()) {
       continue;
     }
-    out.union_set(it->second.TriggeringSegments());
+    // TODO XXXXX use interacting_segments?
+    out.union_set(it->second.condition.TriggeringSegments());
   }
   return out;
 }
 
 Status DependencyClosure::InitializeConditions(
-    flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+    flat_hash_map<dep_graph::Node, ConditionAndSegments>& conditions,
     const SegmentSet& changed_segments,
     const flat_hash_set<Node>& new_init_font_nodes) const {
   for (const auto& n : new_init_font_nodes) {
-    conditions.insert_or_assign(n, ActivationCondition::True(0));
+    conditions.insert_or_assign(n, {ActivationCondition::True(0), {}});
   }
 
   for (segment_index_t s : changed_segments) {
@@ -230,7 +244,7 @@ Status DependencyClosure::InitializeConditions(
     Node n = Node::Segment(s);
     if (!segmentation_info_->Segments().at(s).Definition().Empty()) {
       conditions.insert_or_assign(Node::Segment(s),
-                                  ActivationCondition::exclusive_segment(s, 0));
+                                  {ActivationCondition::exclusive_segment(s, 0), {s}});
     } else {
       conditions.erase(n);
     }
@@ -242,7 +256,7 @@ Status DependencyClosure::InitializeConditions(
 StatusOr<std::optional<ActivationCondition>>
 DependencyClosure::EdgeConditionsToActivationCondition(
     const dep_graph::EdgeConditionsCnf& edge_conditions,
-    const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
+    const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
         node_conditions) {
   if (edge_conditions.empty()) {
     return absl::InternalError("edge_conditions cannot be empty.");
@@ -265,10 +279,10 @@ DependencyClosure::EdgeConditionsToActivationCondition(
       }
 
       if (!group_condition.has_value()) {
-        group_condition = it->second;
+        group_condition = it->second.condition;
       } else {
         // edge_conditions is in cnf form, so the inner groups are disjunctive.
-        group_condition = ActivationCondition::Or(*group_condition, it->second);
+        group_condition = ActivationCondition::Or(*group_condition, it->second.condition);
       }
     }
 
@@ -292,7 +306,7 @@ DependencyClosure::EdgeConditionsToActivationCondition(
 Status DependencyClosure::PropagateConditions(
     const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
-    flat_hash_map<Node, ActivationCondition>& node_conditions,
+    flat_hash_map<Node, ConditionAndSegments>& node_conditions,
     flat_hash_set<Node>& modified) const {
   for (const std::vector<Node>& scc : sccs) {
     // strongly connect components have cycles so we need to iteratively
@@ -310,13 +324,14 @@ Status DependencyClosure::PropagateConditions(
 
         auto node_conditions_it = node_conditions.find(n);
         if (node_conditions_it != node_conditions.end() &&
-            node_conditions_it->second.IsAlwaysTrue()) {
+            node_conditions_it->second.condition.IsAlwaysTrue()) {
           // If node is always true, it's condition cannot change further.
           continue;
         }
 
         std::optional<ActivationCondition> complete_condition;
 
+        // TODO XXXX populate interacting segments
         for (const EdgeConditionsCnf& edge : it->second) {
           std::optional<ActivationCondition> condition =
               TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
@@ -342,14 +357,17 @@ Status DependencyClosure::PropagateConditions(
 
         auto it_existing = node_conditions.find(n);
         if (it_existing == node_conditions.end()) {
-          node_conditions.insert({n, *complete_condition});
+          // TODO XXXXX Populate interacting segments from incoming edges instead of complete_condition
+          node_conditions.insert({n, {*complete_condition, complete_condition->TriggeringSegments()}});
           modified.insert(n);
           changed = true;
         } else {
+          // TODO XXXX here too
           ActivationCondition combined =
-              ActivationCondition::Or(it_existing->second, *complete_condition);
-          if (combined != it_existing->second) {
-            it_existing->second = std::move(combined);
+              ActivationCondition::Or(it_existing->second.condition, *complete_condition);
+          if (combined != it_existing->second.condition) { // TODO XXX also check interacting segments equality
+            it_existing->second.interacting_segments = combined.TriggeringSegments();
+            it_existing->second.condition = std::move(combined);
             modified.insert(n);
             changed = true;
           }
@@ -539,7 +557,7 @@ Status DependencyClosure::UpdateAllNodeConditions(
 
     // Transfer the modified conditions forward to the next phase (or final
     // output)
-    flat_hash_map<dep_graph::Node, ActivationCondition>* next_phase_conditions =
+    flat_hash_map<dep_graph::Node, ConditionAndSegments>* next_phase_conditions =
         &node_condition_cache_;
     if (next_phase != phases.end()) {
       next_phase_conditions = &phase_node_condition_cache_[*next_phase];
