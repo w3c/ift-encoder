@@ -201,6 +201,34 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions) {
   ASSERT_EQ(conditions.at(117).ToString(), "if (s5) then p0");
 }
 
+TEST_F(DependencyClosureTest, ExtractAllGlyphInteractingSegments) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'b'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'A'}},
+                  /* 4 */ {{0x0391 /* Greek Alpha */}},
+              });
+
+  const auto& interacting = dependency_closure->AllGlyphInteractingSegments();
+
+  // .notdef (gid 0) is in init font, so it is not in the result map.
+  EXPECT_FALSE(interacting.contains(0));
+
+  // Unitary conditions.
+  EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+  EXPECT_EQ(interacting.at(74 /* f */), (SegmentSet{1}));
+  EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{2}));
+
+  // Conjunctive condition ('fi' ligature depends on 'f' AND 'i').
+  EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{1, 2}));
+
+  // Disjunctive condition ('A' is also needed by Greek Alpha composite).
+  EXPECT_EQ(interacting.at(37 /* A */), (SegmentSet{3, 4}));
+  EXPECT_EQ(interacting.at(910 /* Alpha */), (SegmentSet{4}));
+}
+
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
   // Move 'f' to init font
   Reconfigure(face.get(), WithDefaultFeatures({'f'}),
@@ -216,6 +244,25 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_InitFont) {
 
   // i (gid 77) is in segment 1
   ASSERT_EQ(conditions.at(77).ToString(), "if (s1) then p0");
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphInteractingSegments_InitFont) {
+  // Move 'f' to init font.
+  Reconfigure(face.get(), WithDefaultFeatures({'f'}),
+              {
+                  /* 0 */ {{'b'}},
+                  /* 1 */ {{'i'}},
+              });
+
+  const auto& interacting = dependency_closure->AllGlyphInteractingSegments();
+
+  // 'f' is in init font, so it's not in the result map.
+  EXPECT_FALSE(interacting.contains(74 /* f */));
+
+  EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+  EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{1}));
+  // 'fi' now only depends on 'i' (s1) since 'f' is in the init font.
+  EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{1}));
 }
 
 TEST_F(DependencyClosureTest, InertSegments) {
@@ -277,6 +324,62 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_Composite) {
   // g9 is reached via a single subst of U+6406 which is gated on either
   // aalt or jp78
   ASSERT_EQ(conditions.at(9).ToString(), "if (s3 AND (s6 OR s7)) then p0");
+}
+
+TEST_F(DependencyClosureTest, ExtractAllGlyphInteractingSegments_Composite) {
+  SubsetDefinition aalt;
+  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
+  SubsetDefinition jp78;
+  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
+
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0x6406}},
+                  /* 4 */ {{0xe0100}},
+                  /* 5 */ {{0xfe00}},
+                  /* 6 */ {aalt},
+                  /* 7 */ {jp78},
+              });
+
+  const auto& interacting = dependency_closure->AllGlyphInteractingSegments();
+
+  EXPECT_EQ(interacting.at(8), (SegmentSet{1, 4, 5}));
+  EXPECT_EQ(interacting.at(9), (SegmentSet{3, 6, 7}));
+}
+
+TEST_F(DependencyClosureTest,
+       ExtractAllGlyphInteractingSegments_Simplification) {
+  // U+FB01 maps directly to the 'fi' ligature glyph (gid 444) in cmap, while
+  // 'f' (s0) + 'i' (s1) also produces gid 444 via GSUB 'liga'. The condition
+  // s0 OR (s0 AND s1) simplifies to s0, masking s1 from TriggeringSegments().
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'f', 0xFB01 /* fi */}},
+                  /* 1 */ {{'i'}},
+              });
+
+  EXPECT_EQ(dependency_closure->AllGlyphConditions().at(444).ToString(),
+            "if (s0) then p0");
+  EXPECT_EQ(dependency_closure->AllGlyphInteractingSegments().at(444),
+            (SegmentSet{0, 1}));
+
+  // Contextual substitution in Roboto's 'ccmp' replaces 'i' (s0) with
+  // dotlessi (gid 609) when followed by combining marks such as gravecomb (s0)
+  // or acutecomb (s1). The CNF edge condition s0 AND (s0 OR s1) simplifies
+  // to s0, masking s1 from TriggeringSegments().
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'i', 0x0300 /* gravecomb */}},
+                  /* 1 */ {{0x0301 /* acutecomb */}},
+              });
+
+  EXPECT_EQ(dependency_closure->AllGlyphConditions().at(609).ToString(),
+            "if (s0) then p0");
+  EXPECT_EQ(dependency_closure->AllGlyphInteractingSegments().at(609),
+            (SegmentSet{0, 1}));
 }
 
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_PhaseIsolation) {
@@ -768,6 +871,127 @@ TEST_F(DependencyClosureTest, SegmentsMerged_GlyphConditionsUpdate) {
   EXPECT_EQ(conditions.at(444).ToString(), "if (s2) then p0");
 }
 
+TEST_F(DependencyClosureTest,
+       SegmentsMerged_GlyphInteractingSegmentsUpdate) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'b'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'A'}},
+                  /* 4 */ {{0x0391 /* Greek Alpha */}},
+              });
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    ASSERT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+    ASSERT_EQ(interacting.at(74 /* f */), (SegmentSet{1}));
+    ASSERT_EQ(interacting.at(77 /* i */), (SegmentSet{2}));
+    ASSERT_EQ(interacting.at(444 /* fi */), (SegmentSet{1, 2}));
+    ASSERT_EQ(interacting.at(37 /* A */), (SegmentSet{3, 4}));
+    ASSERT_EQ(interacting.at(910 /* Alpha */), (SegmentSet{4}));
+  }
+
+  // Merge {1, 2} into 2.
+  segmentation_info->AssignMergedSegment(2, {1}, Segment(SubsetDefinition{'f', 'i'}));
+  Status s = dependency_closure->SegmentsMerged(2, {1, 2});
+  ASSERT_TRUE(s.ok()) << s;
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+    EXPECT_EQ(interacting.at(74 /* f */), (SegmentSet{2}));
+    EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{2}));
+    EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{2}));
+    EXPECT_EQ(interacting.at(37 /* A */), (SegmentSet{3, 4}));
+    EXPECT_EQ(interacting.at(910 /* Alpha */), (SegmentSet{4}));
+  }
+
+  // Partial merge of a multi-segment disjunctive set {3, 4}: merge {0, 3} -> 0.
+  segmentation_info->AssignMergedSegment(0, {3}, Segment(SubsetDefinition{'b', 'A'}));
+  s = dependency_closure->SegmentsMerged(0, {0, 3});
+  ASSERT_TRUE(s.ok()) << s;
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+    EXPECT_EQ(interacting.at(37 /* A */), (SegmentSet{0, 4}));
+    EXPECT_EQ(interacting.at(910 /* Alpha */), (SegmentSet{4}));
+    EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{2}));
+  }
+}
+
+TEST_F(DependencyClosureTest,
+       SegmentsMerged_ChainedAfterConditionSimplification) {
+  Reconfigure(noto_sans_jp_vf.get(), {},
+              {
+                  /* 0 */ {{0x6717}},
+                  /* 1 */ {{0x7891}},
+                  /* 2 */ {{0x798f}},
+                  /* 3 */ {{0xe0100}},
+                  /* 4 */ {{0xfe00}},
+              });
+
+  ASSERT_EQ(dependency_closure->AllGlyphConditions().at(8).ToString(),
+            "if (s1 AND (s3 OR s4)) then p0");
+  ASSERT_EQ(dependency_closure->AllGlyphInteractingSegments().at(8),
+            (SegmentSet{1, 3, 4}));
+
+  // Merging {1, 3} into 1 simplifies g8's activation condition to "if (s1)" via
+  // s1 AND (s1 OR s4), but s4 still interacts with g8.
+  segmentation_info->AssignMergedSegment(
+      1, {3}, Segment(SubsetDefinition{0x7891, 0xe0100}));
+  Status s = dependency_closure->SegmentsMerged(1, {1, 3});
+  ASSERT_TRUE(s.ok()) << s;
+
+  EXPECT_EQ(dependency_closure->AllGlyphConditions().at(8).ToString(),
+            "if (s1) then p0");
+  EXPECT_EQ(dependency_closure->AllGlyphInteractingSegments().at(8),
+            (SegmentSet{1, 4}));
+
+  // Subsequent merge of {2, 4} into 2 must still update g8's interacting
+  // segments even though s4 is no longer in TriggeringSegments().
+  segmentation_info->AssignMergedSegment(
+      2, {4}, Segment(SubsetDefinition{0x798f, 0xfe00}));
+  s = dependency_closure->SegmentsMerged(2, {2, 4});
+  ASSERT_TRUE(s.ok()) << s;
+
+  EXPECT_EQ(dependency_closure->AllGlyphInteractingSegments().at(8),
+            (SegmentSet{1, 2}));
+}
+
+TEST_F(DependencyClosureTest,
+       SegmentsMerged_NonDisjoint_GlyphInteractingSegmentsUpdate) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'f'}},
+                  /* 1 */ {{'i'}},
+                  /* 2 */ {{'f', 'i'}},
+              });
+
+  ASSERT_FALSE(segmentation_info->SegmentsAreDisjoint());
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    ASSERT_EQ(interacting.at(74 /* f */), (SegmentSet{0, 2}));
+    ASSERT_EQ(interacting.at(77 /* i */), (SegmentSet{1, 2}));
+    ASSERT_EQ(interacting.at(444 /* fi */), (SegmentSet{0, 1, 2}));
+  }
+
+  segmentation_info->AssignMergedSegment(1, {0},
+                                         Segment(SubsetDefinition{'f', 'i'}));
+  Status s = dependency_closure->SegmentsMerged(1, {0, 1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  const auto& interacting = dependency_closure->AllGlyphInteractingSegments();
+  EXPECT_EQ(interacting.at(74 /* f */), (SegmentSet{1, 2}));
+  EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{1, 2}));
+  EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{1, 2}));
+}
+
 TEST_F(DependencyClosureTest, SegmentsMerged_InertSegments) {
   Reconfigure(WithDefaultFeatures(),
               {
@@ -807,6 +1031,91 @@ TEST_F(DependencyClosureTest, InitFontChanged_GlyphConditionsUpdate) {
   EXPECT_FALSE(conditions.contains(74 /* f */));
   // 'fi' should now only depend on 'i' (s2)
   EXPECT_EQ(conditions.at(444 /* fi */).ToString(), "if (s2) then p0");
+}
+
+TEST_F(DependencyClosureTest, InitFontChanged_GlyphInteractingSegmentsUpdate) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'b'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+              });
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    ASSERT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+    ASSERT_EQ(interacting.at(74 /* f */), (SegmentSet{1}));
+    ASSERT_EQ(interacting.at(77 /* i */), (SegmentSet{2}));
+    ASSERT_EQ(interacting.at(444 /* fi */), (SegmentSet{1, 2}));
+  }
+
+  Status s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                                   WithDefaultFeatures({'f'}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged({1});
+  ASSERT_TRUE(s.ok()) << s;
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    EXPECT_FALSE(interacting.contains(74 /* f */));
+    EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{2}));
+    EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{2}));
+    EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+  }
+
+  s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                            WithDefaultFeatures({'f', 'i'}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged({2});
+  ASSERT_TRUE(s.ok()) << s;
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    EXPECT_FALSE(interacting.contains(74 /* f */));
+    EXPECT_FALSE(interacting.contains(77 /* i */));
+    EXPECT_FALSE(interacting.contains(444 /* fi */));
+    EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{0}));
+  }
+}
+
+TEST_F(DependencyClosureTest, SegmentsReset_GlyphInteractingSegmentsUpdate) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'b'}},
+                  /* 1 */ {{'f'}},
+                  /* 2 */ {{'i'}},
+                  /* 3 */ {{'A'}},
+                  /* 4 */ {{0x0391 /* Greek Alpha */}},
+              });
+
+  {
+    const auto& interacting =
+        dependency_closure->AllGlyphInteractingSegments();
+    ASSERT_EQ(interacting.at(444 /* fi */), (SegmentSet{1, 2}));
+    ASSERT_EQ(interacting.at(37 /* A */), (SegmentSet{3, 4}));
+  }
+
+  segmentation_info->ResetSegments({
+      /* 0 */ {{'f', 'i'}},
+      /* 1 */ {{0x0391 /* Greek Alpha */}},
+      /* 2 */ {{'b'}},
+      /* 3 */ {{'A'}},
+  });
+  Status s = dependency_closure->SegmentsReset();
+  ASSERT_TRUE(s.ok()) << s;
+
+  const auto& interacting = dependency_closure->AllGlyphInteractingSegments();
+  EXPECT_EQ(interacting.at(74 /* f */), (SegmentSet{0}));
+  EXPECT_EQ(interacting.at(77 /* i */), (SegmentSet{0}));
+  EXPECT_EQ(interacting.at(444 /* fi */), (SegmentSet{0}));
+  EXPECT_EQ(interacting.at(910 /* Alpha */), (SegmentSet{1}));
+  EXPECT_EQ(interacting.at(70 /* b */), (SegmentSet{2}));
+  EXPECT_EQ(interacting.at(37 /* A */), (SegmentSet{1, 3}));
 }
 
 TEST_F(DependencyClosureTest, InitFontChanged_InertSegments) {

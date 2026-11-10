@@ -58,6 +58,14 @@ class DependencyClosure {
     return always_true_glyphs_;
   }
 
+  // For each glyph the set of segments that are involved in the glyphs presence.
+  // A superset of TriggeringSegments() of the conditions from AllGlyphConditions()
+  // will contain segments that are dropped from conditions due to simplification.
+  const absl::flat_hash_map<glyph_id_t, common::SegmentSet>&
+  AllGlyphInteractingSegments() const {
+    return glyph_interacting_segment_cache_;
+  }
+
   common::GlyphSet SegmentsToAffectedGlyphs(
       const common::SegmentSet& segments) const;
 
@@ -125,15 +133,20 @@ class DependencyClosure {
       const absl::flat_hash_map<glyph_id_t, ActivationCondition>& conditions)
       const;
 
+  struct ConditionAndSegments {
+    ActivationCondition condition;
+    common::SegmentSet interacting_segments;
+  };
+
   absl::Status InitializeConditions(
-      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+      absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>& conditions,
       const common::SegmentSet& changed_segments,
       const absl::flat_hash_set<dep_graph::Node>& new_init_font_nodes) const;
 
   static absl::StatusOr<std::optional<ActivationCondition>>
   EdgeConditionsToActivationCondition(
       const dep_graph::EdgeConditionsCnf& edge_conditions,
-      const absl::flat_hash_map<dep_graph::Node, ActivationCondition>&
+      const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
           node_conditions);
 
   absl::Status PropagateConditions(
@@ -141,7 +154,7 @@ class DependencyClosure {
                                 std::vector<dep_graph::EdgeConditionsCnf>>&
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
-      absl::flat_hash_map<dep_graph::Node, ActivationCondition>& conditions,
+      absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>& conditions,
       absl::flat_hash_set<dep_graph::Node>& modified) const;
 
   DependencyClosure(dep_graph::DependencyGraph&& graph,
@@ -167,12 +180,15 @@ class DependencyClosure {
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
   ift::common::GlyphSet always_true_glyphs_;
-  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
+  absl::flat_hash_map<glyph_id_t, common::SegmentSet> glyph_interacting_segment_cache_;
+  absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>
       node_condition_cache_;
+
+  // TODO XXXX Should this reverse index on triggering segments or interacting segments?
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
       node_conditions_with_segment_;
 
-  absl::flat_hash_map<dep_graph::Node, ActivationCondition>
+  absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>
       phase_node_condition_cache_
           [dep_graph::DependencyGraph::kNumberOfClosurePhases];
 
