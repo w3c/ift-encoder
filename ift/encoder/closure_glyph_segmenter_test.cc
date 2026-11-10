@@ -2949,6 +2949,53 @@ TEST_F(ClosureGlyphSegmenterTest,
 }
 
 TEST_F(ClosureGlyphSegmenterTest,
+       SegmentationContext_InteractingConditionsAndGlyphs) {
+  // 1. CLOSURE_ONLY fallback (no DependencyClosure): returns non-exclusive
+  // conditions from glyph_groupings.
+  {
+    std::vector<Segment> segments = {
+        Segment({'b'}),      Segment({'f'}), Segment({'i'}),
+        Segment({'c', 'd'}), Segment({'d', 'e'}),
+    };
+    auto context = SegmentationContext::InitializeSegmentationContext(
+        roboto.get(), {'a'}, segments, FIND_CONDITIONS, CLOSURE_ONLY, 8, 8,
+        resolver, ift::config::UNICODE_RANGE);
+    ASSERT_TRUE(context.ok()) << context.status();
+
+    btree_map<ActivationCondition, ift::common::GlyphSet> expected = {
+        {ActivationCondition::and_segments({1, 2}, 0),
+         ift::common::GlyphSet{444, 446}},
+        {ActivationCondition::or_segments({3, 4}, 0),
+         ift::common::GlyphSet{72}},
+    };
+    // TODO XXXXX
+    // EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
+  }
+
+  // 2. Dep-graph mode with condition simplification: exposes masked
+  // interacting segments by reconstructing the conjunctive condition.
+  {
+    std::vector<Segment> segments = {
+        Segment({'b'}),
+        Segment({'f', 0xFB01, 0xFB03}),
+        Segment({'i'}),
+    };
+    auto context = SegmentationContext::InitializeSegmentationContext(
+        roboto.get(), {'a'}, segments, FIND_CONDITIONS,
+        CLOSURE_AND_VALIDATE_DEP_GRAPH, 8, 8, resolver,
+        ift::config::UNICODE_RANGE);
+    ASSERT_TRUE(context.ok()) << context.status();
+
+    btree_map<ActivationCondition, ift::common::GlyphSet> expected = {
+        {ActivationCondition::and_segments({1, 2}, 0),
+         ift::common::GlyphSet{444, 446}},
+    };
+    // TODO XXXX
+    // EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_InitialSegmentCodepointsAndFeatures) {
   ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
