@@ -69,7 +69,15 @@ class DependencyClosure {
   common::GlyphSet SegmentsToAffectedGlyphs(
       const common::SegmentSet& segments) const;
 
+  // Returns the set of nodes in which any of segments appear in those nodes conditions.
   absl::flat_hash_set<dep_graph::Node> SegmentsToAffectedNodeConditions(
+      const common::SegmentSet& segments) const;
+
+  // Returns the set of nodes that interact in some way with segments, this
+  // is a broader set than 'SegmentsToAffectedNodeConditions'. It includes
+  // segments that interact with a node, but don't appear in the node's condition
+  // due to simplification.
+  absl::flat_hash_set<dep_graph::Node> SegmentsToInteractingNode(
       const common::SegmentSet& segments) const;
 
   const ift::common::SegmentSet& InertSegments() const {
@@ -136,6 +144,9 @@ class DependencyClosure {
   struct ConditionAndSegments {
     ActivationCondition condition;
     common::SegmentSet interacting_segments;
+
+    bool operator==(const ConditionAndSegments& other) const = default;
+    bool operator!=(const ConditionAndSegments& other) const = default;
   };
 
   absl::Status InitializeConditions(
@@ -143,7 +154,7 @@ class DependencyClosure {
       const common::SegmentSet& changed_segments,
       const absl::flat_hash_set<dep_graph::Node>& new_init_font_nodes) const;
 
-  static absl::StatusOr<std::optional<ActivationCondition>>
+  static absl::StatusOr<std::optional<ConditionAndSegments>>
   EdgeConditionsToActivationCondition(
       const dep_graph::EdgeConditionsCnf& edge_conditions,
       const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
@@ -184,9 +195,10 @@ class DependencyClosure {
   absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>
       node_condition_cache_;
 
-  // TODO XXXX Should this reverse index on triggering segments or interacting segments?
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
       node_conditions_with_segment_;
+  absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>
+      node_interacting_segments_with_segment_;
 
   absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>
       phase_node_condition_cache_
