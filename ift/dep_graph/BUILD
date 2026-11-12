@@ -76,6 +76,7 @@ cc_test(
         "//ift/freq:common",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 

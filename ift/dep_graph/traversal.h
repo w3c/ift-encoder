@@ -1,6 +1,8 @@
 #ifndef IFT_DEP_GRAPH_TRAVERSAL_H_
 #define IFT_DEP_GRAPH_TRAVERSAL_H_
 
+#include <vector>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "ift/common/int_set.h"
@@ -75,6 +77,21 @@ class Traversal {
   }
 
   void AddPending(PendingEdge edge) { pending_edges_.push_back(edge); }
+
+  void PruneReachedPendingEdges() {
+    std::erase_if(pending_edges_, [this](const PendingEdge& edge) {
+      if (edge.dest.IsGlyph()) {
+        return reached_glyphs_.contains(edge.dest.Id());
+      }
+      if (edge.dest.IsUnicode()) {
+        return reached_codepoints_.contains(edge.dest.Id());
+      }
+      if (edge.dest.IsFeature()) {
+        return reached_feature_tags_.contains(edge.dest.Id());
+      }
+      return false;
+    });
+  }
 
   bool HasPendingEdges() const { return !pending_edges_.empty(); }
 
