@@ -4,6 +4,8 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "hb-subset.h"
+#include "hb.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/data_file_resolver.h"
 #include "ift/common/font_data.h"
@@ -35,6 +37,7 @@ using ift::encoder::RequestedSegmentationInformation;
 using ift::encoder::Segment;
 using ift::encoder::SubsetDefinition;
 using ift::freq::ProbabilityBound;
+using ::testing::Contains;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::UnorderedElementsAre;
@@ -607,7 +610,9 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_TopologicalSorting) {
                   });
 
   auto sccs_or = graph.StronglyConnectedComponents(
-      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+      {DependencyGraph::kPhaseInit, FontHelper::kCmap, FontHelper::kGSUB,
+       FontHelper::kGlyf},
+      0xFFFFFFFF);
   ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
   const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
   glyph_id_t gid_a = *FontHelper::GetNominalGlyph(face.get(), 'a');
@@ -677,7 +682,9 @@ TEST_F(DependencyGraphTest,
               });
 
   auto sccs_or = graph.StronglyConnectedComponents(
-      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+      {DependencyGraph::kPhaseInit, FontHelper::kCmap, FontHelper::kGSUB,
+       FontHelper::kGlyf},
+      0xFFFFFFFF);
   ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
   const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
@@ -704,7 +711,9 @@ TEST_F(DependencyGraphTest,
               });
 
   auto sccs_or = graph.StronglyConnectedComponents(
-      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF);
+      {DependencyGraph::kPhaseInit, FontHelper::kCmap, FontHelper::kGSUB,
+       FontHelper::kGlyf},
+      0xFFFFFFFF);
   ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
   const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
@@ -783,9 +792,17 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_TableFiltering) {
   EXPECT_NE(edges->find(Node::Glyph(gid_A)), edges->end());
   EXPECT_EQ(edges->find(Node::Glyph(gid_smcp_A)), edges->end());
 
-  // With GSUB, it should now be reachable
+  // With GSUB only, cmap edge to gid_A is excluded while smcp sub of A is
+  // included.
   edges =
       graph.CollectIncomingEdges({FontHelper::kGSUB}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(edges.ok()) << edges.status();
+  EXPECT_EQ(edges->find(Node::Glyph(gid_A)), edges->end());
+  EXPECT_NE(edges->find(Node::Glyph(gid_smcp_A)), edges->end());
+
+  // With both cmap and GSUB, both are reachable.
+  edges = graph.CollectIncomingEdges({FontHelper::kCmap, FontHelper::kGSUB},
+                                     0xFFFFFFFF, 0xFFFFFFFF);
   ASSERT_TRUE(edges.ok()) << edges.status();
   EXPECT_NE(edges->find(Node::Glyph(gid_A)), edges->end());
   EXPECT_NE(edges->find(Node::Glyph(gid_smcp_A)), edges->end());
@@ -881,8 +898,9 @@ TEST_F(DependencyGraphTest, StronglyConnectedComponents_NodeInclusionFilter) {
   };
 
   auto sccs_or = graph.StronglyConnectedComponents(
-      {FontHelper::kCmap, FontHelper::kGSUB, FontHelper::kGlyf}, 0xFFFFFFFF,
-      &filter);
+      {DependencyGraph::kPhaseInit, FontHelper::kCmap, FontHelper::kGSUB,
+       FontHelper::kGlyf},
+      0xFFFFFFFF, &filter);
   ASSERT_TRUE(sccs_or.ok()) << sccs_or.status();
   const std::vector<Node> topo_order = FlattenSccs(*sccs_or);
 
@@ -931,6 +949,295 @@ TEST_F(DependencyGraphTest, CollectIncomingEdges_NodeInclusionFilter) {
                           },
                           expected_fi_edge,
                       }));
+}
+
+TEST_F(DependencyGraphTest, CollectIncomingEdges_UnicodePhases) {
+  Reconfigure(WithDefaultFeatures({}), {
+                                           /* 0 */ {{0xC1 /* Aacute */}},
+                                           /* 1 */ {{'A'}},
+                                           /* 2 */ {{0x301 /* acutecomb */}},
+                                           /* 3 */ {{'('}},
+                                           /* 4 */ {{')'}},
+                                       });
+
+  glyph_id_t gid_A = *FontHelper::GetNominalGlyph(face.get(), 'A');
+
+  // Phase 0 (Init + Bidi): segment -> unicode/feature and bidi unicode ->
+  // unicode edges.
+  auto init_edges = graph.CollectIncomingEdges({DependencyGraph::kPhaseInit},
+                                               0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(init_edges.ok()) << init_edges.status();
+  EXPECT_THAT(init_edges->at(Node::Unicode('(')),
+              UnorderedElementsAre(EdgeConditionsCnf{{Node::Segment(3)}},
+                                   EdgeConditionsCnf{{Node::Unicode(')')}}));
+  EXPECT_THAT(init_edges->at(Node::Unicode(')')),
+              UnorderedElementsAre(EdgeConditionsCnf{{Node::Segment(4)}},
+                                   EdgeConditionsCnf{{Node::Unicode('(')}}));
+  EXPECT_EQ(init_edges->at(Node::Unicode('A')),
+            (std::vector<EdgeConditionsCnf>{{{Node::Segment(1)}}}));
+  EXPECT_EQ(init_edges->at(Node::Unicode(0xC1)),
+            (std::vector<EdgeConditionsCnf>{{{Node::Segment(0)}}}));
+  EXPECT_EQ(init_edges->find(Node::Glyph(gid_A)), init_edges->end());
+
+  // Phase 2 (Decomposition): only unicode -> decomposed unicode edges.
+  auto decomp_edges = graph.CollectIncomingEdges(
+      {DependencyGraph::kPhaseDecomposition}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(decomp_edges.ok()) << decomp_edges.status();
+  EXPECT_EQ(decomp_edges->at(Node::Unicode('A')),
+            (std::vector<EdgeConditionsCnf>{{{Node::Unicode(0xC1)}}}));
+  EXPECT_EQ(decomp_edges->at(Node::Unicode(0x301)),
+            (std::vector<EdgeConditionsCnf>{{{Node::Unicode(0xC1)}}}));
+  EXPECT_EQ(decomp_edges->find(Node::Unicode(0xC1)), decomp_edges->end());
+  EXPECT_EQ(decomp_edges->find(Node::Unicode(')')), decomp_edges->end());
+  EXPECT_EQ(decomp_edges->find(Node::Glyph(gid_A)), decomp_edges->end());
+
+  // Phase 3 (Composition): only unicode -> composed unicode conjunctive edges.
+  auto comp_edges = graph.CollectIncomingEdges(
+      {DependencyGraph::kPhaseComposition}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(comp_edges.ok()) << comp_edges.status();
+  EXPECT_EQ(comp_edges->at(Node::Unicode(0xC1)),
+            (std::vector<EdgeConditionsCnf>{
+                {{Node::Unicode('A')}, {Node::Unicode(0x301)}}}));
+  EXPECT_EQ(comp_edges->find(Node::Unicode('A')), comp_edges->end());
+  EXPECT_EQ(comp_edges->find(Node::Unicode(')')), comp_edges->end());
+  EXPECT_EQ(comp_edges->find(Node::Glyph(gid_A)), comp_edges->end());
+
+  // Phase 4 (cmap): only nominal unicode -> glyph edges.
+  auto cmap_edges =
+      graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(cmap_edges.ok()) << cmap_edges.status();
+  EXPECT_EQ(cmap_edges->at(Node::Glyph(gid_A)),
+            (std::vector<EdgeConditionsCnf>{{{Node::Unicode('A')}}}));
+  EXPECT_EQ(cmap_edges->find(Node::Unicode('A')), cmap_edges->end());
+  EXPECT_EQ(cmap_edges->find(Node::Unicode(')')), cmap_edges->end());
+
+  // Phase 1 (Variation Selectors) with NotoSansJP: only UVS -> glyph edges.
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{0x4FAE}},
+                  /* 1 */ {{0xFE00}},
+                  /* 2 */ {{0xFA30}},
+              });
+  glyph_id_t gid_4fae = *FontHelper::GetNominalGlyph(noto_sans_jp.get(), 0x4FAE);
+  glyph_id_t gid_fa30 = *FontHelper::GetNominalGlyph(noto_sans_jp.get(), 0xFA30);
+
+  auto uvs_edges = graph.CollectIncomingEdges(
+      {DependencyGraph::kPhaseVariationSelectors}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(uvs_edges.ok()) << uvs_edges.status();
+  EXPECT_THAT(
+      uvs_edges->at(Node::Glyph(gid_fa30)),
+      Contains(EdgeConditionsCnf{
+          {Node::Unicode(0x4FAE)}, {Node::Unicode(0xFE00)}}));
+  EXPECT_EQ(uvs_edges->find(Node::Glyph(gid_4fae)), uvs_edges->end());
+
+  auto jp_cmap_edges =
+      graph.CollectIncomingEdges({FontHelper::kCmap}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(jp_cmap_edges.ok()) << jp_cmap_edges.status();
+  EXPECT_EQ(jp_cmap_edges->at(Node::Glyph(gid_4fae)),
+            (std::vector<EdgeConditionsCnf>{{{Node::Unicode(0x4FAE)}}}));
+  EXPECT_EQ(jp_cmap_edges->at(Node::Glyph(gid_fa30)),
+            (std::vector<EdgeConditionsCnf>{{{Node::Unicode(0xFA30)}}}));
+}
+
+TEST_F(DependencyGraphTest,
+       StronglyConnectedComponents_NoCycleBetweenCompAndDecomp) {
+  Reconfigure(WithDefaultFeatures({}), {
+                                           {{0xC1 /* Aacute */}},
+                                           {{'A'}},
+                                           {{0x301 /* acutecomb */}},
+                                           {{'('}},
+                                           {{')'}},
+                                       });
+
+  // In Decomposition alone, there are no cycles and Aacute precedes A and 0x301.
+  auto decomp_sccs = graph.StronglyConnectedComponents(
+      {DependencyGraph::kPhaseDecomposition}, Node::NodeType::UNICODE);
+  ASSERT_TRUE(decomp_sccs.ok()) << decomp_sccs.status();
+  for (const auto& scc : *decomp_sccs) {
+    EXPECT_EQ(scc.size(), 1);
+  }
+  const std::vector<Node> decomp_order = FlattenSccs(*decomp_sccs);
+  EXPECT_LT(GetIndex(decomp_order, Node::Unicode(0xC1)),
+            GetIndex(decomp_order, Node::Unicode('A')));
+  EXPECT_LT(GetIndex(decomp_order, Node::Unicode(0xC1)),
+            GetIndex(decomp_order, Node::Unicode(0x301)));
+
+  // In Composition alone, there are no cycles and A and 0x301 precede Aacute.
+  auto comp_sccs = graph.StronglyConnectedComponents(
+      {DependencyGraph::kPhaseComposition}, Node::NodeType::UNICODE);
+  ASSERT_TRUE(comp_sccs.ok()) << comp_sccs.status();
+  for (const auto& scc : *comp_sccs) {
+    EXPECT_EQ(scc.size(), 1);
+  }
+  const std::vector<Node> comp_order = FlattenSccs(*comp_sccs);
+  EXPECT_LT(GetIndex(comp_order, Node::Unicode('A')),
+            GetIndex(comp_order, Node::Unicode(0xC1)));
+  EXPECT_LT(GetIndex(comp_order, Node::Unicode(0x301)),
+            GetIndex(comp_order, Node::Unicode(0xC1)));
+
+  // Init + Bidi has its own symmetric 2-node SCC between '(' and ')'.
+  auto init_sccs = graph.StronglyConnectedComponents(
+      {DependencyGraph::kPhaseInit},
+      Node::NodeType::SEGMENT | Node::NodeType::UNICODE);
+  ASSERT_TRUE(init_sccs.ok()) << init_sccs.status();
+  uint32_t bidi_cycles = 0;
+  for (const auto& scc : *init_sccs) {
+    if (scc.size() > 1) {
+      EXPECT_THAT(scc, UnorderedElementsAre(Node::Unicode('('),
+                                            Node::Unicode(')')));
+      bidi_cycles++;
+    }
+  }
+  EXPECT_EQ(bidi_cycles, 1);
+  const std::vector<Node> init_order = FlattenSccs(*init_sccs);
+  EXPECT_LT(GetIndex(init_order, Node::Segment(3)),
+            GetIndex(init_order, Node::Unicode('(')));
+  EXPECT_LT(GetIndex(init_order, Node::Segment(4)),
+            GetIndex(init_order, Node::Unicode(')')));
+
+  // If Decomposition and Composition were combined, they would form a cycle.
+  auto combined_sccs = graph.StronglyConnectedComponents(
+      {DependencyGraph::kPhaseDecomposition,
+       DependencyGraph::kPhaseComposition},
+      Node::NodeType::UNICODE);
+  ASSERT_TRUE(combined_sccs.ok()) << combined_sccs.status();
+  uint32_t combined_cycles = 0;
+  for (const auto& scc : *combined_sccs) {
+    if (scc.size() > 1) {
+      EXPECT_THAT(scc, UnorderedElementsAre(Node::Unicode(0xC1),
+                                            Node::Unicode('A'),
+                                            Node::Unicode(0x301)));
+      combined_cycles++;
+    }
+  }
+  EXPECT_EQ(combined_cycles, 1);
+}
+
+TEST_F(DependencyGraphTest, ClosureTraversal_DecompBeforeComp) {
+  Reconfigure(WithDefaultFeatures({}), {
+                                           {{0xE1 /* aacute */}},
+                                           {{'e'}},
+                                           {{'a'}},
+                                           {{0x301 /* acutecomb */}},
+                                           {{0xE9 /* eacute */}},
+                                       });
+
+  auto r = graph.ClosureTraversal({Node::Unicode(0xE1), Node::Unicode('e')});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_EQ(r->ReachedCodepoints(),
+            (CodepointSet{0xE1, 'e', 'a', 0x301, 0xE9}));
+
+  glyph_id_t gid_eacute = *FontHelper::GetNominalGlyph(face.get(), 0xE9);
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_eacute));
+  EXPECT_TRUE(r->TraversedTables().contains(FontHelper::kCmap));
+  EXPECT_FALSE(
+      r->TraversedTables().contains(DependencyGraph::kPhaseDecomposition));
+  EXPECT_FALSE(
+      r->TraversedTables().contains(DependencyGraph::kPhaseComposition));
+}
+
+TEST_F(DependencyGraphTest, ClosureTraversal_BidiBeforeDecomposition) {
+  // Keep 0x2329, 0x3008, 0x3009 while dropping 0x232A (bidi mirror of 0x2329).
+  // 0x2329 canonically decomposes to 0x3008, and 0x3008 <-> 0x3009 are bidi
+  // mirrors.
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_NE(input, nullptr);
+  hb_subset_input_set_flags(input, HB_SUBSET_FLAGS_NO_BIDI_CLOSURE);
+  hb_set_t* unicodes = hb_subset_input_unicode_set(input);
+  hb_set_add(unicodes, 0x2329);
+  hb_set_add(unicodes, 0x3008);
+  hb_set_add(unicodes, 0x3009);
+  hb_face_unique_ptr subset =
+      ift::common::make_hb_face(hb_subset_or_fail(noto_sans_jp.get(), input));
+  hb_subset_input_destroy(input);
+  ASSERT_NE(subset.get(), nullptr);
+  ift::common::hb_blob_unique_ptr blob =
+      ift::common::make_hb_blob(hb_face_reference_blob(subset.get()));
+  hb_face_unique_ptr subset_face =
+      ift::common::make_hb_face(hb_face_create(blob.get(), 0));
+
+  CodepointSet subset_cps = FontHelper::ToCodepointsSet(subset_face.get());
+  ASSERT_TRUE(subset_cps.contains(0x2329));
+  ASSERT_TRUE(subset_cps.contains(0x3008));
+  ASSERT_TRUE(subset_cps.contains(0x3009));
+  ASSERT_FALSE(subset_cps.contains(0x232A));
+
+  Reconfigure(subset_face.get(), WithDefaultFeatures({}),
+              {
+                  {{0x2329}},
+                  {{0x3008}},
+                  {{0x3009}},
+              });
+
+  // Starting from 0x2329: Bidi runs before Decomposition, so 0x3008 (reached
+  // only via Decomposition of 0x2329) must NOT trigger Bidi mirroring to
+  // 0x3009.
+  auto r = graph.ClosureTraversal({Node::Unicode(0x2329)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x2329, 0x3008}));
+
+  // Starting from 0x3009: Bidi mirrors 0x3009 -> 0x3008.
+  r = graph.ClosureTraversal({Node::Unicode(0x3009)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_EQ(r->ReachedCodepoints(), (CodepointSet{0x3009, 0x3008}));
+}
+
+TEST_F(DependencyGraphTest, ClosureTraversal_UvsBeforeDecomposition) {
+  // 0xF901 canonically decomposes to 0x66F4, and (0x66F4, 0xE0101) maps via UVS
+  // to glyph 16687 (while nominal glyph for both 0xF901 and 0x66F4 is 6563).
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{0xF901}},
+                  /* 1 */ {{0xE0101}},
+                  /* 2 */ {{0x66F4}},
+              });
+
+  // Starting from 0xF901 + 0xE0101: Phase 2 (Variation Selectors) runs before
+  // Phase 3 (Decomposition), so 0x66F4 (reached via Decomposition) must NOT
+  // activate UVS glyph 16687.
+  auto r = graph.ClosureTraversal({Node::Segment(0), Node::Segment(1)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedCodepoints().contains(0x66F4));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(6563));
+  EXPECT_FALSE(r->ReachedGlyphs().contains(16687));
+
+  // Starting from 0x66F4 + 0xE0101 directly DOES reach UVS glyph 16687.
+  r = graph.ClosureTraversal({Node::Segment(2), Node::Segment(1)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(16687));
+}
+
+TEST_F(DependencyGraphTest, ClosureTraversal_UvsPhaseAndPendingPruning) {
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{0x4FAE, 0xFA30}},
+                  /* 1 */ {{0xFE00}},
+              });
+
+  glyph_id_t gid_fa30 = *FontHelper::GetNominalGlyph(noto_sans_jp.get(), 0xFA30);
+
+  // Segment 0 reaches gid_fa30 via cmap (Phase 5) even though Phase 2 (UVS)
+  // leaves a pending edge (0x4FAE, 0xFE00) -> gid_fa30. That pending edge must
+  // be pruned because gid_fa30 was reached in Phase 5.
+  auto r = graph.ClosureTraversal({Node::Segment(0)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_fa30));
+  EXPECT_FALSE(r->HasPendingEdges());
+
+  // When both base and variation selector are reached, UVS (Phase 2) reaches
+  // gid_fa30 directly without adding codepoint 0xFA30, and records kCmap table.
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures({}),
+              {
+                  /* 0 */ {{0x4FAE}},
+                  /* 1 */ {{0xFE00}},
+              });
+  r = graph.ClosureTraversal({Node::Segment(0), Node::Segment(1)});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_fa30));
+  EXPECT_FALSE(r->ReachedCodepoints().contains(0xFA30));
+  EXPECT_TRUE(r->TraversedTables().contains(FontHelper::kCmap));
+  EXPECT_FALSE(r->TraversedTables().contains(
+      DependencyGraph::kPhaseVariationSelectors));
 }
 
 // TODO(garretrieger):
