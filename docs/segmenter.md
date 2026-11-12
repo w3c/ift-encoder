@@ -2,7 +2,7 @@
 
 Author: Garret Rieger  
 Date: Aug 5th, 2026  
-Updated: Sep 15th, 2026
+Updated: Nov 12th, 2026
 
 ## Introduction
 
@@ -184,6 +184,58 @@ capitalize on.
 
 In the case of initial font merges the cost delta also adds the number of bytes the initial font
 increases by to the delta value.
+
+### All-Pairs Segment Merging
+
+During cost-based segment merging ([all_pairs_merger.cc](../ift/encoder/all_pairs_merger.cc)),
+candidate merges are selected globally across all active segments in a merge group rather than
+greedily merging into one base segment at a time. Evaluating candidates globally avoids greedy traps
+where a high-probability segment absorbs a lower-probability segment for a marginal gain and blocks
+a much stronger merge between that lower-probability segment and another partner.
+
+Active segments with exclusive patches above the low-impact optimization cutoff are maintained in
+descending probability order so candidate pairs can be pruned early once lower-ranked inert segments
+fall below the best-case probability threshold. Multi-segment composite activation conditions are
+also queued as candidate merges. Only strictly cost-reducing merges ($\Delta \text{cost} < 0$) are
+accepted during all-pairs merging; once all negative cost delta candidates are exhausted, the
+all-pairs phase finishes and any remaining undersized segments are handled in a separate pass for
+minimum group size enforcement.
+
+To avoid evaluating $O(n^2)$ Brotli compressions upfront and recomputing unaffected pairs after
+every merge, `AllPairsMerger` combines three mechanisms:
+
+* **Two-Stage Priority Queue**: A single min-heap stores both *best-case lower-bound* entries
+  (computed from best-case merged patch sizes without running Brotli) and *exact* entries (backed by
+  Brotli-compressed patch sizes). Heap priorities normalize $\Delta \text{cost}$ by the total
+  pre-merge byte size (including per-patch network overhead $k$) of the patches affected by the
+  merged segments, prioritizing merges with the largest expected transfer savings per affected byte
+  (breaking ties in favor of exact entries, then lexicographically by segment set). On each step the
+  highest-priority non-stale entry is popped: if it is a lower-bound entry, its exact Brotli cost
+  delta is evaluated and, if still negative, re-inserted into the heap as an exact entry; if the
+  popped entry is already exact, its normalized delta is at least as good as every remaining entry
+  in the heap and the merge is applied immediately.
+
+* **Segment Epochs**: Rather than scanning or rebuilding the heap to purge invalidated candidates
+  after a merge, `AllPairsMerger` performs lazy invalidation using a monotonically increasing
+  `current_epoch` counter and a per-segment epoch array. Each queued candidate records
+  `current_epoch` when created. Segments that are merged into another segment or marked finished
+  have their epoch set to `UINT32_MAX`, and segments whose conditions change during a merge have
+  their epoch updated to the incremented `current_epoch`. When a candidate is popped from the heap,
+  it is discarded if any of its segments has an epoch greater than the candidate's creation epoch.
+
+* **Dirty Tracking and Refresh**: Because incremental condition reprocessing for non-inert merges
+  runs between `TryNextMerge()` calls, post-merge glyph conditions and patch groupings are not
+  finalized until the start of the next iteration. During merge application (before conditions are
+  modified), `AssignMergedSegment` records any segments sharing a pre-merge composite condition with
+  the merged segments, records one representative glyph from each pre-combination condition
+  triggered by the merged segments, temporarily removes the merged and surviving base segments from
+  the active set with epoch `UINT32_MAX`, and marks the surviving base segment dirty. At the start
+  of the next `TryNextAllPairsMerge()` call (after condition reprocessing completes),
+  `RefreshDirtySegments` looks up the post-reprocessing conditions of those representative glyphs
+  and the surviving base segment to collect all newly affected triggering segments, updates the
+  surviving base segment's probability and exclusive patch size in the active set, increments
+  `current_epoch` across all dirty segments to invalidate stale heap entries, and queues fresh
+  best-case pairwise and composite candidates involving only the dirty segments.
 
 ### Estimating Activation Condition Probabilities
 
@@ -486,7 +538,11 @@ help preserve privacy. The current merger implementation has this as a configura
 minimum group size is configured the merger will never select a merge which has a positive cost
 delta. When a minimum group size is configured then the merger will accept positive cost delta
 merges for patches that do not meet the configured minimum group size. When merging to meet minimum
-group sizes the merger will still seek out the lowest, least positive, cost delta candidate.
+group sizes the merger will still seek out the lowest, least positive, cost delta candidate. For
+segment merging, minimum group sizes are enforced in a separate pass after the all-pairs merger has
+exhausted all negative cost delta merges: remaining undersized segments are visited in descending
+probability order (using the active segment ordering maintained by the all-pairs merger) and merged
+per-base without resuming all-pairs cost-reduction searches.
 
 #### Caching
 
