@@ -5,7 +5,6 @@
 #include <optional>
 #include <vector>
 
-#include "absl/flags/declare.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/all_pairs_merger.h"
@@ -14,8 +13,6 @@
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/segmentation_context.h"
 #include "ift/encoder/types.h"
-
-ABSL_DECLARE_FLAG(bool, experimental_all_pairs_merging);
 
 namespace ift::encoder {
 
@@ -121,8 +118,6 @@ class Merger {
   }
 
   bool ShouldRecordMergedSizeReductions() const;
-
-  bool UseAllPairsMerging() const;
 
   void LogMergedSizeHistogram() const;
 

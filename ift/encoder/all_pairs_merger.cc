@@ -3,15 +3,12 @@
 #include <cstdint>
 #include <iterator>
 #include <optional>
-#include <string>
 #include <utility>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
-#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
@@ -20,19 +17,6 @@
 #include "ift/encoder/merger.h"
 #include "ift/encoder/types.h"
 
-ABSL_FLAG(ift::encoder::AllPairsNormalizationMode,
-          experimental_all_pairs_normalization,
-          ift::encoder::AllPairsNormalizationMode::kNone,
-          "Controls how cost deltas are normalized when ranking candidate "
-          "merges in all-pairs mode: 'none' (no normalization), 'segment' "
-          "(divide by merged_segments.size() - 1), or 'byte' (divide by "
-          "pre-merge patch bytes including network overhead).");
-
-ABSL_FLAG(bool, experimental_all_pairs_phase1_in_phase2, true,
-          "When enabled, Phase 1 all-pairs cost-reducing merging remains active "
-          "during Phase 2 minimum group size enforcement. When disabled, Phase "
-          "1 stops once Phase 2 begins.");
-
 using absl::btree_set;
 using absl::Status;
 using absl::StatusOr;
@@ -40,36 +24,6 @@ using ift::common::GlyphSet;
 using ift::common::SegmentSet;
 
 namespace ift::encoder {
-
-bool AbslParseFlag(absl::string_view text, AllPairsNormalizationMode* mode,
-                   std::string* error) {
-  if (text == "none") {
-    *mode = AllPairsNormalizationMode::kNone;
-    return true;
-  }
-  if (text == "segment" || text == "segments") {
-    *mode = AllPairsNormalizationMode::kSegment;
-    return true;
-  }
-  if (text == "byte" || text == "bytes") {
-    *mode = AllPairsNormalizationMode::kByte;
-    return true;
-  }
-  *error = "unknown normalization mode; expected 'none', 'segment', or 'byte'";
-  return false;
-}
-
-std::string AbslUnparseFlag(AllPairsNormalizationMode mode) {
-  switch (mode) {
-    case AllPairsNormalizationMode::kNone:
-      return "none";
-    case AllPairsNormalizationMode::kSegment:
-      return "segment";
-    case AllPairsNormalizationMode::kByte:
-      return "byte";
-  }
-  return "none";
-}
 
 void AllPairsMerger::AssignMergedSegment(const Merger& merger,
                                          segment_index_t base,
@@ -160,56 +114,47 @@ Status AllPairsMerger::UpdateActiveSegment(Merger& merger, segment_index_t s) {
 
 StatusOr<double> AllPairsMerger::NormalizationDivisor(
     Merger& merger, const SegmentSet& merged_segments) const {
-  switch (absl::GetFlag(FLAGS_experimental_all_pairs_normalization)) {
-    case AllPairsNormalizationMode::kNone:
-      return 1.0;
-    case AllPairsNormalizationMode::kSegment:
-      return static_cast<double>(merged_segments.size() - 1);
-    case AllPairsNormalizationMode::kByte: {
-      const uint32_t overhead = merger.Strategy().NetworkOverheadCost();
-      const auto& context = merger.Context();
-      if (merged_segments.size() == 2) {
-        segment_index_t u = *merged_segments.min();
-        segment_index_t v = *merged_segments.max();
-        if (context.InertSegments().contains(u) &&
-            context.InertSegments().contains(v)) {
-          uint32_t size_u = TRY(merger.ExclusivePatchSize(u));
-          uint32_t size_v = TRY(merger.ExclusivePatchSize(v));
-          if (size_u > 0 && size_v > 0) {
-            return static_cast<double>(size_u + overhead) +
-                   static_cast<double>(size_v + overhead);
-          }
-        }
+  const uint32_t overhead = merger.Strategy().NetworkOverheadCost();
+  const auto& context = merger.Context();
+  if (merged_segments.size() == 2) {
+    segment_index_t u = *merged_segments.min();
+    segment_index_t v = *merged_segments.max();
+    if (context.InertSegments().contains(u) &&
+        context.InertSegments().contains(v)) {
+      uint32_t size_u = TRY(merger.ExclusivePatchSize(u));
+      uint32_t size_v = TRY(merger.ExclusivePatchSize(v));
+      if (size_u > 0 && size_v > 0) {
+        return static_cast<double>(size_u + overhead) +
+               static_cast<double>(size_v + overhead);
       }
-
-      const bool unicode_range_mode =
-          (context.GetTargetMode() == config::UNICODE_RANGE);
-      const auto& groupings = context.glyph_groupings;
-      const auto& conditions_and_glyphs = groupings.ConditionsAndGlyphs();
-      absl::flat_hash_set<const ActivationCondition*> seen_conditions;
-      uint64_t total_bytes = 0;
-      for (segment_index_t s : merged_segments) {
-        for (const auto& c : groupings.TriggeringSegmentToConditions(s)) {
-          if (c.IsFallback() || (unicode_range_mode && !c.IsExclusive())) {
-            continue;
-          }
-          auto it = conditions_and_glyphs.find(c);
-          if (it == conditions_and_glyphs.end()) {
-            return absl::InternalError(
-                "Condition which should be present wasn't found.");
-          }
-          if (!seen_conditions.insert(&it->first).second) {
-            continue;
-          }
-          uint32_t patch_size =
-              TRY(context.patch_size_cache->GetPatchSize(it->second));
-          total_bytes += static_cast<uint64_t>(patch_size + overhead);
-        }
-      }
-      return total_bytes > 0 ? static_cast<double>(total_bytes) : 1.0;
     }
   }
-  return 1.0;
+
+  const bool unicode_range_mode =
+      (context.GetTargetMode() == config::UNICODE_RANGE);
+  const auto& groupings = context.glyph_groupings;
+  const auto& conditions_and_glyphs = groupings.ConditionsAndGlyphs();
+  absl::flat_hash_set<const ActivationCondition*> seen_conditions;
+  uint64_t total_bytes = 0;
+  for (segment_index_t s : merged_segments) {
+    for (const auto& c : groupings.TriggeringSegmentToConditions(s)) {
+      if (c.IsFallback() || (unicode_range_mode && !c.IsExclusive())) {
+        continue;
+      }
+      auto it = conditions_and_glyphs.find(c);
+      if (it == conditions_and_glyphs.end()) {
+        return absl::InternalError(
+            "Condition which should be present wasn't found.");
+      }
+      if (!seen_conditions.insert(&it->first).second) {
+        continue;
+      }
+      uint32_t patch_size =
+          TRY(context.patch_size_cache->GetPatchSize(it->second));
+      total_bytes += static_cast<uint64_t>(patch_size + overhead);
+    }
+  }
+  return total_bytes > 0 ? static_cast<double>(total_bytes) : 1.0;
 }
 
 Status AllPairsMerger::QueueBestCaseCandidate(
@@ -459,6 +404,9 @@ StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
     TRYV(Initialize(merger));
   } else {
     TRYV(RefreshDirtySegments(merger));
+    if (phase_ == FINISHED) {
+      return std::nullopt;
+    }
   }
 
   while (!queue_.empty()) {
@@ -491,9 +439,7 @@ StatusOr<std::optional<InvalidationSet>> AllPairsMerger::TryNextAllPairsMerge(
     return top.evaluated_merge->Apply(merger);
   }
 
-  if (!absl::GetFlag(FLAGS_experimental_all_pairs_phase1_in_phase2)) {
-    phase_ = FINISHED;
-  }
+  phase_ = FINISHED;
   return std::nullopt;
 }
 

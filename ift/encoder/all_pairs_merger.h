@@ -4,14 +4,11 @@
 #include <cstdint>
 #include <optional>
 #include <queue>
-#include <string>
 #include <vector>
 
 #include "absl/container/btree_set.h"
-#include "absl/flags/declare.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/candidate_merge.h"
 #include "ift/encoder/invalidation_set.h"
@@ -20,16 +17,6 @@
 namespace ift::encoder {
 
 class Merger;
-
-enum class AllPairsNormalizationMode {
-  kNone,
-  kSegment,
-  kByte,
-};
-
-bool AbslParseFlag(absl::string_view text, AllPairsNormalizationMode* mode,
-                   std::string* error);
-std::string AbslUnparseFlag(AllPairsNormalizationMode mode);
 
 // Implements Phase 1 all-pairs cost-reducing segment merging for Merger using a
 // lazy two-stage (best-case lower bound -> exact) priority queue.
@@ -150,9 +137,5 @@ class AllPairsMerger {
 };
 
 }  // namespace ift::encoder
-
-ABSL_DECLARE_FLAG(ift::encoder::AllPairsNormalizationMode,
-                  experimental_all_pairs_normalization);
-ABSL_DECLARE_FLAG(bool, experimental_all_pairs_phase1_in_phase2);
 
 #endif  // IFT_ENCODER_ALL_PAIRS_MERGER_H_
