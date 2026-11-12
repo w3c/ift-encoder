@@ -2,7 +2,6 @@
 
 #include <optional>
 
-#include "absl/flags/flag.h"
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
@@ -1005,8 +1004,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   std::vector<SubsetDefinition> expected_segments = {
       {'A'},
       {'C'},
-      {0xC1},
-      {0x106},
+      {0xC1, 0x106},
+      {},
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
@@ -1014,8 +1013,8 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
             R"(initial font: { gid0 }
 p0: { gid117, gid169, gid640, gid700 }
 p1: { gid37, gid39 }
-if ((s2 OR s3)) then p0
-if ((s0 OR s1 OR s2 OR s3)) then p1
+if (s2) then p0
+if ((s0 OR s1 OR s2)) then p1
 )");
 }
 
@@ -1046,23 +1045,19 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
   std::vector<SubsetDefinition> expected_segments = {
       {'A'},
       {'C'},
-      {0xC1},
-      {0x106},
+      {0xC1, 0x106},
+      {},
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
-p0: { gid37 }
-p1: { gid39 }
-p2: { gid117, gid169 }
-p3: { gid640 }
-p4: { gid700 }
-if ((s0 OR s2)) then p0
-if ((s1 OR s3)) then p1
-if ((s2 OR s3)) then p2
-if ((s0 OR s2) AND (s2 OR s3)) then p3
-if ((s1 OR s3) AND (s2 OR s3)) then p4
+p0: { gid117, gid169, gid640, gid700 }
+p1: { gid37 }
+p2: { gid39 }
+if (s2) then p0
+if ((s0 OR s2)) then p1
+if ((s1 OR s2)) then p2
 )");
 }
 
@@ -1165,12 +1160,14 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
             R"(initial font: { gid0 }
 p0: { gid3, gid9, gid155 }
 p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
+p2: { gid5, gid6, gid14, gid33, gid60, gid91, gid112, gid145, gid152, gid157, gid158, gid190, gid191 }
 p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
+p4: { gid11, gid47, gid73, gid74, gid75, gid76, gid83, gid111, gid149 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
 if ((s0 OR s1 OR s2)) then p3
+if ((s0 OR s1) AND s2) then p4
 )");
 
   // With simplification there's no more composite conditions:
@@ -3381,19 +3378,6 @@ TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_TotalCosts) {
   EXPECT_NEAR(ur_costs[0].ift_patch_cost, expected_patch_cost, 1e-6);
 }
 
-namespace {
-struct ScopedAllPairsMergingFlag {
-  explicit ScopedAllPairsMergingFlag(bool enabled)
-      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_merging)) {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, enabled);
-  }
-  ~ScopedAllPairsMergingFlag() {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, prev);
-  }
-  bool prev;
-};
-}  // namespace
-
 TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_AvoidsGreedyTrap_EndToEnd) {
   PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
   double size_a = *patch_sizer.GetPatchSize({69}) + 75.0;
@@ -3422,36 +3406,22 @@ TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_AvoidsGreedyTrap_EndToEnd) {
       MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 1);
   strategy.SetOptimizationCutoffFraction(0.0);
 
-  std::vector<SubsetDefinition> single_base_expected = {
-      {'a', 'b'},
-      {},
-      {'c'},
-  };
   std::vector<SubsetDefinition> all_pairs_expected = {
       {'a'},
       {'b', 'c'},
       {},
   };
 
-  GlyphSegmentation single_base_seg({}, {}, {});
-  {
-    ScopedAllPairsMergingFlag flag_override(false);
-    auto res = segmenter.CodepointToGlyphSegments(
-        roboto.get(), {}, {{'a'}, {'b'}, {'c'}}, strategy);
-    ASSERT_TRUE(res.ok()) << res.status();
-    EXPECT_EQ(res->Segments(), single_base_expected);
-    single_base_seg = *res;
-  }
+  auto single_base_res = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a', 'b'}, {}, {'c'}}, MergeStrategy::None());
+  ASSERT_TRUE(single_base_res.ok()) << single_base_res.status();
+  GlyphSegmentation single_base_seg = *single_base_res;
 
-  GlyphSegmentation all_pairs_seg({}, {}, {});
-  {
-    ScopedAllPairsMergingFlag flag_override(true);
-    auto res = segmenter.CodepointToGlyphSegments(
-        roboto.get(), {}, {{'a'}, {'b'}, {'c'}}, strategy);
-    ASSERT_TRUE(res.ok()) << res.status();
-    EXPECT_EQ(res->Segments(), all_pairs_expected);
-    all_pairs_seg = *res;
-  }
+  auto all_pairs_res = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, {{'a'}, {'b'}, {'c'}}, strategy);
+  ASSERT_TRUE(all_pairs_res.ok()) << all_pairs_res.status();
+  EXPECT_EQ(all_pairs_res->Segments(), all_pairs_expected);
+  GlyphSegmentation all_pairs_seg = *all_pairs_res;
 
   auto single_base_costs =
       *segmenter.TotalCosts(roboto.get(), single_base_seg, {calc.get()});
@@ -3463,7 +3433,6 @@ TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_AvoidsGreedyTrap_EndToEnd) {
 
 TEST_F(ClosureGlyphSegmenterTest,
        AllPairsMerging_CompositeConditionsAndNonInertMerges) {
-  ScopedAllPairsMergingFlag flag_override(true);
   // Combines conjunctive ligatures ('f', 'i', 'l'), a 3-segment disjunctive
   // accent condition (0xC1 Aacute, 0xC9 Eacute, 0xCD Iacute), and inert
   // segments ('a', 'b').
@@ -3503,7 +3472,6 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        AllPairsMerging_MinGroupSizeAndOptimizationCutoff) {
-  ScopedAllPairsMergingFlag flag_override(true);
   UnicodeFrequencies frequencies{
       {{' ', ' '}, 100},
       {{'a', 'a'}, 95},
@@ -3533,7 +3501,6 @@ TEST_F(ClosureGlyphSegmenterTest,
 }
 
 TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_UnicodeRangeMode) {
-  ScopedAllPairsMergingFlag flag_override(true);
   auto calc = std::make_shared<MockProbabilityCalculator>(
       std::vector<std::pair<Segment, double>>{
           {Segment({'b'}), 0.6},
@@ -3565,7 +3532,6 @@ TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_UnicodeRangeMode) {
 }
 
 TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_Determinism) {
-  ScopedAllPairsMergingFlag flag_override(true);
   UnicodeFrequencies frequencies{
       {{' ', ' '}, 100}, {{'a', 'a'}, 90},  {{'b', 'b'}, 90},
       {{'c', 'c'}, 60},  {{'d', 'd'}, 60},  {{'e', 'e'}, 60},

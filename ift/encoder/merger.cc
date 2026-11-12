@@ -25,20 +25,10 @@ ABSL_FLAG(bool, record_merged_size_reductions, false,
           "When enabled the merger will record the percent size reductions of "
           "each assessed merge.");
 
-ABSL_FLAG(bool, experimental_all_pairs_merging, false,
-          "When enabled the cost-based merger considers all segment pairs "
-          "globally instead of only pairs with the current highest probability "
-          "base segment.");
-
 namespace ift::encoder {
 
 bool Merger::ShouldRecordMergedSizeReductions() const {
   return absl::GetFlag(FLAGS_record_merged_size_reductions);
-}
-
-bool Merger::UseAllPairsMerging() const {
-  return strategy_.UseCosts() &&
-         absl::GetFlag(FLAGS_experimental_all_pairs_merging);
 }
 
 StatusOr<double> Merger::ComputeAndCacheAggregateProbability(
@@ -140,7 +130,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
   // cost for each script individually and use the sum of the individual costs
   // as the overall cost.
 
-  if (UseAllPairsMerging()) {
+  if (strategy_.UseCosts()) {
     auto modified = TRY(all_pairs_merger_.TryNextAllPairsMerge(*this));
     if (modified.has_value()) {
       return *modified;
@@ -149,7 +139,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextMerge() {
 
   while (true) {
     segment_index_t base_segment_index;
-    if (UseAllPairsMerging() &&
+    if (strategy_.UseCosts() &&
         !all_pairs_merger_.ActiveSegmentsByProb().empty()) {
       base_segment_index =
           all_pairs_merger_.ActiveSegmentsByProb().begin()->segment_index;
@@ -566,24 +556,14 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
     return std::nullopt;
   }
 
-  std::optional<CandidateMerge> smallest_candidate_merge;
   const auto& base_segment =
       context_->SegmentationInfo().Segments()[base_segment_index];
-  bool min_group_size_met =
-      base_segment.MeetsMinimumGroupSize(strategy_.MinimumGroupSize());
-  if (min_group_size_met) {
-    if (UseAllPairsMerging()) {
-      // Negative cost delta merges have already been exhausted by
-      // AllPairsMerger.
-      return std::nullopt;
-    }
-    // If min group size is met, then we will no longer consider merge's that
-    // have a positive cost delta so start with an existing smallest candidate
-    // set to cost delta 0 which will filter out positive cost delta candidates.
-    smallest_candidate_merge =
-        CandidateMerge::BaselineCandidate(base_segment_index, 0.0);
+  if (base_segment.MeetsMinimumGroupSize(strategy_.MinimumGroupSize())) {
+    // Negative cost delta merges have already been exhausted by AllPairsMerger.
+    return std::nullopt;
   }
 
+  std::optional<CandidateMerge> smallest_candidate_merge;
   TRYV(CollectExclusiveCandidateMerges(base_segment_index,
                                        smallest_candidate_merge));
 
@@ -595,18 +575,6 @@ StatusOr<std::optional<InvalidationSet>> Merger::MergeSegmentWithCosts(
   }
 
   if (!smallest_candidate_merge.has_value()) {
-    return std::nullopt;
-  }
-
-  if (smallest_candidate_merge->SegmentsToMerge() ==
-      SegmentSet{base_segment_index}) {
-    // nothing smaller than the baseline was found.
-    return std::nullopt;
-  }
-
-  // Enforce a negative cost delta only if this segments has met the minimum
-  // grouping size.
-  if (min_group_size_met && smallest_candidate_merge->CostDelta() >= 0.0) {
     return std::nullopt;
   }
 
@@ -752,28 +720,18 @@ Status Merger::CollectExclusiveCandidateMerges(
     return true;
   };
 
-  if (UseAllPairsMerging()) {
-    for (const auto& entry : all_pairs_merger_.ActiveSegmentsByProb()) {
-      if (!TRY(evaluate_candidate(entry.segment_index))) {
+  for (const auto& entry : all_pairs_merger_.ActiveSegmentsByProb()) {
+    if (!TRY(evaluate_candidate(entry.segment_index))) {
+      break;
+    }
+  }
+  if (!smallest_candidate_merge.has_value()) {
+    for (auto it =
+             candidate_segments_.lower_bound(optimization_cutoff_segment_);
+         it != candidate_segments_.end(); ++it) {
+      if (!TRY(evaluate_candidate(*it))) {
         break;
       }
-    }
-    if (!smallest_candidate_merge.has_value()) {
-      for (auto it =
-               candidate_segments_.lower_bound(optimization_cutoff_segment_);
-           it != candidate_segments_.end(); ++it) {
-        if (!TRY(evaluate_candidate(*it))) {
-          break;
-        }
-      }
-    }
-    return absl::OkStatus();
-  }
-
-  for (auto it = candidate_segments_.lower_bound(base_segment_index);
-       it != candidate_segments_.end(); it++) {
-    if (!TRY(evaluate_candidate(*it))) {
-      break;
     }
   }
 

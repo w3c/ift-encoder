@@ -4,7 +4,6 @@
 #include <memory>
 #include <optional>
 
-#include "absl/flags/flag.h"
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
@@ -1777,41 +1776,6 @@ TEST_F(CandidateMergeTest,
   EXPECT_NEAR(*exact_delta, expected_exact, 1e-9);
 }
 
-namespace {
-struct ScopedAllPairsMergingFlag {
-  explicit ScopedAllPairsMergingFlag(bool enabled)
-      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_merging)) {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, enabled);
-  }
-  ~ScopedAllPairsMergingFlag() {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_merging, prev);
-  }
-  bool prev;
-};
-
-struct ScopedAllPairsNormalizationFlag {
-  explicit ScopedAllPairsNormalizationFlag(AllPairsNormalizationMode mode)
-      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_normalization)) {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_normalization, mode);
-  }
-  ~ScopedAllPairsNormalizationFlag() {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_normalization, prev);
-  }
-  AllPairsNormalizationMode prev;
-};
-
-struct ScopedAllPairsPhase1InPhase2Flag {
-  explicit ScopedAllPairsPhase1InPhase2Flag(bool enabled)
-      : prev(absl::GetFlag(FLAGS_experimental_all_pairs_phase1_in_phase2)) {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_phase1_in_phase2, enabled);
-  }
-  ~ScopedAllPairsPhase1InPhase2Flag() {
-    absl::SetFlag(&FLAGS_experimental_all_pairs_phase1_in_phase2, prev);
-  }
-  bool prev;
-};
-}  // namespace
-
 TEST_F(CandidateMergeTest, AllPairsMerging_AvoidsSingleBaseGreedyTrap) {
   // s0 ('a', gid 69) has a marginally negative merge with s1 ('b', gid 70)
   // (delta = -4.0), whereas s1 ('b', gid 70) and s2 ('c', gid 71) have a much
@@ -1831,77 +1795,53 @@ TEST_F(CandidateMergeTest, AllPairsMerging_AvoidsSingleBaseGreedyTrap) {
       {{{'a', 'b', 'c'}}, 0.99},
   };
 
-  auto run_merger = [&](bool all_pairs) {
-    ScopedAllPairsMergingFlag flag_override(all_pairs);
-    ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
-    auto context = SegmentationContext::InitializeSegmentationContext(
-        roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-        segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-        segmenter.init_font_merging_brotli_quality(), resolver);
-    EXPECT_TRUE(context.ok()) << context.status();
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
 
-    auto* size_cache = new MockPatchSizeCache();
-    size_cache->SetPatchSize({69}, 200);
-    size_cache->SetPatchSize({70}, 200);
-    size_cache->SetPatchSize({71}, 200);
-    size_cache->SetPatchSize({69, 70}, 440);
-    size_cache->SetPatchSize({70, 71}, 220);
-    size_cache->SetPatchSize({69, 71}, 450);
-    size_cache->SetPatchSize({69, 70, 71}, 650);
-    context->patch_size_cache.reset(size_cache);
+  auto* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize({69}, 200);
+  size_cache->SetPatchSize({70}, 200);
+  size_cache->SetPatchSize({71}, 200);
+  size_cache->SetPatchSize({69, 70}, 440);
+  size_cache->SetPatchSize({70, 71}, 220);
+  size_cache->SetPatchSize({69, 71}, 450);
+  size_cache->SetPatchSize({69, 70, 71}, 650);
+  context->patch_size_cache.reset(size_cache);
 
-    auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
-    Merger merger = *Merger::New(
-        *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 1),
-        all, all);
+  auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
+  Merger merger = *Merger::New(
+      *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 1), all,
+      all);
 
-    while (true) {
-      auto modified = merger.TryNextMerge();
-      EXPECT_TRUE(modified.ok()) << modified.status();
-      if (!modified->has_value()) {
-        break;
-      }
-      EXPECT_TRUE(context->ReprocessChanged(**modified).ok());
+  while (true) {
+    auto modified = merger.TryNextMerge();
+    ASSERT_TRUE(modified.ok()) << modified.status();
+    if (!modified->has_value()) {
+      break;
     }
+    ASSERT_TRUE(context->ReprocessChanged(**modified).ok());
+  }
 
-    std::vector<SubsetDefinition> result;
-    for (const auto& seg : context->SegmentationInfo().Segments()) {
-      result.push_back(seg.Definition());
-    }
-    return result;
-  };
-
-  // Single-base greedy mode merges {0, 1} first, trapping s2 unmerged.
-  std::vector<SubsetDefinition> single_base_result = run_merger(false);
-  std::vector<SubsetDefinition> expected_single_base = {
-      {'a', 'b'},
-      {},
-      {'c'},
-  };
-  EXPECT_EQ(single_base_result, expected_single_base);
+  std::vector<SubsetDefinition> result;
+  for (const auto& seg : context->SegmentationInfo().Segments()) {
+    result.push_back(seg.Definition());
+  }
 
   // All-pairs mode merges {1, 2} first and leaves s0 separate.
-  std::vector<SubsetDefinition> all_pairs_result = run_merger(true);
   std::vector<SubsetDefinition> expected_all_pairs = {
       {'a'},
       {'b', 'c'},
       {},
   };
-  EXPECT_EQ(all_pairs_result, expected_all_pairs);
+  EXPECT_EQ(result, expected_all_pairs);
 }
 
 TEST_F(CandidateMergeTest,
-       AllPairsMerging_Phase2ResumesPhase1AfterForcedMerge) {
-  // With min_group_size = 2:
-  // - s0 ('a', gid 69) and s1 ('b', gid 70) each have 1 codepoint; s2
-  //   ({'c', 'd'}, gids {71, 72}) already has 2 codepoints.
-  // - All initial 2-segment merges have positive cost deltas, so Phase 1 makes
-  //   no merges and Phase 2 forces s0 to merge with s1 (delta = +6.5).
-  // - Once s0 becomes {'a', 'b'}, merging s0 with s2 has a negative cost delta
-  //   (delta = -220.25). Even though both s0 and s2 now meet min_group_size = 2,
-  //   AllPairsMerger refreshes dirty segment s0 and resumes Phase 1 to apply
-  //   the cost-reducing merge {0, 2}.
-  ScopedAllPairsMergingFlag flag_override(true);
+       AllPairsMerging_Phase2DoesNotResumePhase1AfterForcedMerge) {
   std::vector<Segment> segments = {
       {{'a'}},
       {{'b'}},
@@ -1947,71 +1887,8 @@ TEST_F(CandidateMergeTest,
   EXPECT_EQ((*step1)->segments, (SegmentSet{0, 1}));
   ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
 
-  // Step 2: Phase 1 resumes on dirty segment 0 and applies {0, 2}.
-  auto step2 = merger.TryNextMerge();
-  ASSERT_TRUE(step2.ok()) << step2.status();
-  ASSERT_TRUE(step2->has_value());
-  EXPECT_EQ((*step2)->base_segment, 0u);
-  EXPECT_EQ((*step2)->segments, (SegmentSet{0, 2}));
-  ASSERT_TRUE(context->ReprocessChanged(**step2).ok());
-
-  auto step3 = merger.TryNextMerge();
-  ASSERT_TRUE(step3.ok()) << step3.status();
-  EXPECT_FALSE(step3->has_value());
-}
-
-TEST_F(CandidateMergeTest,
-       AllPairsMerging_Phase2DisablesPhase1WhenFlagFalse) {
-  ScopedAllPairsMergingFlag flag_override(true);
-  ScopedAllPairsPhase1InPhase2Flag phase1_override(false);
-  std::vector<Segment> segments = {
-      {{'a'}},
-      {{'b'}},
-      {{'c', 'd'}},
-  };
-  std::vector<std::pair<Segment, double>> probabilities = {
-      {{{'a'}}, 0.80},
-      {{{'b'}}, 0.50},
-      {{{'c', 'd'}}, 0.75},
-      {{{'a', 'b'}}, 0.80},
-      {{{'a', 'c', 'd'}}, 0.95},
-      {{{'b', 'c', 'd'}}, 0.95},
-      {{{'a', 'b', 'c', 'd'}}, 0.80},
-  };
-
-  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
-  auto context = SegmentationContext::InitializeSegmentationContext(
-      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-      segmenter.init_font_merging_brotli_quality(), resolver);
-  ASSERT_TRUE(context.ok()) << context.status();
-
-  auto* size_cache = new MockPatchSizeCache();
-  size_cache->SetPatchSize({69}, 200);
-  size_cache->SetPatchSize({70}, 200);
-  size_cache->SetPatchSize({71, 72}, 240);
-  size_cache->SetPatchSize({69, 70}, 380);
-  size_cache->SetPatchSize({69, 71, 72}, 450);
-  size_cache->SetPatchSize({70, 71, 72}, 450);
-  size_cache->SetPatchSize({69, 70, 71, 72}, 400);
-  context->patch_size_cache.reset(size_cache);
-
-  auto calc = std::make_shared<MockProbabilityCalculator>(probabilities);
-  Merger merger = *Merger::New(
-      *context, MergeStrategy::CostBased(ProbabilityProfile(calc), 75, 2), all,
-      all);
-
-  // Step 1: Phase 1 finds no negative merges; Phase 2 forces {0, 1}.
-  auto step1 = merger.TryNextMerge();
-  ASSERT_TRUE(step1.ok()) << step1.status();
-  ASSERT_TRUE(step1->has_value());
-  EXPECT_EQ((*step1)->base_segment, 0u);
-  EXPECT_EQ((*step1)->segments, (SegmentSet{0, 1}));
-  ASSERT_TRUE(context->ReprocessChanged(**step1).ok());
-
-  // Step 2: With experimental_all_pairs_phase1_in_phase2 = false, Phase 1 does
-  // not resume on dirty segment 0. Since both s0 and s2 now meet min_group_size = 2,
-  // no further merges are performed.
+  // Step 2: Phase 1 does not resume during Phase 2 on dirty segment 0. Since
+  // both s0 and s2 now meet min_group_size = 2, no further merges are performed.
   auto step2 = merger.TryNextMerge();
   ASSERT_TRUE(step2.ok()) << step2.status();
   EXPECT_FALSE(step2->has_value());
@@ -2030,7 +1907,6 @@ TEST_F(CandidateMergeTest,
   //   delta (+1.54), s3 is selected over s1.
   // - s2 (0.001) is visited after s3 and s1 and breaks early on
   //   inert_threshold (0.0065).
-  ScopedAllPairsMergingFlag flag_override(true);
   std::vector<Segment> segments = {
       {{'a'}},
       {{'b'}},
@@ -2116,31 +1992,18 @@ TEST_F(CandidateMergeTest,
   EXPECT_EQ((*step2)->segments, (SegmentSet{0, 3}));
 }
 
-TEST_F(CandidateMergeTest, AllPairsMerging_NormalizationModes) {
-  AllPairsNormalizationMode parsed_mode = AllPairsNormalizationMode::kNone;
-  std::string parse_error;
-  EXPECT_TRUE(AbslParseFlag("none", &parsed_mode, &parse_error));
-  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kNone);
-  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "none");
-  EXPECT_TRUE(AbslParseFlag("segment", &parsed_mode, &parse_error));
-  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kSegment);
-  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "segment");
-  EXPECT_TRUE(AbslParseFlag("byte", &parsed_mode, &parse_error));
-  EXPECT_EQ(parsed_mode, AllPairsNormalizationMode::kByte);
-  EXPECT_EQ(AbslUnparseFlag(parsed_mode), "byte");
-  EXPECT_FALSE(AbslParseFlag("invalid", &parsed_mode, &parse_error));
-
-  // Set up three independent candidate merges with different segment counts
-  // and pre-merge byte footprints (network overhead = 75, P = 0.50):
+TEST_F(CandidateMergeTest, AllPairsMerging_ByteNormalization) {
+  // Set up three independent candidate merges with different pre-merge byte
+  // footprints (network overhead = 75, P = 0.50):
   // - {0, 1, 2} (aacute, eacute, cacute sharing acute component):
-  //   3 segments (divisor = 2), 1400 pre-merge bytes (400 + 400 + 400 + 200),
-  //   exact delta = -90.0 -> kNone: -90.0, kSegment: -45.0, kByte: -0.0643
+  //   1400 pre-merge bytes (400 + 400 + 400 + 200),
+  //   exact delta = -90.0 -> normalized: -0.0643
   // - {3, 4} ('d', 'b'):
-  //   2 segments (divisor = 1), 800 pre-merge bytes (600 + 200),
-  //   exact delta = -68.0 -> kNone: -68.0, kSegment: -68.0, kByte: -0.0850
+  //   800 pre-merge bytes (600 + 200),
+  //   exact delta = -68.0 -> normalized: -0.0850
   // - {5, 6} ('p', 'q'):
-  //   2 segments (divisor = 1), 400 pre-merge bytes (200 + 200),
-  //   exact delta = -62.0 -> kNone: -62.0, kSegment: -62.0, kByte: -0.1550
+  //   400 pre-merge bytes (200 + 200),
+  //   exact delta = -62.0 -> normalized: -0.1550
   std::vector<Segment> segments = {
       {{0x00E1}},  // s0: aacute
       {{0x00E9}},  // s1: eacute
@@ -2175,92 +2038,71 @@ TEST_F(CandidateMergeTest, AllPairsMerging_NormalizationModes) {
     probs.push_back({Segment(def), 1.0});
   }
 
-  auto run_with_mode = [&](AllPairsNormalizationMode mode) {
-    ScopedAllPairsMergingFlag all_pairs_flag(true);
-    ScopedAllPairsNormalizationFlag norm_flag(mode);
+  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  auto context = SegmentationContext::InitializeSegmentationContext(
+      roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
+      segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
+      segmenter.init_font_merging_brotli_quality(), resolver);
+  ASSERT_TRUE(context.ok()) << context.status();
 
-    ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
-    auto context = SegmentationContext::InitializeSegmentationContext(
-        roboto.get(), {}, segments, segmenter.unmapped_glyph_handling(),
-        segmenter.condition_analysis_mode(), segmenter.brotli_quality(),
-        segmenter.init_font_merging_brotli_quality(), resolver);
-    EXPECT_TRUE(context.ok()) << context.status();
+  const auto& groupings = context->glyph_groupings;
+  GlyphSet g0 = groupings.ExclusiveGlyphs(0);
+  GlyphSet g1 = groupings.ExclusiveGlyphs(1);
+  GlyphSet g2 = groupings.ExclusiveGlyphs(2);
+  GlyphSet g3 = groupings.ExclusiveGlyphs(3);
+  GlyphSet g4 = groupings.ExclusiveGlyphs(4);
+  GlyphSet g5 = groupings.ExclusiveGlyphs(5);
+  GlyphSet g6 = groupings.ExclusiveGlyphs(6);
+  GlyphSet g_acute = groupings.ConditionsAndGlyphs().at(
+      ActivationCondition::or_segments({0, 1, 2}, 0));
 
-    const auto& groupings = context->glyph_groupings;
-    GlyphSet g0 = groupings.ExclusiveGlyphs(0);
-    GlyphSet g1 = groupings.ExclusiveGlyphs(1);
-    GlyphSet g2 = groupings.ExclusiveGlyphs(2);
-    GlyphSet g3 = groupings.ExclusiveGlyphs(3);
-    GlyphSet g4 = groupings.ExclusiveGlyphs(4);
-    GlyphSet g5 = groupings.ExclusiveGlyphs(5);
-    GlyphSet g6 = groupings.ExclusiveGlyphs(6);
-    GlyphSet g_acute = groupings.ConditionsAndGlyphs().at(
-        ActivationCondition::or_segments({0, 1, 2}, 0));
+  GlyphSet g012 = g0;
+  g012.union_set(g1);
+  g012.union_set(g2);
+  g012.union_set(g_acute);
+  GlyphSet g34 = g3;
+  g34.union_set(g4);
+  GlyphSet g56 = g5;
+  g56.union_set(g6);
 
-    GlyphSet g012 = g0;
-    g012.union_set(g1);
-    g012.union_set(g2);
-    g012.union_set(g_acute);
-    GlyphSet g34 = g3;
-    g34.union_set(g4);
-    GlyphSet g56 = g5;
-    g56.union_set(g6);
+  auto* size_cache = new MockPatchSizeCache();
+  size_cache->SetPatchSize(g0, 325);
+  size_cache->SetPatchSize(g1, 325);
+  size_cache->SetPatchSize(g2, 325);
+  size_cache->SetPatchSize(g_acute, 125);
+  size_cache->SetPatchSize(g012, 1145);
 
-    auto* size_cache = new MockPatchSizeCache();
-    size_cache->SetPatchSize(g0, 325);
-    size_cache->SetPatchSize(g1, 325);
-    size_cache->SetPatchSize(g2, 325);
-    size_cache->SetPatchSize(g_acute, 125);
-    size_cache->SetPatchSize(g012, 1145);
+  size_cache->SetPatchSize(g3, 525);
+  size_cache->SetPatchSize(g4, 125);
+  size_cache->SetPatchSize(g34, 589);
 
-    size_cache->SetPatchSize(g3, 525);
-    size_cache->SetPatchSize(g4, 125);
-    size_cache->SetPatchSize(g34, 589);
+  size_cache->SetPatchSize(g5, 125);
+  size_cache->SetPatchSize(g6, 125);
+  size_cache->SetPatchSize(g56, 201);
+  context->patch_size_cache.reset(size_cache);
 
-    size_cache->SetPatchSize(g5, 125);
-    size_cache->SetPatchSize(g6, 125);
-    size_cache->SetPatchSize(g56, 201);
-    context->patch_size_cache.reset(size_cache);
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      ProbabilityProfile(std::make_shared<MockProbabilityCalculator>(probs)),
+      75, 1);
 
-    MergeStrategy strategy = MergeStrategy::CostBased(
-        ProbabilityProfile(std::make_shared<MockProbabilityCalculator>(probs)),
-        75, 1);
-
-    Merger merger = *Merger::New(*context, strategy, all, all);
-    std::vector<SegmentSet> merge_order;
-    while (true) {
-      auto modified = merger.TryNextMerge();
-      EXPECT_TRUE(modified.ok()) << modified.status();
-      if (!modified->has_value()) {
-        break;
-      }
-      merge_order.push_back((*modified)->segments);
-      EXPECT_TRUE(context->ReprocessChanged(**modified).ok());
+  Merger merger = *Merger::New(*context, strategy, all, all);
+  std::vector<SegmentSet> merge_order;
+  while (true) {
+    auto modified = merger.TryNextMerge();
+    ASSERT_TRUE(modified.ok()) << modified.status();
+    if (!modified->has_value()) {
+      break;
     }
-    return merge_order;
-  };
-
-  std::vector<SegmentSet> expected_none = {
-      SegmentSet{0, 1, 2},
-      SegmentSet{3, 4},
-      SegmentSet{5, 6},
-  };
-  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kNone), expected_none);
-
-  std::vector<SegmentSet> expected_segment = {
-      SegmentSet{3, 4},
-      SegmentSet{5, 6},
-      SegmentSet{0, 1, 2},
-  };
-  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kSegment),
-            expected_segment);
+    merge_order.push_back((*modified)->segments);
+    ASSERT_TRUE(context->ReprocessChanged(**modified).ok());
+  }
 
   std::vector<SegmentSet> expected_byte = {
       SegmentSet{5, 6},
       SegmentSet{3, 4},
       SegmentSet{0, 1, 2},
   };
-  EXPECT_EQ(run_with_mode(AllPairsNormalizationMode::kByte), expected_byte);
+  EXPECT_EQ(merge_order, expected_byte);
 }
 
 TEST_F(CandidateMergeTest, ComputeCostDelta_BestCaseSkipsUnchangedGlyphSetConditions) {
