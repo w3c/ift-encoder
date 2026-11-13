@@ -40,7 +40,7 @@ namespace ift::encoder {
 
 Status GlyphSegmentation::ConditionsToSegmentation(
     const btree_map<ActivationCondition, GlyphSet>& conditions,
-    const SegmentSet& fallback_group, GlyphSegmentation& segmentation) {
+    GlyphSegmentation& segmentation) {
   patch_id_t next_id = 0;
   segmentation.patches_.clear();
   segmentation.conditions_.clear();
@@ -58,11 +58,8 @@ Status GlyphSegmentation::ConditionsToSegmentation(
       segmentation.conditions_.insert(ActivationCondition::exclusive_segment(
           *condition.TriggeringSegments().begin(), next_id++));
     } else {
-      bool is_fallback = !fallback_group.empty() &&
-                         condition.IsPurelyDisjunctive() &&
-                         (condition.TriggeringSegments() == fallback_group);
       segmentation.conditions_.insert(ActivationCondition::composite_condition(
-          condition.conditions(), next_id++, is_fallback));
+          condition.conditions(), next_id++));
     }
   }
 

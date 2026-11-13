@@ -138,10 +138,6 @@ struct CandidateMerge {
   // Computes the predicted change to the total cost if merged_segments
   // are joined together into a new segment.
   //
-  // exclusive_gids is an optional hint that specifies which glyphs
-  // will end up in the exclusive patch after merged_segments are merged
-  // together.
-  //
   // If best_case is true then this will compute an estimated best possible cost
   // delta from the merge (computationally cheap) instead of the real delta.
   //
@@ -150,7 +146,6 @@ struct CandidateMerge {
   template <bool best_case>
   static absl::StatusOr<double> ComputeCostDelta(
       Merger& merger, const ift::common::SegmentSet& merged_segments,
-      std::optional<common::GlyphSet> exclusive_gids,
       std::optional<double> delta_to_beat);
 
   // Computes the predicted change to the toal cost if moved_glyphs are

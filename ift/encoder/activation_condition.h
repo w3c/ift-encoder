@@ -53,16 +53,14 @@ class ActivationCondition {
    * (segment_1) OR ... OR inersects(segment_n).
    */
   static ActivationCondition or_segments(const ift::common::SegmentSet& ids,
-                                         patch_id_t activated,
-                                         bool is_fallback = false);
+                                         patch_id_t activated);
 
   /*
    * Constructs a condition that activates when the input intersects:
    * (s1 OR ..) AND (si OR ...) AND ...
    */
   static ActivationCondition composite_condition(
-      absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated,
-      bool is_fallback = false);
+      absl::Span<const ift::common::SegmentSet> groups, patch_id_t activated);
 
   /*
    * Constructs a new condition equal to 'condition' except with the is
@@ -104,8 +102,6 @@ class ActivationCondition {
   }
 
   bool IsAlwaysTrue() const { return conditions().size() == 0; }
-
-  bool IsFallback() const { return is_fallback_; }
 
   /*
    * Populates out with the set of patch ids that are part of this condition
@@ -229,8 +225,8 @@ class ActivationCondition {
 
   size_t Hash() const {
     if (!cached_hash_.has_value()) {
-      cached_hash_ = absl::HashOf(conditions_, activated_, is_fallback_,
-                                  is_exclusive_, encoding_);
+      cached_hash_ =
+          absl::HashOf(conditions_, activated_, is_exclusive_, encoding_);
     }
     return *cached_hash_;
   }
@@ -248,7 +244,6 @@ class ActivationCondition {
       return false;
     }
     return conditions_ == other.conditions_ && activated_ == other.activated_ &&
-           is_fallback_ == other.is_fallback_ &&
            is_exclusive_ == other.is_exclusive_ && encoding_ == other.encoding_;
   }
 
@@ -270,7 +265,6 @@ class ActivationCondition {
   ActivationCondition()
       : conditions_(), activated_({0}), encoding_(proto::GLYPH_KEYED) {}
 
-  bool is_fallback_ = false;
   bool is_exclusive_ = false;
   // Represents:
   // (s_1_1 OR s_1_2 OR ...) AND (s_2_1 OR ...) ...

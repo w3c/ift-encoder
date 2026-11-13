@@ -12,8 +12,6 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::config::PATCH;
-
 using absl::StatusOr;
 using ift::common::BazelDataFileResolver;
 using ift::common::CodepointSet;
@@ -63,8 +61,7 @@ TEST_F(GlyphClosureCacheTest, SegmentClosure) {
 
   SubsetDefinition init;
   init.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  auto info =
-      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
+  auto info = RequestedSegmentationInformation::Create(segments, init, **cache);
   ASSERT_TRUE(info.ok());
 
   auto closure = (*cache)->SegmentClosure(info->get(), {0});
@@ -90,8 +87,7 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions) {
 
   // s0 or s1 -> g37 (A)
 
-  auto info =
-      RequestedSegmentationInformation::Create(segments, {}, **cache, PATCH);
+  auto info = RequestedSegmentationInformation::Create(segments, {}, **cache);
   ASSERT_TRUE(info.ok());
 
   ASSERT_TRUE(
@@ -118,43 +114,13 @@ TEST_F(GlyphClosureCacheTest, HasAdditionalConditions_IncludesInitFont) {
   SubsetDefinition init;
   init.feature_tags = {HB_TAG('c', '2', 's', 'c')};
 
-  auto info =
-      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
+  auto info = RequestedSegmentationInformation::Create(segments, init, **cache);
   ASSERT_TRUE(info.ok());
 
   // s0 or s1 -> g563 (smcap A)
-  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {0}),
-            (GlyphSet{37, 563}));
-  EXPECT_EQ(*(*cache)->CodepointsToOrGids(*info->get(), {1}),
-            (GlyphSet{37, 563}));
-
   EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {0}, {563}));
   EXPECT_TRUE(*(*cache)->HasAdditionalConditions(info->get(), {1}, {563}));
   EXPECT_FALSE(*(*cache)->HasAdditionalConditions(info->get(), {0, 1}, {563}));
-}
-
-TEST_F(GlyphClosureCacheTest, AnalyzeSegment) {
-  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
-  ASSERT_TRUE(cache.ok()) << cache.status();
-  std::vector<Segment> segments{
-      {{'f'}},
-      {{'i'}},
-  };
-
-  SubsetDefinition init;
-  init.feature_tags = {HB_TAG('l', 'i', 'g', 'a')};
-  auto info =
-      RequestedSegmentationInformation::Create(segments, init, **cache, PATCH);
-  ASSERT_TRUE(info.ok());
-
-  GlyphSet and_gids, or_gids, exclusive_gids;
-  auto status = (*cache)->AnalyzeSegment(*info->get(), {0}, and_gids, or_gids,
-                                         exclusive_gids);
-  ASSERT_TRUE(status.ok());
-
-  EXPECT_EQ(exclusive_gids, (GlyphSet{74 /* f */}));
-  EXPECT_EQ(or_gids, (GlyphSet{}));
-  EXPECT_EQ(and_gids, (GlyphSet{444 /* fi */, 446 /* ffi */}));
 }
 
 TEST_F(GlyphClosureCacheTest, ExpandClosure) {
@@ -172,27 +138,6 @@ TEST_F(GlyphClosureCacheTest, ExpandClosure) {
   auto expanded = (*cache)->ExpandClosure(def);
   ASSERT_TRUE(expanded.ok());
   ASSERT_EQ(*expanded, expected);
-}
-
-TEST_F(GlyphClosureCacheTest, CodepointsToOrGids) {
-  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
-  ASSERT_TRUE(cache.ok()) << cache.status();
-  std::vector<Segment> segments{
-      {{'A'}},
-      {{0xC1 /* Aacute */}},
-  };
-
-  SubsetDefinition init_font;
-  auto info = RequestedSegmentationInformation::Create(segments, init_font,
-                                                       **cache, PATCH);
-  ASSERT_TRUE(info.ok());
-
-  SegmentSet segs;
-  segs.insert(0);
-
-  auto or_gids = (*cache)->CodepointsToOrGids(*info->get(), {0});
-  ASSERT_TRUE(or_gids.ok());
-  EXPECT_EQ(*or_gids, (GlyphSet{37}));
 }
 
 TEST_F(GlyphClosureCacheTest, UnicodeCompDecomp_ExpandClosure) {

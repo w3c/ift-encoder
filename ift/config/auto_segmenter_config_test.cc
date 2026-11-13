@@ -20,9 +20,7 @@
 #include "ift/common/test_font_loader.h"
 #include "ift/config/load_codepoints.h"
 
-using ift::config::CLOSURE_AND_DEP_GRAPH;
 using ift::config::FIND_CONDITIONS;
-using ift::config::MOVE_TO_INIT_FONT;
 using ift::config::SegmenterConfig;
 
 namespace ift::config {
@@ -173,8 +171,7 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary) {
 
   std::string config_string;
   TextFormat::PrintToString(*config_or, &config_string);
-  ASSERT_EQ(config_string, R"(unmapped_glyph_handling: MOVE_TO_INIT_FONT
-brotli_quality: 11
+  ASSERT_EQ(config_string, R"(brotli_quality: 11
 brotli_quality_for_initial_font_merging: 9
 base_heuristic_config {
   min_patch_size: 2500
@@ -549,12 +546,23 @@ static std::vector<bool> GetUseBigrams(const SegmenterConfig& config) {
   return result;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+bool HasUnmappedGlyphHandling(const SegmenterConfig& config) {
+  return config.has_unmapped_glyph_handling();
+}
+UnmappedGlyphHandling GetUnmappedGlyphHandling(const SegmenterConfig& config) {
+  return config.unmapped_glyph_handling();
+}
+#pragma GCC diagnostic pop
+
 TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
   auto config_or = AutoSegmenterConfig::GenerateConfig(face_.get(), *resolver,
                                                        std::nullopt, 1);
   ASSERT_TRUE(config_or.ok()) << config_or.status();
   EXPECT_EQ(config_or->brotli_quality(), 0);
-  EXPECT_EQ(config_or->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
+  EXPECT_FALSE(HasUnmappedGlyphHandling(*config_or));
+  EXPECT_EQ(GetUnmappedGlyphHandling(*config_or), FIND_CONDITIONS);
   EXPECT_THAT(GetUseBigrams(*config_or), Each(false));
   EXPECT_EQ(config_or->brotli_quality_for_initial_font_merging(), 0);
   EXPECT_EQ(config_or->base_cost_config().optimization_cutoff_fraction(), 0.05);
@@ -563,7 +571,8 @@ TEST_F(AutoSegmenterConfigTest, QualityLevelForcing) {
                                                          std::nullopt, 7);
   ASSERT_TRUE(config_or_8.ok()) << config_or_8.status();
   EXPECT_EQ(config_or_8->brotli_quality(), 11);
-  EXPECT_EQ(config_or_8->unmapped_glyph_handling(), MOVE_TO_INIT_FONT);
+  EXPECT_FALSE(HasUnmappedGlyphHandling(*config_or_8));
+  EXPECT_EQ(GetUnmappedGlyphHandling(*config_or_8), FIND_CONDITIONS);
   EXPECT_THAT(GetUseBigrams(*config_or_8), Each(true));
   EXPECT_EQ(config_or_8->brotli_quality_for_initial_font_merging(), 11);
   EXPECT_EQ(config_or_8->base_cost_config().optimization_cutoff_fraction(),
@@ -707,8 +716,7 @@ TEST_F(AutoSegmenterConfigTest, Roboto_UnspecifiedPrimary_UnicodeRange) {
   // - Ignored for overlap codepoints present in multiple groups (ie. 0x20) are moved to exactly one group.
   // - This in turn requires explicit segment definitions for affected groups.
   // - Combining marks are not ignored for overlap detection so latin + cyrillic are grouped.
-  ASSERT_EQ(config_string, R"(unmapped_glyph_handling: FIND_CONDITIONS
-brotli_quality: 11
+  ASSERT_EQ(config_string, R"(brotli_quality: 11
 base_heuristic_config {
   min_patch_size: 2500
   max_patch_size: 20000
@@ -776,7 +784,8 @@ TEST_F(AutoSegmenterConfigTest, UnicodeRange_QualityLevels) {
   ASSERT_TRUE(config_q1.ok()) << config_q1.status();
   EXPECT_EQ(config_q1->target_mode(), UNICODE_RANGE);
   EXPECT_EQ(config_q1->brotli_quality(), 0);
-  EXPECT_EQ(config_q1->unmapped_glyph_handling(), FIND_CONDITIONS);
+  EXPECT_FALSE(HasUnmappedGlyphHandling(*config_q1));
+  EXPECT_EQ(GetUnmappedGlyphHandling(*config_q1), FIND_CONDITIONS);
   EXPECT_FALSE(config_q1->has_brotli_quality_for_initial_font_merging());
   EXPECT_FALSE(config_q1->base_cost_config().experimental_use_patch_merges());
   EXPECT_THAT(GetUseBigrams(*config_q1), Each(false));
@@ -787,7 +796,8 @@ TEST_F(AutoSegmenterConfigTest, UnicodeRange_QualityLevels) {
   ASSERT_TRUE(config_q7.ok()) << config_q7.status();
   EXPECT_EQ(config_q7->target_mode(), UNICODE_RANGE);
   EXPECT_EQ(config_q7->brotli_quality(), 11);
-  EXPECT_EQ(config_q7->unmapped_glyph_handling(), FIND_CONDITIONS);
+  EXPECT_FALSE(HasUnmappedGlyphHandling(*config_q7));
+  EXPECT_EQ(GetUnmappedGlyphHandling(*config_q7), FIND_CONDITIONS);
   EXPECT_FALSE(config_q7->has_brotli_quality_for_initial_font_merging());
   EXPECT_FALSE(config_q7->base_cost_config().experimental_use_patch_merges());
   EXPECT_THAT(GetUseBigrams(*config_q7), Each(true));

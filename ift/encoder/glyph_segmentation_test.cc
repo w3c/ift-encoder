@@ -14,8 +14,7 @@
 #include "ift/proto/patch_encoding.h"
 #include "ift/proto/patch_map.h"
 
-using ift::config::CLOSURE_ONLY;
-using ift::config::PATCH;
+using ift::config::DEP_GRAPH_ONLY;
 
 using google::protobuf::TextFormat;
 using ift::common::BazelDataFileResolver;
@@ -54,7 +53,7 @@ class GlyphSegmentationTest : public ::testing::Test {
 };
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentation_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(8, 11, DEP_GRAPH_ONLY, resolver);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -125,7 +124,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, SimpleSegmentationWithFeatures_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(8, 11, DEP_GRAPH_ONLY, resolver);
 
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
@@ -266,7 +265,7 @@ initial_glyphs {
 }
 
 TEST_F(GlyphSegmentationTest, MixedAndOr_ToConfigProto) {
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(8, 11, DEP_GRAPH_ONLY, resolver);
   UnicodeFrequencies freq;
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f', 0xc1}, {'i', 0x106}});
@@ -384,7 +383,7 @@ initial_glyphs {
 TEST_F(GlyphSegmentationTest, MergeBases_ToConfigProto) {
   // {e, f} is too smal, since no conditional patches exist it should merge with
   // the next available base which is {'j', 'k'}
-  ClosureGlyphSegmenter segmenter(8, 11, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(8, 11, DEP_GRAPH_ONLY, resolver);
   auto segmentation =
       segmenter.CodepointToGlyphSegments(roboto.get(), {},
                                          {
@@ -537,8 +536,5 @@ TEST_F(GlyphSegmentationTest, ActivationConditionOrdering) {
   ASSERT_FALSE(f < e);
   ASSERT_FALSE(g < f);
 }
-
-// TODO(garretrieger): add test where or_set glyphs are moved back to unmapped
-// due to found "additional conditions".
 
 }  // namespace ift::encoder

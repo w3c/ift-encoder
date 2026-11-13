@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -51,7 +52,6 @@ class SegmentationContext {
   static absl::StatusOr<SegmentationContext> Create(
       hb_face_t* face, const SubsetDefinition& initial_segment,
       const std::vector<Segment>& segments,
-      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
@@ -63,13 +63,12 @@ class SegmentationContext {
         TRY(GlyphClosureCache::Create(face, *resolver));
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(segments, initial_segment,
-                                                     *closure_cache,
-                                                     unmapped_glyph_handling));
+                                                     *closure_cache));
 
     SegmentationContext context(
-        face, unmapped_glyph_handling, condition_analysis_mode, brotli_quality,
-        init_font_brotli_quality, std::move(closure_cache),
-        std::move(segmentation_info), std::move(resolver), target_mode);
+        face, condition_analysis_mode, brotli_quality, init_font_brotli_quality,
+        std::move(closure_cache), std::move(segmentation_info),
+        std::move(resolver), target_mode);
 
     TRYV(context.InitDependencyClosure());
     return context;
@@ -82,14 +81,13 @@ class SegmentationContext {
     std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
         TRY(RequestedSegmentationInformation::Create(
             SegmentationInfo().Segments(), SegmentationInfo().InitFontSegment(),
-            *closure_cache, SegmentationInfo().GetUnmappedGlyphHandling()));
+            *closure_cache));
 
     SegmentationContext context(
-        original_face.get(), SegmentationInfo().GetUnmappedGlyphHandling(),
-        condition_analysis_mode_, brotli_quality_, init_font_brotli_quality_,
-        std::move(closure_cache), std::move(segmentation_info), resolver_,
-        target_mode_, estimated_compression_ratio_,
-        estimated_woff2_base_overhead_);
+        original_face.get(), condition_analysis_mode_, brotli_quality_,
+        init_font_brotli_quality_, std::move(closure_cache),
+        std::move(segmentation_info), resolver_, target_mode_,
+        estimated_compression_ratio_, estimated_woff2_base_overhead_);
     context.initial_glyph_probabilities_ = initial_glyph_probabilities_;
 
     TRYV(context.InitDependencyClosure());
@@ -105,7 +103,6 @@ class SegmentationContext {
   static absl::StatusOr<SegmentationContext> InitializeSegmentationContext(
       hb_face_t* face, SubsetDefinition initial_segment,
       std::vector<Segment> segments,
-      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
@@ -114,7 +111,6 @@ class SegmentationContext {
  private:
   SegmentationContext(
       hb_face_t* face,
-      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::unique_ptr<GlyphClosureCache> closure_cache,
@@ -128,7 +124,7 @@ class SegmentationContext {
         glyph_closure_cache(std::move(closure_cache)),
         original_face(ift::common::make_hb_face(hb_face_reference(face))),
         segmentation_info_(std::move(segmentation_info)),
-        dependency_closure_(std::nullopt),
+        dependency_closure_(nullptr),
         glyph_condition_set(hb_face_get_glyph_count(face)),
         glyph_groupings(hb_face_get_glyph_count(face),
                         condition_analysis_mode ==
@@ -144,11 +140,8 @@ class SegmentationContext {
   }
 
   absl::Status InitDependencyClosure() {
-    if (UsingDepGraph()) {
-      dependency_closure_ = TRY(DependencyClosure::Create(
-          segmentation_info_.get(), original_face.get(), *resolver_,
-          IsPureDepGraphAnalysisMode()));
-    }
+    dependency_closure_ = TRY(DependencyClosure::Create(
+        segmentation_info_.get(), original_face.get(), *resolver_));
     return absl::OkStatus();
   }
 
@@ -178,39 +171,26 @@ class SegmentationContext {
   }
 
   void LogClosureStatistics() const {
-    uint64_t dep_graph_closures = 0;
-    uint64_t dep_graph_inaccurate = 0;
-    if (dependency_closure_.has_value()) {
-      dep_graph_closures = (*dependency_closure_)->AccurateResults() * 2;
-      dep_graph_inaccurate = (*dependency_closure_)->InaccurateResults();
-    }
-
-    uint64_t potential_closures = glyph_closure_cache->CacheHits() +
-                                  glyph_closure_cache->CacheMisses() +
-                                  dep_graph_closures;
+    uint64_t total_closures =
+        glyph_closure_cache->CacheHits() + glyph_closure_cache->CacheMisses();
 
     double hb_subset_rate =
-        100.0 * ((double)glyph_closure_cache->CacheMisses() /
-                 (double)potential_closures);
-    double cache_hit_rate = 100.0 * ((double)glyph_closure_cache->CacheHits() /
-                                     (double)potential_closures);
-    double dep_graph_hit_rate =
-        100.0 * ((double)dep_graph_closures / (double)potential_closures);
-    uint64_t other_closures = glyph_closure_cache->CacheHits() +
-                              glyph_closure_cache->CacheMisses() -
-                              (2 * dep_graph_inaccurate);
+        total_closures == 0
+            ? 0.0
+            : 100.0 * ((double)glyph_closure_cache->CacheMisses() /
+                       (double)total_closures);
+    double cache_hit_rate =
+        total_closures == 0
+            ? 0.0
+            : 100.0 * ((double)glyph_closure_cache->CacheHits() /
+                       (double)total_closures);
 
-    VLOG(0) << ">> Of " << potential_closures
-            << " potential closure operations:" << std::endl
+    VLOG(0) << ">> Of " << total_closures << " closure operations:" << std::endl
             << "  " << glyph_closure_cache->CacheMisses() << " ("
-            << hb_subset_rate << "%)  were handled by hb-subset-plan"
+            << hb_subset_rate << "%) were handled by hb-subset-plan"
             << std::endl
-            << "  " << dep_graph_closures << " (" << dep_graph_hit_rate
-            << "%) were handled by dep graph" << std::endl
             << "  " << glyph_closure_cache->CacheHits() << " ("
-            << cache_hit_rate << "%) were provided by the cache" << std::endl
-            << "  " << other_closures
-            << " were from something other than AnalyzeSegment()" << std::endl;
+            << cache_hit_rate << "%) were provided by the cache" << std::endl;
   }
 
   const ift::common::SegmentSet& InertSegments() const {
@@ -223,28 +203,6 @@ class SegmentationContext {
 
   ift::config::ConditionAnalysisMode GetConditionAnalysisMode() const {
     return condition_analysis_mode_;
-  }
-
-  bool IsPureDepGraphAnalysisMode() const {
-    switch (condition_analysis_mode_) {
-      case config::DEP_GRAPH_ONLY:
-      case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  bool UsingDepGraph() const {
-    switch (condition_analysis_mode_) {
-      case config::CLOSURE_AND_DEP_GRAPH:
-      case config::CLOSURE_AND_VALIDATE_DEP_GRAPH:
-      case config::DEP_GRAPH_ONLY:
-      case config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION:
-        return true;
-      default:
-        return false;
-    }
   }
 
   // Assign a new merged segment to base and clear all of the segments that
@@ -278,10 +236,7 @@ class SegmentationContext {
     // group glyphs is called.
     glyph_condition_set.InvalidateGlyphInformation(glyphs, segments);
 
-    if (dependency_closure_.has_value()) {
-      return (*dependency_closure_)->SegmentsMerged(base_segment, segments);
-    }
-    return absl::OkStatus();
+    return dependency_closure_->SegmentsMerged(base_segment, segments);
   }
 
   /*
@@ -305,13 +260,6 @@ class SegmentationContext {
   // Regenerates glyphs conditions and groupings for all segments.
   absl::Status ReprocessAll();
 
-  // Performs a closure analysis on codepoints and returns the associated
-  // and, or, and exclusive glyph sets.
-  absl::Status AnalyzeSegment(const ift::common::SegmentSet& segment_ids,
-                              ift::common::GlyphSet& and_gids,
-                              ift::common::GlyphSet& or_gids,
-                              ift::common::GlyphSet& exclusive_gids);
-
  private:
   // Update the glyph groups for 'glyphs'.
   //
@@ -319,22 +267,11 @@ class SegmentationContext {
   // calling this.
   absl::Status GroupGlyphs(const ift::common::GlyphSet& glyphs,
                            const ift::common::SegmentSet& modified_segments) {
-    std::optional<DependencyClosure*> maybe_dep_closure = std::nullopt;
-    if (dependency_closure_.has_value()) {
-      maybe_dep_closure = (*dependency_closure_).get();
-    }
     return glyph_groupings.GroupGlyphs(*segmentation_info_, glyph_condition_set,
-                                       *glyph_closure_cache, maybe_dep_closure,
-                                       glyphs, modified_segments,
-                                       !IsPureDepGraphAnalysisMode());
+                                       glyphs, modified_segments);
   }
 
   void TransferDependencyGraphGlyphConditions(const common::GlyphSet& gids);
-
-  // Generates updated glyph conditions and glyph groupings for segment_index
-  // which has the provided set of codepoints.
-  absl::StatusOr<ift::common::GlyphSet> ReprocessSegment(
-      segment_index_t segment_index);
 
   /*
    * Ensures that the produce segmentation is:
@@ -416,7 +353,7 @@ class SegmentationContext {
 
  private:
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info_;
-  std::optional<std::unique_ptr<DependencyClosure>> dependency_closure_;
+  std::unique_ptr<DependencyClosure> dependency_closure_;
 
  public:
   // == Phase 1 - derived from segments and init information

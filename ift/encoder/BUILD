@@ -80,7 +80,6 @@ cc_library(
     srcs = [
         "all_pairs_merger.cc",
         "candidate_merge.cc",
-        "complex_condition_finder.cc",
         "dependency_closure.cc",
         "estimated_patch_size_cache.cc",
         "glyph_condition_set.cc",
@@ -92,7 +91,6 @@ cc_library(
     hdrs = [
         "all_pairs_merger.h",
         "candidate_merge.h",
-        "complex_condition_finder.h",
         "condition_to_glyphs_index.h",
         "dependency_closure.h",
         "estimated_patch_size_cache.h",
@@ -158,7 +156,6 @@ cc_library(
         "//ift/common",
         "//ift/common:data_file_resolver",
         "//ift/common:try",
-        "//ift/config:common_cc_proto",
         "//ift/dep_graph:unicode_edges",
         "//ift/feature_registry",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -381,31 +378,6 @@ cc_test(
 )
 
 cc_test(
-    name = "complex_condition_finder_test",
-    size = "medium",
-    srcs = [
-        "complex_condition_finder_test.cc",
-    ],
-    data = [
-        "//ift:testdata",
-        "//ift/common:testdata",
-    ],
-    deps = [
-        ":common",
-        ":encoder",
-        ":segmentation_context",
-        ":segmentation_info",
-        "//ift/common",
-        "//ift/common:data_file_resolver",
-        "//ift/common:test_font_loader",
-        "//ift/freq:common",
-        "@abseil-cpp//absl/container:btree",
-        "@googletest//:gtest",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "closure_glyph_segmenter_test",
     size = "medium",
     srcs = [
@@ -538,7 +510,6 @@ cc_test(
         "//ift/common",
         "//ift/common:data_file_resolver",
         "//ift/common:test_font_loader",
-        "//ift/config:common_cc_proto",
         "//ift/dep_graph",
         "//ift/freq:common",
         "@bazel_tools//tools/cpp/runfiles",

@@ -10,8 +10,6 @@
 #include "ift/encoder/subset_definition.h"
 #include "ift/encoder/types.h"
 
-using ift::config::Glyphs;
-
 using absl::Status;
 using absl::StatusOr;
 using ift::common::CodepointSet;
@@ -168,82 +166,6 @@ StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
   glyph_closure_cache_.insert(std::pair(segment, GlyphSet(gids)));
 
   return GlyphSet(gids);
-}
-
-StatusOr<GlyphSet> GlyphClosureCache::CodepointsToOrGids(
-    const RequestedSegmentationInformation& segmentation_info,
-    const SegmentSet& segment_ids) {
-  GlyphSet and_gids;
-  GlyphSet or_gids;
-  GlyphSet exclusive_gids;
-  TRYV(AnalyzeSegment(segmentation_info, segment_ids, and_gids, or_gids,
-                      exclusive_gids));
-
-  return or_gids;
-}
-
-Status GlyphClosureCache::AnalyzeSegment(
-    const RequestedSegmentationInformation& segmentation_info,
-    const SegmentSet& segment_ids, GlyphSet& and_gids, GlyphSet& or_gids,
-    GlyphSet& exclusive_gids) {
-  if (segment_ids.empty()) {
-    return absl::OkStatus();
-  }
-
-  // This function tests various closures using the segment codepoints to
-  // determine what conditions are present for the inclusion of closure glyphs.
-  //
-  // At a high level we do the following (where s_i is the segment being
-  // tested):
-  //
-  // * Set A: glyph closure on original font of the union of all segments.
-  // * Set B: glyph closure on original font of the union of all segments except
-  //          for s_i
-  // * Set I: (glyph closure on original font of s_0 union s_i) - (glyph closure
-  //           on original font of s_0)
-  // * Set D: A - B, the set of glyphs that are dropped when s_i is removed.
-  //
-  // Then we know the following:
-  // * Glyphs in I should be included whenever s_i is activated.
-  // * s_i is necessary for glyphs in D to be required, but other segments may
-  //   be needed too.
-  //
-  // Furthermore we can intersect I and D to produce three sets:
-  // * D - I: the activation condition for these glyphs is s_i AND …
-  //          Where … is one or more additional segments.
-  // * I - D: the activation conditions for these glyphs is s_i OR …
-  //          Where … is one or more additional segments.
-  // * D intersection I: the activation conditions for these glyphs is only s_i
-
-  SubsetDefinition
-      combined;  // This is the subset definition of the unions of segment_ids.
-  for (segment_index_t s_id : segment_ids) {
-    combined.Union(segmentation_info.Segments()[s_id].Definition());
-  }
-
-  SubsetDefinition except_segment =
-      ComputeExceptSegment(segmentation_info, segment_ids, combined);
-  auto B_except_segment_closure = TRY(GlyphClosure(except_segment));
-
-  SubsetDefinition only_segment = combined;
-  only_segment.Union(segmentation_info.InitFontSegment());
-
-  auto I_only_segment_closure = TRY(GlyphClosure(only_segment));
-  I_only_segment_closure.subtract(segmentation_info.InitFontGlyphs());
-
-  GlyphSet D_dropped = segmentation_info.FullClosure();
-  D_dropped.subtract(B_except_segment_closure);
-
-  and_gids.union_set(D_dropped);
-  and_gids.subtract(I_only_segment_closure);
-
-  or_gids.union_set(I_only_segment_closure);
-  or_gids.subtract(D_dropped);
-
-  exclusive_gids.union_set(I_only_segment_closure);
-  exclusive_gids.intersect(D_dropped);
-
-  return absl::OkStatus();
 }
 
 CodepointSet GlyphClosureCache::CodepointsForGlyphs(
