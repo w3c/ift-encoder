@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "hb-subset.h"
+#include "hb.h"
 #include "ift/common/bazel_data_file_resolver.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
@@ -264,6 +266,93 @@ TEST_F(GlyphClosureCacheTest, CodepointsForGlyphs) {
     EXPECT_TRUE(cps_mix.contains(0xFE00));
     EXPECT_TRUE(cps_mix.contains('x'));
   }
+}
+
+TEST_F(GlyphClosureCacheTest, GlyphClosure_DecompBeforeComp) {
+  auto cache = GlyphClosureCache::Create(roboto.get(), *resolver);
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
+  auto gids = (*cache)->GlyphClosure({0xE1 /* aacute */, 'e'});
+  ASSERT_TRUE(gids.ok()) << gids.status();
+
+  auto gid_eacute = FontHelper::GetNominalGlyph(roboto.get(), 0xE9);
+  ASSERT_TRUE(gid_eacute.ok()) << gid_eacute.status();
+  EXPECT_TRUE(gids->contains(*gid_eacute));
+}
+
+TEST_F(GlyphClosureCacheTest, GlyphClosure_BidiBeforeDecomposition) {
+  hb_face_unique_ptr noto_sans_jp =
+      from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
+
+  // Keep 0x2329, 0x3008, 0x3009 while dropping 0x232A (bidi mirror of 0x2329).
+  // 0x2329 canonically decomposes to 0x3008, and 0x3008 <-> 0x3009 are bidi
+  // mirrors.
+  hb_subset_input_t* input = hb_subset_input_create_or_fail();
+  ASSERT_NE(input, nullptr);
+  hb_subset_input_set_flags(input, HB_SUBSET_FLAGS_NO_BIDI_CLOSURE);
+  hb_set_t* unicodes = hb_subset_input_unicode_set(input);
+  hb_set_add(unicodes, 0x2329);
+  hb_set_add(unicodes, 0x3008);
+  hb_set_add(unicodes, 0x3009);
+  hb_face_unique_ptr subset =
+      ift::common::make_hb_face(hb_subset_or_fail(noto_sans_jp.get(), input));
+  hb_subset_input_destroy(input);
+  ASSERT_NE(subset.get(), nullptr);
+  ift::common::hb_blob_unique_ptr blob =
+      ift::common::make_hb_blob(hb_face_reference_blob(subset.get()));
+  hb_face_unique_ptr subset_face =
+      ift::common::make_hb_face(hb_face_create(blob.get(), 0));
+
+  CodepointSet subset_cps = FontHelper::ToCodepointsSet(subset_face.get());
+  ASSERT_TRUE(subset_cps.contains(0x2329));
+  ASSERT_TRUE(subset_cps.contains(0x3008));
+  ASSERT_TRUE(subset_cps.contains(0x3009));
+  ASSERT_FALSE(subset_cps.contains(0x232A));
+
+  auto cache = GlyphClosureCache::Create(subset_face.get(), *resolver);
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
+  uint32_t gid_2329 =
+      *FontHelper::GetNominalGlyph(subset_face.get(), 0x2329);
+  uint32_t gid_3008 =
+      *FontHelper::GetNominalGlyph(subset_face.get(), 0x3008);
+  uint32_t gid_3009 =
+      *FontHelper::GetNominalGlyph(subset_face.get(), 0x3009);
+
+  // Starting from 0x2329: Bidi runs before Decomposition, so 0x3008 (reached
+  // only via Decomposition of 0x2329) must NOT trigger Bidi mirroring to
+  // 0x3009.
+  auto gids = (*cache)->GlyphClosure({0x2329});
+  ASSERT_TRUE(gids.ok()) << gids.status();
+  EXPECT_TRUE(gids->contains(gid_2329));
+  EXPECT_TRUE(gids->contains(gid_3008));
+  EXPECT_FALSE(gids->contains(gid_3009));
+
+  // Starting from 0x3009: Bidi mirrors 0x3009 -> 0x3008.
+  gids = (*cache)->GlyphClosure({0x3009});
+  ASSERT_TRUE(gids.ok()) << gids.status();
+  EXPECT_TRUE(gids->contains(gid_3009));
+  EXPECT_TRUE(gids->contains(gid_3008));
+}
+
+TEST_F(GlyphClosureCacheTest, GlyphClosure_UvsBeforeDecomposition) {
+  hb_face_unique_ptr noto_sans_jp =
+      from_file("ift/common/testdata/NotoSansJP-Regular.ttf");
+
+  auto cache = GlyphClosureCache::Create(noto_sans_jp.get(), *resolver);
+  ASSERT_TRUE(cache.ok()) << cache.status();
+
+  // 0xF901 canonically decomposes to 0x66F4, and (0x66F4, 0xE0101) maps via UVS
+  // to glyph 16687 (while nominal glyph for both 0xF901 and 0x66F4 is 6563).
+  auto gids = (*cache)->GlyphClosure({0xF901, 0xE0101});
+  ASSERT_TRUE(gids.ok()) << gids.status();
+  EXPECT_TRUE(gids->contains(6563));
+  EXPECT_FALSE(gids->contains(16687));
+
+  // Starting from 0x66F4 + 0xE0101 directly DOES reach UVS glyph 16687.
+  gids = (*cache)->GlyphClosure({0x66F4, 0xE0101});
+  ASSERT_TRUE(gids.ok()) << gids.status();
+  EXPECT_TRUE(gids->contains(16687));
 }
 
 }  // namespace ift::encoder

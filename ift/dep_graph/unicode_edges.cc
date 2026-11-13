@@ -196,6 +196,7 @@ void UnicodeEdges::ComputeUVSEdges(
   hb_set_unique_ptr vs_unicodes_hb = make_hb_set();
   hb_face_collect_variation_selectors(face, vs_unicodes_hb.get());
   CodepointSet vs_unicodes(vs_unicodes_hb.get());
+  result.vs_unicodes = vs_unicodes;
 
   hb_font_unique_ptr font = make_hb_font(hb_font_create(face));
 

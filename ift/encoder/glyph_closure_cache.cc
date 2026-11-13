@@ -1,5 +1,7 @@
 #include "ift/encoder/glyph_closure_cache.h"
 
+#include "hb-subset.h"
+#include "hb.h"
 #include "ift/common/font_data.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
@@ -18,20 +20,43 @@ using ift::common::CodepointSet;
 using ift::common::DataFileResolver;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
+using ift::common::hb_blob_unique_ptr;
 using ift::common::hb_face_unique_ptr;
 using ift::common::hb_set_unique_ptr;
+using ift::common::make_hb_blob;
 using ift::common::make_hb_face;
+using ift::common::make_hb_face_builder;
 using ift::common::make_hb_set;
 using ift::common::SegmentSet;
 using ift::dep_graph::UnicodeEdges;
 
 namespace ift::encoder {
 
+namespace {
+
+hb_face_unique_ptr RemoveCmapTable(hb_face_t* face) {
+  hb_face_unique_ptr builder = make_hb_face_builder();
+  for (hb_tag_t tag : FontHelper::GetTags(face)) {
+    if (tag == FontHelper::kCmap) {
+      continue;
+    }
+    hb_blob_unique_ptr table_blob =
+        make_hb_blob(hb_face_reference_table(face, tag));
+    hb_face_builder_add_table(builder.get(), tag, table_blob.get());
+  }
+  return builder;
+}
+
+}  // namespace
+
 StatusOr<std::unique_ptr<GlyphClosureCache>> GlyphClosureCache::Create(
     hb_face_t* face, const DataFileResolver& resolver) {
-  auto preprocessed_face = make_hb_face(hb_subset_preprocess(face));
+  auto preprocessed_with_cmap = make_hb_face(hb_subset_preprocess(face));
   auto unicode_edges = TRY(UnicodeEdges::ComputeUnicodeDependencyEdges(
-      preprocessed_face.get(), resolver));
+      preprocessed_with_cmap.get(), resolver));
+  auto without_cmap = RemoveCmapTable(preprocessed_with_cmap.get());
+  auto preprocessed_face =
+      make_hb_face(hb_subset_preprocess(without_cmap.get()));
   return std::unique_ptr<GlyphClosureCache>(new GlyphClosureCache(
       face, std::move(preprocessed_face), std::move(unicode_edges)));
 }
@@ -96,33 +121,63 @@ StatusOr<bool> GlyphClosureCache::HasAdditionalConditions(
   return closure_glyphs.intersects(glyphs);
 }
 
-CodepointSet GlyphClosureCache::UnicodeClosure(
-    const CodepointSet& unicodes) const {
-  CodepointSet queue = unicodes;
-  CodepointSet visited = unicodes;
+CodepointSet GlyphClosureCache::UnicodeClosure(const CodepointSet& unicodes,
+                                               GlyphSet& uvs_glyphs) const {
+  // Follow DependencyGraph's ordered unicode closure phases:
+  // 1. Init + Bidi mirroring
+  CodepointSet closed = unicodes;
+  hb_unicode_funcs_t* unicode_funcs = hb_unicode_funcs_get_default();
+  for (hb_codepoint_t u : unicodes) {
+    hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, u);
+    if (mirror != u && unicode_edges_.unicode_to_gid.contains(mirror)) {
+      closed.insert(mirror);
+    }
+  }
 
-  while (!queue.empty()) {
-    hb_codepoint_t u = *queue.min();
-    queue.erase(u);
+  // 2. Variation selectors
+  CodepointSet active_vs = closed;
+  active_vs.intersect(unicode_edges_.vs_unicodes);
+  for (hb_codepoint_t vs : active_vs) {
+    auto it = unicode_edges_.variation_selector.find(vs);
+    if (it == unicode_edges_.variation_selector.end()) {
+      continue;
+    }
+    for (const auto& edge : it->second) {
+      if (closed.contains(edge.unicode)) {
+        uvs_glyphs.insert(edge.gid);
+      }
+    }
+  }
 
-    // outgoing decomp edges
+  // 3. Unicode canonical decomposition
+  CodepointSet decomp_queue = closed;
+  while (!decomp_queue.empty()) {
+    hb_codepoint_t u = *decomp_queue.min();
+    decomp_queue.erase(u);
+
     auto decomp = unicode_edges_.decomposition.find(u);
     if (decomp != unicode_edges_.decomposition.end()) {
       CodepointSet edges = decomp->second;
-      edges.subtract(visited);
-      queue.union_set(edges);
-      visited.union_set(edges);
+      edges.subtract(closed);
+      decomp_queue.union_set(edges);
+      closed.union_set(edges);
     }
+  }
 
-    // outgoing comp edges
+  // 4. Unicode canonical composition
+  CodepointSet comp_queue = closed;
+  while (!comp_queue.empty()) {
+    hb_codepoint_t u = *comp_queue.min();
+    comp_queue.erase(u);
+
     auto comp = unicode_edges_.composition.find(u);
     if (comp != unicode_edges_.composition.end()) {
       for (const auto& edge : comp->second) {
-        if (!visited.contains(edge.dest) &&
-            visited.contains(edge.other_source)) {
+        if (!closed.contains(edge.dest) &&
+            closed.contains(edge.other_source)) {
           // edge requirements are satisfied, we can follow it.
-          queue.insert(edge.dest);
-          visited.insert(edge.dest);
+          comp_queue.insert(edge.dest);
+          closed.insert(edge.dest);
         }
         // Note: if edge requirements are not satisfied, then this edge will be
         // rechecked later on if edge.other_source is visited, since edges for a
@@ -131,7 +186,7 @@ CodepointSet GlyphClosureCache::UnicodeClosure(
     }
   }
 
-  return visited;
+  return closed;
 }
 
 StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
@@ -149,9 +204,33 @@ StatusOr<GlyphSet> GlyphClosureCache::GlyphClosure(
     return absl::InternalError("Closure subset configuration failed.");
   }
 
-  SubsetDefinition expanded_segment = segment;
-  expanded_segment.codepoints = UnicodeClosure(segment.codepoints);
+  // Harfbuzz subsetter currently has only limited support for doing
+  // unicode closure (only bidi is supported), so we need to manually
+  // do the closure ourselves. In order to avoid subsetter from
+  // incorrectly mapping uvs glyphs back to nominal codepoints we
+  // manually do the cmap unicode -> glyph mapping and disable cmap
+  // in the harfbuzz subsetting operation.
+  //
+  // This "hack" can be removed later on if harfbuzz gains full support
+  // for unicode closure over unicode composition and decomposition.
+  GlyphSet uvs_glyphs;
+  CodepointSet closed_unicodes = UnicodeClosure(segment.codepoints, uvs_glyphs);
 
+  GlyphSet initial_gids = std::move(uvs_glyphs);
+  for (hb_codepoint_t u : closed_unicodes) {
+    auto cmap_it = unicode_edges_.unicode_to_gid.find(u);
+    if (cmap_it != unicode_edges_.unicode_to_gid.end()) {
+      initial_gids.insert(cmap_it->second);
+    }
+  }
+
+  SubsetDefinition expanded_segment = segment;
+  expanded_segment.codepoints.clear();
+  expanded_segment.gids.union_set(initial_gids);
+
+  hb_subset_input_set_flags(
+      // BIDI closure is disabled since we manually performed it already.
+      input, hb_subset_input_get_flags(input) | HB_SUBSET_FLAGS_NO_BIDI_CLOSURE);
   expanded_segment.ConfigureInput(input, preprocessed_face_.get());
   hb_subset_plan_t* plan =
       hb_subset_plan_create_or_fail(preprocessed_face_.get(), input);

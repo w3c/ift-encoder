@@ -36,6 +36,7 @@ struct UnicodeEdges {
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::CodepointSet>
       gid_to_unicode;
   absl::flat_hash_map<encoder::glyph_id_t, ift::common::CodepointSet> gid_to_vs;
+  ift::common::CodepointSet vs_unicodes;
 
   static absl::StatusOr<UnicodeEdges> ComputeUnicodeDependencyEdges(
       hb_face_t* face, const ift::common::DataFileResolver& resolver);
