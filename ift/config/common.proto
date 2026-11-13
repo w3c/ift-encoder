@@ -38,15 +38,17 @@ message AxisRangeProto {
   float end = 2;
 }
 
-// This enum is used to specify how unmapped glyphs are handled in the produced segmentation.
+// Deprecated: unmapped glyph handling is only used by removed closure analysis
+// modes. Specifying anything other than FIND_CONDITIONS will result in an
+// error.
 enum UnmappedGlyphHandling {
-  // All unmapped glyphs will be placed into a patch which is always loaded.
-  PATCH = 0;
+  // Deprecated: specifying this value will result in an error.
+  PATCH = 0 [deprecated = true];
 
-  // All unmapped glyphs will be moved into the initial font.
-  MOVE_TO_INIT_FONT = 1;
+  // Deprecated: specifying this value will result in an error.
+  MOVE_TO_INIT_FONT = 1 [deprecated = true];
 
-  // Advanced condition analysis will be used (expensive) to discover the conditions
-  // for unmapped glyphs.
+  // Default value; triggers no additional behavior in dependency graph
+  // condition analysis modes.
   FIND_CONDITIONS = 2;
 }

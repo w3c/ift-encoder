@@ -8,7 +8,6 @@
 #include "absl/container/btree_map.h"
 #include "absl/status/statusor.h"
 #include "ift/common/data_file_resolver.h"
-#include "ift/config/common.pb.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/config/segmenter_config.pb.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -40,14 +39,12 @@ class ClosureGlyphSegmenter {
  public:
   ClosureGlyphSegmenter(
       uint32_t brotli_quality, uint32_t init_font_merging_brotli_quality,
-      ift::config::UnmappedGlyphHandling unmapped_glyph_handling,
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
       ift::config::TargetMode target_mode = ift::config::IFT,
       double disjoint_conditions_probability_threshold = 0.0)
       : brotli_quality_(brotli_quality),
         init_font_merging_brotli_quality_(init_font_merging_brotli_quality),
-        unmapped_glyph_handling_(unmapped_glyph_handling),
         condition_analysis_mode_(condition_analysis_mode),
         resolver_(std::move(resolver)),
         target_mode_(target_mode),
@@ -82,15 +79,6 @@ class ClosureGlyphSegmenter {
       absl::Span<const freq::ProbabilityCalculator* const>
           probability_calculators) const;
 
-  /*
-   * Computes the total cost of the fallback patch (expected number of bytes
-   * transferred)
-   */
-  absl::Status FallbackCost(hb_face_t* original_face,
-                            const GlyphSegmentation& segmentation,
-                            uint32_t& fallback_glyphs_size,
-                            uint32_t& all_glyphs_size) const;
-
   static absl::Status AddTableKeyedSegments(
       ift::config::SegmentationPlan& plan,
       const absl::btree_map<ift::common::SegmentSet, MergeStrategy>&
@@ -103,9 +91,6 @@ class ClosureGlyphSegmenter {
   uint32_t brotli_quality() const { return brotli_quality_; }
   uint32_t init_font_merging_brotli_quality() const {
     return init_font_merging_brotli_quality_;
-  }
-  ift::config::UnmappedGlyphHandling unmapped_glyph_handling() const {
-    return unmapped_glyph_handling_;
   }
   ift::config::ConditionAnalysisMode condition_analysis_mode() const {
     return condition_analysis_mode_;
@@ -123,7 +108,6 @@ class ClosureGlyphSegmenter {
 
   uint32_t brotli_quality_;
   uint32_t init_font_merging_brotli_quality_;
-  ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
   std::shared_ptr<ift::common::DataFileResolver> resolver_;
   ift::config::TargetMode target_mode_;

@@ -22,14 +22,9 @@
 #include "ift/freq/unicode_frequencies.h"
 #include "ift/freq/unigram_probability_calculator.h"
 
-using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
-using ift::config::CLOSURE_ONLY;
 using ift::config::DEP_GRAPH_ONLY;
 using ift::config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION;
-using ift::config::FIND_CONDITIONS;
 using ift::config::kDefaultNetworkCost;
-using ift::config::MOVE_TO_INIT_FONT;
-using ift::config::PATCH;
 
 using absl::btree_map;
 using absl::StatusOr;
@@ -58,20 +53,9 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
         noto_sans_jp(make_hb_face(nullptr)),
         resolver(*BazelDataFileResolver::CreateForTest()),
 
-        segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver),
-        segmenter_find_conditions(8, 8, FIND_CONDITIONS, CLOSURE_ONLY,
-                                  resolver),
-        segmenter_move_to_init_font(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY,
-                                    resolver),
-        segmenter_dep_graph(8, 8, PATCH, CLOSURE_AND_VALIDATE_DEP_GRAPH,
-                            resolver),
-        segmenter_dep_graph_only(8, 8, PATCH, DEP_GRAPH_ONLY, resolver),
+        segmenter(8, 8, DEP_GRAPH_ONLY, resolver),
         segmenter_dep_graph_only_with_simplification(
-            8, 8, PATCH, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver),
-        segmenter_find_conditions_dep_graph(
-            8, 8, FIND_CONDITIONS, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver),
-        segmenter_move_to_init_font_dep_graph(
-            8, 8, MOVE_TO_INIT_FONT, CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver) {
+            8, 8, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, resolver) {
     roboto = from_file("ift/common/testdata/Roboto-Regular.ttf");
     noto_nastaliq_urdu =
         from_file("ift/common/testdata/NotoNastaliqUrdu.subset.ttf");
@@ -87,98 +71,16 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
       std::optional<MergeStrategy> strategy = std::nullopt) const {
-    auto segmentation = TRY(segmenter.CodepointToGlyphSegments(
-        face, initial_segment, subset_definitions, strategy));
-    auto dep_graph_segmentation =
-        TRY(segmenter_dep_graph.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, strategy));
-    auto dep_graph_only_segmentation =
-        TRY(segmenter_dep_graph_only.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, strategy));
-
-    if (segmentation != dep_graph_segmentation) {
-      return absl::InternalError(
-          "Basic segmenter: segmentation from dep graph is not equivalent to "
-          "the non-dep graph version.");
-    }
-    if (segmentation != dep_graph_only_segmentation) {
-      std::cerr << "Closure segmentation: " << segmentation.ToString()
-                << std::endl;
-      std::cerr << "Dep graph only segmentation: "
-                << dep_graph_only_segmentation.ToString() << std::endl;
-      return absl::InternalError(
-          "Basic segmenter: segmentation from dep graph only is not equivalent "
-          "to "
-          "the non-dep graph version.");
-    }
-
-    return segmentation;
+    return segmenter.CodepointToGlyphSegments(face, initial_segment,
+                                              subset_definitions, strategy);
   }
 
   StatusOr<GlyphSegmentation> CodepointToGlyphSegments(
       hb_face_t* face, SubsetDefinition initial_segment,
       const std::vector<SubsetDefinition>& subset_definitions,
       btree_map<SegmentSet, MergeStrategy> merge_groups) const {
-    auto segmentation = TRY(segmenter.CodepointToGlyphSegments(
-        face, initial_segment, subset_definitions, merge_groups));
-    auto dep_graph_segmentation =
-        TRY(segmenter_dep_graph.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, merge_groups));
-    auto dep_graph_only_segmentation =
-        TRY(segmenter_dep_graph_only.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, merge_groups));
-
-    if (segmentation != dep_graph_segmentation) {
-      return absl::InternalError(
-          "Basic segmenter: segmentation from dep graph is not equivalent to "
-          "the non-dep graph version.");
-    }
-    if (segmentation != dep_graph_only_segmentation) {
-      std::cerr << "Closure segmentation: " << segmentation.ToString()
-                << std::endl;
-      std::cerr << "Dep graph only segmentation: "
-                << dep_graph_only_segmentation.ToString() << std::endl;
-      return absl::InternalError(
-          "Basic segmenter: segmentation from dep graph only is not equivalent "
-          "to "
-          "the non-dep graph version.");
-    }
-
-    return segmentation;
-  }
-
-  StatusOr<GlyphSegmentation> FindConditionsCodepointToGlyphSegments(
-      hb_face_t* face, SubsetDefinition initial_segment,
-      const std::vector<SubsetDefinition>& subset_definitions,
-      std::optional<MergeStrategy> strategy = std::nullopt) const {
-    auto segmentation = segmenter_find_conditions.CodepointToGlyphSegments(
-        face, initial_segment, subset_definitions, strategy);
-    auto dep_graph_segmentation =
-        segmenter_find_conditions_dep_graph.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, strategy);
-    if (segmentation != dep_graph_segmentation) {
-      return absl::InternalError(
-          "Find conditions segmenter: segmentation from dep graph is not "
-          "equivalent to the non-dep graph version.");
-    }
-    return segmentation;
-  }
-
-  StatusOr<GlyphSegmentation> MoveToInitFontCodepointToGlyphSegments(
-      hb_face_t* face, SubsetDefinition initial_segment,
-      const std::vector<SubsetDefinition>& subset_definitions,
-      absl::btree_map<SegmentSet, MergeStrategy> merge_groups) const {
-    auto segmentation = segmenter_move_to_init_font.CodepointToGlyphSegments(
-        face, initial_segment, subset_definitions, merge_groups);
-    auto dep_graph_segmentation =
-        segmenter_move_to_init_font_dep_graph.CodepointToGlyphSegments(
-            face, initial_segment, subset_definitions, merge_groups);
-    if (segmentation != dep_graph_segmentation) {
-      return absl::InternalError(
-          "Move to init font segmenter: segmentation from dep graph is not "
-          "equivalent to the non-dep graph version.");
-    }
-    return segmentation;
+    return segmenter.CodepointToGlyphSegments(face, initial_segment,
+                                              subset_definitions, merge_groups);
   }
 
   hb_face_unique_ptr roboto;
@@ -187,13 +89,7 @@ class ClosureGlyphSegmenterTest : public ::testing::Test {
 
   std::shared_ptr<DataFileResolver> resolver;
   ClosureGlyphSegmenter segmenter;
-  ClosureGlyphSegmenter segmenter_find_conditions;
-  ClosureGlyphSegmenter segmenter_move_to_init_font;
-  ClosureGlyphSegmenter segmenter_dep_graph;
-  ClosureGlyphSegmenter segmenter_dep_graph_only;
   ClosureGlyphSegmenter segmenter_dep_graph_only_with_simplification;
-  ClosureGlyphSegmenter segmenter_find_conditions_dep_graph;
-  ClosureGlyphSegmenter segmenter_move_to_init_font_dep_graph;
 };
 
 TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation) {
@@ -335,32 +231,14 @@ if ((s0 OR s1)) then p1
 }
 
 TEST_F(ClosureGlyphSegmenterTest, SegmentationWithAdditionalConditionOverlap) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
-  auto dep_graph_segmentation = segmenter_dep_graph.CodepointToGlyphSegments(
-      roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
-  auto dep_graph_only_segmentation =
-      segmenter_dep_graph_only.CodepointToGlyphSegments(
-          roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
+  auto segmentation =
+      CodepointToGlyphSegments(roboto.get(), {'a'}, {{'f'}, {'i'}, {'f', 'i'}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_only_segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {{'f'}, {'i'}, {'f', 'i'}};
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
   ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0, gid69 }
-p0: { gid74 }
-p1: { gid77 }
-p2: { gid444, gid446 }
-if ((s0 OR s2)) then p0
-if ((s1 OR s2)) then p1
-if ((s0 OR s1 OR s2)) then p2
-)");
-  ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
-
-  ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
 p0: { gid74 }
 p1: { gid77 }
@@ -589,100 +467,11 @@ if (s0 AND s1) then p3
 )");
 }
 
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FallbackSegment) {
-  auto segmentation = segmenter.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
-  auto dep_graph_segmentation = segmenter_dep_graph.CodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
-  auto dep_graph_only_segmentation =
-      segmenter_dep_graph_only.CodepointToGlyphSegments(
-          noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}});
-  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_only_segmentation.ok()) << segmentation.status();
-
-  ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 12);
-
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid3, gid9, gid155 }
-p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid11, gid157 }
-p3: { gid158 }
-p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
-p5: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
-p6: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-if (s3) then p3
-if ((s0 OR s1)) then p4
-if ((s2 OR s3)) then p5
-if ((s0 OR s1 OR s2 OR s3)) then p6
-)");
-  ASSERT_EQ(segmentation->ToString(), dep_graph_segmentation->ToString());
-
-  ASSERT_EQ(dep_graph_only_segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid3, gid9, gid155 }
-p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid157 }
-p3: { gid158 }
-p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172 }
-p5: { gid14, gid33, gid60, gid91, gid112, gid145, gid152, gid190, gid191 }
-p6: { gid174 }
-p7: { gid11 }
-p8: { gid47, gid73, gid74, gid75, gid76, gid83, gid111, gid149 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-if (s3) then p3
-if ((s0 OR s1)) then p4
-if ((s2 OR s3)) then p5
-if ((s0 OR s1 OR s2 OR s3)) then p6
-if ((s0 OR s1) AND s2) then p7
-if ((s0 OR s1) AND (s2 OR s3)) then p8
-)");
-}
-
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions) {
-  auto segmentation = FindConditionsCodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {},
-      {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, std::nullopt);
-  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-
-  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
-      << segmentation->UnmappedGlyphs().ToString();
-
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid1 }
-p1: { gid3, gid9, gid155 }
-p2: { gid4, gid10, gid156 }
-p3: { gid5, gid6, gid11, gid157 }
-p4: { gid158 }
-p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
-p6: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
-p7: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-if (s3) then p3
-if (s4) then p4
-if ((s1 OR s2)) then p5
-if ((s3 OR s4)) then p6
-if ((s1 OR s2 OR s3 OR s4)) then p7
-)");
-}
-
 TEST_F(ClosureGlyphSegmenterTest, DepGraphOnly_FindConditions) {
-  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
       {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-
-  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
-      << segmentation->UnmappedGlyphs().ToString();
 
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
@@ -716,9 +505,6 @@ TEST_F(ClosureGlyphSegmenterTest, DepGraphOnly_WithSimplification) {
           {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}});
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
-  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
-      << segmentation->UnmappedGlyphs().ToString();
-
   ASSERT_EQ(segmentation->ToString(),
             R"(initial font: { gid0 }
 p0: { gid1 }
@@ -737,61 +523,6 @@ if (s4) then p4
 if ((s1 OR s2)) then p5
 if ((s3 OR s4)) then p6
 if ((s1 OR s2 OR s3 OR s4)) then p7
-)");
-}
-
-TEST_F(ClosureGlyphSegmenterTest, UnmappedGlyphs_FindConditions_IsFallback) {
-  // Here the found conditions are equal to the fallback segment, this ensures
-  // everything works properly in this case.
-  auto segmentation = FindConditionsCodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
-      std::nullopt);
-  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(segmentation->UnmappedGlyphs().empty())
-      << segmentation->UnmappedGlyphs().ToString();
-  ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0 }
-p0: { gid3, gid9, gid155 }
-p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid11, gid157 }
-p3: { gid158 }
-p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
-p5: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
-p6: { gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-if (s3) then p3
-if ((s0 OR s1)) then p4
-if ((s2 OR s3)) then p5
-if ((s0 OR s1 OR s2 OR s3)) then p6
-)");
-}
-
-TEST_F(ClosureGlyphSegmenterTest,
-       UnmappedGlyphs_FallbackSegmentMovedToInitFont) {
-  auto segmentation = MoveToInitFontCodepointToGlyphSegments(
-      noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
-      btree_map<SegmentSet, MergeStrategy>{});
-  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-
-  ASSERT_EQ(segmentation->UnmappedGlyphs().size(), 0);
-
-  ASSERT_EQ(
-      segmentation->ToString(),
-      R"(initial font: { gid0, gid47, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid111, gid149, gid174, gid190, gid191 }
-p0: { gid3, gid9, gid155 }
-p1: { gid4, gid10, gid156 }
-p2: { gid5, gid6, gid11, gid157 }
-p3: { gid158 }
-p4: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid172 }
-p5: { gid14, gid33, gid60, gid91, gid112, gid145, gid152 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-if (s3) then p3
-if ((s0 OR s1)) then p4
-if ((s2 OR s3)) then p5
 )");
 }
 
@@ -822,9 +553,8 @@ TEST_F(ClosureGlyphSegmenterTest, FullRoboto_WithFeaturesAndDepGraph) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   segments.push_back(smcp);
 
-  auto dep_graph_only_segmentation =
-      segmenter_dep_graph_only.CodepointToGlyphSegments(
-          roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
+  auto dep_graph_only_segmentation = segmenter.CodepointToGlyphSegments(
+      roboto.get(), {}, segments, MergeStrategy::Heuristic(4000, 12000));
   ASSERT_TRUE(dep_graph_only_segmentation.ok())
       << dep_graph_only_segmentation.status();
 }
@@ -983,15 +713,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {
-          {'A'},
-          {'C'},
-          {0xC1},  /* Aacute */
-          {0x106}, /* Cacute */
-      },
-      strategy);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'A'},
+                                             {'C'},
+                                             {0xC1},  /* Aacute */
+                                             {0x106}, /* Cacute */
+                                         },
+                                         strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1024,15 +754,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_NoPatchMerge) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(false);
 
-  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {
-          {'A'},
-          {'C'},
-          {0xC1},  /* Aacute */
-          {0x106}, /* Cacute */
-      },
-      strategy);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'A'},
+                                             {'C'},
+                                             {0xC1},  /* Aacute */
+                                             {0x106}, /* Cacute */
+                                         },
+                                         strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1066,15 +796,15 @@ TEST_F(ClosureGlyphSegmenterTest, SimpleSegmentation_PatchMerge_MinGroupSize) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {
-          {'A'},
-          {'C'},
-          {0xC1},  /* Aacute */
-          {0x106}, /* Cacute */
-      },
-      strategy);
+  auto segmentation =
+      segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                         {
+                                             {'A'},
+                                             {'C'},
+                                             {0xC1},  /* Aacute */
+                                             {0x106}, /* Cacute */
+                                         },
+                                         strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   std::vector<SubsetDefinition> expected_segments = {
@@ -1103,15 +833,14 @@ if ((s1 OR s3) AND (s2 OR s3)) then p4
 
   // Now with min group size larger merges will be done to reach min group size
   strategy.SetMinimumGroupSize(3);
-  segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
-      roboto.get(), {},
-      {
-          {'A'},
-          {'C'},
-          {0xC1},  /* Aacute */
-          {0x106}, /* Cacute */
-      },
-      strategy);
+  segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {},
+                                                    {
+                                                        {'A'},
+                                                        {'C'},
+                                                        {0xC1},  /* Aacute */
+                                                        {0x106}, /* Cacute */
+                                                    },
+                                                    strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
   ASSERT_EQ(segmentation->Segments(), expected_segments);
   // Group size minimum is met for everything other than the last condition
@@ -1139,7 +868,7 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
   strategy.SetOptimizationCutoffFraction(0.0);
   strategy.SetUsePatchMerges(true);
 
-  auto segmentation = segmenter_dep_graph_only.CodepointToGlyphSegments(
+  auto segmentation = segmenter.CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {}, {{0x62a}, {0x62b}, {0x62c}, {0x62d}},
       strategy);
   auto segmentation_with_simplification =
@@ -1311,11 +1040,11 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   UnigramProbabilityCalculator calculator(std::move(frequencies));
 
   // Basic no segment case.
-  GlyphSegmentation segmentation1({'a', 'b', 'c'}, {}, {});
-  auto sc = GlyphSegmentation::ConditionsToSegmentation({}, {}, segmentation1);
+  GlyphSegmentation segmentation1({'a', 'b', 'c'}, {});
+  auto sc = GlyphSegmentation::ConditionsToSegmentation({}, segmentation1);
   ASSERT_TRUE(sc.ok()) << sc;
 
-  ClosureGlyphSegmenter segmenter(8, 8, PATCH, CLOSURE_ONLY, resolver);
+  ClosureGlyphSegmenter segmenter(8, 8, DEP_GRAPH_ONLY, resolver);
   std::vector<SegmentationCost> base_cost =
       *segmenter.TotalCosts(roboto.get(), segmentation1, {&calculator});
   ASSERT_GT(base_cost[0].ift_init_cost, 1000);
@@ -1324,13 +1053,13 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_EQ(base_cost[0].uncovered_ift_patch_cost, 0);
 
   // Add some patches
-  GlyphSegmentation segmentation2({'a', 'b', 'c'}, {}, {});
+  GlyphSegmentation segmentation2({'a', 'b', 'c'}, {});
   sc = GlyphSegmentation::ConditionsToSegmentation(
       {
           {ActivationCondition::exclusive_segment(0, 0), {100, 101, 102}},
           {ActivationCondition::exclusive_segment(1, 0), {103, 104, 105}},
       },
-      {}, segmentation2);
+      segmentation2);
   ASSERT_TRUE(sc.ok()) << sc;
 
   std::vector<SubsetDefinition> segments{
@@ -1347,7 +1076,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
   ASSERT_EQ(with_patches_cost[0].uncovered_ift_patch_cost, 0);
 
   // Add uncovered segments ('f' and 'g' are not in frequencies).
-  GlyphSegmentation segmentation3({'a', 'b', 'c'}, {}, {});
+  GlyphSegmentation segmentation3({'a', 'b', 'c'}, {});
   sc = GlyphSegmentation::ConditionsToSegmentation(
       {
           {ActivationCondition::exclusive_segment(0, 0), {100, 101, 102}},
@@ -1355,7 +1084,7 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
           {ActivationCondition::and_segments({0, 2}, 0), {105}},
           {ActivationCondition::and_segments({2, 3}, 0), {106, 107}},
       },
-      {}, segmentation3);
+      segmentation3);
   ASSERT_TRUE(sc.ok()) << sc;
 
   std::vector<SubsetDefinition> segments3{
@@ -2153,59 +1882,17 @@ TEST_F(ClosureGlyphSegmenterTest, ConjunctiveAdditionalConditions) {
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
   smcp.feature_tags.insert(HB_TAG('c', '2', 's', 'c'));
 
-  auto segmentation = segmenter.CodepointToGlyphSegments(roboto.get(), {0xE4},
-                                                         {
-                                                             {0xD6},  // Ö
-                                                             {0xF6},  // ö
-                                                             smcp,
-                                                         },
-                                                         MergeStrategy::None());
-  auto dep_graph_segmentation =
-      segmenter_dep_graph.CodepointToGlyphSegments(roboto.get(), {0xE4},
-                                                   {
-                                                       {0xD6},  // Ö
-                                                       {0xF6},  // ö
-                                                       smcp,
-                                                   },
-                                                   MergeStrategy::None());
-  auto dep_graph_only_segmentation =
-      segmenter_dep_graph_only.CodepointToGlyphSegments(roboto.get(), {0xE4},
-                                                        {
-                                                            {0xD6},  // Ö
-                                                            {0xF6},  // ö
-                                                            smcp,
-                                                        },
-                                                        MergeStrategy::None());
+  auto segmentation = CodepointToGlyphSegments(roboto.get(), {0xE4},
+                                               {
+                                                   {0xD6},  // Ö
+                                                   {0xF6},  // ö
+                                                   smcp,
+                                               },
+                                               MergeStrategy::None());
 
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
-  ASSERT_TRUE(dep_graph_segmentation.ok()) << dep_graph_segmentation.status();
-  ASSERT_TRUE(dep_graph_only_segmentation.ok())
-      << dep_graph_only_segmentation.status();
 
-  // Note: gid839 is the small caps O dieresis, it's currently mapped with
-  // condition 'if {smcp}', the true condition is 'if {smcp} AND {Ö or ö}'
-  // but the closure segmenter does not currently discover composite conditions.
   ASSERT_EQ(segmentation->ToString(),
-            R"(initial font: { gid0, gid69, gid106, gid670 }
-p0: { gid51, gid660 }
-p1: { gid83, gid687 }
-p2: { gid477, gid563, gid822, gid839 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-)");
-
-  ASSERT_EQ(dep_graph_segmentation->ToString(),
-            R"(initial font: { gid0, gid69, gid106, gid670 }
-p0: { gid51, gid660 }
-p1: { gid83, gid687 }
-p2: { gid477, gid563, gid822, gid839 }
-if (s0) then p0
-if (s1) then p1
-if (s2) then p2
-)");
-
-  ASSERT_EQ(dep_graph_only_segmentation->ToString(),
             R"(initial font: { gid0, gid69, gid106, gid670 }
 p0: { gid51, gid660 }
 p1: { gid83, gid687 }
@@ -2328,7 +2015,7 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
   profile.init_font_merge_threshold = -75;
   MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
 
-  auto segmentation = FindConditionsCodepointToGlyphSegments(
+  auto segmentation = CodepointToGlyphSegments(
       noto_nastaliq_urdu.get(), {},
       {{0x20}, {0x62a}, {0x62b}, {0x62c}, {0x62d}}, strategy);
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
@@ -2339,12 +2026,10 @@ TEST_F(ClosureGlyphSegmenterTest, InitFontMergingAndFindConditions) {
   };
   ASSERT_EQ(segmentation->Segments(), expected_segments);
 
-  // Complex condition if ((s1 OR s2 OR s3 OR s4)) then ... is moved to the init
-  // font.
   ASSERT_EQ(
       segmentation->ToString(),
-      R"(initial font: { gid0, gid1, gid3, gid4, gid9, gid10, gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid68, gid139, gid140, gid153, gid155, gid156, gid172, gid174 }
-p0: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid64, gid73, gid74, gid75, gid76, gid77, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
+      R"(initial font: { gid0, gid1, gid3, gid4, gid9, gid10, gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid155, gid156, gid172, gid174 }
+p0: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
 if (s3) then p0
 )");
 }
@@ -2704,7 +2389,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   // When max_patch_size allows the merged exclusive patch {77, 80} but is
   // smaller than the combined non-exclusive patch {444, 445, 446, 447}, s0 and
   // s1 must not be merged.
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto not_merged = seg->CodepointToGlyphSegments(
         roboto.get(), {}, segments,
         MergeStrategy::Heuristic(merged_exclusive_size,
@@ -2745,7 +2430,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
   uint32_t i_j_size = *patch_sizer.GetPatchSize({77, 78});
 
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto result = seg->CodepointToGlyphSegments(
         roboto.get(), {}, segments, MergeStrategy::Heuristic(i_j_size));
     ASSERT_TRUE(result.ok()) << result.status();
@@ -2780,7 +2465,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   // gid77 ('i'), gid444 ('fi'), gid446 ('ffi'), gid640 (Aacute).
   uint32_t s0_s3_size = *patch_sizer.GetPatchSize({37, 74, 77, 444, 446, 640});
 
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto result = seg->CodepointToGlyphSegments(
         roboto.get(), {}, segments, MergeStrategy::Heuristic(s0_s3_size));
     ASSERT_TRUE(result.ok()) << result.status();
@@ -2814,7 +2499,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   PatchSizeCacheImpl patch_sizer(roboto.get(), segmenter.brotli_quality());
   uint32_t s_t_size = *patch_sizer.GetPatchSize({87, 88});
 
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto result = seg->CodepointToGlyphSegments(
         roboto.get(), {'f', 'F'}, segments,
         MergeStrategy::Heuristic(s_t_size, s_t_size));
@@ -2853,7 +2538,7 @@ TEST_F(ClosureGlyphSegmenterTest,
       {{0, 1, 2}, MergeStrategy::Heuristic(a_b_size)},
   };
 
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto result =
         seg->CodepointToGlyphSegments(roboto.get(), {}, segments, merge_groups);
     ASSERT_TRUE(result.ok()) << result.status();
@@ -2880,10 +2565,9 @@ TEST_F(ClosureGlyphSegmenterTest, HeuristicStrategy_BatchesInertBaseSegments) {
       *patch_sizer.GetPatchSize({69, 70, 71, 72, 73, 75});
 
   auto context = SegmentationContext::InitializeSegmentationContext(
-      roboto.get(), {}, segments, segmenter_dep_graph_only.unmapped_glyph_handling(),
-      segmenter_dep_graph_only.condition_analysis_mode(),
-      segmenter_dep_graph_only.brotli_quality(),
-      segmenter_dep_graph_only.init_font_merging_brotli_quality(), resolver);
+      roboto.get(), {}, segments, segmenter.condition_analysis_mode(),
+      segmenter.brotli_quality(), segmenter.init_font_merging_brotli_quality(),
+      resolver);
   ASSERT_TRUE(context.ok()) << context.status();
 
   SegmentSet all_segments{0, 1, 2, 3, 4, 5, 6, 7};
@@ -2933,7 +2617,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   // Glyphs for 'a', 'b', 'c', 'd' are 69, 70, 71, 72.
   uint32_t a_b_c_d_size = *patch_sizer.GetPatchSize({69, 70, 71, 72});
 
-  for (ClosureGlyphSegmenter* seg : {&segmenter, &segmenter_dep_graph_only}) {
+  for (ClosureGlyphSegmenter* seg : {&segmenter}) {
     auto result = seg->CodepointToGlyphSegments(
         roboto.get(), {}, segments,
         MergeStrategy::Heuristic(a_b_c_d_size, a_b_c_d_size));
@@ -2950,17 +2634,28 @@ TEST_F(ClosureGlyphSegmenterTest,
   }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(ClosureGlyphSegmenterTest,
-       UnicodeRangeValidation_RejectsMoveToInitFont) {
-  ClosureGlyphSegmenter seg(8, 8, MOVE_TO_INIT_FONT, CLOSURE_ONLY, resolver,
-                            ift::config::UNICODE_RANGE);
-  auto result = seg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
-  EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+       Validation_RejectsDeprecatedConditionAnalysisModes) {
+  for (auto target_mode : {ift::config::IFT, ift::config::UNICODE_RANGE}) {
+    for (auto mode :
+         {ift::config::CLOSURE_ONLY, ift::config::CLOSURE_AND_DEP_GRAPH,
+          ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH}) {
+      ClosureGlyphSegmenter seg(8, 8, mode, resolver, target_mode);
+      auto result =
+          seg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
+      EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+    }
+  }
 }
+
+#pragma GCC diagnostic pop
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRangeValidation_RejectsFeatureSegments) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
   SubsetDefinition smcp;
   smcp.feature_tags.insert(HB_TAG('s', 'm', 'c', 'p'));
@@ -2971,7 +2666,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRangeValidation_RejectsInitFontMerging) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
   MergeStrategy strategy = MergeStrategy::CostBased(ProbabilityProfile(
       std::make_shared<MockProbabilityCalculator>(
@@ -2983,7 +2678,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 }
 
 TEST_F(ClosureGlyphSegmenterTest, UnicodeRangeValidation_RejectsPatchMerging) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
   MergeStrategy strategy = MergeStrategy::CostBased(
       ProbabilityProfile(std::make_shared<MockProbabilityCalculator>(
@@ -2996,13 +2691,13 @@ TEST_F(ClosureGlyphSegmenterTest, UnicodeRangeValidation_RejectsPatchMerging) {
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRangeValidation_RejectsInvalidThreshold) {
-  ClosureGlyphSegmenter seg_neg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter seg_neg(8, 8, DEP_GRAPH_ONLY, resolver,
                                 ift::config::UNICODE_RANGE, -0.1);
   auto result =
       seg_neg.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
   EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
 
-  ClosureGlyphSegmenter seg_gt1(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter seg_gt1(8, 8, DEP_GRAPH_ONLY, resolver,
                                 ift::config::UNICODE_RANGE, 1.1);
   result =
       seg_gt1.CodepointToGlyphSegments(roboto.get(), {'a'}, {{'b'}, {'c'}});
@@ -3015,9 +2710,8 @@ TEST_F(ClosureGlyphSegmenterTest,
       {'b'}, {'f'}, {'i'}, {'c', 'd'}, {'d', 'e'}};
 
   for (auto analysis_mode :
-       {CLOSURE_ONLY, CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
-        DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
-    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+       {DEP_GRAPH_ONLY, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver,
                               ift::config::UNICODE_RANGE);
     auto segmentation =
         seg.CodepointToGlyphSegments(roboto.get(), {'a'}, segments);
@@ -3048,9 +2742,8 @@ if (s3) then p2
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_MakeActivationConditionsDisjoint_ComplexConditions) {
   for (auto analysis_mode :
-       {CLOSURE_ONLY, CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
-        DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
-    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+       {DEP_GRAPH_ONLY, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver,
                               ift::config::UNICODE_RANGE);
     auto segmentation = seg.CodepointToGlyphSegments(
         noto_nastaliq_urdu.get(), {},
@@ -3089,8 +2782,7 @@ TEST_F(ClosureGlyphSegmenterTest,
   strategy.SetOptimizationCutoffFraction(1.0);
   strategy.SetUsePatchMerges(false);
 
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
-                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE,
                             /*disjoint_conditions_probability_threshold=*/0.2);
 
@@ -3099,7 +2791,8 @@ TEST_F(ClosureGlyphSegmenterTest,
   ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
   // 'f' and 'i' were merged into s0; 0xc1 (s1) and 0x106 (s2) were not merged,
-  // and their non-exclusive shared patch {gid117, gid169, gid667} was omitted.
+  // and non-exclusive patches ({gid117, gid169, gid667} and {gid141, gid609,
+  // gid679}) below the probability threshold were omitted.
   std::vector<SubsetDefinition> expected_segments = {
       {'f', 'i'}, {0xc1}, {0x106}};
   EXPECT_EQ(segmentation->Segments(), expected_segments);
@@ -3110,7 +2803,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
   EXPECT_EQ(segmentation->ToString(),
             R"(initial font: { gid0, gid69 }
-p0: { gid74, gid77, gid141, gid444, gid446, gid609, gid679 }
+p0: { gid74, gid77, gid444, gid446 }
 p1: { gid37, gid640 }
 p2: { gid39, gid700 }
 if (s0) then p0
@@ -3135,8 +2828,8 @@ TEST_F(ClosureGlyphSegmenterTest,
       Segment({'f'}), Segment({'i'}), Segment({0xc1}), Segment({0x106})};
 
   auto context = SegmentationContext::InitializeSegmentationContext(
-      roboto.get(), {'a'}, segments, FIND_CONDITIONS, CLOSURE_ONLY, 8, 8,
-      resolver, ift::config::UNICODE_RANGE);
+      roboto.get(), {'a'}, segments, DEP_GRAPH_ONLY, 8, 8, resolver,
+      ift::config::UNICODE_RANGE);
   ASSERT_TRUE(context.ok()) << context.status();
 
   ASSERT_TRUE(context->CacheInitialGlyphProbabilities({calc.get()}).ok());
@@ -3161,8 +2854,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_InitialSegmentCodepointsAndFeatures) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
-                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
   SubsetDefinition init;
   init.codepoints = {'f'};
@@ -3193,8 +2885,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_MakeActivationConditionsDisjoint_SpansMultipleMergeGroups) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
-                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
 
   // s0 ('f') and s1 ('i') are non-shared in Group 0 and interact via 'fi'.
@@ -3249,8 +2940,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_MakeActivationConditionsDisjoint_ReordersByNewProbability) {
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
-                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter seg(8, 8, DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE);
 
   // Initially {'b'} (0.5) > {'f'} (0.4) > {'i'} (0.3) > {'c'} (0.1).
@@ -3306,8 +2996,7 @@ TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_Woff2PatchSizeCostFunction) {
   strategy.SetUsePatchMerges(false);
 
   {
-    ClosureGlyphSegmenter ift_seg(1, 1, FIND_CONDITIONS,
-                                  CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+    ClosureGlyphSegmenter ift_seg(1, 1, DEP_GRAPH_ONLY, resolver,
                                   ift::config::IFT);
     auto ift_segmentation = ift_seg.CodepointToGlyphSegments(
         roboto.get(), {'a'}, {{'b'}, {'c'}}, strategy);
@@ -3317,8 +3006,7 @@ TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_Woff2PatchSizeCostFunction) {
   }
 
   for (uint32_t quality : {0u, 1u}) {
-    ClosureGlyphSegmenter ur_seg(quality, quality, FIND_CONDITIONS,
-                                 CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+    ClosureGlyphSegmenter ur_seg(quality, quality, DEP_GRAPH_ONLY, resolver,
                                  ift::config::UNICODE_RANGE);
     auto ur_segmentation = ur_seg.CodepointToGlyphSegments(
         roboto.get(), {'a'}, {{'b'}, {'c'}}, strategy);
@@ -3335,22 +3023,22 @@ TEST_F(ClosureGlyphSegmenterTest, UnicodeRange_TotalCosts) {
   };
   UnigramProbabilityCalculator calculator(std::move(frequencies));
 
-  GlyphSegmentation segmentation({'a'}, {}, {});
+  GlyphSegmentation segmentation({'a'}, {});
   auto sc = GlyphSegmentation::ConditionsToSegmentation(
       {
           {ActivationCondition::exclusive_segment(0, 0), {70}},
           {ActivationCondition::exclusive_segment(1, 0), {71}},
       },
-      {}, segmentation);
+      segmentation);
   ASSERT_TRUE(sc.ok()) << sc;
   segmentation.CopySegments({{'b'}, {'c'}});
 
-  ClosureGlyphSegmenter ift_seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter ift_seg(8, 8, DEP_GRAPH_ONLY, resolver,
                                 ift::config::IFT);
   std::vector<SegmentationCost> ift_costs =
       *ift_seg.TotalCosts(roboto.get(), segmentation, {&calculator});
 
-  ClosureGlyphSegmenter ur_seg(8, 8, FIND_CONDITIONS, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter ur_seg(8, 8, DEP_GRAPH_ONLY, resolver,
                                ift::config::UNICODE_RANGE);
   std::vector<SegmentationCost> ur_costs =
       *ur_seg.TotalCosts(roboto.get(), segmentation, {&calculator});
@@ -3512,8 +3200,7 @@ TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_UnicodeRangeMode) {
   strategy.SetUsePatchMerges(false);
 
   for (uint32_t quality : {0u, 1u}) {
-    ClosureGlyphSegmenter ur_seg(quality, quality, FIND_CONDITIONS,
-                                 CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+    ClosureGlyphSegmenter ur_seg(quality, quality, DEP_GRAPH_ONLY, resolver,
                                  ift::config::UNICODE_RANGE);
     auto ur_segmentation = ur_seg.CodepointToGlyphSegments(
         roboto.get(), {'a'}, {{'b'}, {'c'}, {'f'}, {'i'}}, strategy);

@@ -44,20 +44,13 @@ void AllPairsMerger::AssignMergedSegment(const Merger& merger,
       // let us locate any conditions involved with those glyphs post-merge.
       for (const auto& c :
            groupings.TriggeringSegmentToConditionsPreCombination(s)) {
-        if (c.IsFallback()) {
-          continue;
-        }
         if (auto rep = pre_comb_map.at(c).min(); rep.has_value()) {
           dirty_glyphs_.insert(*rep);
         }
       }
 
       // Also record any segments involved in conditions directly impacted by the merge.
-      for (const auto& c :
-           groupings.TriggeringSegmentToConditions(s)) {
-        if (c.IsFallback()) {
-          continue;
-        }
+      for (const auto& c : groupings.TriggeringSegmentToConditions(s)) {
         if (!c.IsExclusive()) {
           dirty_segments_.union_set(c.TriggeringSegments());
         }
@@ -138,7 +131,7 @@ StatusOr<double> AllPairsMerger::NormalizationDivisor(
   uint64_t total_bytes = 0;
   for (segment_index_t s : merged_segments) {
     for (const auto& c : groupings.TriggeringSegmentToConditions(s)) {
-      if (c.IsFallback() || (unicode_range_mode && !c.IsExclusive())) {
+      if (unicode_range_mode && !c.IsExclusive()) {
         continue;
       }
       auto it = conditions_and_glyphs.find(c);
@@ -168,8 +161,8 @@ Status AllPairsMerger::QueueBestCaseCandidate(
     return absl::OkStatus();
   }
 
-  auto best_case_delta = CandidateMerge::ComputeCostDelta<true>(
-      merger, merged_segments, std::nullopt, 0.0);
+  auto best_case_delta =
+      CandidateMerge::ComputeCostDelta<true>(merger, merged_segments, 0.0);
   if (absl::IsCancelled(best_case_delta.status())) {
     return absl::OkStatus();
   }
@@ -227,7 +220,7 @@ Status AllPairsMerger::QueueCompositeCandidates(
            last_exclusive);
        it != merger.Context().glyph_groupings.OrderedConditions().end(); ++it) {
     const auto& next_condition = *it;
-    if (next_condition.IsFallback() || next_condition.IsExclusive()) {
+    if (next_condition.IsExclusive()) {
       continue;
     }
 
@@ -349,8 +342,7 @@ Status AllPairsMerger::Initialize(Merger& merger) {
 Status AllPairsMerger::RefreshDirtySegments(Merger& merger) {
   const auto& groupings = merger.Context().glyph_groupings;
   for (glyph_id_t gid : dirty_glyphs_) {
-    if (auto cond = groupings.GlyphToCondition(gid);
-        cond.has_value() && !cond->IsFallback()) {
+    if (auto cond = groupings.GlyphToCondition(gid); cond.has_value()) {
       dirty_segments_.union_set(cond->TriggeringSegments());
     }
   }
@@ -360,7 +352,7 @@ Status AllPairsMerger::RefreshDirtySegments(Merger& merger) {
   for (segment_index_t base : dirty_bases_) {
     dirty_segments_.insert(base);
     for (const auto& c : groupings.TriggeringSegmentToConditions(base)) {
-      if (!c.IsFallback() && !c.IsExclusive()) {
+      if (!c.IsExclusive()) {
         dirty_segments_.union_set(c.TriggeringSegments());
       }
     }

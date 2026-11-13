@@ -85,15 +85,9 @@ In the proceeding sections each of these steps will be discussed in more details
 
 ## Condition Analysis
 
-Detecting the conditions under which a glyph is needed can be done in a couple of different
-ways. The segmentation implementation currently has two main approaches:
+Condition analysis infers the activation conditions under which each glyph in the font is needed by analyzing a [glyph dependency graph](dependency_graph.md) and running [dependency graph condition extraction](dependency_graph_condition_extract.md) (previously, an experimental font-subsetting closure approach was also supported; that approach has been removed).
 
-1. Infer glyph conditions via [font subsetting closure](experimental/closure_glyph_segmentation.md).
-2. Infer glyph conditions via a [glyph dependency graph](dependency_graph.md) and [dependency graph condition extraction](dependency_graph_condition_extract.md).
-
-Both approaches ultimately aim to detect conditions that each glyph is needed which will satisfy the glyph closure
-requirement. The dependency graph is the default and recommended method for finding conditions. It's generally faster
-and produces more detailed conditions.
+Using the dependency graph generates detailed activation conditions that satisfy the glyph closure requirement, and the final segmentation is validated against HarfBuzz subsetting closure.
 
 ## Merging
 
@@ -373,8 +367,6 @@ In the merger implementation, actual cost delta computation is optimized by firs
 *aggregate probability* $P_{\text{agg}}(c_i) = \sum_{m=1}^M P_m(c_i)$ of a condition across all
 frequency data sets in the merge group, and then multiplying that sum once by $(\text{size}(p_i) + k)$
 for each affected patch. This avoids redundant patch size evaluations and per-data-set delta loops.
-Similarly, because the fallback patch is needed with probability $1.0$ under every frequency data set,
-its size delta is multiplied by the number of data sets $M$.
 
 ### Prioritizing a Primary Script and Language
 

@@ -74,19 +74,16 @@ ActivationCondition ActivationCondition::and_segments(
 }
 
 ActivationCondition ActivationCondition::or_segments(const SegmentSet& segments,
-                                                     patch_id_t activated,
-                                                     bool is_fallback) {
+                                                     patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = {activated};
   conditions.conditions_.push_back(segments);
-  conditions.is_fallback_ = is_fallback;
 
   return conditions;
 }
 
 ActivationCondition ActivationCondition::composite_condition(
-    absl::Span<const SegmentSet> groups, patch_id_t activated,
-    bool is_fallback) {
+    absl::Span<const SegmentSet> groups, patch_id_t activated) {
   ActivationCondition conditions;
   conditions.activated_ = {activated};
   for (const auto& group : groups) {
@@ -95,7 +92,6 @@ ActivationCondition ActivationCondition::composite_condition(
 
   Simplify(conditions.conditions_);
 
-  conditions.is_fallback_ = is_fallback;
   return conditions;
 }
 
@@ -174,7 +170,6 @@ ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
   // they must be combined in a commutative and associative way. Otherwise
   // folding Or() across a group of conditions would produce different results
   // depending on the order the conditions are visited in.
-  condition.is_fallback_ = a.is_fallback_ || b.is_fallback_;
   condition.is_exclusive_ = false;
   condition.activated_ = std::max(a.activated_, b.activated_);
   condition.encoding_ = std::max(a.encoding_, b.encoding_);
@@ -297,7 +292,6 @@ ActivationCondition ActivationCondition::ReplaceSegments(
     }
 
     new_condition.activated_ = activated_;
-    new_condition.is_fallback_ = is_fallback_;
     new_condition.is_exclusive_ =
         is_exclusive_ || new_condition.conditions_.size() == 1;
     new_condition.encoding_ = encoding_;
@@ -321,7 +315,6 @@ ActivationCondition ActivationCondition::RemoveIntersectingSubgroups(
   ActivationCondition new_condition = ActivationCondition::True(0);
   new_condition.activated_ = activated_;
   new_condition.encoding_ = encoding_;
-  new_condition.is_fallback_ = is_fallback_;
   new_condition.is_exclusive_ = is_exclusive_;
 
   for (const auto& condition_group : conditions_) {
@@ -378,7 +371,6 @@ ActivationCondition ActivationCondition::NonCompositeSuperset() const {
   }
 
   ActivationCondition out;
-  out.is_fallback_ = is_fallback_;
   out.is_exclusive_ = is_exclusive_;
   out.conditions_ = {};
   out.activated_ = activated_;
@@ -470,10 +462,6 @@ bool ActivationCondition::operator<(const ActivationCondition& other) const {
 
   if (is_exclusive_ != other.is_exclusive_) {
     return is_exclusive_;
-  }
-
-  if (is_fallback_ != other.is_fallback_) {
-    return !is_fallback_;
   }
 
   return encoding_ < other.encoding_;

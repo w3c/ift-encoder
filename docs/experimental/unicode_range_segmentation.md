@@ -16,7 +16,6 @@ With `@font-face` `unicode-range`, a font is split into a collection of standalo
 | **Client Loading Model** | Single font instance incrementally extended by patches | Independent `@font-face` WOFF2 font files matched per character by `unicode-range` |
 | **Initial Segment (`config.initial_segment`)** | Loaded once as the base font; initial font merging moves high-probability patches into it | Included in **every** subset (union of `initial_segment` codepoints/glyphs/features + default features and the patch's glyphs; useful for UVS codepoints, etc.). Initial font merging is disabled |
 | **Layout Features** | Optional feature patches + table-keyed patches | Codepoints only; each subset statically retains the default layout features plus any explicitly requested in `config.initial_segment.features`. Optional feature segments and table-keyed segments are disallowed |
-| **Unmapped Glyphs** | Configurable (defaults to `MOVE_TO_INIT_FONT`) | Must be `FIND_CONDITIONS` or `PATCH` (`AutoSegmenterConfig` sets `FIND_CONDITIONS`; `MOVE_TO_INIT_FONT` is rejected) |
 | **Patch Merging** | Optional (`experimental_use_patch_merges`) | Disabled; only segment merges are performed |
 | **Interacting Glyphs & Disjoint Conditions** | Can be placed in separate patches (e.g. `fi` in patch `f AND i`, shared component `A` in `A OR À`) | Determined via dependency graph / closure analysis; `MakeActivationConditionsDisjoint` merges triggering segments of non-exclusive conditions whose probability $\ge$ `disjoint_conditions_probability_threshold`. Conditions below the threshold are skipped |
 | **Final Subsets & Activation Conditions** | CNF expressions (`(s1 OR s2) AND s3`) | Only **exclusive** patches (`(s_i)`) are emitted in the final plan (any remaining non-exclusive patches are ignored), yielding strictly disjunctive and mutually disjoint `unicode-range` sets |
@@ -29,16 +28,14 @@ With `@font-face` `unicode-range`, a font is split into a collection of standalo
 A `TargetMode` enum (`IFT`, `UNICODE_RANGE`) in [segmenter_config.proto](../ift/config/segmenter_config.proto) selects the segmentation target mode (`target_mode` on `SegmenterConfig`, defaulting to `IFT`), alongside a `disjoint_conditions_probability_threshold` setting. The auto-configuration generator (`AutoSegmenterConfig::GenerateConfig`) also accepts `TargetMode` and automatically configures appropriate defaults when `UNICODE_RANGE` is selected:
 
 * Disables optional feature segment generation (`generate_feature_segments = false`) and table-keyed segment generation (`generate_table_keyed_segments = false`).
-* Sets `unmapped_glyph_handling = FIND_CONDITIONS` so all glyphs in the full closure receive activation conditions.
 * Leaves initial font merging thresholds unset and skips IFT-specific base segmentation plan settings (`jump_ahead`, `use_prefetch_lists`).
 
 To ensure invalid configurations are caught regardless of whether a caller goes through `SegmenterConfigUtil` or invokes `ClosureGlyphSegmenter` directly, `ClosureGlyphSegmenter` validates that when `target_mode == UNICODE_RANGE`:
 
-1. `unmapped_glyph_handling` is set to either `FIND_CONDITIONS` or `PATCH` (`MOVE_TO_INIT_FONT` is rejected).
-2. No input segment definitions contain layout features (optional feature loading is unsupported).
-3. Initial font merging is not enabled on any merge group.
-4. Patch merging is disabled on all merge groups.
-5. `generate_table_keyed_segments` is not enabled.
+1. No input segment definitions contain layout features (optional feature loading is unsupported).
+2. Initial font merging is not enabled on any merge group.
+3. Patch merging is disabled on all merge groups.
+4. `generate_table_keyed_segments` is not enabled.
 
 ### Initial Segment Handling
 
@@ -57,7 +54,7 @@ In CSS `@font-face`, each subset is treated as a separate font face during text 
 
 ### `MakeActivationConditionsDisjoint`
 
-After initial condition analysis (and unmapped glyph condition finding when `FIND_CONDITIONS` is used), the segmenter runs a `MakeActivationConditionsDisjoint` pass before starting general cost-based or heuristic merging:
+After initial condition analysis, the segmenter runs a `MakeActivationConditionsDisjoint` pass before starting general cost-based or heuristic merging:
 
 1. Inspect all non-exclusive patch conditions (conditions involving more than one triggering segment, whether conjunctive or disjunctive).
 2. Group segments into connected components by unioning the triggering segments of each non-exclusive condition.

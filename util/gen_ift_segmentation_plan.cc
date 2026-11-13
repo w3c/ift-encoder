@@ -39,8 +39,7 @@
 
 using ift::common::BazelDataFileResolver;
 using ift::common::DataFileResolver;
-using ift::config::CLOSURE_ONLY;
-using ift::config::PATCH;
+using ift::config::DEP_GRAPH_ONLY;
 using ift::config::SegmentationPlan;
 using ift::config::SegmenterConfig;
 using ift::freq::ProbabilityCalculator;
@@ -75,10 +74,6 @@ ABSL_FLAG(bool, output_segmentation_analysis, false,
 
 ABSL_FLAG(bool, segmentation_analysis_split_cjk, false,
           "If set, then for analysis split \"Script_CJK\" into the individual scripts.");
-
-ABSL_FLAG(
-    bool, output_fallback_glyph_count, false,
-    "If set the number of fallback glyphs in the segmentation will be output.");
 
 ABSL_FLAG(
     int, verbosity, 0,
@@ -188,7 +183,7 @@ static Status Analysis(hb_face_t* font,
     }
   }
 
-  ClosureGlyphSegmenter segmenter(11, 11, PATCH, CLOSURE_ONLY, resolver,
+  ClosureGlyphSegmenter segmenter(11, 11, DEP_GRAPH_ONLY, resolver,
                                   target_mode);
   auto costs = TRY(segmenter.TotalCosts(font, segmentation,
                                         strategy_probability_calculators));
@@ -233,28 +228,6 @@ static Status Analysis(hb_face_t* font,
   return absl::OkStatus();
 }
 
-static Status OutputFallbackGlyphCount(hb_face_t* original_face,
-                                       const ClosureGlyphSegmenter& segmenter,
-                                       const GlyphSegmentation& segmentation) {
-  uint32_t num_fallback_glyphs = segmentation.UnmappedGlyphs().size();
-  uint32_t fallback_glyphs_size = 0;
-  uint32_t all_glyphs_size = 0;
-  TRYV(segmenter.FallbackCost(original_face, segmentation, fallback_glyphs_size,
-                              all_glyphs_size));
-
-  GlyphSet all_glyphs;
-  for (const auto& [_, gids] : segmentation.GidSegments()) {
-    all_glyphs.union_set(gids);
-  }
-
-  uint32_t num_glyphs = all_glyphs.size() + num_fallback_glyphs;
-  std::cout << "num_fallback_glyphs, " << num_fallback_glyphs << ", "
-            << num_glyphs << ", " << fallback_glyphs_size << ", "
-            << all_glyphs_size << std::endl;
-
-  return absl::OkStatus();
-}
-
 static Status Main(const std::vector<char*> args) {
   auto resolver = TRY(BazelDataFileResolver::Create(args[0]));
 
@@ -294,16 +267,6 @@ static Status Main(const std::vector<char*> args) {
     // No config requested, just output a simplified plain text representation
     // of the segmentation.
     std::cout << segmentation.ToString() << std::endl;
-  }
-
-  if (absl::GetFlag(FLAGS_output_fallback_glyph_count)) {
-    ClosureGlyphSegmenter segmenter(
-        config.brotli_quality(),
-        config.brotli_quality_for_initial_font_merging(),
-        config.unmapped_glyph_handling(), config.condition_analysis_mode(),
-        resolver, config.target_mode(),
-        config.disjoint_conditions_probability_threshold());
-    TRYV(OutputFallbackGlyphCount(font.get(), segmenter, segmentation));
   }
 
   if (!absl::GetFlag(FLAGS_output_segmentation_analysis)) {
