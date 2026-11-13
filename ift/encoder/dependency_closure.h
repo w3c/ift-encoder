@@ -23,72 +23,25 @@ namespace ift::encoder {
 class RequestedSegmentationInformation;
 
 /*
- * Performs closure analysis (like GlyphClosureCache) using a dependency graph
- * instead of closure. The dependency graph is not always accurate
- * (overestimating the true closure in some cases) so this returns a signal on
- * the accuracy of the analysis.
+ * Extracts glyph activation conditions and interaction sets using a dependency
+ * graph instead of repeated subsetting closure. In some cases may overestimate
+ * activation conditions versus real subsetting closure due to reliance on the
+ * dependency graph.
  */
 class DependencyClosure {
  public:
-  // If allow_context_glyph_analysis is true then AnalyzeSegment() will not
-  // report INNACCURATE for cases that involve context glyphs.
   static absl::StatusOr<std::unique_ptr<DependencyClosure>> Create(
       const RequestedSegmentationInformation* segmentation_info,
-      hb_face_t* face, const ift::common::DataFileResolver& resolver,
-      bool allow_context_glyph_analysis = false) {
+      hb_face_t* face, const ift::common::DataFileResolver& resolver) {
     dep_graph::DependencyGraph graph = TRY(
         dep_graph::DependencyGraph::Create(segmentation_info, face, resolver));
     auto result = std::unique_ptr<DependencyClosure>(
         new DependencyClosure(std::move(graph), segmentation_info, face));
 
-    if (!allow_context_glyph_analysis) {
-      result->context_glyphs_ = common::GlyphSet{};
-      result->init_font_context_glyphs_ = common::GlyphSet{};
-    }
     TRYV(result->InitFontChanged(ift::common::SegmentSet::all()));
 
     return result;
   }
-
-  enum AnalysisAccuracy {
-    // The analysis is accurate and should match true glyph closure.
-    ACCURATE,
-
-    // The analysis may not be accurate and as a result may overestimate
-    // the true glyph closure.
-    INACCURATE,
-  };
-
-  // Attempts to analyze the given segment using a glyph dependency graph
-  // from harfbuzz. The return value signals if an analysis was able to be
-  // performed or not.
-  //
-  // If ACCURATE is returned then the dep graph is able to produce an analysis
-  // which should match GlyphClosureCache::AnalyzeSegment(). In this case
-  // the three output sets (and_gids, or_gids, and exclusive_gids) will be
-  // populated with the anaysis results.
-  //
-  // Otherwise if INACCURATE is returned then the dep graph analysis was found
-  // to possibly not match GlyphClosureCache::AnalyzeSegment(). The three
-  // output sets will not be modified in this case.
-  //
-  // The three output sets have the following interpretation:
-  // and_gids: these gids have the union of input segments as a conjunctive
-  // condition.
-  //           ie. (s_1 U ... U s_n) AND ... -> and_gids
-  //
-  // or_gids: these gids have the union of input segments as a disjunctive
-  // condition.
-  //          ie. (s_1 U ... U s_n) OR ... -> or_gids
-  //
-  // exclusive_gids: these gids are exclusively needed by the union of input
-  // segments.
-  //                 ie. (s_1 U ... U s_n) -> exclusive_gids
-  absl::StatusOr<AnalysisAccuracy> AnalyzeSegment(
-      const ift::common::SegmentSet& segments, ift::common::GlyphSet& and_gids,
-      ift::common::GlyphSet& or_gids, ift::common::GlyphSet& exclusive_gids,
-      bool with_simplification
-  );
 
   // Extracts the full activations conditions (as specified by the dependency
   // graph) for all glyphs. In some cases may overestimate activation conditions
@@ -136,9 +89,6 @@ class DependencyClosure {
       const SubsetDefinition& def) const;
   absl::StatusOr<ift::common::SegmentSet> SegmentsThatInteractWith(
       const absl::flat_hash_set<dep_graph::Node> nodes) const;
-
-  uint64_t AccurateResults() const { return accurate_results_; }
-  uint64_t InaccurateResults() const { return inaccurate_results_; }
 
  private:
 
@@ -194,20 +144,6 @@ class DependencyClosure {
         original_face_(ift::common::make_hb_face(hb_face_reference(face))),
         graph_(std::move(graph)) {}
 
-  struct AnalysisResult {
-    AnalysisAccuracy accuracy;
-    ift::common::GlyphSet reached_glyphs;
-    ift::common::GlyphSet and_gids;
-    ift::common::GlyphSet or_gids;
-    ift::common::GlyphSet exclusive_gids;
-  };
-
-  absl::StatusOr<AnalysisResult> AnalyzeSegmentInternal(
-      const ift::common::SegmentSet& segments, bool with_simplification) const;
-
-  absl::StatusOr<common::SegmentSet> FilterSegments(
-      const common::SegmentSet& segments) const;
-
   absl::Status InitNodeConditionsCache(
       const common::SegmentSet& changed_segments);
   void UpdateNodeConditionsCache(segment_index_t base_segment,
@@ -216,9 +152,6 @@ class DependencyClosure {
   const RequestedSegmentationInformation* segmentation_info_;
   ift::common::hb_face_unique_ptr original_face_;
   dep_graph::DependencyGraph graph_;
-
-  std::optional<ift::common::GlyphSet> context_glyphs_ = std::nullopt;
-  std::optional<ift::common::GlyphSet> init_font_context_glyphs_ = std::nullopt;
 
   // Inert segments are segments that:
   // - Appear only in a single unitary condition, that is
@@ -246,9 +179,6 @@ class DependencyClosure {
   // Cache of previously processed InitFont nodes, used to determine newly added
   // init items.
   absl::flat_hash_set<dep_graph::Node> init_font_nodes_;
-
-  uint64_t accurate_results_ = 0;
-  uint64_t inaccurate_results_ = 0;
 };
 
 }  // namespace ift::encoder

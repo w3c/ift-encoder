@@ -176,6 +176,22 @@ static StatusOr<TableKeyedSegmentMode> ResolveTableKeyedSegmentMode(
   return config.generate_table_keyed_segments_mode();
 }
 
+static absl::Status ValidateConditionAnalysisAndUnmappedGlyphs(
+    const SegmenterConfig& config) {
+  if (config.condition_analysis_mode() != DEP_GRAPH_ONLY &&
+      config.condition_analysis_mode() != DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {
+    return absl::InvalidArgumentError(
+        "Closure-based condition_analysis_mode values are deprecated and "
+        "unsupported; use DEP_GRAPH_ONLY or "
+        "DEP_GRAPH_ONLY_WITH_SIMPLIFICATION.");
+  }
+  if (config.unmapped_glyph_handling() != FIND_CONDITIONS) {
+    return absl::InvalidArgumentError(
+        "unmapped_glyph_handling is deprecated and must be FIND_CONDITIONS.");
+  }
+  return absl::OkStatus();
+}
+
 #pragma GCC diagnostic pop
 
 StatusOr<MergeStrategy::ProbabilityProfile>
@@ -355,6 +371,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
     const SegmenterConfig& config, const CodepointSet& font_codepoints,
     const btree_set<hb_tag_t>& font_features,
     std::vector<SubsetDefinition>& segments) {
+  TRYV(ValidateConditionAnalysisAndUnmappedGlyphs(config));
+
   if (config.target_mode() == UNICODE_RANGE &&
       (!config.feature_segments().empty() ||
        config.generate_feature_segments())) {
@@ -410,6 +428,8 @@ SegmenterConfigUtil::ConfigToMergeGroups(
 
 StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
     hb_face_t* face, const SegmenterConfig& config) {
+  TRYV(ValidateConditionAnalysisAndUnmappedGlyphs(config));
+
   TableKeyedSegmentMode table_keyed_mode =
       TRY(ResolveTableKeyedSegmentMode(config));
   if (config.target_mode() == UNICODE_RANGE && table_keyed_mode != NONE) {
@@ -429,8 +449,7 @@ StatusOr<SegmentationResult> SegmenterConfigUtil::RunSegmenter(
 
   ClosureGlyphSegmenter segmenter(
       config.brotli_quality(), config.brotli_quality_for_initial_font_merging(),
-      config.unmapped_glyph_handling(), config.condition_analysis_mode(),
-      resolver_, config.target_mode(),
+      config.condition_analysis_mode(), resolver_, config.target_mode(),
       config.disjoint_conditions_probability_threshold());
 
   GlyphSegmentation segmentation = TRY(segmenter.CodepointToGlyphSegments(

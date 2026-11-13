@@ -417,7 +417,6 @@ TEST(ActivationConditionTest, And) {
   EXPECT_EQ(combined_ab.ToString(), "if ((s1 OR s2) AND s3) then p10");
   EXPECT_EQ(combined_ab.activated(), 10);
   EXPECT_FALSE(combined_ab.IsExclusive());
-  EXPECT_FALSE(combined_ab.IsFallback());
 
   auto combined_ba = ActivationCondition::And(b, a);
   EXPECT_EQ(combined_ab.conditions(), combined_ba.conditions());
@@ -468,7 +467,6 @@ TEST(ActivationConditionTest, Or) {
             "then p11");
   EXPECT_EQ(combined_ab.activated(), 11);
   EXPECT_FALSE(combined_ab.IsExclusive());
-  EXPECT_FALSE(combined_ab.IsFallback());
 
   auto combined_ba = ActivationCondition::Or(b, a);
   EXPECT_EQ(combined_ab, combined_ba);
@@ -477,14 +475,13 @@ TEST(ActivationConditionTest, Or) {
 TEST(ActivationConditionTest, Or_IsOrderIndependent) {
   auto a = ActivationCondition::or_segments({1, 2}, 10);
   a.SetEncoding(ift::proto::DEFAULT_ENCODING);
-  auto b = ActivationCondition::or_segments({3}, 11, /*is_fallback=*/true);
+  auto b = ActivationCondition::or_segments({3}, 11);
   b.SetEncoding(ift::proto::DEFAULT_ENCODING);
   auto c = ActivationCondition::and_segments({4, 5}, 9);
   c.SetEncoding(ift::proto::TABLE_KEYED_PARTIAL);
 
   auto ab = ActivationCondition::Or(a, b);
   EXPECT_EQ(ab, ActivationCondition::Or(b, a));
-  EXPECT_TRUE(ab.IsFallback());
   EXPECT_EQ(ab.activated(), 11);
 
   auto ac = ActivationCondition::Or(a, c);

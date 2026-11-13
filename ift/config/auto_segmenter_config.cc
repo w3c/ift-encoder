@@ -114,10 +114,6 @@ enum Quality {
 // To start, the list of parameters we can use to make quality/performance
 // tradeoffs:
 //
-// - unmapped_glyph_handling (global)
-//     Lower quality is to not find conditions (so use patch or init font), high
-//     quality is to find conditions.
-//
 // - generate_feature_segments (global): high quality generate segment per
 // feature, low quality put all optional features
 //     in one segment.
@@ -135,10 +131,10 @@ enum Quality {
 //     Would be reasonable to always have this set to at least the minimum group
 //     size.
 //
-// - condition_analysis_mode: use DEP_GRAPH_ONLY if dependency API is available,
-// otherwise CLOSURE_ONLY. DEP_GRAPH_ONLY_WITH_SIMPLIFICATION can significantly
-// speed up cases with high condition complexity, at the cost of less specific
-// final conditions.
+// - condition_analysis_mode: use DEP_GRAPH_ONLY or
+// DEP_GRAPH_ONLY_WITH_SIMPLIFICATION. DEP_GRAPH_ONLY_WITH_SIMPLIFICATION can
+// significantly speed up cases with high condition complexity, at the cost of
+// less specific final conditions.
 //
 // Merge group settings:
 //
@@ -403,10 +399,9 @@ static Status GroupInteractingScripts(
 
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info =
       TRY(RequestedSegmentationInformation::Create(
-          std::move(segments), init_segment, *closure_cache, FIND_CONDITIONS));
+          std::move(segments), init_segment, *closure_cache));
   std::unique_ptr<DependencyClosure> dependency_closure =
-      TRY(DependencyClosure::Create(segmentation_info.get(), face, resolver,
-                                    /*allow_context_glyph_analysis=*/true));
+      TRY(DependencyClosure::Create(segmentation_info.get(), face, resolver));
 
   GlyphPartition ungrouped_partition(ungrouped_list.size());
   flat_hash_map<uint32_t, IntSet> ungrouped_to_scripts;
@@ -957,12 +952,6 @@ static void ApplyQualityLevelTo(Quality quality, MergeGroup& merge_group) {
 
 static void ApplyQualityLevelTo(Quality quality, SegmenterConfig& config) {
   config.set_preprocess_merging_group_size_for_ungrouped(kMinimumGroupSize * 3);
-
-  if (config.target_mode() == UNICODE_RANGE) {
-    config.set_unmapped_glyph_handling(FIND_CONDITIONS);
-  } else {
-    config.set_unmapped_glyph_handling(MOVE_TO_INIT_FONT);
-  }
 
   if (quality == ONE) {
     config.set_condition_analysis_mode(DEP_GRAPH_ONLY_WITH_SIMPLIFICATION);

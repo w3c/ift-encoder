@@ -84,6 +84,16 @@ void SetLegacyGenerateTableKeyedSegments(SegmenterConfig& config, bool value) {
   config.set_generate_table_keyed_segments(value);
 }
 
+void SetLegacyUnmappedGlyphHandling(SegmenterConfig& config,
+                                    ift::config::UnmappedGlyphHandling value) {
+  config.set_unmapped_glyph_handling(value);
+}
+
+void SetLegacyConditionAnalysisMode(SegmenterConfig& config,
+                                    ift::config::ConditionAnalysisMode value) {
+  config.set_condition_analysis_mode(value);
+}
+
 #pragma GCC diagnostic pop
 
 MergeStrategy ExpectedCostStrategy(
@@ -960,7 +970,6 @@ TEST_F(SegmenterConfigUtilTest,
 
   SegmenterConfig config;
   config.set_target_mode(ift::config::UNICODE_RANGE);
-  config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
   config.set_generate_table_keyed_segments_mode(FROM_FREQ_DATA);
   AddSegment(config, 1, {0x43});
 
@@ -983,7 +992,6 @@ TEST_F(SegmenterConfigUtilTest,
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     config.set_generate_feature_segments(true);
     AddSegment(config, 1, {0x43});
 
@@ -999,7 +1007,6 @@ TEST_F(SegmenterConfigUtilTest,
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     Features features;
     features.add_values("smcp");
     (*config.mutable_feature_segments())[1] = features;
@@ -1012,7 +1019,6 @@ TEST_F(SegmenterConfigUtilTest,
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     AddSegment(config, 1, {0x43});
     (*config.mutable_segments())[1].mutable_features()->add_values("smcp");
 
@@ -1028,21 +1034,26 @@ TEST_F(SegmenterConfigUtilTest,
       loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
   SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
 
-  // Default unmapped_glyph_handling (MOVE_TO_INIT_FONT) is rejected.
+  // Explicit MOVE_TO_INIT_FONT or PATCH is rejected.
   {
-    SegmenterConfig config;
-    config.set_target_mode(ift::config::UNICODE_RANGE);
-    AddSegment(config, 1, {0x43});
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    for (auto handling : {ift::config::MOVE_TO_INIT_FONT, ift::config::PATCH}) {
+#pragma GCC diagnostic pop
+      SegmenterConfig config;
+      config.set_target_mode(ift::config::UNICODE_RANGE);
+      SetLegacyUnmappedGlyphHandling(config, handling);
+      AddSegment(config, 1, {0x43});
 
-    auto result = util.RunSegmenter(face.get(), config);
-    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+      auto result = util.RunSegmenter(face.get(), config);
+      EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+    }
   }
 
   // Initial font merging is rejected.
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     AddSegment(config, 1, {0x43});
     auto* group = config.add_merge_groups();
     AddFreqData(*group, "test_freq_data.riegeli");
@@ -1058,7 +1069,6 @@ TEST_F(SegmenterConfigUtilTest,
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     AddSegment(config, 1, {0x43});
     auto* group = config.add_merge_groups();
     AddFreqData(*group, "test_freq_data.riegeli");
@@ -1072,7 +1082,6 @@ TEST_F(SegmenterConfigUtilTest,
   {
     SegmenterConfig config;
     config.set_target_mode(ift::config::UNICODE_RANGE);
-    config.set_unmapped_glyph_handling(ift::config::FIND_CONDITIONS);
     config.set_brotli_quality(0);
     config.set_brotli_quality_for_initial_font_merging(0);
     AddSegment(config, 1, {0x43});
@@ -1082,6 +1091,69 @@ TEST_F(SegmenterConfigUtilTest,
     auto result = util.RunSegmenter(face.get(), config);
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(result->plan.non_glyph_segments_size(), 0);
+  }
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_RejectsDeprecatedConditionAnalysisModes) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  for (auto mode :
+       {ift::config::CLOSURE_ONLY, ift::config::CLOSURE_AND_DEP_GRAPH,
+        ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH}) {
+#pragma GCC diagnostic pop
+    SegmenterConfig config;
+    SetLegacyConditionAnalysisMode(config, mode);
+    AddSegment(config, 1, {0x43});
+
+    std::vector<SubsetDefinition> segments_out;
+    auto groups = util.ConfigToMergeGroups(config, {0x43}, {}, segments_out);
+    EXPECT_TRUE(absl::IsInvalidArgument(groups.status())) << groups.status();
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+}
+
+TEST_F(SegmenterConfigUtilTest,
+       RunSegmenter_RejectsInvalidUnmappedGlyphHandling) {
+  auto loader = TestFontLoader::Default().value();
+  auto face =
+      loader->LoadFace("ift/common/testdata/Roboto-Regular.ttf").value();
+  SegmenterConfigUtil util("util/testdata/config.txtpb", resolver);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+  for (auto handling : {ift::config::PATCH, ift::config::MOVE_TO_INIT_FONT}) {
+#pragma GCC diagnostic pop
+    SegmenterConfig config;
+    SetLegacyUnmappedGlyphHandling(config, handling);
+    AddSegment(config, 1, {0x43});
+
+    std::vector<SubsetDefinition> segments_out;
+    auto groups = util.ConfigToMergeGroups(config, {0x43}, {}, segments_out);
+    EXPECT_TRUE(absl::IsInvalidArgument(groups.status())) << groups.status();
+
+    auto result = util.RunSegmenter(face.get(), config);
+    EXPECT_TRUE(absl::IsInvalidArgument(result.status())) << result.status();
+  }
+
+  // Default (unset) and explicit FIND_CONDITIONS succeed.
+  {
+    SegmenterConfig config;
+    config.set_brotli_quality(0);
+    AddSegment(config, 1, {0x43});
+    auto result = util.RunSegmenter(face.get(), config);
+    ASSERT_TRUE(result.ok()) << result.status();
+
+    SetLegacyUnmappedGlyphHandling(config, ift::config::FIND_CONDITIONS);
+    result = util.RunSegmenter(face.get(), config);
+    ASSERT_TRUE(result.ok()) << result.status();
   }
 }
 

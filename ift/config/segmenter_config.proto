@@ -6,23 +6,14 @@ import "ift/config/segmentation_plan.proto";
 import "ift/config/common.proto";
 
 enum ConditionAnalysisMode {
-  // [DEPRECATED]
-  // Analyzes glyph conditions using closure analysis only.
-  // This is a legacy mode, it's much slower and generally produces
-  // worse results then the dependency graph approach.
-  CLOSURE_ONLY = 0;
+  // Deprecated: specifying this mode will result in an error.
+  CLOSURE_ONLY = 0 [deprecated = true];
 
-  // Attempts to analyze glyph conditions using a dependency
-  // graph where possible. When dep graph is expected not to be accurate
-  // it falls back to closure analysis. This is for many cases much faster
-  // then pure closure based analysis.
-  CLOSURE_AND_DEP_GRAPH = 1;
+  // Deprecated: specifying this mode will result in an error.
+  CLOSURE_AND_DEP_GRAPH = 1 [deprecated = true];
 
-  // Always runs both closure and dependency graph analysis, the
-  // results are compared and an error is raised if they differ.
-  // Useful primarily for testing the accuracy of the dependency
-  // graph approach.
-  CLOSURE_AND_VALIDATE_DEP_GRAPH = 2;
+  // Deprecated: specifying this mode will result in an error.
+  CLOSURE_AND_VALIDATE_DEP_GRAPH = 2 [deprecated = true];
 
   // [RECOMMENDED]
   // Analyze glyph conditions using dep graph only. Closure is
@@ -112,12 +103,10 @@ message SegmenterConfig {
   // are included in all subsets.
   SegmentProto initial_segment = 1;
 
-  // Specifies what to do with unmapped glyphs. Unmapped glyphs are glyphs in which the analysis
-  // is unable to determine activation conditions for.
-  //
-  // When target_mode is UNICODE_RANGE, this must be set to either FIND_CONDITIONS or PATCH
-  // (MOVE_TO_INIT_FONT is invalid).
-  UnmappedGlyphHandling unmapped_glyph_handling = 2 [default = MOVE_TO_INIT_FONT];
+  // Deprecated: only FIND_CONDITIONS is valid; specifying any other value will
+  // result in an error.
+  UnmappedGlyphHandling unmapped_glyph_handling = 2
+      [default = FIND_CONDITIONS, deprecated = true];
 
   // Deprecated: use generate_table_keyed_segments_mode instead.
   //

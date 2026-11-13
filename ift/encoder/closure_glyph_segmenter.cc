@@ -23,6 +23,7 @@
 #include "ift/common/try.h"
 #include "ift/common/woff2.h"
 #include "ift/config/auto_segmenter_config.h"
+#include "ift/config/common.pb.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -40,11 +41,9 @@
 using ift::config::FROM_FREQ_DATA;
 using ift::config::FROM_MERGE_GROUPS;
 using ift::config::kDefaultNetworkCost;
-using ift::config::MOVE_TO_INIT_FONT;
 using ift::config::SegmentationPlan;
 using ift::config::SegmentsProto;
 using ift::config::TableKeyedSegmentMode;
-using ift::config::UnmappedGlyphHandling;
 
 using absl::btree_map;
 using absl::btree_set;
@@ -128,69 +127,6 @@ static void PrintDiff(const GlyphGroupings& a, const GlyphGroupings& b) {
   }
 }
 
-// Returns true if the glyph groupings a and b are equivalent (not necessarily
-// equal).
-//
-// Complex condition finding can return multiple possible valid conditions for a
-// glyph so for these we allowe differences as long as the closure condition is
-// satisfied (that is there are no additional conditions.)
-static StatusOr<bool> GlyphGroupingsAreEquivalent(
-    const SegmentationContext& context, const GlyphGroupings& a,
-    const GlyphGroupings& b) {
-  if (a.ConditionsAndGlyphs() == b.ConditionsAndGlyphs()) {
-    return true;
-  }
-
-  for (glyph_id_t gid = 0;
-       gid < hb_face_get_glyph_count(context.original_face.get()); gid++) {
-    auto maybe_cond_a = a.GlyphToCondition(gid);
-    auto maybe_cond_b = b.GlyphToCondition(gid);
-
-    if (maybe_cond_a.has_value() != maybe_cond_b.has_value()) {
-      return false;
-    }
-
-    if (!maybe_cond_a.has_value()) {
-      continue;
-    }
-
-    ActivationCondition cond_a = *maybe_cond_a;
-    ActivationCondition cond_b = *maybe_cond_b;
-
-    if (cond_a == cond_b) {
-      continue;
-    }
-
-    if (!a.FoundConditionGlyphs().contains(gid) ||
-        !b.FoundConditionGlyphs().contains(gid)) {
-      // diffs only allowed if gid is a found conditions gid in both a and b.
-      return false;
-    }
-
-    if (cond_a.conditions().size() > 1 || cond_b.conditions().size() > 1) {
-      // diffs only allowed for purely disjunctive conditions
-      return false;
-    }
-
-    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(
-            &context.SegmentationInfo(), cond_a.TriggeringSegments(),
-            GlyphSet{gid}))) {
-      return false;
-    }
-
-    if (TRY(context.glyph_closure_cache->HasAdditionalConditions(
-            &context.SegmentationInfo(), cond_b.TriggeringSegments(),
-            GlyphSet{gid}))) {
-      return false;
-    }
-
-    // If no additional conditions are present on either side then we allow the
-    // diff.
-  }
-
-  return true;
-}
-
 /*
  * Checks that the incrementally generated glyph conditions and groupings in
  * context match what would have been produced by a non incremental process.
@@ -211,20 +147,13 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
   }
   TRYV(non_incremental_context.ReprocessAll());
 
-  bool glyph_groupings_diffs_allowed = false;
   if (non_incremental_context.glyph_groupings.ConditionsAndGlyphs() !=
       context.glyph_groupings.ConditionsAndGlyphs()) {
-    if (!TRY(GlyphGroupingsAreEquivalent(
-            context, context.glyph_groupings,
-            non_incremental_context.glyph_groupings))) {
-      VLOG(0) << "-- incremental grouping";
-      VLOG(0) << "++ non-incremental grouping";
-      PrintDiff(context.glyph_groupings,
-                non_incremental_context.glyph_groupings);
-      return absl::FailedPreconditionError(
-          "conditions_and_glyphs aren't correct.");
-    }
-    glyph_groupings_diffs_allowed = true;
+    VLOG(0) << "-- incremental grouping";
+    VLOG(0) << "++ non-incremental grouping";
+    PrintDiff(context.glyph_groupings, non_incremental_context.glyph_groupings);
+    return absl::FailedPreconditionError(
+        "conditions_and_glyphs aren't correct.");
   }
 
   if (non_incremental_context.glyph_condition_set !=
@@ -232,8 +161,7 @@ Status ValidateIncrementalGroupings(hb_face_t* face,
     return absl::FailedPreconditionError("glyph_condition_set isn't correct.");
   }
 
-  if (!glyph_groupings_diffs_allowed &&
-      non_incremental_context.glyph_groupings != context.glyph_groupings) {
+  if (non_incremental_context.glyph_groupings != context.glyph_groupings) {
     return absl::FailedPreconditionError("glyph groups aren't correct.");
   }
 
@@ -609,6 +537,15 @@ static StatusOr<GlyphSegmentation> ToFinalSegmentation(
 Status ClosureGlyphSegmenter::ValidateInput(
     const std::vector<SubsetDefinition>& subset_definitions,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) const {
+  if (condition_analysis_mode_ != ift::config::DEP_GRAPH_ONLY &&
+      condition_analysis_mode_ !=
+          ift::config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {
+    return absl::InvalidArgumentError(
+        "Closure-based condition_analysis_mode values are deprecated and "
+        "unsupported; use DEP_GRAPH_ONLY or "
+        "DEP_GRAPH_ONLY_WITH_SIMPLIFICATION.");
+  }
+
   if (disjoint_conditions_probability_threshold_ < 0.0 ||
       disjoint_conditions_probability_threshold_ > 1.0) {
     return absl::InvalidArgumentError(
@@ -616,13 +553,6 @@ Status ClosureGlyphSegmenter::ValidateInput(
   }
 
   if (target_mode_ == ift::config::UNICODE_RANGE) {
-    if (unmapped_glyph_handling_ != ift::config::FIND_CONDITIONS &&
-        unmapped_glyph_handling_ != ift::config::PATCH) {
-      return absl::InvalidArgumentError(
-          "unmapped_glyph_handling must be FIND_CONDITIONS or PATCH when "
-          "target_mode is UNICODE_RANGE.");
-    }
-
     for (const auto& def : subset_definitions) {
       if (!def.feature_tags.empty()) {
         return absl::InvalidArgumentError(
@@ -671,7 +601,7 @@ static StatusOr<bool> ShouldMergeForDisjointConditions(
     const SegmentationContext& context, const ActivationCondition& condition,
     double probability_threshold,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
-  if (condition.IsExclusive() || condition.IsFallback()) {
+  if (condition.IsExclusive()) {
     return false;
   }
   if (merge_groups.empty()) {
@@ -726,7 +656,7 @@ static StatusOr<GlyphPartition> PartitionInteractingSegments(
   GlyphPartition segment_partition(num_segments);
   for (const auto& condition : context.glyph_groupings.OrderedConditions()) {
     SegmentSet triggering = condition.TriggeringSegments();
-    if (condition.IsExclusive() || condition.IsFallback() || triggering.size() <= 1) {
+    if (condition.IsExclusive() || triggering.size() <= 1) {
       continue;
     }
 
@@ -836,9 +766,9 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
   SegmentationContext context =
       TRY(SegmentationContext::InitializeSegmentationContext(
-          face, initial_segment, std::move(segments), unmapped_glyph_handling_,
-          condition_analysis_mode_, brotli_quality_,
-          init_font_merging_brotli_quality_, resolver_, target_mode_));
+          face, initial_segment, std::move(segments), condition_analysis_mode_,
+          brotli_quality_, init_font_merging_brotli_quality_, resolver_,
+          target_mode_));
 
   if (target_mode_ == ift::config::UNICODE_RANGE) {
     std::vector<const ProbabilityCalculator*> calculators;
@@ -878,20 +808,6 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
         TRYV(merger.MoveSegmentsToInitFont(p));
       }
     }
-  }
-
-  // Once we've gotten standard segments placed into the initial font as needed,
-  // if requested any remaining fallback glyphs are also moved into the init
-  // font.
-  GlyphSet fallback_glyphs = context.glyph_groupings.UnmappedGlyphs();
-  if (unmapped_glyph_handling_ == MOVE_TO_INIT_FONT &&
-      !fallback_glyphs.empty()) {
-    VLOG(0) << "Moving " << fallback_glyphs.size()
-            << " fallback glyphs into the initial font." << std::endl;
-    SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
-    new_def.gids.union_set(fallback_glyphs);
-    TRYV(context.ReassignInitSubset(new_def));
-    init_font_changed = true;
   }
 
   if (init_font_changed) {
@@ -1070,23 +986,6 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
     });
   }
   return out;
-}
-
-Status ClosureGlyphSegmenter::FallbackCost(
-    hb_face_t* original_face, const GlyphSegmentation& segmentation,
-    uint32_t& fallback_glyphs_size, uint32_t& all_glyphs_size) const {
-  GlyphSet all_glyphs = segmentation.InitialFontGlyphClosure();
-  for (const auto& [_, gids] : segmentation.GidSegments()) {
-    all_glyphs.union_set(gids);
-  }
-
-  GlyphSet fallback_glyphs = segmentation.UnmappedGlyphs();
-
-  PatchSizeCacheImpl patch_sizer(original_face, 11);
-  all_glyphs_size = TRY(patch_sizer.GetPatchSize(all_glyphs));
-  fallback_glyphs_size = TRY(patch_sizer.GetPatchSize(fallback_glyphs));
-
-  return absl::OkStatus();
 }
 
 static std::vector<SubsetDefinition> TableKeyedSegmentsFromMergeGroups(

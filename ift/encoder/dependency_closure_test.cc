@@ -9,7 +9,6 @@
 #include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
-#include "ift/config/common.pb.h"
 #include "ift/dep_graph/node.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
@@ -19,8 +18,6 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 #include "tools/cpp/runfiles/runfiles.h"
-
-using ift::config::PATCH;
 
 using absl::btree_set;
 using absl::flat_hash_map;
@@ -54,7 +51,7 @@ class DependencyClosureTest : public ::testing::Test {
         resolver(*BazelDataFileResolver::CreateForTest()),
         closure_cache(*GlyphClosureCache::Create(face.get(), *resolver)),
         segmentation_info(*RequestedSegmentationInformation::Create(
-            segments, WithDefaultFeatures(), *closure_cache, PATCH)),
+            segments, WithDefaultFeatures(), *closure_cache)),
         dependency_closure(*DependencyClosure::Create(segmentation_info.get(),
                                                       face.get(), *resolver)) {}
 
@@ -85,67 +82,64 @@ class DependencyClosureTest : public ::testing::Test {
       /* 5 */ {{0xC1 /* Aacute */}},
   };
 
-  void Reconfigure(SubsetDefinition new_init, std::vector<Segment> new_segments,
-                   bool context_analysis_allowed = false) {
+  void Reconfigure(SubsetDefinition new_init,
+                   std::vector<Segment> new_segments) {
     segmentation_info = *RequestedSegmentationInformation::Create(
-        new_segments, new_init, *closure_cache, PATCH);
-    dependency_closure =
-        *DependencyClosure::Create(segmentation_info.get(), face.get(),
-                                   *resolver, context_analysis_allowed);
+        new_segments, new_init, *closure_cache);
+    dependency_closure = *DependencyClosure::Create(segmentation_info.get(),
+                                                    face.get(), *resolver);
   }
 
   void Reconfigure(hb_face_t* new_face, SubsetDefinition new_init,
                    std::vector<Segment> new_segments) {
     closure_cache = *GlyphClosureCache::Create(new_face, *resolver);
     segmentation_info = *RequestedSegmentationInformation::Create(
-        new_segments, new_init, *closure_cache, PATCH);
+        new_segments, new_init, *closure_cache);
     dependency_closure = *DependencyClosure::Create(segmentation_info.get(),
                                                     new_face, *resolver);
   }
 
-  Status RejectedAnalysis(segment_index_t segment) {
-    GlyphSet and_gids;
-    GlyphSet or_gids;
-    GlyphSet exclusive_gids;
-
-    if (TRY(dependency_closure->AnalyzeSegment({segment}, and_gids, or_gids,
-                                               exclusive_gids, false)) ==
-        DependencyClosure::ACCURATE) {
-      return absl::InternalError(
-          "Dependency closure analysis should have been rejected.");
+  GlyphSet ActivatedGlyphs(const SegmentSet& segments) const {
+    GlyphSet out;
+    for (const auto& [gid, condition] :
+         dependency_closure->AllGlyphConditions()) {
+      bool matches = true;
+      for (const auto& group : condition.conditions()) {
+        if (!group.intersects(segments)) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) {
+        out.insert(gid);
+      }
     }
-    return absl::OkStatus();
+    return out;
+  }
+
+  absl::StatusOr<GlyphSet> ExpectedClosure(const SegmentSet& segments) const {
+    GlyphSet gids =
+        TRY(closure_cache->SegmentClosure(segmentation_info.get(), segments));
+    gids.subtract(segmentation_info->InitFontGlyphs());
+    return gids;
   }
 
   Status CompareAnalysis(SegmentSet segments) {
-    GlyphSet and_gids;
-    GlyphSet or_gids;
-    GlyphSet exclusive_gids;
-
-    if (TRY(dependency_closure->AnalyzeSegment(segments, and_gids, or_gids,
-                                               exclusive_gids, false)) !=
-        DependencyClosure::ACCURATE) {
-      return absl::InternalError(
-          "Dependency closure analysis rejected unexpectedly.");
+    SegmentSet other;
+    for (segment_index_t i = 0; i < segmentation_info->Segments().size(); ++i) {
+      if (!segments.contains(i)) {
+        other.insert(i);
+      }
     }
-
-    GlyphSet expected_and_gids;
-    GlyphSet expected_or_gids;
-    GlyphSet expected_exclusive_gids;
-    TRYV(closure_cache->AnalyzeSegment(*segmentation_info, segments,
-                                       expected_and_gids, expected_or_gids,
-                                       expected_exclusive_gids));
 
     std::string message;
     bool success = true;
-    if (!CompareGids("AND", and_gids, expected_and_gids, message)) {
+    if (!CompareGids("SEGMENTS", ActivatedGlyphs(segments),
+                     TRY(ExpectedClosure(segments)), message)) {
       success = false;
     }
-    if (!CompareGids("OR", or_gids, expected_or_gids, message)) {
-      success = false;
-    }
-    if (!CompareGids("EXCLUSIVE", exclusive_gids, expected_exclusive_gids,
-                     message)) {
+    if (!CompareGids("OTHER", ActivatedGlyphs(other),
+                     TRY(ExpectedClosure(other)), message)) {
       success = false;
     }
 
@@ -179,98 +173,6 @@ class DependencyClosureTest : public ::testing::Test {
   std::unique_ptr<RequestedSegmentationInformation> segmentation_info;
   std::unique_ptr<DependencyClosure> dependency_closure;
 };
-
-TEST_F(DependencyClosureTest, AnalyzeSegment_InaccurateAnalysisPopulatesSets) {
-  Reconfigure(WithDefaultFeatures({'i'}),
-              {
-                  /* 0 */ {{0x300 /* gravecomb */}},
-                  /* 1 */ {{0x485}},
-              });
-
-  GlyphSet and_gids;
-  GlyphSet or_gids;
-  GlyphSet exclusive_gids;
-
-  // Segment 0 contains gravecomb (0x300), which intersects with
-  // init_font_context_glyphs_ ('i' in init font + 0x300 form a context lookup).
-  // Therefore, AnalyzeSegment will return INACCURATE.
-  auto accuracy = dependency_closure->AnalyzeSegment(
-      {0}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/false);
-  ASSERT_TRUE(accuracy.ok()) << accuracy.status();
-  EXPECT_EQ(*accuracy, DependencyClosure::INACCURATE);
-
-  // Verify that the analysis was still performed and populated the glyph sets
-  // despite being INACCURATE.
-  auto font = make_hb_font(hb_font_create(face.get()));
-  hb_codepoint_t gravecomb_gid = 0;
-  ASSERT_TRUE(hb_font_get_nominal_glyph(font.get(), 0x300, &gravecomb_gid));
-  EXPECT_TRUE(exclusive_gids.contains(gravecomb_gid));
-}
-
-TEST_F(DependencyClosureTest, AnalyzeSegment_WithSimplification) {
-  SubsetDefinition aalt;
-  aalt.feature_tags.insert(HB_TAG('a', 'a', 'l', 't'));
-  SubsetDefinition jp78;
-  jp78.feature_tags.insert(HB_TAG('j', 'p', '7', '8'));
-
-  Reconfigure(noto_sans_jp_vf.get(), {},
-              {
-                  /* 0 */ {{0x6717}},
-                  /* 1 */ {{0x7891}},
-                  /* 2 */ {{0x798f}},
-                  /* 3 */ {{0x6406}},
-                  /* 4 */ {{0xe0100}},
-                  /* 5 */ {{0xfe00}},
-                  /* 6 */ {aalt},
-                  /* 7 */ {jp78},
-              });
-
-  // g8 (glyph 8) has condition: s1 AND (s4 OR s5).
-  // Without simplification, s1 is part of a mixed condition for g8, so g8 is
-  // not classified as exclusive.
-  {
-    GlyphSet and_gids;
-    GlyphSet or_gids;
-    GlyphSet exclusive_gids;
-
-    auto r = dependency_closure->AnalyzeSegment(
-        {1}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/false);
-    ASSERT_TRUE(r.ok()) << r.status();
-    EXPECT_EQ(*r, DependencyClosure::ACCURATE);
-
-    EXPECT_FALSE(exclusive_gids.contains(8));
-  }
-
-  // With simplification, the condition for g8 simplifies to s1, so g8 is
-  // classified as exclusive.
-  {
-    GlyphSet and_gids;
-    GlyphSet or_gids;
-    GlyphSet exclusive_gids;
-
-    auto r = dependency_closure->AnalyzeSegment(
-        {1}, and_gids, or_gids, exclusive_gids, /*with_simplification=*/true);
-    ASSERT_TRUE(r.ok()) << r.status();
-    EXPECT_EQ(*r, DependencyClosure::ACCURATE);
-
-    EXPECT_TRUE(exclusive_gids.contains(8));
-  }
-}
-
-TEST_F(DependencyClosureTest, AddsToSets) {
-  GlyphSet and_gids{101};
-  GlyphSet or_gids{102};
-  GlyphSet exclusive_gids{103};
-
-  auto r = dependency_closure->AnalyzeSegment({0}, and_gids, or_gids,
-                                              exclusive_gids, false);
-  ASSERT_TRUE(r.ok()) << r.status();
-  ASSERT_EQ(*r, DependencyClosure::ACCURATE);
-
-  ASSERT_EQ(and_gids, (GlyphSet{101, 667}));
-  ASSERT_EQ(or_gids, (GlyphSet{102}));
-  ASSERT_EQ(exclusive_gids, (GlyphSet{69, 103}));
-}
 
 TEST_F(DependencyClosureTest, ExtractAllGlyphConditions) {
   Reconfigure(WithDefaultFeatures(),
@@ -682,57 +584,6 @@ TEST_F(DependencyClosureTest, AlreadyInInitFont) {
   ASSERT_TRUE(s.ok()) << s;
 }
 
-TEST_F(DependencyClosureTest, SegmentOutOfBounds) {
-  Status s = CompareAnalysis({10});
-  ASSERT_TRUE(absl::IsInvalidArgument(s)) << s;
-}
-
-TEST_F(DependencyClosureTest, Rejected_LookAheadGlyphs) {
-  Reconfigure(WithDefaultFeatures({}), {
-                                           {{'i'}},
-                                           {{0x485}},
-                                       });
-
-  Status s = CompareAnalysis({0});
-  ASSERT_TRUE(s.ok()) << s;
-
-  // glyph for 0x485 is part of a lookahead on a chain context sub
-  // so analysis should be rejected.
-  s = RejectedAnalysis(1);
-  ASSERT_TRUE(s.ok()) << s;
-}
-
-TEST_F(DependencyClosureTest, Allowed_LookAheadGlyphs) {
-  Reconfigure(WithDefaultFeatures({}),
-              {
-                  {{'i'}},
-                  {{0x485}},
-              },
-              true);
-
-  Status s = CompareAnalysis({0});
-  ASSERT_TRUE(s.ok()) << s;
-  // glyph for 0x485 is part of a lookahead on a chain context sub
-  // since context analysis has been turned on then analysis will
-  // not be rejected.
-  s = CompareAnalysis({1});
-  ASSERT_TRUE(s.ok()) << s;
-}
-
-TEST_F(DependencyClosureTest, Rejected_InitFontContext) {
-  Reconfigure(WithDefaultFeatures({'i'}),
-              {
-                  {{0x300 /* gravecomb */}},
-                  {{0x485}},
-              });
-
-  // Gravecomb doesn't pass through any contextual dependencies, but
-  // it shows up as a context glyph for the init font subset.
-  // Thus it should be rejected.
-  Status s = RejectedAnalysis(0);
-  ASSERT_TRUE(s.ok()) << s;
-}
-
 TEST_F(DependencyClosureTest, Noop_Features) {
   SubsetDefinition features;
   features.feature_tags.insert(HB_TAG('a', 'b', 'c', 'd'));
@@ -819,19 +670,6 @@ TEST_F(DependencyClosureTest, UvsAndFeatures_ConflictingConjunctiveConditions) {
   s = CompareAnalysis({6});
   ASSERT_TRUE(s.ok()) << s;
   s = CompareAnalysis({7});
-  ASSERT_TRUE(s.ok()) << s;
-}
-
-TEST_F(DependencyClosureTest, Rejected_FullySatisfiedContext) {
-  Reconfigure(WithDefaultFeatures({}),
-              {
-                  {{'i', 0x300 /* gravecomb */}},
-              });
-
-  // The segment contains everything needed to activated the i + gravecomb
-  // contextual lookup, but should still be rejected on account of passing
-  // through a contextual lookup.
-  Status s = RejectedAnalysis(0);
   ASSERT_TRUE(s.ok()) << s;
 }
 
