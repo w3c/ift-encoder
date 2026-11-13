@@ -2,6 +2,7 @@
 #define IFT_DEP_GRAPH_DEPENDENCY_GRAPH_H_
 
 #include <cstdint>
+#include <iterator>
 #include <memory>
 
 #include "absl/container/btree_set.h"
@@ -40,31 +41,60 @@ class TraversalContext;
 class DependencyGraph {
  private:
  public:
-  static constexpr uint32_t kNumberOfClosurePhases = 6;
+  // Special closure phase identifiers for non-table phases of closure.
+  // Use '#' prefix so they never collide with real OpenType table tags.
+  static constexpr hb_tag_t kPhaseInit = HB_TAG('#', 'i', 'n', 'i');
+  static constexpr hb_tag_t kPhaseVariationSelectors =
+      HB_TAG('#', 'u', 'v', 's');
+  static constexpr hb_tag_t kPhaseDecomposition = HB_TAG('#', 'd', 'e', 'c');
+  static constexpr hb_tag_t kPhaseComposition = HB_TAG('#', 'c', 'm', 'p');
+
+  static constexpr bool IsSpecialClosurePhase(hb_tag_t tag) {
+    return tag == kPhaseInit || tag == kPhaseVariationSelectors ||
+           tag == kPhaseDecomposition || tag == kPhaseComposition;
+  }
+
+  static constexpr uint32_t kNumberOfClosurePhases = 10;
 
   // Reference for the phases and ordering:
   // _populate_gids_to_retain() from
   // https://github.com/harfbuzz/harfbuzz/blob/main/src/hb-subset-plan.cc#L439
   static constexpr hb_tag_t kClosurePhaseTable[] = {
-      /* 0 */ common::FontHelper::kCmap,
-      /* 1 */ common::FontHelper::kMATH,
-      /* 2 */ common::FontHelper::kGSUB,
-      /* 3 */ common::FontHelper::kCOLR,
-      /* 4 */ common::FontHelper::kGlyf,
-      /* 5 */ common::FontHelper::kCFF,
+      /* 0 */ kPhaseInit,
+      /* 1 */ kPhaseVariationSelectors,
+      /* 2 */ kPhaseDecomposition,
+      /* 3 */ kPhaseComposition,
+      /* 4 */ common::FontHelper::kCmap,
+      /* 5 */ common::FontHelper::kMATH,
+      /* 6 */ common::FontHelper::kGSUB,
+      /* 7 */ common::FontHelper::kCOLR,
+      /* 8 */ common::FontHelper::kGlyf,
+      /* 9 */ common::FontHelper::kCFF,
   };
+  static_assert(std::size(kClosurePhaseTable) == kNumberOfClosurePhases);
 
-  static constexpr hb_tag_t kClosurePhaseNodeFilter[] = {
-      /* cmap */ 0xFFFFFFFF,
+  static constexpr uint32_t kClosurePhaseNodeFilter[] = {
+      /* Init + Bidi */ Node::NodeType::SEGMENT | Node::NodeType::INIT_FONT |
+          Node::NodeType::UNICODE | Node::NodeType::FEATURE,
+      /* Variation Selectors */ Node::NodeType::UNICODE |
+          Node::NodeType::GLYPH,
+      /* Decomposition */ Node::NodeType::UNICODE,
+      /* Composition */ Node::NodeType::UNICODE,
+      /* cmap */ Node::NodeType::UNICODE | Node::NodeType::GLYPH,
       /* MATH */ Node::NodeType::GLYPH,
       /* GSUB */ Node::NodeType::GLYPH,
       /* COLR */ Node::NodeType::GLYPH,
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
   };
+  static_assert(std::size(kClosurePhaseNodeFilter) == kNumberOfClosurePhases);
 
-  static constexpr hb_tag_t kClosurePhaseStartNodes[] = {
-      /* cmap */ Node::NodeType::SEGMENT,
+  static constexpr uint32_t kClosurePhaseStartNodes[] = {
+      /* Init + Bidi */ Node::NodeType::SEGMENT,
+      /* Variation Selectors */ Node::NodeType::UNICODE,
+      /* Decomposition */ Node::NodeType::UNICODE,
+      /* Composition */ Node::NodeType::UNICODE,
+      /* cmap */ Node::NodeType::UNICODE,
       /* MATH */ Node::NodeType::GLYPH,
       // For GSUB we also need to consider reached features as starting nodes
       // since those have outgoing GSUB edges.
@@ -73,6 +103,7 @@ class DependencyGraph {
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
   };
+  static_assert(std::size(kClosurePhaseStartNodes) == kNumberOfClosurePhases);
 
   enum TraversalMode {
     ENFORCE_CONTEXT,
@@ -101,6 +132,10 @@ class DependencyGraph {
       const ift::common::GlyphSet* glyph_filter_ptr = nullptr,
       const ift::common::CodepointSet* unicode_filter_ptr = nullptr,
       TraversalMode mode = ENFORCE_CONTEXT) const;
+
+  // Returns the set of closure phase indices (0..kNumberOfClosurePhases-1)
+  // that are active for this graph's font and unicode edges.
+  ift::common::IntSet ActiveClosurePhases() const;
 
   const absl::flat_hash_set<hb_tag_t>& FullFeatureSet() const {
     return full_feature_set_;

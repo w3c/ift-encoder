@@ -118,9 +118,9 @@ class TraversalContext {
   hb_subset_depend_t* depend = nullptr;
 
   // Only edges from these tables will be followed.
-  flat_hash_set<hb_tag_t> table_filter = {FontHelper::kCmap, FontHelper::kGlyf,
-                                          FontHelper::kGSUB, FontHelper::kCOLR,
-                                          FontHelper::kMATH, FontHelper::kCFF};
+  flat_hash_set<hb_tag_t> table_filter = {
+      std::begin(DependencyGraph::kClosurePhaseTable),
+      std::end(DependencyGraph::kClosurePhaseTable)};
 
   // Only edges that originate from and end at glyphs from this filter will be
   // followed.
@@ -226,16 +226,13 @@ class TraversalContext {
 
   // Traverse an edge with no special context and/or additional information
   // other than table tag
-  Status TraverseEdgeTo(Node source, Node dest,
-                        std::optional<hb_tag_t> table_tag = std::nullopt) {
+  Status TraverseEdgeTo(Node source, Node dest, hb_tag_t table_tag) {
     if (!ShouldFollow(dest, table_tag, std::nullopt)) {
       return absl::OkStatus();
     }
 
-    TRYV(callback.Visit(
-        *this,
-        PendingEdge::Disjunctive(
-            source, dest, table_tag.value_or(HB_TAG(' ', ' ', ' ', ' ')))));
+    TRYV(callback.Visit(*this,
+                        PendingEdge::Disjunctive(source, dest, table_tag)));
     Reached(dest);
     return absl::OkStatus();
   }
@@ -256,9 +253,11 @@ class TraversalContext {
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::Uvs(a, b, gid);
+    PendingEdge edge =
+        PendingEdge::Uvs(a, b, gid, DependencyGraph::kPhaseVariationSelectors);
     Node dest = Node::Glyph(gid);
-    return TraversePendingEdgeTo(dest, edge, FontHelper::kCmap);
+    return TraversePendingEdgeTo(dest, edge,
+                                 DependencyGraph::kPhaseVariationSelectors);
   }
 
   Status TraverseCompositionEdge(hb_codepoint_t a, hb_codepoint_t b,
@@ -271,9 +270,11 @@ class TraversalContext {
       return absl::OkStatus();
     }
 
-    PendingEdge edge = PendingEdge::UnicodeComposition(a, b, dest_unicode);
+    PendingEdge edge = PendingEdge::UnicodeComposition(
+        a, b, dest_unicode, DependencyGraph::kPhaseComposition);
     Node dest = Node::Unicode(dest_unicode);
-    return TraversePendingEdgeTo(dest, edge, FontHelper::kCmap);
+    return TraversePendingEdgeTo(dest, edge,
+                                 DependencyGraph::kPhaseComposition);
   }
 
   Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
@@ -420,13 +421,13 @@ class TraversalContext {
 
   void Pending(PendingEdge edge) { pending_edges_.push_back(edge); }
 
-  bool ShouldFollow(Node node, std::optional<hb_tag_t> table_tag,
+  bool ShouldFollow(Node node, hb_tag_t table_tag,
                     std::optional<hb_tag_t> layout_feature) const {
     if (!node.Matches(node_type_filter)) {
       return false;
     }
 
-    if (table_tag.has_value() && !table_filter.contains(*table_tag)) {
+    if (!table_filter.contains(table_tag)) {
       return false;
     }
 
@@ -458,7 +459,9 @@ class TraversalContext {
 
 Status DependencyGraph::ClosureState::Visit(
     const TraversalContext<ClosureState>& context, const PendingEdge& edge) {
-  if (edge.table_tag == HB_TAG(' ', ' ', ' ', ' ')) {
+  if (edge.table_tag == kPhaseVariationSelectors) {
+    traversal.Visit(edge.dest, FontHelper::kCmap);
+  } else if (IsSpecialClosurePhase(edge.table_tag)) {
     traversal.Visit(edge.dest);
   } else if (edge.table_tag == FontHelper::kGSUB &&
              edge.required_feature.has_value()) {
@@ -771,6 +774,32 @@ StatusOr<Traversal> DependencyGraph::TraverseGraph(
   return std::move(context->callback.traversal);
 }
 
+IntSet DependencyGraph::ActiveClosurePhases() const {
+  IntSet out;
+  flat_hash_set<hb_tag_t> table_tags = FontHelper::GetTags(original_face_.get());
+  for (uint32_t phase = 0; phase < kNumberOfClosurePhases; phase++) {
+    hb_tag_t table = kClosurePhaseTable[phase];
+    if (table == kPhaseInit) {
+      out.insert(phase);
+    } else if (table == kPhaseVariationSelectors) {
+      if (!unicode_edges_.variation_selector.empty()) {
+        out.insert(phase);
+      }
+    } else if (table == kPhaseDecomposition) {
+      if (!unicode_edges_.decomposition.empty()) {
+        out.insert(phase);
+      }
+    } else if (table == kPhaseComposition) {
+      if (!unicode_edges_.composition.empty()) {
+        out.insert(phase);
+      }
+    } else if (table_tags.contains(table)) {
+      out.insert(phase);
+    }
+  }
+  return out;
+}
+
 StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     const SegmentSet& start, TraversalMode mode) const {
   btree_set<Node> start_nodes;
@@ -802,18 +831,20 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     non_init_font_glyphs = segmentation_info_->NonInitFontGlyphs();
   }
 
-  flat_hash_set<hb_tag_t> table_tags =
-      FontHelper::GetTags(original_face_.get());
   Traversal traversal_full;
 
   // Subsetting closure happens in phases which we need to mimic here:
-  // 1. Unicode closure (bidi)
-  // 2. Unicode to glyph (cmap + UVS)
-  // 3. GSUB glyph closure
-  // 4. MATH closure.
-  // 5. COLR closure
-  // 6. glyf closure
-  // 7. CFF closure
+  // 0. Init + Bidi mirroring (segment/init font -> unicode/feature,
+  //    bidi unicode -> unicode)
+  // 1. Variation selectors (unicode -> glyph)
+  // 2. Unicode canonical decomposition (unicode -> unicode)
+  // 3. Unicode canonical composition (unicode -> unicode)
+  // 4. cmap nominal unicode -> glyph
+  // 5. MATH closure
+  // 6. GSUB glyph closure
+  // 7. COLR closure
+  // 8. glyf closure
+  // 9. CFF closure
   //
   // Reference for the phases and ordering:
   // _populate_gids_to_retain() from
@@ -852,7 +883,7 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
     traversal_full.Visit(node);
   }
 
-  /* ### Phase 1 + 2: Unicode and Unicode to glyph */
+  /* ### Phase 0: Init + Bidi ### */
   {
     TraversalContext<ClosureState> context = base_context;
     context.SetReached(filtered_nodes);
@@ -863,12 +894,15 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   }
 
   /* ### Remaining Phases ### */
-  for (unsigned phase = 1; phase < DependencyGraph::kNumberOfClosurePhases;
-       phase++) {
-    if (table_tags.contains(DependencyGraph::kClosurePhaseTable[phase])) {
-      TRYV(ClosureSubTraversal(&base_context, phase, traversal_full));
+  IntSet active_phases = ActiveClosurePhases();
+  for (uint32_t phase : active_phases) {
+    if (phase == 0) {
+      continue;
     }
+    TRYV(ClosureSubTraversal(&base_context, phase, traversal_full));
   }
+
+  traversal_full.PruneReachedPendingEdges();
 
   return traversal_full;
 }
@@ -877,6 +911,13 @@ Status DependencyGraph::ClosureSubTraversal(
     const TraversalContext<ClosureState>* base_context, uint32_t phase_index,
     Traversal& traversal_full) const {
   std::vector<Node> start_nodes;
+
+  if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
+      Node::NodeType::UNICODE) {
+    for (hb_codepoint_t u : traversal_full.ReachedCodepoints()) {
+      start_nodes.push_back(Node::Unicode(u));
+    }
+  }
 
   if (DependencyGraph::kClosurePhaseStartNodes[phase_index] &
       Node::NodeType::GLYPH) {
@@ -905,52 +946,74 @@ Status DependencyGraph::ClosureSubTraversal(
 template <typename CallbackT>
 Status DependencyGraph::HandleUnicodeOutgoingEdges(
     hb_codepoint_t unicode, TraversalContext<CallbackT>* context) const {
-  {
+  if (context->table_filter.contains(FontHelper::kCmap)) {
     auto it = unicode_edges_.unicode_to_gid.find(unicode);
     if (it != unicode_edges_.unicode_to_gid.end()) {
       TRYV(context->TraverseEdgeTo(Node::Unicode(unicode),
-                                   Node::Glyph(it->second)));
-    }
-  }
-
-  auto vs_edges = unicode_edges_.variation_selector.find(unicode);
-  if (vs_edges != unicode_edges_.variation_selector.end()) {
-    for (VariationSelectorEdge edge : vs_edges->second) {
-      TRYV(context->TraverseUvsEdge(unicode, edge.unicode, edge.gid));
-    }
-  }
-
-  auto comp_edges = unicode_edges_.composition.find(unicode);
-  if (comp_edges != unicode_edges_.composition.end()) {
-    for (const auto& edge : comp_edges->second) {
-      TRYV(context->TraverseCompositionEdge(unicode, edge.other_source,
-                                            edge.dest));
-    }
-  }
-
-  auto decomp_edges = unicode_edges_.decomposition.find(unicode);
-  if (decomp_edges != unicode_edges_.decomposition.end()) {
-    for (hb_codepoint_t dest : decomp_edges->second) {
-      TRYV(context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(dest),
+                                   Node::Glyph(it->second),
                                    FontHelper::kCmap));
     }
   }
 
-  // The subsetter adds unicode bidi mirrors for any unicode codepoints,
-  // so add a dep graph edge for those if they exist:
-  auto unicode_funcs = hb_unicode_funcs_get_default();
-  hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
-  if (mirror != unicode) {
-    TRYV(
-        context->TraverseEdgeTo(Node::Unicode(unicode), Node::Unicode(mirror)));
+  if (context->table_filter.contains(kPhaseVariationSelectors)) {
+    auto vs_edges = unicode_edges_.variation_selector.find(unicode);
+    if (vs_edges != unicode_edges_.variation_selector.end()) {
+      for (VariationSelectorEdge edge : vs_edges->second) {
+        TRYV(context->TraverseUvsEdge(unicode, edge.unicode, edge.gid));
+      }
+    }
+  }
+
+  if (context->table_filter.contains(kPhaseComposition)) {
+    auto comp_edges = unicode_edges_.composition.find(unicode);
+    if (comp_edges != unicode_edges_.composition.end()) {
+      for (const auto& edge : comp_edges->second) {
+        TRYV(context->TraverseCompositionEdge(unicode, edge.other_source,
+                                              edge.dest));
+      }
+    }
+  }
+
+  if (context->table_filter.contains(kPhaseDecomposition)) {
+    auto decomp_edges = unicode_edges_.decomposition.find(unicode);
+    if (decomp_edges != unicode_edges_.decomposition.end()) {
+      for (hb_codepoint_t dest : decomp_edges->second) {
+        TRYV(context->TraverseEdgeTo(Node::Unicode(unicode),
+                                     Node::Unicode(dest),
+                                     kPhaseDecomposition));
+      }
+    }
+  }
+
+  if (context->table_filter.contains(kPhaseInit)) {
+    // The subsetter adds unicode bidi mirrors for any unicode codepoints,
+    // so add a dep graph edge for those if they exist:
+    auto unicode_funcs = hb_unicode_funcs_get_default();
+    hb_codepoint_t mirror = hb_unicode_mirroring(unicode_funcs, unicode);
+    if (mirror != unicode) {
+      TRYV(context->TraverseEdgeTo(Node::Unicode(unicode),
+                                   Node::Unicode(mirror), kPhaseInit));
+    }
   }
 
   return absl::OkStatus();
 }
 
+static bool HasGlyphTableFilter(const flat_hash_set<hb_tag_t>& table_filter) {
+  return table_filter.contains(FontHelper::kMATH) ||
+         table_filter.contains(FontHelper::kGSUB) ||
+         table_filter.contains(FontHelper::kCOLR) ||
+         table_filter.contains(FontHelper::kGlyf) ||
+         table_filter.contains(FontHelper::kCFF);
+}
+
 template <typename CallbackT>
 Status DependencyGraph::HandleGlyphOutgoingEdges(
     glyph_id_t gid, TraversalContext<CallbackT>* context) const {
+  if (!HasGlyphTableFilter(context->table_filter)) {
+    return absl::OkStatus();
+  }
+
   hb_codepoint_t entry_count = hb_subset_depend_lookup_glyph(
       dependency_graph_.get(), gid, 0, nullptr, nullptr);
   for (unsigned i = 0; i < entry_count; i++) {
@@ -979,6 +1042,10 @@ Status DependencyGraph::HandleGlyphOutgoingEdges(
     }
 
     TRYV(context->TraverseEdgeTo(Node::Glyph(gid), dest, entry.table_tag));
+  }
+
+  if (!context->table_filter.contains(FontHelper::kGSUB)) {
+    return absl::OkStatus();
   }
 
   auto it = context_glyph_implied_edges_.find(gid);
@@ -1061,12 +1128,16 @@ template <typename CallbackT>
 Status DependencyGraph::HandleSubsetDefinitionOutgoingEdges(
     Node source, const SubsetDefinition& subset_def,
     TraversalContext<CallbackT>* context) const {
+  if (!context->table_filter.contains(kPhaseInit)) {
+    return absl::OkStatus();
+  }
+
   for (hb_codepoint_t u : subset_def.codepoints) {
-    TRYV(context->TraverseEdgeTo(source, Node::Unicode(u)));
+    TRYV(context->TraverseEdgeTo(source, Node::Unicode(u), kPhaseInit));
   }
 
   for (hb_tag_t f : subset_def.feature_tags) {
-    TRYV(context->TraverseEdgeTo(source, Node::Feature(f)));
+    TRYV(context->TraverseEdgeTo(source, Node::Feature(f), kPhaseInit));
   }
   return absl::OkStatus();
 }

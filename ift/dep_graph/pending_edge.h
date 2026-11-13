@@ -19,17 +19,17 @@ struct PendingEdge {
   }
 
   static PendingEdge Uvs(hb_codepoint_t a, hb_codepoint_t b,
-                         encoder::glyph_id_t gid) {
-    PendingEdge edge(Node::Unicode(a), Node::Glyph(gid),
-                     HB_TAG('c', 'm', 'a', 'p'));
+                         encoder::glyph_id_t gid, hb_tag_t table_tag) {
+    PendingEdge edge(Node::Unicode(a), Node::Glyph(gid), table_tag);
     edge.required_codepoints = std::make_pair(a, b);
     return edge;
   }
 
   static PendingEdge UnicodeComposition(hb_codepoint_t a, hb_codepoint_t b,
-                                        hb_codepoint_t dest_unicode) {
+                                        hb_codepoint_t dest_unicode,
+                                        hb_tag_t table_tag) {
     PendingEdge edge(Node::Unicode(a), Node::Unicode(dest_unicode),
-                     HB_TAG('c', 'm', 'a', 'p'));
+                     table_tag);
     edge.required_codepoints = std::make_pair(a, b);
     return edge;
   }

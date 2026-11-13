@@ -528,6 +528,7 @@ Status DependencyClosure::PropagateConditions(
               ActivationCondition::Or(it_existing->second, *complete_condition);
           if (combined != it_existing->second) {
             it_existing->second = std::move(combined);
+            modified.insert(n);
             changed = true;
           }
         }
@@ -611,19 +612,6 @@ StatusOr<flat_hash_set<Node>> DependencyClosure::InitFontNodes(
   return init_font_nodes;
 }
 
-static IntSet ActiveClosurePhases(hb_face_t* face) {
-  IntSet out;
-  flat_hash_set<hb_tag_t> table_tags = FontHelper::GetTags(face);
-  for (uint32_t phase = 0; phase < DependencyGraph::kNumberOfClosurePhases;
-       phase++) {
-    hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
-    if (table_tags.contains(table)) {
-      out.insert(phase);
-    }
-  }
-  return out;
-}
-
 StatusOr<const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>&>
 DependencyClosure::IncomingEdgesForClosurePhase(
     uint32_t phase, bool full_recalc, const flat_hash_set<Node>* node_filter) {
@@ -641,13 +629,13 @@ DependencyClosure::IncomingEdgesForClosurePhase(
   } else if (source_type_filter & Node::SEGMENT) {
     // Init font changes change the outgoing links on SEGMENT and/or INIT_FONT
     // nodes so if a phase includes these then a partial update is needed. Only
-    // needs to consider link types in the cmap phase (segment/init font ->
-    // unicode/feature, unicode -> unicode, unicode -> glyph)
+    // needs to consider link types in the Init phase (segment/init font ->
+    // unicode/feature, and bidi unicode -> unicode).
     update_type = Partial;
     source_type_filter =
         (Node::SEGMENT | Node::UNICODE | Node::INIT_FONT) & source_type_filter;
     dest_type_filter =
-        (Node::UNICODE | Node::FEATURE | Node::GLYPH) & dest_type_filter;
+        (Node::UNICODE | Node::FEATURE) & dest_type_filter;
   }
 
   if (update_type == None) {
@@ -660,6 +648,11 @@ DependencyClosure::IncomingEdgesForClosurePhase(
   if (update_type == Full) {
     prev_incoming_edges = std::move(new_incoming_edges);
   } else {
+    if (node_filter != nullptr) {
+      for (const auto& n : *node_filter) {
+        prev_incoming_edges->erase(n);
+      }
+    }
     for (const auto& [n, edges] : new_incoming_edges) {
       prev_incoming_edges->insert_or_assign(n, std::move(edges));
     }
@@ -678,7 +671,7 @@ Status DependencyClosure::UpdateAllNodeConditions(
       *last_seen_full_closure_size_ != segmentation_info_->FullClosure().size();
   last_seen_full_closure_size_ = segmentation_info_->FullClosure().size();
 
-  IntSet phases = ActiveClosurePhases(original_face_.get());
+  IntSet phases = graph_.ActiveClosurePhases();
 
   flat_hash_set<Node> new_init_nodes;
   init_font_nodes_ = TRY(InitFontNodes(init_font_nodes_, new_init_nodes));

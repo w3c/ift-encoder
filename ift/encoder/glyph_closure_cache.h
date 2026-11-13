@@ -67,8 +67,8 @@ class GlyphClosureCache {
   hb_face_t* Face() { return preprocessed_face_.get(); }
 
  private:
-  common::CodepointSet UnicodeClosure(
-      const common::CodepointSet& unicodes) const;
+  common::CodepointSet UnicodeClosure(const common::CodepointSet& unicodes,
+                                      common::GlyphSet& uvs_glyphs) const;
 
   ift::common::hb_face_unique_ptr original_face_;
   ift::common::hb_face_unique_ptr preprocessed_face_;

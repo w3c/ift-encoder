@@ -479,6 +479,36 @@ TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_BidiCycle) {
   EXPECT_EQ(conditions.at(13).ToString(), "if ((s0 OR s1)) then p0");
 }
 
+TEST_F(DependencyClosureTest, ExtractAllGlyphConditions_UnicodePhasesOrdering) {
+  Reconfigure(face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{0xC1 /* Aacute */}},
+                  /* 1 */ {{'A'}},
+                  /* 2 */ {{0x301 /* acutecomb */}},
+              });
+
+  glyph_id_t gid_A = *FontHelper::GetNominalGlyph(face.get(), 'A');
+  glyph_id_t gid_Aacute = *FontHelper::GetNominalGlyph(face.get(), 0xC1);
+
+  auto conditions = dependency_closure->AllGlyphConditions();
+  EXPECT_EQ(conditions.at(gid_A).ToString(), "if ((s0 OR s1)) then p0");
+  EXPECT_EQ(conditions.at(gid_Aacute).ToString(),
+            "if ((s0 OR s1) AND (s0 OR s2)) then p0");
+
+  // 0xF901 decomposes to 0x66F4, and (0x66F4, 0xE0101) maps via UVS to glyph
+  // 16687. Because Variation Selectors precede Decomposition, s0 (0xF901) does
+  // not trigger glyph 16687.
+  Reconfigure(noto_sans_jp.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{0xF901}},
+                  /* 1 */ {{0xE0101}},
+                  /* 2 */ {{0x66F4}},
+              });
+
+  conditions = dependency_closure->AllGlyphConditions();
+  EXPECT_EQ(conditions.at(16687).ToString(), "if (s1 AND s2) then p0");
+}
+
 TEST_F(DependencyClosureTest, Exclusive) {
   Status s = CompareAnalysis({0});
   ASSERT_TRUE(s.ok()) << s;
@@ -1261,6 +1291,34 @@ TEST_F(DependencyClosureTest, InitFontChanged_Caching) {
   ASSERT_FALSE(conditions3.contains(
       444 /* fi */));  // now that f, i are in init font so should fi
   ASSERT_EQ(conditions3.at(69 /* a */).ToString(), "if (s0) then p0");
+}
+
+TEST_F(DependencyClosureTest, InitFontChanged_PreservesBidiEdges) {
+  Reconfigure(WithDefaultFeatures(),
+              {
+                  /* 0 */ {{'a'}},
+                  /* 1 */ {{'('}},
+                  /* 2 */ {{')'}},
+              });
+
+  auto conditions1 = dependency_closure->AllGlyphConditions();
+  ASSERT_EQ(conditions1.at(69 /* a */).ToString(), "if (s0) then p0");
+  ASSERT_EQ(conditions1.at(12 /* ( */).ToString(), "if ((s1 OR s2)) then p0");
+  ASSERT_EQ(conditions1.at(13 /* ) */).ToString(), "if ((s1 OR s2)) then p0");
+
+  // Change init font to include 'a' (partial update on Init phase must
+  // preserve bidi edges between '(' and ')').
+  Status s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                                   WithDefaultFeatures({'a'}));
+  ASSERT_TRUE(s.ok()) << s;
+
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto conditions2 = dependency_closure->AllGlyphConditions();
+  ASSERT_FALSE(conditions2.contains(69 /* a */));
+  EXPECT_EQ(conditions2.at(12 /* ( */).ToString(), "if ((s1 OR s2)) then p0");
+  EXPECT_EQ(conditions2.at(13 /* ) */).ToString(), "if ((s1 OR s2)) then p0");
 }
 
 }  // namespace ift::encoder
