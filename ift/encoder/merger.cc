@@ -190,7 +190,7 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryNextPatchMerge() {
            last_exclusive);
        it != Context().glyph_groupings.OrderedConditions().end(); ++it) {
     const auto& condition = *it;
-    if (condition.IsFallback() || condition.IsExclusive()) {
+    if (condition.IsExclusive()) {
       continue;
     }
     const GlyphSet& glyphs =
@@ -758,10 +758,7 @@ Status Merger::CollectCompositeCandidateMerges(
            last_exclusive);
        it != context_->glyph_groupings.OrderedConditions().end(); it++) {
     const auto& next_condition = *it;
-    if (next_condition.IsFallback() || next_condition.IsExclusive()) {
-      // Merging the fallback will cause all segments to be merged into one,
-      // which is undesirable so don't consider the fallback. Also skip
-      // any non composite conditions.
+    if (next_condition.IsExclusive()) {
       continue;
     }
 
@@ -823,7 +820,7 @@ GlyphSet Merger::ComputeCandidatePatchMergeGlyphs(
        it != context.glyph_groupings.OrderedConditions().end(); it++) {
     const auto& condition = *it;
 
-    if (condition.IsFallback() || condition.IsExclusive()) {
+    if (condition.IsExclusive()) {
       continue;
     }
 
@@ -1047,10 +1044,9 @@ StatusOr<std::optional<InvalidationSet>> Merger::TryMergingACompositeCondition(
   for (const ActivationCondition& next_condition :
        context_->glyph_groupings.TriggeringSegmentToConditions(
            base_segment_index)) {
-    if (next_condition.IsFallback() || next_condition.IsUnitary()) {
-      // Merging the fallback will cause all segments to be merged into one,
-      // which is undesirable so don't consider the fallback. Unitary conditions
-      // only reference a single segment so there is nothing to merge.
+    if (next_condition.IsUnitary()) {
+      // Unitary conditions only reference a single segment so there is nothing
+      // to merge.
       continue;
     }
 

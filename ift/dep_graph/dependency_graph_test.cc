@@ -19,8 +19,6 @@
 #include "ift/encoder/types.h"
 #include "ift/freq/probability_bound.h"
 
-using ift::config::PATCH;
-
 using absl::btree_set;
 using absl::flat_hash_map;
 using absl::flat_hash_set;
@@ -65,7 +63,7 @@ class DependencyGraphTest : public ::testing::Test {
             loader->LoadFace("ift/common/testdata/NotoSansKR[wght].subset.ttf")
                 .value()),
         segmentation_info(*RequestedSegmentationInformation::Create(
-            segments, WithDefaultFeatures({}), *closure_cache, PATCH)),
+            segments, WithDefaultFeatures({}), *closure_cache)),
         graph(*DependencyGraph::Create(segmentation_info.get(), face.get(),
                                        *resolver)) {}
 
@@ -78,7 +76,7 @@ class DependencyGraphTest : public ::testing::Test {
   void Reconfigure(SubsetDefinition new_init,
                    std::vector<Segment> new_segments) {
     segmentation_info = *RequestedSegmentationInformation::Create(
-        new_segments, new_init, *closure_cache, PATCH);
+        new_segments, new_init, *closure_cache);
     graph = *DependencyGraph::Create(segmentation_info.get(), face.get(),
                                      *resolver);
   }
@@ -87,7 +85,7 @@ class DependencyGraphTest : public ::testing::Test {
                    std::vector<Segment> new_segments) {
     closure_cache = std::move(*GlyphClosureCache::Create(new_face, *resolver));
     segmentation_info = *RequestedSegmentationInformation::Create(
-        new_segments, new_init, *closure_cache, PATCH);
+        new_segments, new_init, *closure_cache);
     graph =
         *DependencyGraph::Create(segmentation_info.get(), new_face, *resolver);
   }

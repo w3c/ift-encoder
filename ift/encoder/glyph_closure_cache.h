@@ -46,18 +46,6 @@ class GlyphClosureCache {
       const ift::common::SegmentSet& segments,
       const ift::common::GlyphSet& glyphs);
 
-  // Analyzes the provided segments with AnalyzeSegment() and returns just the
-  // or_gids
-  absl::StatusOr<ift::common::GlyphSet> CodepointsToOrGids(
-      const RequestedSegmentationInformation& segmentation_info,
-      const ift::common::SegmentSet& segment_ids);
-
-  absl::Status AnalyzeSegment(
-      const RequestedSegmentationInformation& segmentation_info,
-      const ift::common::SegmentSet& segment_ids,
-      ift::common::GlyphSet& and_gids, ift::common::GlyphSet& or_gids,
-      ift::common::GlyphSet& exclusive_gids);
-
   absl::StatusOr<SubsetDefinition> ExpandClosure(
       const SubsetDefinition& definition);
 

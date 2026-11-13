@@ -8,8 +8,6 @@
 #include "ift/common/int_set.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/condition_to_glyphs_index.h"
-#include "ift/encoder/dependency_closure.h"
-#include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/glyph_condition_set.h"
 #include "ift/encoder/glyph_partition.h"
 #include "ift/encoder/glyph_segmentation.h"
@@ -33,8 +31,7 @@ class GlyphGroupings {
            simplify_combined_ == other.simplify_combined_ &&
            conditions_and_glyphs_ == other.conditions_and_glyphs_ &&
            conditions_and_glyphs_pre_combination_ ==
-               other.conditions_and_glyphs_pre_combination_ &&
-           unmapped_glyphs_ == other.unmapped_glyphs_;
+               other.conditions_and_glyphs_pre_combination_;
   }
 
   bool operator!=(const GlyphGroupings& other) { return !(*this == other); }
@@ -88,16 +85,6 @@ class GlyphGroupings {
     return empty;
   }
 
-  // Returns the set of glyphs that are considered unmapped,
-  // which will be placed in the fallback (always loaded) patch.
-  ift::common::GlyphSet UnmappedGlyphs() const { return unmapped_glyphs_; }
-
-  // Returns the set of glyphs that were unmapped but had conditions
-  // found for them.
-  const ift::common::GlyphSet& FoundConditionGlyphs() const {
-    return found_condition_glyphs_;
-  }
-
   // Returns a list of conditions which include segment.
   const absl::flat_hash_set<ActivationCondition>& TriggeringSegmentToConditions(
       segment_index_t segment) const {
@@ -124,11 +111,6 @@ class GlyphGroupings {
     }
     return empty;
   }
-
-  // Add a set of glyphs to an existing exclusive group (and_group of one
-  // segment).
-  absl::Status AddGlyphsToExclusiveGroup(segment_index_t exclusive_segment,
-                                         const ift::common::GlyphSet& glyphs);
 
   // Specify that any patches containing glyphs from either a or b should be
   // merged into one patch. Only affects exclusive and disjunctive patches.
@@ -157,11 +139,8 @@ class GlyphGroupings {
   absl::Status GroupGlyphs(
       const RequestedSegmentationInformation& segmentation_info,
       const GlyphConditionSet& glyph_condition_set,
-      GlyphClosureCache& closure_cache,
-      std::optional<DependencyClosure*> dependency_closure,
       ift::common::GlyphSet glyphs,
-      const ift::common::SegmentSet& modified_segments,
-      bool additional_conditions_check = true);
+      const ift::common::SegmentSet& modified_segments);
 
   // Converts this grouping into a finalized GlyphSegmentation.
   absl::StatusOr<GlyphSegmentation> ToGlyphSegmentation(
@@ -189,20 +168,8 @@ class GlyphGroupings {
   }
 
  private:
-  void CollectSegments(glyph_id_t gid, ift::common::SegmentSet& segments);
-
   ift::common::GlyphSet ModifiedGlyphs(
       const ift::common::SegmentSet& segments) const;
-
-  // Perform a more detailed analysis to try and find more granular conditions
-  // for fallback glyphs. Will replace the fallback glyphs with any found
-  // conditions.
-  absl::Status FindFallbackGlyphConditions(
-      const RequestedSegmentationInformation& segmentation_info,
-      const GlyphConditionSet& glyph_condition_set,
-      const ift::common::SegmentSet& inscope_segments,
-      GlyphClosureCache& closure_cache,
-      std::optional<DependencyClosure*> dependency_closure);
 
   // Removes all stored grouping information related to glyph with the specified
   // condition.
@@ -310,14 +277,6 @@ class GlyphGroupings {
   // An alternate representation of and/or_glyph_groups_, derived from them.
   ConditionToGlyphsIndex<true> conditions_and_glyphs_;
   ConditionToGlyphsIndex<false> conditions_and_glyphs_pre_combination_;
-
-  // These glyphs aren't mapped by any conditions and as a result should be
-  // included in the fallback patch.
-  ift::common::GlyphSet unmapped_glyphs_;
-
-  // These glyphs were previously considered unmapped, but have had conditions
-  // found for them.
-  ift::common::GlyphSet found_condition_glyphs_;
 };
 
 }  // namespace ift::encoder

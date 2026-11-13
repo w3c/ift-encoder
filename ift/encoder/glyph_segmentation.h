@@ -30,16 +30,13 @@ namespace ift::encoder {
 class GlyphSegmentation {
  public:
   GlyphSegmentation(SubsetDefinition init_font_segment,
-                    ift::common::GlyphSet init_font_glyph_closure,
-                    ift::common::GlyphSet unmapped_glyphs)
+                    ift::common::GlyphSet init_font_glyph_closure)
       : init_font_segment_(init_font_segment),
-        init_font_glyph_closure_(init_font_glyph_closure),
-        unmapped_glyphs_(unmapped_glyphs) {}
+        init_font_glyph_closure_(init_font_glyph_closure) {}
 
   bool operator==(const GlyphSegmentation& other) const {
     return init_font_segment_ == other.init_font_segment_ &&
            init_font_glyph_closure_ == other.init_font_glyph_closure_ &&
-           unmapped_glyphs_ == other.unmapped_glyphs_ &&
            conditions_ == other.conditions_ && segments_ == other.segments_ &&
            patches_ == other.patches_;
   }
@@ -76,17 +73,6 @@ class GlyphSegmentation {
   }
 
   /*
-   * These glyphs where unable to be grouped into patches due to complex
-   * interactions.
-   *
-   * TODO(garretrieger): instead of treating them separately generate a catch
-   * all patch that contains the unmapped glyphs.
-   */
-  const ift::common::GlyphSet& UnmappedGlyphs() const {
-    return unmapped_glyphs_;
-  };
-
-  /*
    * These glyphs should be included in the initial font.
    */
   const ift::common::GlyphSet& InitialFontGlyphClosure() const {
@@ -107,7 +93,6 @@ class GlyphSegmentation {
 
   static absl::Status ConditionsToSegmentation(
       const absl::btree_map<ActivationCondition, common::GlyphSet>& conditions,
-      const common::SegmentSet& fallback_group,
       GlyphSegmentation& segmentation);
 
   void CopySegments(const std::vector<SubsetDefinition>& segments);
@@ -115,7 +100,6 @@ class GlyphSegmentation {
  private:
   SubsetDefinition init_font_segment_;
   ift::common::GlyphSet init_font_glyph_closure_;
-  ift::common::GlyphSet unmapped_glyphs_;
   absl::btree_set<ActivationCondition> conditions_;
   std::vector<SubsetDefinition> segments_;
   absl::btree_map<patch_id_t, ift::common::GlyphSet> patches_;

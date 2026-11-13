@@ -21,9 +21,8 @@ using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::hb_face_unique_ptr;
 using ift::common::Woff2;
-using ift::config::CLOSURE_AND_VALIDATE_DEP_GRAPH;
 using ift::config::ConfigCompiler;
-using ift::config::FIND_CONDITIONS;
+using ift::config::DEP_GRAPH_ONLY;
 using ift::config::SegmentationPlan;
 
 namespace ift::encoder {
@@ -64,8 +63,7 @@ TEST_F(UnicodeRangeCompilerTest, ExtractFontFamily) {
 }
 
 TEST_F(UnicodeRangeCompilerTest, CompileFromSegmentationPlan) {
-  ClosureGlyphSegmenter segmenter(1, 1, FIND_CONDITIONS,
-                                  CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter segmenter(1, 1, DEP_GRAPH_ONLY, resolver,
                                   ift::config::UNICODE_RANGE);
   auto segmentation = segmenter.CodepointToGlyphSegments(
       roboto.get(), {'a'}, {{'f'}, {'i'}, {'b', 'c', 'd'}});

@@ -6,7 +6,6 @@
 #include "absl/container/flat_hash_map.h"
 #include "ift/common/int_set.h"
 #include "ift/common/try.h"
-#include "ift/config/common.pb.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/segment.h"
@@ -22,13 +21,11 @@ class RequestedSegmentationInformation {
  public:
   static absl::StatusOr<std::unique_ptr<RequestedSegmentationInformation>>
   Create(std::vector<Segment> segments, SubsetDefinition init_font_segment,
-         GlyphClosureCache& closure_cache,
-         ift::config::UnmappedGlyphHandling unmapped_glyph_handling);
+         GlyphClosureCache& closure_cache);
 
  private:
-  RequestedSegmentationInformation(
-      std::vector<Segment> segments, SubsetDefinition init_font_segment,
-      ift::config::UnmappedGlyphHandling unmapped_glyph_handling);
+  RequestedSegmentationInformation(std::vector<Segment> segments,
+                                   SubsetDefinition init_font_segment);
 
  public:
   // Merge all of the segments in to_merge into base, assigned it
@@ -81,10 +78,6 @@ class RequestedSegmentationInformation {
       }
     }
     return absl::OkStatus();
-  }
-
-  ift::config::UnmappedGlyphHandling GetUnmappedGlyphHandling() const {
-    return unmapped_glyph_handling_;
   }
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
@@ -173,7 +166,6 @@ class RequestedSegmentationInformation {
   ift::common::CodepointSet full_codepoint_closure_;
 
   bool segments_disjoint_;
-  enum ift::config::UnmappedGlyphHandling unmapped_glyph_handling_;
   absl::flat_hash_map<hb_codepoint_t, ift::common::SegmentSet>
       codepoint_to_segments_;
 };

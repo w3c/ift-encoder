@@ -17,7 +17,6 @@ using ift::common::FontData;
 using ift::common::hb_face_unique_ptr;
 using ift::common::make_hb_face;
 using ift::common::SegmentSet;
-using ift::config::PATCH;
 using ift::freq::ProbabilityBound;
 
 namespace ift::encoder {
@@ -48,8 +47,7 @@ TEST_F(RequestedSegmentationInformationTest, SegmentsForCodepoints) {
       {{'d'}},
   };
 
-  auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 
@@ -71,8 +69,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnMerge) {
       {{'c'}},
   };
 
-  auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 
@@ -97,8 +94,7 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
       {{'b', 'c'}},
   };
 
-  auto info_or =
-      RequestedSegmentationInformation::Create(segments, {}, *cache, PATCH);
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
   ASSERT_TRUE(info_or.ok());
   auto& info = *info_or;
 

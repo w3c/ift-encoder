@@ -7,8 +7,6 @@
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
-using ift::config::UnmappedGlyphHandling;
-
 using absl::StatusOr;
 using ift::common::CodepointSet;
 using ift::common::SegmentSet;
@@ -37,13 +35,11 @@ static bool CheckSegmentsAreDisjoint(const SubsetDefinition& init_segment,
 }
 
 StatusOr<std::unique_ptr<RequestedSegmentationInformation>>
-RequestedSegmentationInformation::Create(
-    std::vector<Segment> segments, SubsetDefinition init_font_segment,
-    GlyphClosureCache& closure_cache,
-    UnmappedGlyphHandling unmapped_glyph_handling) {
+RequestedSegmentationInformation::Create(std::vector<Segment> segments,
+                                         SubsetDefinition init_font_segment,
+                                         GlyphClosureCache& closure_cache) {
   std::unique_ptr<RequestedSegmentationInformation> info(
-      new RequestedSegmentationInformation(segments, init_font_segment,
-                                           unmapped_glyph_handling));
+      new RequestedSegmentationInformation(segments, init_font_segment));
   TRYV(info->ReassignInitSubset(closure_cache, init_font_segment));
   info->segments_disjoint_ =
       CheckSegmentsAreDisjoint(init_font_segment, info->segments_);
@@ -51,11 +47,8 @@ RequestedSegmentationInformation::Create(
 }
 
 RequestedSegmentationInformation::RequestedSegmentationInformation(
-    std::vector<Segment> segments, SubsetDefinition init_font_segment,
-    UnmappedGlyphHandling unmapped_glyph_handling)
-    : segments_(std::move(segments)),
-      init_font_segment_(),
-      unmapped_glyph_handling_(unmapped_glyph_handling) {
+    std::vector<Segment> segments, SubsetDefinition init_font_segment)
+    : segments_(std::move(segments)), init_font_segment_() {
   // ReassignInitSubset expects full_definition_ is already populated.
   full_definition_ = init_font_segment;
   for (size_t i = 0; i < segments_.size(); ++i) {
