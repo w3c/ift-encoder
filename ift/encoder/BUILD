@@ -163,6 +163,7 @@ cc_library(
         "//ift/feature_registry",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
+        "@harfbuzz",
     ],
 )
 
@@ -452,6 +453,7 @@ cc_test(
         "//ift/freq:common",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@harfbuzz",
     ],
 )
 
