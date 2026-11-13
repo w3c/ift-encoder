@@ -698,7 +698,6 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     const ActivationCondition* first_condition = nullptr;
     const GlyphSet* first_glyphs = nullptr;
     uint32_t source_count = 0;
-    bool glyph_set_unchanged = false;
     bool skip_new_condition = false;
     GlyphSet glyphs;
     uint32_t largest_patch_size = 0;
@@ -735,7 +734,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
               << "]";
     }
 
-    if (!best_case && !info.glyph_set_unchanged) {
+    if (!best_case && info.source_count > 1) {
       info.glyphs.union_set(*glyphs);
     }
 
@@ -772,11 +771,13 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       continue;
     }
 
-    if (info.source_count == 1) {
+    info.source_count++;
+    if (info.source_count == 2) {
+      // The previously collected first condition needs to be removed now
+      // that it's merging with this condition.
       TRYV(add_removed_condition(info.first_condition, info.first_glyphs,
                                  info));
     }
-    info.source_count++;
     TRYV(add_removed_condition(condition, glyphs, info));
   }
 
@@ -786,7 +787,6 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
     }
     bool was_active_before_merge =
         (!unicode_range_mode || info.first_condition->IsExclusive());
-    info.glyph_set_unchanged = true;
     if (best_case ||
         (was_active_before_merge &&
          info.first_condition->IsUnchangedByMerge(merged_segments))) {
@@ -814,7 +814,7 @@ StatusOr<double> CandidateMerge::ComputeCostDelta(
       extra = std::max((uint32_t)(extra * best_case_reduction_fraction),
                        Merger::BEST_CASE_MERGE_SIZE_DELTA);
       size = info.largest_patch_size + extra;
-    } else if (info.glyph_set_unchanged) {
+    } else if (info.source_count == 1) {
       size = info.largest_patch_size;
     } else {
       size = TRY(patch_size_cache->GetPatchSize(info.glyphs));
