@@ -51,6 +51,13 @@ class DependencyClosure {
     return glyph_condition_cache_;
   }
 
+  // Glyphs in NonInitFontGlyphs() whose dependency-graph condition evaluated
+  // to IsAlwaysTrue() (e.g. due to hb_subset_depend over-approximations on
+  // nested or multi-position contextual lookups).
+  const common::GlyphSet& AlwaysTrueGlyphs() const {
+    return always_true_glyphs_;
+  }
+
   common::GlyphSet SegmentsToAffectedGlyphs(
       const common::SegmentSet& segments) const;
 
@@ -159,6 +166,7 @@ class DependencyClosure {
   ift::common::SegmentSet inert_segments_;
 
   absl::flat_hash_map<glyph_id_t, ActivationCondition> glyph_condition_cache_;
+  ift::common::GlyphSet always_true_glyphs_;
   absl::flat_hash_map<dep_graph::Node, ActivationCondition>
       node_condition_cache_;
   absl::flat_hash_map<segment_index_t, absl::flat_hash_set<dep_graph::Node>>

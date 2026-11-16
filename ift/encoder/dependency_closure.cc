@@ -72,6 +72,7 @@ Status DependencyClosure::InitNodeConditionsCache(
 
   node_conditions_with_segment_.clear();
   glyph_condition_cache_.clear();
+  always_true_glyphs_.clear();
   for (const auto& [n, condition] : node_condition_cache_) {
     for (segment_index_t s : condition.TriggeringSegments()) {
       node_conditions_with_segment_[s].insert(n);
@@ -79,6 +80,9 @@ Status DependencyClosure::InitNodeConditionsCache(
     if (n.IsGlyph() &&
         segmentation_info_->NonInitFontGlyphs().contains(n.Id())) {
       glyph_condition_cache_.insert({n.Id(), condition});
+      if (condition.IsAlwaysTrue()) {
+        always_true_glyphs_.insert(n.Id());
+      }
     }
   }
 
