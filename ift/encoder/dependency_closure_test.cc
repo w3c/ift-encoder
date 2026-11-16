@@ -1159,6 +1159,21 @@ TEST_F(DependencyClosureTest, InitFontChanged_PreservesBidiEdges) {
   EXPECT_EQ(conditions2.at(13 /* ) */).ToString(), "if ((s1 OR s2)) then p0");
 }
 
+TEST_F(DependencyClosureTest, AlwaysTrueGlyphs_NestedContextOverApproximation) {
+  hb_face_unique_ptr nested_face =
+      from_file("ift/common/testdata/Roboto-Regular.nested-context.ttf");
+  Reconfigure(nested_face.get(), WithDefaultFeatures({'a', 'b'}), {{{'c'}}});
+
+  // Lookup 0 ('c', 'a' -> Lookup 1) -> Lookup 1 ('a', 'b' -> Lookup 2) ->
+  // Lookup 2 ('a' -> gid 4) drops the outer 'c' requirement in
+  // hb_subset_depend (FROM_NESTED_CONTEXT), so dep-graph closure evaluates gid
+  // 4 as always true while hb-subset keeps gid 4 out of InitFontGlyphs().
+  EXPECT_TRUE(segmentation_info->FullClosure().contains(4));
+  EXPECT_FALSE(segmentation_info->InitFontGlyphs().contains(4));
+  EXPECT_EQ(dependency_closure->AlwaysTrueGlyphs(), (GlyphSet{4}));
+  EXPECT_TRUE(dependency_closure->AllGlyphConditions().at(4).IsAlwaysTrue());
+}
+
 }  // namespace ift::encoder
 
 // TODO(garretrieger): missing tests

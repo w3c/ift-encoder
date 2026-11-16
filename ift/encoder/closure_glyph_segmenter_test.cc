@@ -3280,4 +3280,83 @@ TEST_F(ClosureGlyphSegmenterTest,
   }
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       AlwaysTrueGlyphs_InitialSegmentMovedToInitFont) {
+  hb_face_unique_ptr test_face =
+      from_file("ift/common/testdata/Roboto-Regular.nested-context.ttf");
+  glyph_id_t gid_c = FontHelper::GetNominalGlyph(test_face.get(), 'c').value();
+  glyph_id_t gid_target = 4;
+
+  for (const auto& [analysis_mode, target_mode] :
+       std::vector<std::pair<ift::config::ConditionAnalysisMode,
+                             ift::config::TargetMode>>{
+           {DEP_GRAPH_ONLY, ift::config::IFT},
+           {DEP_GRAPH_ONLY_WITH_SIMPLIFICATION, ift::config::IFT},
+           {DEP_GRAPH_ONLY, ift::config::UNICODE_RANGE},
+       }) {
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver, target_mode);
+    auto segmentation = seg.CodepointToGlyphSegments(
+        test_face.get(), {'a', 'b'}, {{'c'}}, MergeStrategy::None());
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    // gid_target's condition is overestimated by dep graph to always true (due
+    // to nested context lookups), so it should be in the initial
+    // font despite not being specified in the initial segment.
+    EXPECT_TRUE(segmentation->InitialFontSegment().gids.contains(gid_target));
+    EXPECT_TRUE(segmentation->InitialFontGlyphClosure().contains(gid_target));
+
+    bool found_c = false;
+    for (const auto& [_, gids] : segmentation->GidSegments()) {
+      EXPECT_FALSE(gids.contains(gid_target));
+      if (gids.contains(gid_c)) {
+        found_c = true;
+      }
+    }
+    EXPECT_TRUE(found_c);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       AlwaysTrueGlyphs_InitFontMoveDoesNotDropGlyph) {
+  hb_face_unique_ptr test_face =
+      from_file("ift/common/testdata/Roboto-Regular.nested-context.ttf");
+  glyph_id_t gid_c = FontHelper::GetNominalGlyph(test_face.get(), 'c').value();
+  glyph_id_t gid_target = 4;
+
+  UnicodeFrequencies frequencies{
+      {{'a', 'a'}, 1000},
+      {{'b', 'b'}, 1000},
+      {{'c', 'c'}, 1},
+  };
+  auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+  profile.init_font_merge_threshold = 0;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
+
+  for (auto analysis_mode :
+       {DEP_GRAPH_ONLY, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver);
+    auto segmentation = seg.CodepointToGlyphSegments(
+        test_face.get(), {}, {{'a'}, {'b'}, {'c'}}, strategy);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    // gid_target's condition is overestimated by dep graph to always true (due
+    // to nested context lookups), so it should be in the initial
+    // font despite not being specified in the initial segment.
+    EXPECT_TRUE(segmentation->InitialFontSegment().codepoints.contains('a'));
+    EXPECT_TRUE(segmentation->InitialFontSegment().codepoints.contains('b'));
+    EXPECT_FALSE(segmentation->InitialFontSegment().codepoints.contains('c'));
+    EXPECT_TRUE(segmentation->InitialFontSegment().gids.contains(gid_target));
+    EXPECT_TRUE(segmentation->InitialFontGlyphClosure().contains(gid_target));
+
+    bool found_c = false;
+    for (const auto& [_, gids] : segmentation->GidSegments()) {
+      EXPECT_FALSE(gids.contains(gid_target));
+      if (gids.contains(gid_c)) {
+        found_c = true;
+      }
+    }
+    EXPECT_TRUE(found_c);
+  }
+}
+
 }  // namespace ift::encoder
