@@ -1,6 +1,7 @@
 #include "ift/encoder/closure_glyph_segmenter.h"
 
 #include <optional>
+#include <utility>
 
 #include "gtest/gtest.h"
 #include "ift/common/bazel_data_file_resolver.h"
@@ -2751,13 +2752,15 @@ TEST_F(ClosureGlyphSegmenterTest,
     ASSERT_TRUE(segmentation.ok()) << segmentation.status();
 
     std::vector<SubsetDefinition> expected_segments = {
-        {0x20}, {0x62a, 0x62b, 0x62c, 0x62d}, {}, {}, {}};
+        {0x20, 0x62a, 0x62b, 0x62c, 0x62d}, {}, {}, {}, {}};
     EXPECT_EQ(segmentation->Segments(), expected_segments);
+    EXPECT_EQ(segmentation->Conditions().size(), 1);
 
     for (const auto& cond : segmentation->Conditions()) {
       EXPECT_TRUE(cond.IsExclusive()) << cond.ToString();
     }
-    EXPECT_EQ(segmentation->Conditions().size(), 2);
+
+    EXPECT_EQ(segmentation->Conditions().size(), 1);
   }
 }
 
@@ -2817,9 +2820,9 @@ TEST_F(ClosureGlyphSegmenterTest,
   // CLOSURE_ONLY is omitted because black-box closure cannot distinguish a
   // simplified condition such as (s1 OR (s1 AND s2)) -> s1 from s1 alone.
   for (auto analysis_mode :
-       {CLOSURE_AND_VALIDATE_DEP_GRAPH, DEP_GRAPH_ONLY,
+       {DEP_GRAPH_ONLY,
         DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
-    ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS, analysis_mode, resolver,
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver,
                               ift::config::UNICODE_RANGE);
 
     // Case 1 (Or absorption):
@@ -2889,8 +2892,8 @@ TEST_F(
   strategy.SetOptimizationCutoffFraction(1.0);
   strategy.SetUsePatchMerges(false);
 
-  ClosureGlyphSegmenter seg(8, 8, FIND_CONDITIONS,
-                            CLOSURE_AND_VALIDATE_DEP_GRAPH, resolver,
+  ClosureGlyphSegmenter seg(8, 8,
+                            DEP_GRAPH_ONLY, resolver,
                             ift::config::UNICODE_RANGE,
                             /*disjoint_conditions_probability_threshold=*/0.2);
 
@@ -2949,7 +2952,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 }
 
 TEST_F(ClosureGlyphSegmenterTest,
-       SegmentationContext_InteractingConditionsAndGlyphs) {
+       SegmentationContext_InteractingSegmentsAndGlyphs) {
   // 1. CLOSURE_ONLY fallback (no DependencyClosure): returns non-exclusive
   // conditions from glyph_groupings.
   {
@@ -2958,22 +2961,22 @@ TEST_F(ClosureGlyphSegmenterTest,
         Segment({'c', 'd'}), Segment({'d', 'e'}),
     };
     auto context = SegmentationContext::InitializeSegmentationContext(
-        roboto.get(), {'a'}, segments, FIND_CONDITIONS, CLOSURE_ONLY, 8, 8,
+        roboto.get(), {'a'}, segments, DEP_GRAPH_ONLY, 8, 8,
         resolver, ift::config::UNICODE_RANGE);
     ASSERT_TRUE(context.ok()) << context.status();
 
-    btree_map<ActivationCondition, ift::common::GlyphSet> expected = {
-        {ActivationCondition::and_segments({1, 2}, 0),
-         ift::common::GlyphSet{444, 446}},
-        {ActivationCondition::or_segments({3, 4}, 0),
-         ift::common::GlyphSet{72}},
-    };
-    // TODO XXXXX
-    // EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
+    btree_map<std::pair<ActivationCondition, SegmentSet>, ift::common::GlyphSet>
+        expected = {
+            {{ActivationCondition::and_segments({1, 2}, 0), SegmentSet{1, 2}},
+             ift::common::GlyphSet{444, 446}},
+            {{ActivationCondition::or_segments({3, 4}, 0), SegmentSet{3, 4}},
+             ift::common::GlyphSet{72}},
+        };
+    EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
   }
 
   // 2. Dep-graph mode with condition simplification: exposes masked
-  // interacting segments by reconstructing the conjunctive condition.
+  // interacting segments alongside the simplified condition.
   {
     std::vector<Segment> segments = {
         Segment({'b'}),
@@ -2981,17 +2984,42 @@ TEST_F(ClosureGlyphSegmenterTest,
         Segment({'i'}),
     };
     auto context = SegmentationContext::InitializeSegmentationContext(
-        roboto.get(), {'a'}, segments, FIND_CONDITIONS,
-        CLOSURE_AND_VALIDATE_DEP_GRAPH, 8, 8, resolver,
+        roboto.get(), {'a'}, segments,
+        DEP_GRAPH_ONLY, 8, 8, resolver,
         ift::config::UNICODE_RANGE);
     ASSERT_TRUE(context.ok()) << context.status();
 
-    btree_map<ActivationCondition, ift::common::GlyphSet> expected = {
-        {ActivationCondition::and_segments({1, 2}, 0),
-         ift::common::GlyphSet{444, 446}},
+    btree_map<std::pair<ActivationCondition, SegmentSet>, ift::common::GlyphSet>
+        expected = {
+            {{ActivationCondition::exclusive_segment(1, 0), SegmentSet{1, 2}},
+             ift::common::GlyphSet{444, 446}},
+        };
+    EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
+  }
+
+  // 3. Distinct interacting segment sets sharing the same simplified
+  // ActivationCondition remain separate entries rather than being unioned.
+  {
+    std::vector<Segment> segments = {
+        Segment({'b'}),
+        Segment({'f', 0xFB01, 0xFB02, 0xFB03, 0xFB04}),
+        Segment({'i'}),
+        Segment({'l'}),
     };
-    // TODO XXXX
-    // EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
+    auto context = SegmentationContext::InitializeSegmentationContext(
+        roboto.get(), {'a'}, segments,
+        DEP_GRAPH_ONLY, 8, 8, resolver,
+        ift::config::UNICODE_RANGE);
+    ASSERT_TRUE(context.ok()) << context.status();
+
+    btree_map<std::pair<ActivationCondition, SegmentSet>, ift::common::GlyphSet>
+        expected = {
+            {{ActivationCondition::exclusive_segment(1, 0), SegmentSet{1, 2}},
+             ift::common::GlyphSet{444, 446}},
+            {{ActivationCondition::exclusive_segment(1, 0), SegmentSet{1, 3}},
+             ift::common::GlyphSet{445, 447}},
+        };
+    EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
   }
 }
 

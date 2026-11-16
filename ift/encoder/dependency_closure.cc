@@ -246,7 +246,6 @@ StatusOr<SegmentSet> DependencyClosure::SegmentsThatInteractWith(
     if (it == node_condition_cache_.end()) {
       continue;
     }
-    // TODO XXXXX use interacting_segments?
     out.union_set(it->second.condition.TriggeringSegments());
   }
   return out;
