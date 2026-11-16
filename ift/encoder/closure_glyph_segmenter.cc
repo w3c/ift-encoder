@@ -584,35 +584,31 @@ Status ClosureGlyphSegmenter::ValidateInput(
 }
 
 static void LogMergeForDisjointConditions(
-    const ActivationCondition& condition,
     const SegmentSet& to_merge,
     std::optional<double> condition_probability = std::nullopt) {
   if (condition_probability.has_value()) {
-    VLOG(0) << "  Merging segments "
-            << to_merge.size() << " segments "
+    VLOG(0) << "  Merging segments " << to_merge.size() << " segments "
             << "(probability = " << *condition_probability << ")";
   } else {
-    VLOG(0) << "  Merging segments "
-            << condition.TriggeringSegments().size() << " segments";
+    VLOG(0) << "  Merging segments " << to_merge.size() << " segments";
   }
 }
 
 static StatusOr<bool> ShouldMergeForDisjointConditions(
     const SegmentationContext& context, const ActivationCondition& condition,
-    const SegmentSet& to_merge,
-    double probability_threshold,
+    const SegmentSet& to_merge, double probability_threshold,
     const btree_map<SegmentSet, MergeStrategy>& merge_groups) {
-  if (condition.IsExclusive()) {
+  if (to_merge.size() <= 1) {
     return false;
   }
   if (merge_groups.empty()) {
-    LogMergeForDisjointConditions(condition, to_merge);
+    LogMergeForDisjointConditions(to_merge);
     return true;
   }
 
   const MergeStrategy* matching_strategy = nullptr;
   for (const auto& [merge_group_segments, strategy] : merge_groups) {
-    if (condition.TriggeringSegments().is_subset_of(merge_group_segments)) {
+    if (to_merge.is_subset_of(merge_group_segments)) {
       matching_strategy = &strategy;
       break;
     }
@@ -623,20 +619,19 @@ static StatusOr<bool> ShouldMergeForDisjointConditions(
 
   if (!matching_strategy->UseCosts() ||
       matching_strategy->ProbabilityProfiles().empty()) {
-    LogMergeForDisjointConditions(condition, to_merge);
+    LogMergeForDisjointConditions(to_merge);
     return true;
   }
 
   double total_prob = 0.0;
   for (const auto& profile : matching_strategy->ProbabilityProfiles()) {
-    total_prob +=
-        TRY(condition.Probability(context.SegmentationInfo().Segments(),
-                                  *TRY(profile.Calculator())));
+    total_prob += TRY(condition.Probability(
+        context.SegmentationInfo().Segments(), *TRY(profile.Calculator())));
   }
   double avg_prob =
       total_prob / (double)matching_strategy->ProbabilityProfiles().size();
   if (probability_threshold <= 0.0 || avg_prob > probability_threshold) {
-    LogMergeForDisjointConditions(condition, to_merge, avg_prob);
+    LogMergeForDisjointConditions(to_merge, avg_prob);
     return true;
   }
   return false;
@@ -655,11 +650,10 @@ static StatusOr<GlyphPartition> PartitionInteractingSegments(
   size_t skipped_conditions = 0;
   GlyphSet skipped_glyphs;
   GlyphPartition segment_partition(num_segments);
-for (const auto& [condition, segments_glyphs] :
+  for (const auto& [cond_and_segments, glyphs] :
        context.InteractingSegmentsAndGlyphs()) {
-
-    const SegmentSet& segments = segments_glyphs.first;
-    const GlyphSet& glyphs = segments_glyphs.second;
+    const ActivationCondition& condition = cond_and_segments.first;
+    const SegmentSet& segments = cond_and_segments.second;
     if (segments.size() <= 1) {
       continue;
     }

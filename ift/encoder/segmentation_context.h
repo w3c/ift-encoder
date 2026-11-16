@@ -171,12 +171,13 @@ class SegmentationContext {
     return initial_glyph_probabilities_;
   }
 
-  // Returns the multi-segment interaction conditions and their associated
-  // glyphs. When dependency_closure_ is present, includes segments that
-  // interact with a glyph even if dropped from its ActivationCondition by
-  // simplification; otherwise falls back to non-exclusive conditions in
-  // glyph_groupings.
-  absl::btree_map<ActivationCondition, std::pair<common::SegmentSet, common::GlyphSet>>
+  // Returns the multi-segment interaction conditions, interacting segment sets,
+  // and their associated glyphs. When dependency_closure_ is present, includes
+  // segments that interact with a glyph even if dropped from its
+  // ActivationCondition by simplification; otherwise falls back to
+  // non-exclusive conditions in glyph_groupings.
+  absl::btree_map<std::pair<ActivationCondition, common::SegmentSet>,
+                  common::GlyphSet>
   InteractingSegmentsAndGlyphs() const;
 
   void LogClosureStatistics() const {

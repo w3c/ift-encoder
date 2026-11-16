@@ -62,36 +62,19 @@ Status SegmentationContext::CacheInitialGlyphProbabilities(
   return absl::OkStatus();
 }
 
-btree_map<ActivationCondition, std::pair<SegmentSet, GlyphSet>>
+btree_map<std::pair<ActivationCondition, SegmentSet>, GlyphSet>
 SegmentationContext::InteractingSegmentsAndGlyphs() const {
-  btree_map<ActivationCondition, std::pair<SegmentSet, GlyphSet>> result;
-  if (!dependency_closure_.has_value()) {
-    for (const auto& [condition, glyphs] :
-         glyph_groupings.ConditionsAndGlyphs()) {
-      if (!condition.IsExclusive() && !condition.IsFallback() &&
-          condition.TriggeringSegments().size() > 1) {
-        result[condition].first.union_set(condition.TriggeringSegments());
-        result[condition].second.union_set(glyphs);
-      }
-    }
-    return result;
-  }
+  btree_map<std::pair<ActivationCondition, SegmentSet>, GlyphSet> result;
 
   const auto& interacting_map =
-      (*dependency_closure_)->AllGlyphInteractingSegments();
+      dependency_closure_->AllGlyphInteractingSegments();
   for (const auto& [condition, glyphs] :
        glyph_groupings.ConditionsAndGlyphs()) {
-    if (condition.IsFallback()) {
-      continue;
-    }
-
     for (glyph_id_t gid : glyphs) {
       auto it = interacting_map.find(gid);
-      if (it == interacting_map.end()) {
-        continue;
+      if (it != interacting_map.end() && it->second.size() > 1) {
+        result[{condition, it->second}].insert(gid);
       }
-      result[condition].first.union_set(it->second);
-      result[condition].second.insert(gid);
     }
   }
   return result;
