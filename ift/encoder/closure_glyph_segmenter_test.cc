@@ -3239,4 +3239,45 @@ TEST_F(ClosureGlyphSegmenterTest, AllPairsMerging_Determinism) {
   }
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       ContextualNestedLigature_InitFontMoveDoesNotDropGlyph) {
+  hb_face_unique_ptr test_face =
+      from_file("ift/common/testdata/Roboto-Regular.contextual-ligature.ttf");
+  glyph_id_t gid_onehalf =
+      FontHelper::GetNominalGlyph(test_face.get(), 0xBD).value();
+
+  UnicodeFrequencies frequencies{
+      {{'/', '/'}, 1000},
+      {{'2', '2'}, 1000},
+      {{'1', '1'}, 1},
+      {{0xBD, 0xBD}, 1},
+  };
+  auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+  profile.init_font_merge_threshold = 0;
+  MergeStrategy strategy = MergeStrategy::CostBased(std::move(profile));
+
+  for (auto analysis_mode :
+       {DEP_GRAPH_ONLY, DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
+    ClosureGlyphSegmenter seg(8, 8, analysis_mode, resolver);
+    auto segmentation = seg.CodepointToGlyphSegments(
+        test_face.get(), {}, {{'/'}, {'2'}, {'1'}, {0xBD}}, strategy);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    EXPECT_TRUE(segmentation->InitialFontSegment().codepoints.contains('/'));
+    EXPECT_TRUE(segmentation->InitialFontSegment().codepoints.contains('2'));
+    EXPECT_FALSE(segmentation->InitialFontSegment().codepoints.contains('1'));
+    EXPECT_FALSE(segmentation->InitialFontSegment().codepoints.contains(0xBD));
+    EXPECT_FALSE(segmentation->InitialFontGlyphClosure().contains(gid_onehalf));
+
+    bool found_onehalf = false;
+    for (const auto& [_, gids] : segmentation->GidSegments()) {
+      if (gids.contains(gid_onehalf)) {
+        found_onehalf = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(found_onehalf);
+  }
+}
+
 }  // namespace ift::encoder

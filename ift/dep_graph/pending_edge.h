@@ -34,31 +34,20 @@ struct PendingEdge {
     return edge;
   }
 
-  static PendingEdge Gsub(encoder::glyph_id_t source_gid, hb_tag_t feature,
-                          encoder::glyph_id_t dest_gid) {
+  static PendingEdge Gsub(
+      encoder::glyph_id_t source_gid, hb_tag_t feature,
+      encoder::glyph_id_t dest_gid,
+      hb_codepoint_t liga_set_index = HB_CODEPOINT_INVALID,
+      hb_codepoint_t context_set_index = HB_CODEPOINT_INVALID) {
     PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
                      HB_TAG('G', 'S', 'U', 'B'));
     edge.required_feature = feature;
-    return edge;
-  }
-
-  static PendingEdge Ligature(encoder::glyph_id_t source_gid, hb_tag_t feature,
-                              encoder::glyph_id_t dest_gid,
-                              hb_codepoint_t liga_set_index) {
-    PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
-                     HB_TAG('G', 'S', 'U', 'B'));
-    edge.required_feature = feature;
-    edge.required_liga_set_index = liga_set_index;
-    return edge;
-  }
-
-  static PendingEdge Context(encoder::glyph_id_t source_gid, hb_tag_t feature,
-                             encoder::glyph_id_t dest_gid,
-                             hb_codepoint_t context_set_index) {
-    PendingEdge edge(Node::Glyph(source_gid), Node::Glyph(dest_gid),
-                     HB_TAG('G', 'S', 'U', 'B'));
-    edge.required_feature = feature;
-    edge.required_context_set_index = context_set_index;
+    if (liga_set_index != HB_CODEPOINT_INVALID) {
+      edge.required_liga_set_index = liga_set_index;
+    }
+    if (context_set_index != HB_CODEPOINT_INVALID) {
+      edge.required_context_set_index = context_set_index;
+    }
     return edge;
   }
 

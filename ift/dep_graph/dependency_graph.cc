@@ -278,38 +278,24 @@ class TraversalContext {
   }
 
   Status TraverseGsubEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
-                            hb_tag_t feature) {
-    PendingEdge edge = PendingEdge::Gsub(source_gid, feature, dest_gid);
-    Node dest = Node::Glyph(dest_gid);
-    return TraversePendingEdgeTo(dest, edge, FontHelper::kGSUB);
-  }
-
-  Status TraverseContextualEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
-                                  hb_tag_t feature,
-                                  hb_codepoint_t context_set) {
-    if (!TRY(ContextSetSatisfied(context_set, *full_closure))) {
+                            hb_tag_t feature, hb_codepoint_t liga_set_index,
+                            hb_codepoint_t context_set) {
+    if (context_set != HB_CODEPOINT_INVALID &&
+        !TRY(ContextSetSatisfied(context_set, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge =
-        PendingEdge::Context(source_gid, feature, dest_gid, context_set);
-    Node dest = Node::Glyph(dest_gid);
-    return TraversePendingEdgeTo(dest, edge, FontHelper::kGSUB);
-  }
-
-  Status TraverseLigatureEdgeTo(glyph_id_t source_gid, glyph_id_t dest_gid,
-                                hb_tag_t feature,
-                                hb_codepoint_t liga_set_index) {
     // TODO(garretrieger): can we use glyph filter here instead for more
     // aggressive filtering?
-    if (!TRY(LigaSetSatisfied(liga_set_index, *full_closure))) {
+    if (liga_set_index != HB_CODEPOINT_INVALID &&
+        !TRY(LigaSetSatisfied(liga_set_index, *full_closure))) {
       // Not possible for this edge to be activated so it can be ignored.
       return absl::OkStatus();
     }
 
-    PendingEdge edge =
-        PendingEdge::Ligature(source_gid, feature, dest_gid, liga_set_index);
+    PendingEdge edge = PendingEdge::Gsub(source_gid, feature, dest_gid,
+                                         liga_set_index, context_set);
     Node dest = Node::Glyph(dest_gid);
     return TraversePendingEdgeTo(dest, edge, FontHelper::kGSUB);
   }
@@ -1072,15 +1058,8 @@ Status DependencyGraph::HandleGsubGlyphOutgoingEdges(
     glyph_id_t source_gid, glyph_id_t dest_gid, hb_tag_t layout_tag,
     hb_codepoint_t ligature_set, hb_codepoint_t context_set,
     TraversalContext<CallbackT>* context) const {
-  if (context_set != HB_CODEPOINT_INVALID) {
-    return context->TraverseContextualEdgeTo(source_gid, dest_gid, layout_tag,
-                                             context_set);
-  } else if (ligature_set != HB_CODEPOINT_INVALID) {
-    return context->TraverseLigatureEdgeTo(source_gid, dest_gid, layout_tag,
-                                           ligature_set);
-  } else {
-    return context->TraverseGsubEdgeTo(source_gid, dest_gid, layout_tag);
-  }
+  return context->TraverseGsubEdgeTo(source_gid, dest_gid, layout_tag,
+                                     ligature_set, context_set);
 }
 
 template <typename CallbackT>

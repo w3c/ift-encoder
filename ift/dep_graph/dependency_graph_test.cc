@@ -1238,6 +1238,53 @@ TEST_F(DependencyGraphTest, ClosureTraversal_UvsPhaseAndPendingPruning) {
       DependencyGraph::kPhaseVariationSelectors));
 }
 
+TEST_F(DependencyGraphTest, ContextualNestedLigatureRetainsBothRequirements) {
+  hb_face_unique_ptr test_face =
+      loader
+          ->LoadFace(
+              "ift/common/testdata/Roboto-Regular.contextual-ligature.ttf")
+          .value();
+  glyph_id_t gid_slash =
+      FontHelper::GetNominalGlyph(test_face.get(), '/').value();
+  glyph_id_t gid_1 = FontHelper::GetNominalGlyph(test_face.get(), '1').value();
+  glyph_id_t gid_2 = FontHelper::GetNominalGlyph(test_face.get(), '2').value();
+  glyph_id_t gid_onehalf =
+      FontHelper::GetNominalGlyph(test_face.get(), 0xBD).value();
+
+  // With '/' and '2' in the init font and '1' in a segment, onehalf must NOT
+  // be reached from the init font alone.
+  Reconfigure(test_face.get(), WithDefaultFeatures({'/', '2'}),
+              {{{'1'}}, {{0xBD}}});
+  auto r = graph.ClosureTraversal({Node::InitFont()},
+                                  &segmentation_info->FullClosure(),
+                                  &segmentation_info->FullCodepointClosure());
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_slash));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_2));
+  EXPECT_FALSE(r->ReachedGlyphs().contains(gid_onehalf));
+
+  // Every GSUB incoming edge to onehalf (including those from '/' and '2') must
+  // retain the ligature requirement on '1'.
+  auto edges =
+      graph.CollectIncomingEdges({FontHelper::kGSUB}, 0xFFFFFFFF, 0xFFFFFFFF);
+  ASSERT_TRUE(edges.ok()) << edges.status();
+  auto it = edges->find(Node::Glyph(gid_onehalf));
+  ASSERT_NE(it, edges->end());
+  ASSERT_FALSE(it->second.empty());
+  for (const EdgeConditionsCnf& edge : it->second) {
+    EXPECT_THAT(edge, Contains(std::vector<Node>{Node::Glyph(gid_1)}));
+  }
+
+  // Once '1' is also in the init font, onehalf becomes reachable.
+  Reconfigure(test_face.get(), WithDefaultFeatures({'1', '/', '2'}),
+              {{{0xBD}}});
+  r = graph.ClosureTraversal({Node::InitFont()},
+                             &segmentation_info->FullClosure(),
+                             &segmentation_info->FullCodepointClosure());
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(gid_onehalf));
+}
+
 // TODO(garretrieger):
 // - basic math, CFF, and COLR tests.
 
