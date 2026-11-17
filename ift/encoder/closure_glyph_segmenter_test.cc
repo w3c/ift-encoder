@@ -2817,8 +2817,6 @@ if (s2) then p2
 
 TEST_F(ClosureGlyphSegmenterTest,
        UnicodeRange_MakeActivationConditionsDisjoint_SimplifiedConditions) {
-  // CLOSURE_ONLY is omitted because black-box closure cannot distinguish a
-  // simplified condition such as (s1 OR (s1 AND s2)) -> s1 from s1 alone.
   for (auto analysis_mode :
        {DEP_GRAPH_ONLY,
         DEP_GRAPH_ONLY_WITH_SIMPLIFICATION}) {
@@ -2953,8 +2951,7 @@ TEST_F(ClosureGlyphSegmenterTest,
 
 TEST_F(ClosureGlyphSegmenterTest,
        SegmentationContext_InteractingSegmentsAndGlyphs) {
-  // 1. CLOSURE_ONLY fallback (no DependencyClosure): returns non-exclusive
-  // conditions from glyph_groupings.
+  // 1. Basic case with no masked interactions
   {
     std::vector<Segment> segments = {
         Segment({'b'}),      Segment({'f'}), Segment({'i'}),
@@ -2975,8 +2972,7 @@ TEST_F(ClosureGlyphSegmenterTest,
     EXPECT_EQ(context->InteractingSegmentsAndGlyphs(), expected);
   }
 
-  // 2. Dep-graph mode with condition simplification: exposes masked
-  // interacting segments alongside the simplified condition.
+  // 2. case with masked interactions.
   {
     std::vector<Segment> segments = {
         Segment({'b'}),
