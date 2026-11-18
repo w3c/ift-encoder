@@ -168,6 +168,11 @@ class FontHelper {
   static absl::StatusOr<uint32_t> TotalGlyphData(hb_face_t* face,
                                                  const GlyphSet& gids);
 
+  // Returns the subset of gids whose data in all glyph-keyed outline tables
+  // (glyf, gvar, CFF, CFF2) present in face is empty (0 bytes).
+  static absl::StatusOr<GlyphSet> EmptyGlyphs(hb_face_t* face,
+                                              const GlyphSet& gids);
+
   static absl::Status Cff2GetCharstrings(hb_face_t* face,
                                          FontData& non_charstrings,
                                          FontData& charstrings);

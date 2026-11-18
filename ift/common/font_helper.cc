@@ -1,6 +1,9 @@
 #include "ift/common/font_helper.h"
 
 #include <cstdint>
+#include <optional>
+#include <utility>
+#include <variant>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
@@ -78,32 +81,55 @@ bool FontHelper::HasWideGvar(const hb_face_t* face) {
   return (((uint8_t)gvar.str()[gvar_flags_offset]) & 0x01);
 }
 
-absl::StatusOr<string_view> FontHelper::GlyfData(const hb_face_t* face,
-                                                 uint32_t gid) {
-  auto loca = Loca(face);
-  if (!loca.ok()) {
-    return loca.status();
+namespace {
+
+class IndexedTableReader {
+ public:
+  IndexedTableReader(FontData offsets_table, FontData data_table,
+                     std::variant<IndexedDataReader<uint16_t, 2>,
+                                  IndexedDataReader<uint32_t, 1>>
+                         reader)
+      : offsets_table_(std::move(offsets_table)),
+        data_table_(std::move(data_table)),
+        reader_(std::move(reader)) {}
+
+  IndexedTableReader(const IndexedTableReader&) = delete;
+  IndexedTableReader& operator=(const IndexedTableReader&) = delete;
+  IndexedTableReader(IndexedTableReader&&) = default;
+  IndexedTableReader& operator=(IndexedTableReader&&) = default;
+
+  StatusOr<string_view> DataFor(uint32_t gid) const {
+    return std::visit([gid](const auto& r) { return r.DataFor(gid); }, reader_);
   }
 
-  FontData head = TableData(face, kHead);
-  if (head.size() < 52) {
-    return absl::InvalidArgumentError("invalid head table, too short.");
+ private:
+  FontData offsets_table_;
+  FontData data_table_;
+  std::variant<IndexedDataReader<uint16_t, 2>, IndexedDataReader<uint32_t, 1>>
+      reader_;
+};
+
+StatusOr<IndexedTableReader> CreateGlyfReader(const hb_face_t* face) {
+  FontData loca = FontHelper::TableData(face, FontHelper::kLoca);
+  if (loca.empty()) {
+    return absl::NotFoundError("loca table was not found.");
   }
 
-  auto glyf = TableData(face, kGlyf);
-  bool is_short_loca = !head.str()[51];
-  if (is_short_loca) {
-    IndexedDataReader<uint16_t, 2> reader(*loca, glyf.str());
-    return reader.DataFor(gid);
-  } else {
-    IndexedDataReader<uint32_t, 1> reader(*loca, glyf.str());
-    return reader.DataFor(gid);
+  bool has_long_loca = TRY(FontHelper::HasLongLoca(face));
+  FontData glyf = FontHelper::TableData(face, FontHelper::kGlyf);
+  string_view loca_str = loca.str();
+  string_view glyf_str = glyf.str();
+  if (has_long_loca) {
+    return IndexedTableReader(
+        std::move(loca), std::move(glyf),
+        IndexedDataReader<uint32_t, 1>(loca_str, glyf_str));
   }
+  return IndexedTableReader(std::move(loca), std::move(glyf),
+                            IndexedDataReader<uint16_t, 2>(loca_str, glyf_str));
 }
 
-StatusOr<string_view> FontHelper::GvarData(const hb_face_t* face,
-                                           uint32_t gid) {
-  auto gvar = TableData(face, kGvar);
+StatusOr<IndexedTableReader> CreateGvarReader(const hb_face_t* face) {
+  FontData gvar = FontHelper::TableData(face, FontHelper::kGvar);
   if (gvar.empty()) {
     return absl::NotFoundError("gvar not in the font.");
   }
@@ -113,31 +139,45 @@ StatusOr<string_view> FontHelper::GvarData(const hb_face_t* face,
   constexpr uint32_t data_array_offset = 16;
   constexpr uint32_t gvar_offsets_table_offset = 20;
 
-  if (gvar.size() < 20) {
+  if (gvar.size() < gvar_offsets_table_offset) {
     return absl::InvalidArgumentError("gvar table is too short.");
   }
 
-  auto glyph_count = ReadUInt16(gvar.str().substr(glyph_count_offset));
-  if (!glyph_count.ok()) {
-    return glyph_count.status();
+  string_view gvar_str = gvar.str();
+  uint16_t glyph_count =
+      TRY(FontHelper::ReadUInt16(gvar_str.substr(glyph_count_offset)));
+  uint32_t data_offset =
+      TRY(FontHelper::ReadUInt32(gvar_str.substr(data_array_offset)));
+  if (data_offset > gvar_str.size()) {
+    return absl::InvalidArgumentError("gvar data offset exceeds table size.");
   }
 
-  auto data_offset = ReadUInt32(gvar.str().substr(data_array_offset));
-  if (!data_offset.ok()) {
-    return data_offset.status();
-  }
-
-  bool is_wide = (((uint8_t)gvar.str()[gvar_flags_offset]) & 0x01);
+  bool is_wide = (((uint8_t)gvar_str[gvar_flags_offset]) & 0x01);
+  string_view data = gvar_str.substr(data_offset);
   if (is_wide) {
-    IndexedDataReader<uint32_t, 1> reader(
-        gvar.str().substr(gvar_offsets_table_offset, (*glyph_count + 1) * 4),
-        gvar.str().substr(*data_offset));
-    return reader.DataFor(gid);
+    string_view offsets =
+        gvar_str.substr(gvar_offsets_table_offset, (glyph_count + 1) * 4);
+    return IndexedTableReader(FontData(), std::move(gvar),
+                              IndexedDataReader<uint32_t, 1>(offsets, data));
   }
 
-  IndexedDataReader<uint16_t, 2> reader(
-      gvar.str().substr(gvar_offsets_table_offset, (*glyph_count + 1) * 2),
-      gvar.str().substr(*data_offset));
+  string_view offsets =
+      gvar_str.substr(gvar_offsets_table_offset, (glyph_count + 1) * 2);
+  return IndexedTableReader(FontData(), std::move(gvar),
+                            IndexedDataReader<uint16_t, 2>(offsets, data));
+}
+
+}  // namespace
+
+absl::StatusOr<string_view> FontHelper::GlyfData(const hb_face_t* face,
+                                                 uint32_t gid) {
+  IndexedTableReader reader = TRY(CreateGlyfReader(face));
+  return reader.DataFor(gid);
+}
+
+StatusOr<string_view> FontHelper::GvarData(const hb_face_t* face,
+                                           uint32_t gid) {
+  IndexedTableReader reader = TRY(CreateGvarReader(face));
   return reader.DataFor(gid);
 }
 
@@ -157,30 +197,99 @@ FontData FontHelper::Cff2Data(hb_face_t* face, uint32_t gid) {
 
 StatusOr<uint32_t> FontHelper::TotalGlyphData(hb_face_t* face,
                                               const GlyphSet& gids) {
+  if (gids.empty()) {
+    return 0;
+  }
+
   flat_hash_set<hb_tag_t> tags = FontHelper::GetTags(face);
+
+  std::optional<IndexedTableReader> glyf_reader;
+  if (tags.contains(FontHelper::kGlyf)) {
+    glyf_reader.emplace(TRY(CreateGlyfReader(face)));
+  }
+
+  std::optional<IndexedTableReader> gvar_reader;
+  if (tags.contains(FontHelper::kGvar)) {
+    gvar_reader.emplace(TRY(CreateGvarReader(face)));
+  }
+
+  bool has_cff = tags.contains(FontHelper::kCFF);
+  bool has_cff2 = tags.contains(FontHelper::kCFF2);
 
   uint32_t total = 0;
   for (uint32_t gid : gids) {
-    // TODO(grieger): write this using indexed data readers instead so we can
-    // avoid the per glyph setup overhead incurred by the *Data() methods.
-    if (tags.contains(FontHelper::kGlyf)) {
-      total += TRY(FontHelper::GlyfData(face, gid)).size();
+    if (glyf_reader.has_value()) {
+      total += TRY(glyf_reader->DataFor(gid)).size();
     }
 
-    if (tags.contains(FontHelper::kGvar)) {
-      total += TRY(FontHelper::GvarData(face, gid)).size();
+    if (gvar_reader.has_value()) {
+      total += TRY(gvar_reader->DataFor(gid)).size();
     }
 
-    if (tags.contains(FontHelper::kCFF)) {
+    if (has_cff) {
       total += FontHelper::CffData(face, gid).size();
     }
 
-    if (tags.contains(FontHelper::kCFF2)) {
+    if (has_cff2) {
       total += FontHelper::Cff2Data(face, gid).size();
     }
   }
 
   return total;
+}
+
+StatusOr<GlyphSet> FontHelper::EmptyGlyphs(hb_face_t* face,
+                                           const GlyphSet& gids) {
+  GlyphSet empty_glyphs;
+  if (gids.empty()) {
+    return empty_glyphs;
+  }
+
+  uint32_t glyph_count = hb_face_get_glyph_count(face);
+  if (*gids.max() >= glyph_count) {
+    return absl::NotFoundError(
+        StrCat("Glyph ", *gids.max(), " exceeds glyph count ", glyph_count));
+  }
+
+  flat_hash_set<hb_tag_t> tags = FontHelper::GetTags(face);
+
+  std::optional<IndexedTableReader> glyf_reader;
+  if (tags.contains(kGlyf)) {
+    glyf_reader.emplace(TRY(CreateGlyfReader(face)));
+  }
+
+  std::optional<IndexedTableReader> gvar_reader;
+  if (tags.contains(kGvar)) {
+    gvar_reader.emplace(TRY(CreateGvarReader(face)));
+  }
+
+  bool has_cff = tags.contains(kCFF);
+  bool has_cff2 = tags.contains(kCFF2);
+
+  for (uint32_t gid : gids) {
+    bool is_empty = true;
+    if (glyf_reader.has_value()) {
+      is_empty &= TRY(glyf_reader->DataFor(gid)).empty();
+    }
+
+    if (gvar_reader.has_value()) {
+      is_empty &= TRY(gvar_reader->DataFor(gid)).empty();
+    }
+
+    if (is_empty && has_cff) {
+      is_empty = FontHelper::CffData(face, gid).empty();
+    }
+
+    if (is_empty && has_cff2) {
+      is_empty = FontHelper::Cff2Data(face, gid).empty();
+    }
+
+    if (is_empty) {
+      empty_glyphs.insert(gid);
+    }
+  }
+
+  return empty_glyphs;
 }
 
 Status FontHelper::Cff2GetCharstrings(hb_face_t* face,
