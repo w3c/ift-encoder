@@ -113,4 +113,72 @@ TEST_F(RequestedSegmentationInformationTest, IndexUpdatesOnReassignInit) {
   EXPECT_EQ(info->SegmentsForCodepoints({'c'}), (SegmentSet{1}));
 }
 
+TEST_F(RequestedSegmentationInformationTest, NonInitFontNonEmptyGlyphs_Glyf) {
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(roboto.get(), *resolver);
+  // ' ' -> gid 4 (empty in glyf), 'a' -> gid 69, 'b' -> gid 70.
+  std::vector<Segment> segments{
+      {{' '}},
+      {{'a'}},
+      {{'b'}},
+  };
+
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
+  ASSERT_TRUE(info_or.ok()) << info_or.status();
+  auto& info = *info_or;
+
+  EXPECT_EQ(info->NonInitFontGlyphs(), (ift::common::GlyphSet{4, 69, 70}));
+  EXPECT_EQ(info->NonInitFontNonEmptyGlyphs(), (ift::common::GlyphSet{69, 70}));
+
+  // Moving 'a' into the init font removes gid 69 from both sets.
+  SubsetDefinition new_init;
+  new_init.codepoints = {'a'};
+  ASSERT_TRUE(info->ReassignInitSubset(*cache, new_init).ok());
+  EXPECT_EQ(info->NonInitFontGlyphs(), (ift::common::GlyphSet{4, 70}));
+  EXPECT_EQ(info->NonInitFontNonEmptyGlyphs(), (ift::common::GlyphSet{70}));
+}
+
+TEST_F(RequestedSegmentationInformationTest,
+       NonInitFontNonEmptyGlyphs_GlyfAndGvar) {
+  hb_face_unique_ptr roboto_vf =
+      from_file("ift/common/testdata/Roboto[wdth,wght].ttf");
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(roboto_vf.get(), *resolver);
+  // 0x0002 -> gid 2 (empty in both glyf and gvar)
+  // ' ' -> gid 4 (empty in glyf, non-empty in gvar)
+  // 'a' -> gid 69 (non-empty in both)
+  std::vector<Segment> segments{
+      {{0x0002}},
+      {{' '}},
+      {{'a'}},
+  };
+
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
+  ASSERT_TRUE(info_or.ok()) << info_or.status();
+  auto& info = *info_or;
+
+  EXPECT_EQ(info->NonInitFontGlyphs(), (ift::common::GlyphSet{2, 4, 69}));
+  EXPECT_EQ(info->NonInitFontNonEmptyGlyphs(), (ift::common::GlyphSet{4, 69}));
+}
+
+TEST_F(RequestedSegmentationInformationTest, NonInitFontNonEmptyGlyphs_Cff2) {
+  hb_face_unique_ptr noto_vf =
+      from_file("ift/common/testdata/NotoSansJP-VF.subset.otf");
+  std::unique_ptr<GlyphClosureCache> cache =
+      *GlyphClosureCache::Create(noto_vf.get(), *resolver);
+  SubsetDefinition empty_gid_seg;
+  empty_gid_seg.gids = {1};  // gid 1 is 0-byte charstring in CFF2
+  std::vector<Segment> segments{
+      Segment{empty_gid_seg},
+      Segment{{'A'}},  // gid 34
+  };
+
+  auto info_or = RequestedSegmentationInformation::Create(segments, {}, *cache);
+  ASSERT_TRUE(info_or.ok()) << info_or.status();
+  auto& info = *info_or;
+
+  EXPECT_EQ(info->NonInitFontGlyphs(), (ift::common::GlyphSet{1, 34}));
+  EXPECT_EQ(info->NonInitFontNonEmptyGlyphs(), (ift::common::GlyphSet{34}));
+}
+
 }  // namespace ift::encoder
