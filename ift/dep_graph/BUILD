@@ -42,6 +42,7 @@ cc_library(
         ":unicode_edges",
         "//ift/common",
         "//ift/common:data_file_resolver",
+        "//ift/common:try",
         "//ift/encoder:common",
         "//ift/encoder:segmentation_info",
         "@abseil-cpp//absl/container:btree",

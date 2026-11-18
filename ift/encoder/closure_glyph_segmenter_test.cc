@@ -481,11 +481,10 @@ p1: { gid3, gid9, gid155 }
 p2: { gid4, gid10, gid156 }
 p3: { gid5, gid6, gid157 }
 p4: { gid158 }
-p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172 }
+p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153 }
 p6: { gid14, gid33, gid60, gid91, gid112, gid145, gid152, gid190, gid191 }
-p7: { gid174 }
-p8: { gid11 }
-p9: { gid47, gid73, gid74, gid75, gid76, gid83, gid111, gid149 }
+p7: { gid11 }
+p8: { gid47, gid73, gid74, gid75, gid76, gid83, gid111, gid149 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
@@ -493,9 +492,8 @@ if (s3) then p3
 if (s4) then p4
 if ((s1 OR s2)) then p5
 if ((s3 OR s4)) then p6
-if ((s1 OR s2 OR s3 OR s4)) then p7
-if ((s1 OR s2) AND s3) then p8
-if ((s1 OR s2) AND (s3 OR s4)) then p9
+if ((s1 OR s2) AND s3) then p7
+if ((s1 OR s2) AND (s3 OR s4)) then p8
 )");
 }
 
@@ -513,9 +511,8 @@ p1: { gid3, gid9, gid155 }
 p2: { gid4, gid10, gid156 }
 p3: { gid5, gid6, gid11, gid157 }
 p4: { gid158 }
-p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172 }
+p5: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153 }
 p6: { gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid190, gid191 }
-p7: { gid174 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
@@ -523,7 +520,6 @@ if (s3) then p3
 if (s4) then p4
 if ((s1 OR s2)) then p5
 if ((s3 OR s4)) then p6
-if ((s1 OR s2 OR s3 OR s4)) then p7
 )");
 }
 
@@ -884,12 +880,12 @@ TEST_F(ClosureGlyphSegmenterTest, PatchMerge_WithSimplification) {
 p0: { gid3, gid9, gid155 }
 p1: { gid4, gid10, gid156 }
 p2: { gid5, gid6, gid14, gid33, gid60, gid91, gid112, gid145, gid152, gid157, gid158, gid190, gid191 }
-p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
+p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153 }
 p4: { gid11, gid47, gid73, gid74, gid75, gid76, gid83, gid111, gid149 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
-if ((s0 OR s1 OR s2)) then p3
+if ((s0 OR s1)) then p3
 if ((s0 OR s1) AND s2) then p4
 )");
 
@@ -899,11 +895,11 @@ if ((s0 OR s1) AND s2) then p4
 p0: { gid3, gid9, gid155 }
 p1: { gid4, gid10, gid156 }
 p2: { gid5, gid6, gid11, gid14, gid33, gid47, gid60, gid73, gid74, gid75, gid76, gid83, gid91, gid111, gid112, gid145, gid149, gid152, gid157, gid158, gid190, gid191 }
-p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153, gid172, gid174 }
+p3: { gid12, gid13, gid24, gid30, gid38, gid39, gid57, gid59, gid62, gid64, gid68, gid77, gid139, gid140, gid153 }
 if (s0) then p0
 if (s1) then p1
 if (s2) then p2
-if ((s0 OR s1 OR s2)) then p3
+if ((s0 OR s1)) then p3
 )");
 }
 
@@ -3523,6 +3519,180 @@ TEST_F(ClosureGlyphSegmenterTest,
       }
     }
     EXPECT_TRUE(found_c);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       EmptyGlyphsExcludedInIftMode_IncludedInUnicodeRangeMode) {
+  // In Roboto-Regular.ttf: ' ' -> gid 4 (empty glyf), 'a' -> gid 69, 'b' ->
+  // gid 70.
+  constexpr glyph_id_t gid_space = 4;
+  constexpr glyph_id_t gid_a = 69;
+  constexpr glyph_id_t gid_b = 70;
+
+  auto contains_gid = [](const GlyphSegmentation& seg, glyph_id_t gid) {
+    for (const auto& [_, gids] : seg.GidSegments()) {
+      if (gids.contains(gid)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // IFT mode without merging.
+  {
+    auto seg = segmenter.CodepointToGlyphSegments(
+        roboto.get(), {}, {{' '}, {'a'}, {'b'}}, MergeStrategy::None());
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(gid_space));
+    EXPECT_FALSE(contains_gid(*seg, gid_space));
+    EXPECT_TRUE(contains_gid(*seg, gid_a));
+    EXPECT_TRUE(contains_gid(*seg, gid_b));
+    EXPECT_EQ(seg->GidSegments().size(), 2);
+  }
+
+  // IFT mode with cost-based merging.
+  {
+    UnicodeFrequencies frequencies{
+        {{' ', ' '}, 100},
+        {{'a', 'a'}, 95},
+        {{'b', 'b'}, 50},
+    };
+    auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+    MergeStrategy strategy =
+        MergeStrategy::CostBased(std::move(profile), 75, 1);
+    auto seg = segmenter.CodepointToGlyphSegments(
+        roboto.get(), {}, {{' '}, {'a'}, {'b'}}, strategy);
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(gid_space));
+    EXPECT_FALSE(contains_gid(*seg, gid_space));
+    EXPECT_TRUE(contains_gid(*seg, gid_a));
+    EXPECT_TRUE(contains_gid(*seg, gid_b));
+  }
+
+  // IFT mode with heuristic merging.
+  {
+    auto seg = segmenter.CodepointToGlyphSegments(
+        roboto.get(), {}, {{' '}, {'a'}, {'b'}}, MergeStrategy::Heuristic(500));
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(gid_space));
+    EXPECT_FALSE(contains_gid(*seg, gid_space));
+    EXPECT_TRUE(contains_gid(*seg, gid_a));
+    EXPECT_TRUE(contains_gid(*seg, gid_b));
+  }
+
+  // UNICODE_RANGE mode includes empty glyphs in patches.
+  {
+    ClosureGlyphSegmenter ur_seg(8, 8, DEP_GRAPH_ONLY, resolver,
+                                 ift::config::UNICODE_RANGE);
+    auto seg = ur_seg.CodepointToGlyphSegments(
+        roboto.get(), {}, {{' '}, {'a'}, {'b'}}, MergeStrategy::None());
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(gid_space));
+    EXPECT_TRUE(contains_gid(*seg, gid_space));
+    EXPECT_TRUE(contains_gid(*seg, gid_a));
+    EXPECT_TRUE(contains_gid(*seg, gid_b));
+    EXPECT_EQ(seg->GidSegments().size(), 3);
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest, EmptyGlyfWithNonEmptyGvarKeptInIftMode) {
+  hb_face_unique_ptr roboto_vf =
+      from_file("ift/common/testdata/Roboto[wdth,wght].ttf");
+  // U+0002 -> gid 2 (empty in both glyf and gvar)
+  // ' '    -> gid 4 (empty in glyf, non-empty in gvar)
+  // 'a'    -> gid 69 (non-empty in both)
+  auto seg = segmenter.CodepointToGlyphSegments(
+      roboto_vf.get(), {}, {{0x0002}, {' '}, {'a'}}, MergeStrategy::None());
+  ASSERT_TRUE(seg.ok()) << seg.status();
+
+  ift::common::GlyphSet placed;
+  for (const auto& [_, gids] : seg->GidSegments()) {
+    placed.union_set(gids);
+  }
+  EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(2));
+  EXPECT_FALSE(placed.contains(2));
+  EXPECT_TRUE(placed.contains(4));
+  EXPECT_TRUE(placed.contains(69));
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       AllNonInitGlyphsEmpty_ProducesZeroPatchesInIftMode) {
+  // Both 0x20 (gid 4) and 0xA0 (gid 632) have empty glyf data in Roboto.
+  std::vector<SubsetDefinition> defs = {{0x20}, {0xA0}};
+
+  // MergeStrategy::None()
+  {
+    auto seg = segmenter.CodepointToGlyphSegments(roboto.get(), {}, defs,
+                                                  MergeStrategy::None());
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_TRUE(seg->GidSegments().empty());
+    EXPECT_TRUE(seg->Conditions().empty());
+    EXPECT_EQ(seg->InitialFontGlyphClosure(), (ift::common::GlyphSet{0}));
+  }
+
+  // Heuristic merge strategy
+  {
+    auto seg = segmenter.CodepointToGlyphSegments(
+        roboto.get(), {}, defs, MergeStrategy::Heuristic(500));
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_TRUE(seg->GidSegments().empty());
+    EXPECT_TRUE(seg->Conditions().empty());
+  }
+
+  // Cost-based merge strategy with brotli_quality = 0
+  {
+    UnicodeFrequencies frequencies{
+        {{0x20, 0x20}, 100},
+        {{0xA0, 0xA0}, 50},
+    };
+    auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+    MergeStrategy strategy =
+        MergeStrategy::CostBased(std::move(profile), 75, 1);
+    ClosureGlyphSegmenter zero_q_seg(0, 0, DEP_GRAPH_ONLY, resolver);
+    auto seg =
+        zero_q_seg.CodepointToGlyphSegments(roboto.get(), {}, defs, strategy);
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    EXPECT_TRUE(seg->GidSegments().empty());
+    EXPECT_TRUE(seg->Conditions().empty());
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest, CFF2EmptyGlyphsExcludedInIftMode) {
+  // NotoSansJP-VF.empty-glyph.otf contains:
+  //   gid 0 (.notdef): 0-byte charstring
+  //   gid 1 (space, U+0020): 0-byte charstring
+  //   gid 2 (A, U+0041): 96-byte charstring
+  hb_face_unique_ptr cff2_face =
+      from_file("ift/common/testdata/NotoSansJP-VF.empty-glyph.otf");
+
+  // IFT mode excludes empty CFF2 gid 1.
+  {
+    auto seg = segmenter.CodepointToGlyphSegments(
+        cff2_face.get(), {}, {{0x20}, {'A'}}, MergeStrategy::None());
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    ift::common::GlyphSet placed;
+    for (const auto& [_, gids] : seg->GidSegments()) {
+      placed.union_set(gids);
+    }
+    EXPECT_FALSE(seg->InitialFontGlyphClosure().contains(1));
+    EXPECT_FALSE(placed.contains(1));
+    EXPECT_TRUE(placed.contains(2));
+  }
+
+  // UNICODE_RANGE mode retains empty CFF2 gid 1.
+  {
+    ClosureGlyphSegmenter ur_seg(8, 8, DEP_GRAPH_ONLY, resolver,
+                                 ift::config::UNICODE_RANGE);
+    auto seg = ur_seg.CodepointToGlyphSegments(
+        cff2_face.get(), {}, {{0x20}, {'A'}}, MergeStrategy::None());
+    ASSERT_TRUE(seg.ok()) << seg.status();
+    ift::common::GlyphSet placed;
+    for (const auto& [_, gids] : seg->GidSegments()) {
+      placed.union_set(gids);
+    }
+    EXPECT_TRUE(placed.contains(1));
+    EXPECT_TRUE(placed.contains(2));
   }
 }
 

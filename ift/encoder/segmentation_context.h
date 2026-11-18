@@ -271,6 +271,24 @@ class SegmentationContext {
   absl::Status ReprocessAll();
 
  private:
+  const ift::common::GlyphSet& TargetGlyphs() const {
+    // In unicode range mode we generate fonts from the
+    // glyph sets, so all glyphs whether they have empty
+    // glyph outlines are not, are relevant.
+    //
+    // In IFT mode the end output is glyph outline patches
+    // which only affect outine tables (gvar/glyf/CFF/CFF2).
+    // So glyphs whose outline data is empty don't need to
+    // be patched and thus don't need to be targets in the
+    // segmentation analysis.
+    //
+    // In both cases init font glyphs are excluded since these
+    // are assumed to be always present.
+    return (target_mode_ == config::UNICODE_RANGE)
+               ? segmentation_info_->NonInitFontGlyphs()
+               : segmentation_info_->NonInitFontNonEmptyGlyphs();
+  }
+
   // Update the glyph groups for 'glyphs'.
   //
   // The glyph condition set must be up to date and fully computed prior to

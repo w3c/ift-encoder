@@ -6,6 +6,7 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_set.h"
 #include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/encoder/activation_condition.h"
 #include "ift/encoder/condition_to_glyphs_index.h"
 #include "ift/encoder/glyph_condition_set.h"
