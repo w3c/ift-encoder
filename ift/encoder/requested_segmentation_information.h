@@ -2,10 +2,12 @@
 #define IFT_ENCODER_REQUESTED_SEGMENTATION_INFORMATION_H_
 
 #include <memory>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "ift/common/int_set.h"
-#include "ift/common/try.h"
 #include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/init_subset_defaults.h"
 #include "ift/encoder/segment.h"
@@ -50,35 +52,7 @@ class RequestedSegmentationInformation {
   void ResetSegments(std::vector<Segment> segments);
 
   absl::Status ReassignInitSubset(GlyphClosureCache& closure_cache,
-                                  const SubsetDefinition& new_def) {
-    // TODO XXXXX Can we avoid aggressively expanding the init closure?
-    // ie. run the init subsetting/closure operation purely in glyph form.
-    init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
-
-    full_definition_.Union(init_font_segment_);
-    {
-      auto closure = closure_cache.GlyphClosure(full_definition_);
-      if (closure.ok()) {
-        full_closure_ = std::move(*closure);
-        full_codepoint_closure_ =
-            closure_cache.CodepointsForGlyphs(full_closure_);
-      }
-    }
-
-    // Changing the init font subset may have caused additional codepoints to be
-    // moved to the init font. We need to update the segment definitions to
-    // remove these.
-    for (size_t i = 0; i < segments_.size(); ++i) {
-      auto& s = segments_[i];
-      if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
-        ift::common::CodepointSet intersection = s.Definition().codepoints;
-        intersection.intersect(init_font_segment_.codepoints);
-        RemoveFromIndex(i, intersection);
-        s.Definition().codepoints.subtract(init_font_segment_.codepoints);
-      }
-    }
-    return absl::OkStatus();
-  }
+                                  const SubsetDefinition& new_def);
 
   const SubsetDefinition& InitFontSegment() const { return init_font_segment_; }
 
@@ -98,10 +72,11 @@ class RequestedSegmentationInformation {
   const ift::common::GlyphSet& InitFontGlyphs() const {
     return init_font_segment_.gids;
   }
-  ift::common::GlyphSet NonInitFontGlyphs() const {
-    ift::common::GlyphSet out = full_closure_;
-    out.subtract(InitFontGlyphs());
-    return out;
+  const ift::common::GlyphSet& NonInitFontGlyphs() const {
+    return non_init_font_glyphs_;
+  }
+  const ift::common::GlyphSet& NonInitFontNonEmptyGlyphs() const {
+    return non_init_font_non_empty_glyphs_;
   }
 
   const ift::common::GlyphSet& FullClosure() const { return full_closure_; }
@@ -164,6 +139,10 @@ class RequestedSegmentationInformation {
   SubsetDefinition full_definition_;
   ift::common::GlyphSet full_closure_;
   ift::common::CodepointSet full_codepoint_closure_;
+  ift::common::GlyphSet checked_empty_glyphs_;
+  ift::common::GlyphSet empty_glyphs_;
+  ift::common::GlyphSet non_init_font_glyphs_;
+  ift::common::GlyphSet non_init_font_non_empty_glyphs_;
 
   bool segments_disjoint_;
   absl::flat_hash_map<hb_codepoint_t, ift::common::SegmentSet>

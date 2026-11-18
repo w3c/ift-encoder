@@ -1,14 +1,23 @@
 #include "ift/encoder/requested_segmentation_information.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "ift/common/font_helper.h"
 #include "ift/common/int_set.h"
+#include "ift/common/try.h"
+#include "ift/encoder/glyph_closure_cache.h"
 #include "ift/encoder/segment.h"
 #include "ift/encoder/subset_definition.h"
 
+using absl::Status;
 using absl::StatusOr;
 using ift::common::CodepointSet;
+using ift::common::FontHelper;
+using ift::common::GlyphSet;
 using ift::common::SegmentSet;
 
 namespace ift::encoder {
@@ -69,6 +78,46 @@ void RequestedSegmentationInformation::ResetSegments(
     AddToIndex(i, s.Definition().codepoints);
   }
   segments_disjoint_ = CheckSegmentsAreDisjoint(init_font_segment_, segments_);
+}
+
+Status RequestedSegmentationInformation::ReassignInitSubset(
+    GlyphClosureCache& closure_cache, const SubsetDefinition& new_def) {
+  // TODO XXXXX Can we avoid aggressively expanding the init closure?
+  // ie. run the init subsetting/closure operation purely in glyph form.
+  init_font_segment_ = TRY(closure_cache.ExpandClosure(new_def));
+
+  full_definition_.Union(init_font_segment_);
+  full_closure_ = TRY(closure_cache.GlyphClosure(full_definition_));
+  full_codepoint_closure_ = closure_cache.CodepointsForGlyphs(full_closure_);
+
+  GlyphSet new_non_init = full_closure_;
+  new_non_init.subtract(InitFontGlyphs());
+
+  GlyphSet unchecked = new_non_init;
+  unchecked.subtract(checked_empty_glyphs_);
+  if (!unchecked.empty()) {
+    empty_glyphs_.union_set(
+        TRY(FontHelper::EmptyGlyphs(closure_cache.OriginalFace(), unchecked)));
+    checked_empty_glyphs_.union_set(unchecked);
+  }
+
+  non_init_font_glyphs_ = std::move(new_non_init);
+  non_init_font_non_empty_glyphs_ = non_init_font_glyphs_;
+  non_init_font_non_empty_glyphs_.subtract(empty_glyphs_);
+
+  // Changing the init font subset may have caused additional codepoints to be
+  // moved to the init font. We need to update the segment definitions to
+  // remove these.
+  for (size_t i = 0; i < segments_.size(); ++i) {
+    auto& s = segments_[i];
+    if (s.Definition().codepoints.intersects(init_font_segment_.codepoints)) {
+      CodepointSet intersection = s.Definition().codepoints;
+      intersection.intersect(init_font_segment_.codepoints);
+      RemoveFromIndex(i, intersection);
+      s.Definition().codepoints.subtract(init_font_segment_.codepoints);
+    }
+  }
+  return absl::OkStatus();
 }
 
 SegmentSet RequestedSegmentationInformation::SegmentsForCodepoints(
