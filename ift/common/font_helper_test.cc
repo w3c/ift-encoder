@@ -690,6 +690,61 @@ TEST_F(FontHelperTest, TotalGlyphData_Cff2) {
   ASSERT_EQ(*size, expected);
 }
 
+TEST_F(FontHelperTest, EmptyGlyphs_EmptyInput) {
+  auto empty = FontHelper::EmptyGlyphs(roboto.get(), {});
+  ASSERT_TRUE(empty.ok()) << empty.status();
+  EXPECT_EQ(*empty, (GlyphSet{}));
+}
+
+TEST_F(FontHelperTest, EmptyGlyphs_Glyf) {
+  // In Roboto-Regular.ttf (short loca): gid 0 (.notdef), 69 ('a'), 70 ('b')
+  // are non-empty; gid 4 (space) and 632 (uni00A0) are empty.
+  auto empty =
+      FontHelper::EmptyGlyphs(roboto.get(), GlyphSet{0, 4, 69, 70, 632});
+  ASSERT_TRUE(empty.ok()) << empty.status();
+  EXPECT_EQ(*empty, (GlyphSet{4, 632}));
+
+  // Long loca (NotoSansJP-Regular.ift.ttf): gid 0 and 1055 are empty; gid 52
+  // and 72 are non-empty.
+  auto empty_long = FontHelper::EmptyGlyphs(noto_sans_ift_ttf.get(),
+                                            GlyphSet{0, 52, 72, 1055});
+  ASSERT_TRUE(empty_long.ok()) << empty_long.status();
+  EXPECT_EQ(*empty_long, (GlyphSet{0, 1055}));
+
+  // Out-of-range gid returns NotFoundError.
+  auto oob = FontHelper::EmptyGlyphs(roboto_ab.get(), GlyphSet{71});
+  EXPECT_TRUE(absl::IsNotFound(oob.status())) << oob.status();
+}
+
+TEST_F(FontHelperTest, EmptyGlyphs_GlyfAndGvar) {
+  // In Roboto[wdth,wght].ttf:
+  // - gid 1, 2, 383, 477 are empty in both glyf and gvar.
+  // - gid 4 (space) is empty in glyf (0 bytes) but non-empty in gvar (76 B).
+  // - gid 5, 69 are non-empty in both.
+  auto empty = FontHelper::EmptyGlyphs(roboto_vf.get(),
+                                       GlyphSet{0, 1, 2, 4, 5, 69, 383, 477});
+  ASSERT_TRUE(empty.ok()) << empty.status();
+  EXPECT_EQ(*empty, (GlyphSet{1, 2, 383, 477}));
+}
+
+TEST_F(FontHelperTest, EmptyGlyphs_CffAndCff2) {
+  auto empty_cff =
+      FontHelper::EmptyGlyphs(noto_sans_jp_otf.get(), GlyphSet{0, 1, 2, 1133});
+  ASSERT_TRUE(empty_cff.ok()) << empty_cff.status();
+  EXPECT_EQ(*empty_cff, (GlyphSet{}));
+
+  // In NotoSansJP-VF.subset.otf (CFF2): gids 1, 2 are 0-byte charstrings;
+  // gids 0, 34, 35 are non-empty.
+  auto empty_cff2 = FontHelper::EmptyGlyphs(noto_sans_vf_jp_otf.get(),
+                                            GlyphSet{0, 1, 2, 34, 35});
+  ASSERT_TRUE(empty_cff2.ok()) << empty_cff2.status();
+  EXPECT_EQ(*empty_cff2, (GlyphSet{1, 2}));
+
+  auto oob_cff2 =
+      FontHelper::EmptyGlyphs(noto_sans_vf_jp_otf.get(), GlyphSet{60});
+  EXPECT_TRUE(absl::IsNotFound(oob_cff2.status())) << oob_cff2.status();
+}
+
 TEST_F(FontHelperTest, GidsToUnicodes) {
   ASSERT_EQ(FontHelper::GidsToUnicodes(noto_sans_jp_otf.get(), {20}),
             (CodepointSet{0x33}));
