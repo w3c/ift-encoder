@@ -131,12 +131,21 @@ Status SegmentationContext::ValidateSegmentation(
   GlyphSet full_minus_initial = segmentation_info_->FullClosure();
   full_minus_initial.subtract(initial_closure);
 
-  if (full_minus_initial != visited) {
-    GlyphSet missing = full_minus_initial;
+  const GlyphSet& required_glyphs = TargetGlyphs();
+
+  if (!required_glyphs.is_subset_of(visited)) {
+    GlyphSet missing = required_glyphs;
     missing.subtract(visited);
     return absl::FailedPreconditionError(
         "Not all glyphs in the full closure have been placed. Missing: " +
         missing.ToString());
+  }
+  if (!visited.is_subset_of(full_minus_initial)) {
+    GlyphSet extra = visited;
+    extra.subtract(full_minus_initial);
+    return absl::FailedPreconditionError(
+        "Unexpected glyphs outside the full closure have been placed: " +
+        extra.ToString());
   }
 
   for (const auto& condition : segmentation.Conditions()) {
@@ -229,8 +238,10 @@ void SegmentationContext::LogSegmentCodepointCountHistogram(
 }
 
 Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
-  modified.glyphs.union_set(
-      dependency_closure_->SegmentsToAffectedGlyphs({modified.base_segment}));
+  GlyphSet affected =
+      dependency_closure_->SegmentsToAffectedGlyphs({modified.base_segment});
+  affected.intersect(TargetGlyphs());
+  modified.glyphs.union_set(affected);
   TransferDependencyGraphGlyphConditions(modified.glyphs);
 
   return GroupGlyphs(modified.glyphs, modified.segments);
@@ -239,10 +250,9 @@ Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
 Status SegmentationContext::ReprocessAll() {
   // Pull conditions directly out of the dep graph instead of running closure
   // processing.
-  TransferDependencyGraphGlyphConditions(
-      segmentation_info_->NonInitFontGlyphs());
+  TransferDependencyGraphGlyphConditions(TargetGlyphs());
 
-  return GroupGlyphs(segmentation_info_->NonInitFontGlyphs(), {});
+  return GroupGlyphs(TargetGlyphs(), {});
 }
 
 /*
@@ -258,7 +268,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     // Figure out what's going to change before making the change so that we
     // can utilize the dep graph to locate affected segments.
     new_def = TRY(glyph_closure_cache->ExpandClosure(new_def));
-    GlyphSet removed_gids = SegmentationInfo().NonInitFontGlyphs();
+    GlyphSet removed_gids = TargetGlyphs();
     removed_gids.intersect(new_def.gids);
     total_removed_gids.union_set(removed_gids);
 
@@ -289,8 +299,8 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     // from the input segments to find the affected subgraph.
     TRYV(dependency_closure_->InitFontChanged(segments_with_changed_defs));
 
-    const GlyphSet& always_true_glyphs =
-        dependency_closure_->AlwaysTrueGlyphs();
+    GlyphSet always_true_glyphs = dependency_closure_->AlwaysTrueGlyphs();
+    always_true_glyphs.intersect(TargetGlyphs());
     if (always_true_glyphs.empty()) {
       break;
     }
@@ -320,12 +330,13 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   for (segment_index_t s : total_segments_to_reprocess) {
     gids.union_set(dependency_closure_->SegmentsToAffectedGlyphs({s}));
   }
+  gids.intersect(TargetGlyphs());
   TransferDependencyGraphGlyphConditions(gids);
 
   // the groupings can be incrementally recomputed by looking at what conditions
   // have changed.
   GlyphSet changed_gids = std::move(total_removed_gids);
-  for (glyph_id_t gid : SegmentationInfo().NonInitFontGlyphs()) {
+  for (glyph_id_t gid : TargetGlyphs()) {
     const auto& new_conditions = glyph_condition_set.ConditionsFor(gid);
     if (previous_glyph_condition_set.ConditionsFor(gid) != new_conditions) {
       changed_gids.insert(gid);
@@ -374,12 +385,13 @@ SegmentationContext::InitializeSegmentationContext(
   // segments and glyphs. ###
   VLOG(0) << "Forming initial segmentation plan.";
   TRYV(context.ReprocessAll());
-  if (!context.dependency_closure_->AlwaysTrueGlyphs().empty()) {
-    VLOG(0) << "Moving "
-            << context.dependency_closure_->AlwaysTrueGlyphs().size()
+  GlyphSet always_true_glyphs = context.dependency_closure_->AlwaysTrueGlyphs();
+  always_true_glyphs.intersect(context.TargetGlyphs());
+  if (!always_true_glyphs.empty()) {
+    VLOG(0) << "Moving " << always_true_glyphs.size()
             << " always-true glyphs into the initial font.";
     SubsetDefinition new_def = context.SegmentationInfo().InitFontSegment();
-    new_def.gids.union_set(context.dependency_closure_->AlwaysTrueGlyphs());
+    new_def.gids.union_set(always_true_glyphs);
     TRYV(context.ReassignInitSubset(std::move(new_def)));
   }
 

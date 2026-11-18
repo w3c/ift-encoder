@@ -54,6 +54,9 @@ StatusOr<double> EstimatedPatchSizeCache::EstimateCompressionRatio(
 
   double uncompressed_size =
       TRY(FontHelper::TotalGlyphData(original_face, gids));
+  if (uncompressed_size == 0.0) {
+    return 0.0;
+  }
   double compressed_size = TRY(patch_sizes.GetPatchSize(gids));
 
   return compressed_size / uncompressed_size;

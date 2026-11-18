@@ -53,6 +53,7 @@ class GlyphClosureCache {
   uint64_t CacheMisses() const { return glyph_closure_cache_miss_; }
 
   hb_face_t* Face() { return preprocessed_face_.get(); }
+  hb_face_t* OriginalFace() const { return original_face_.get(); }
 
  private:
   common::CodepointSet UnicodeClosure(const common::CodepointSet& unicodes,

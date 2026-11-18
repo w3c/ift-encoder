@@ -13,6 +13,7 @@
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
 #include "ift/common/int_set.h"
+#include "ift/common/try.h"
 #include "ift/dep_graph/node.h"
 #include "ift/dep_graph/pending_edge.h"
 #include "ift/dep_graph/traversal.h"

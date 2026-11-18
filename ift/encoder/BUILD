@@ -160,6 +160,7 @@ cc_library(
         "//ift/feature_registry",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
         "@harfbuzz",
     ],
 )
