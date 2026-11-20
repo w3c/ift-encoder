@@ -757,15 +757,30 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
   hb_face_unique_ptr normalized_face = TRY(FontHelper::Normalize(face));
   face = normalized_face.get();
 
-
   btree_map<SegmentSet, SegmentSet> with_shared;
   std::vector<Segment> segments =
       TRY(ToOrderedSegments(subset_definitions, merge_groups, with_shared));
+
+  bool has_init_font_merge = false;
+  if (target_mode_ != ift::config::UNICODE_RANGE) {
+    for (const auto& [_, strategy] : merge_groups) {
+      if (strategy.UseCosts() && strategy.HasInitFontMerge()) {
+        has_init_font_merge = true;
+        break;
+      }
+    }
+  }
+
+  // When initial font merging is enabled in IFT mode, keep empty outline glyphs
+  // in InitFontMoveTargetGlyphs() during the initial font move phase so
+  // high-probability empty-glyph codepoints (such as space) can still be
+  // evaluated and moved into the initial font before the remaining empty glyphs
+  // are excluded.
   SegmentationContext context =
       TRY(SegmentationContext::InitializeSegmentationContext(
           face, initial_segment, std::move(segments), condition_analysis_mode_,
           brotli_quality_, init_font_merging_brotli_quality_, resolver_,
-          target_mode_));
+          target_mode_, /*include_empty_glyphs=*/has_init_font_merge));
 
   if (target_mode_ == ift::config::UNICODE_RANGE) {
     std::vector<const ProbabilityCalculator*> calculators;
@@ -807,10 +822,15 @@ StatusOr<GlyphSegmentation> ClosureGlyphSegmenter::CodepointToGlyphSegments(
     }
   }
 
-  if (init_font_changed) {
+  if (has_init_font_merge) {
+    TRYV(context.ExcludeEmptyGlyphs());
+  }
+
+  if (init_font_changed || has_init_font_merge) {
     for (Merger& merger : mergers) {
-      // Any init font moves above can cause segment removals that affect other
-      // mergers, recompute the candiate segments for all mergers.
+      // Any init font moves or empty-glyph exclusions above can cause segment
+      // or exclusive patch changes that affect other mergers, recompute the
+      // candidate segments and caches for all mergers.
       TRYV(merger.ReassignInitSubset());
     }
   }
