@@ -3696,4 +3696,166 @@ TEST_F(ClosureGlyphSegmenterTest, CFF2EmptyGlyphsExcludedInIftMode) {
   }
 }
 
+TEST_F(ClosureGlyphSegmenterTest,
+       InitFontMerging_HighProbEmptyGlyphMoved_LowProbEmptyGlyphDropped) {
+  // In Roboto-Regular.ttf:
+  //   0x20 (' ') -> gid 4 (empty glyf)
+  //   0xA0 (NBSP) -> gid 632 (empty glyf)
+  //   'a' -> gid 69, 'b' -> gid 70, 'c' -> gid 71 (non-empty glyf)
+  for (uint32_t brotli_q : {8u, 0u}) {
+    UnicodeFrequencies frequencies{
+        {{0x20, 0x20}, 100}, {{'a', 'a'}, 100}, {{'b', 'b'}, 50},
+        {{'c', 'c'}, 50},    {{'b', 'c'}, 50},  {{0xA0, 0xA0}, 1},
+    };
+
+    auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+    profile.init_font_merge_threshold = -160;
+    MergeStrategy strategy = MergeStrategy::CostBased(
+        std::move(profile), /*network_overhead_cost=*/200);
+
+    ClosureGlyphSegmenter seg(brotli_q, brotli_q, DEP_GRAPH_ONLY, resolver);
+    std::vector<SubsetDefinition> input_segments = {
+        {0x20}, {'a'}, {'b'}, {'c'}, {0xA0},
+    };
+    SegmentSet all;
+    all.insert_range(0, input_segments.size() - 1);
+    btree_map<SegmentSet, MergeStrategy> merge_groups = {{all, strategy}};
+
+    auto segmentation = seg.CodepointToGlyphSegments(
+        roboto.get(), {}, input_segments, merge_groups);
+    ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+
+    EXPECT_EQ(segmentation->InitialFontSegment().codepoints,
+              (ift::common::CodepointSet{0x20, 'a'}));
+    EXPECT_EQ(segmentation->InitialFontGlyphClosure(),
+              (ift::common::GlyphSet{0, 4, 69}));
+
+    std::vector<SubsetDefinition> expected_segments = {
+        {}, {}, {'b', 'c'}, {}, {0xA0},
+    };
+    EXPECT_EQ(segmentation->Segments(), expected_segments);
+    EXPECT_EQ(segmentation->ToString(),
+              R"(initial font: { gid0, gid4, gid69 }
+p0: { gid70, gid71 }
+if (s2) then p0
+)");
+
+    // Verify table-keyed segment generation excludes ' ' and 'a' (now in init
+    // font) while keeping 'b', 'c', and unmoved empty-glyph 0xA0.
+    ift::config::SegmentationPlan plan =
+        segmentation->ToSegmentationPlanProto();
+    ASSERT_TRUE(ClosureGlyphSegmenter::AddTableKeyedSegments(
+                    plan, merge_groups, input_segments,
+                    segmentation->InitialFontSegment(),
+                    ift::config::FROM_FREQ_DATA)
+                    .ok());
+    ASSERT_EQ(plan.non_glyph_segments_size(), 1);
+    uint32_t tk_id = plan.non_glyph_segments(0).values(0);
+    const auto& tk_cps = plan.segments().at(tk_id).codepoints().values();
+    ift::common::CodepointSet actual_tk_cps;
+    actual_tk_cps.insert(tk_cps.begin(), tk_cps.end());
+    EXPECT_EQ(actual_tk_cps, (ift::common::CodepointSet{'b', 'c', 0xA0}));
+  }
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       InitFontMerging_CFF2EmptyGlyphMovedWhenHighProb) {
+  hb_face_unique_ptr cff2_face =
+      from_file("ift/common/testdata/NotoSansJP-VF.empty-glyph.otf");
+
+  UnicodeFrequencies frequencies{
+      {{0x20, 0x20}, 1000},
+      {{'A', 'A'}, 1},
+  };
+  auto profile = ProbabilityProfile::Bigram(std::move(frequencies)).value();
+  profile.init_font_merge_threshold = -160;
+  MergeStrategy strategy = MergeStrategy::CostBased(
+      std::move(profile), /*network_overhead_cost=*/200);
+
+  auto seg = segmenter.CodepointToGlyphSegments(cff2_face.get(), {},
+                                                {{0x20}, {'A'}}, strategy);
+  ASSERT_TRUE(seg.ok()) << seg.status();
+
+  EXPECT_EQ(seg->InitialFontSegment().codepoints,
+            (ift::common::CodepointSet{0x20}));
+  EXPECT_EQ(seg->InitialFontGlyphClosure(), (ift::common::GlyphSet{0, 1}));
+  EXPECT_EQ(seg->ToString(),
+            R"(initial font: { gid0, gid1 }
+p0: { gid2 }
+if (s1) then p0
+)");
+}
+
+TEST_F(ClosureGlyphSegmenterTest,
+       InitFontMerging_EmptyGlyphConsidersExpandedClosureCost) {
+  // Roboto-Regular.empty-closure.ttf contains:
+  //   gid 0 (.notdef): empty
+  //   gid 1 (space, U+0020): empty glyf
+  //   gid 2, gid 4 (unencoded): non-empty glyf outlines, produced via default
+  //     'ccmp' by both (space -> gid 2, gid 4) and (a -> gid 2, gid 4)
+  //   gid 3 ('a', U+0061): non-empty glyf
+  hb_face_unique_ptr test_face =
+      from_file("ift/common/testdata/Roboto-Regular.empty-closure.ttf");
+
+  // 1. At P(' ') = 0.55 with threshold -30 (network overhead 75), an isolated
+  // empty space glyph in Roboto-Regular.ttf moves to the initial font, whereas
+  // in test_face moving gid 1 expands closure to include non-empty {gid 2,
+  // gid 4}, increasing the cost delta above -30 so ' ' is not moved (and gid 1
+  // is subsequently excluded).
+  {
+    UnicodeFrequencies frequencies{
+        {{0x20, 0x20}, 55},
+        {{'a', 'a'}, 1},
+        {{'z', 'z'}, 100},  // sets total document count = 100 -> P(' ') = 0.55
+    };
+    auto profile = ProbabilityProfile::Unigram(std::move(frequencies)).value();
+    profile.init_font_merge_threshold = -30;
+    MergeStrategy strategy =
+        MergeStrategy::CostBased(std::move(profile), 75, 1);
+
+    auto roboto_seg = segmenter.CodepointToGlyphSegments(
+        roboto.get(), {}, {{0x20}, {'a'}}, strategy);
+    ASSERT_TRUE(roboto_seg.ok()) << roboto_seg.status();
+    EXPECT_TRUE(roboto_seg->InitialFontSegment().codepoints.contains(0x20));
+
+    auto closure_seg = segmenter.CodepointToGlyphSegments(
+        test_face.get(), {}, {{0x20}, {'a'}}, strategy);
+    ASSERT_TRUE(closure_seg.ok()) << closure_seg.status();
+    EXPECT_FALSE(closure_seg->InitialFontSegment().codepoints.contains(0x20));
+    EXPECT_EQ(closure_seg->ToString(),
+              R"(initial font: { gid0 }
+p0: { gid3 }
+p1: { gid2, gid4 }
+if (s1) then p0
+if ((s0 OR s1)) then p1
+)");
+  }
+
+  // 2. At P(' ') = 1.0, the savings outweigh {gid 2, gid 4}'s outline size, so
+  // ' ' (and expanded closure {gid 2, gid 4}) moves into the initial font.
+  {
+    UnicodeFrequencies frequencies{
+        {{0x20, 0x20}, 100},
+        {{'a', 'a'}, 1},
+    };
+    auto profile = ProbabilityProfile::Unigram(std::move(frequencies)).value();
+    profile.init_font_merge_threshold = -30;
+    MergeStrategy strategy =
+        MergeStrategy::CostBased(std::move(profile), 75, 1);
+
+    auto closure_seg = segmenter.CodepointToGlyphSegments(
+        test_face.get(), {}, {{0x20}, {'a'}}, strategy);
+    ASSERT_TRUE(closure_seg.ok()) << closure_seg.status();
+    EXPECT_EQ(closure_seg->InitialFontSegment().codepoints,
+              (ift::common::CodepointSet{0x20}));
+    EXPECT_EQ(closure_seg->InitialFontGlyphClosure(),
+              (ift::common::GlyphSet{0, 1, 2, 4}));
+    EXPECT_EQ(closure_seg->ToString(),
+              R"(initial font: { gid0, gid1, gid2, gid4 }
+p0: { gid3 }
+if (s1) then p0
+)");
+  }
+}
+
 }  // namespace ift::encoder

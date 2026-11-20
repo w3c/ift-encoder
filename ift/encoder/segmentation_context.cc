@@ -250,9 +250,25 @@ Status SegmentationContext::ReprocessChanged(InvalidationSet modified) {
 Status SegmentationContext::ReprocessAll() {
   // Pull conditions directly out of the dep graph instead of running closure
   // processing.
-  TransferDependencyGraphGlyphConditions(TargetGlyphs());
+  TransferDependencyGraphGlyphConditions(InitFontMoveTargetGlyphs());
 
-  return GroupGlyphs(TargetGlyphs(), {});
+  return GroupGlyphs(InitFontMoveTargetGlyphs(), {});
+}
+
+Status SegmentationContext::ExcludeEmptyGlyphs() {
+  if (target_mode_ == config::UNICODE_RANGE || exclude_empty_glyphs_) {
+    return absl::OkStatus();
+  }
+
+  GlyphSet empty_gids = InitFontMoveTargetGlyphs();
+  empty_gids.subtract(TargetGlyphs());
+  exclude_empty_glyphs_ = true;
+  if (empty_gids.empty()) {
+    return absl::OkStatus();
+  }
+
+  glyph_condition_set.InvalidateGlyphInformation(empty_gids);
+  return GroupGlyphs(empty_gids, {});
 }
 
 /*
@@ -268,7 +284,7 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
     // Figure out what's going to change before making the change so that we
     // can utilize the dep graph to locate affected segments.
     new_def = TRY(glyph_closure_cache->ExpandClosure(new_def));
-    GlyphSet removed_gids = TargetGlyphs();
+    GlyphSet removed_gids = InitFontMoveTargetGlyphs();
     removed_gids.intersect(new_def.gids);
     total_removed_gids.union_set(removed_gids);
 
@@ -330,13 +346,13 @@ Status SegmentationContext::ReassignInitSubset(SubsetDefinition new_def) {
   for (segment_index_t s : total_segments_to_reprocess) {
     gids.union_set(dependency_closure_->SegmentsToAffectedGlyphs({s}));
   }
-  gids.intersect(TargetGlyphs());
+  gids.intersect(InitFontMoveTargetGlyphs());
   TransferDependencyGraphGlyphConditions(gids);
 
   // the groupings can be incrementally recomputed by looking at what conditions
   // have changed.
   GlyphSet changed_gids = std::move(total_removed_gids);
-  for (glyph_id_t gid : TargetGlyphs()) {
+  for (glyph_id_t gid : InitFontMoveTargetGlyphs()) {
     const auto& new_conditions = glyph_condition_set.ConditionsFor(gid);
     if (previous_glyph_condition_set.ConditionsFor(gid) != new_conditions) {
       changed_gids.insert(gid);
@@ -367,7 +383,7 @@ SegmentationContext::InitializeSegmentationContext(
     ConditionAnalysisMode condition_analysis_mode, uint32_t brotli_quality,
     uint32_t init_font_brotli_quality,
     std::shared_ptr<DataFileResolver> resolver,
-    ift::config::TargetMode target_mode) {
+    ift::config::TargetMode target_mode, bool include_empty_glyphs) {
   if (!hb_face_get_glyph_count(face)) {
     return absl::InvalidArgumentError("Provided font has no glyphs.");
   }
@@ -379,7 +395,8 @@ SegmentationContext::InitializeSegmentationContext(
   // No merging is done during init.
   SegmentationContext context = TRY(SegmentationContext::Create(
       face, initial_segment, segments, condition_analysis_mode, brotli_quality,
-      init_font_brotli_quality, std::move(resolver), target_mode));
+      init_font_brotli_quality, std::move(resolver), target_mode,
+      include_empty_glyphs));
 
   // ### Generate the initial conditions and groupings by processing all
   // segments and glyphs. ###

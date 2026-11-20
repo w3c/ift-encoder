@@ -56,7 +56,8 @@ class SegmentationContext {
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
-      ift::config::TargetMode target_mode = ift::config::IFT) {
+      ift::config::TargetMode target_mode = ift::config::IFT,
+      bool include_empty_glyphs = false) {
     // TODO(garretrieger): argument list is getting long, switch to a builder
     // pattern for construction.
 
@@ -66,10 +67,12 @@ class SegmentationContext {
         TRY(RequestedSegmentationInformation::Create(segments, initial_segment,
                                                      *closure_cache));
 
+    bool exclude_empty_glyphs =
+        (target_mode != config::UNICODE_RANGE) && !include_empty_glyphs;
     SegmentationContext context(
         face, condition_analysis_mode, brotli_quality, init_font_brotli_quality,
         std::move(closure_cache), std::move(segmentation_info),
-        std::move(resolver), target_mode);
+        std::move(resolver), target_mode, exclude_empty_glyphs);
 
     TRYV(context.InitDependencyClosure());
     return context;
@@ -88,7 +91,8 @@ class SegmentationContext {
         original_face.get(), condition_analysis_mode_, brotli_quality_,
         init_font_brotli_quality_, std::move(closure_cache),
         std::move(segmentation_info), resolver_, target_mode_,
-        estimated_compression_ratio_, estimated_woff2_base_overhead_);
+        exclude_empty_glyphs_, estimated_compression_ratio_,
+        estimated_woff2_base_overhead_);
     context.initial_glyph_probabilities_ = initial_glyph_probabilities_;
 
     TRYV(context.InitDependencyClosure());
@@ -107,7 +111,8 @@ class SegmentationContext {
       ift::config::ConditionAnalysisMode condition_analysis_mode,
       uint32_t brotli_quality, uint32_t init_font_brotli_quality,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
-      ift::config::TargetMode target_mode = ift::config::IFT);
+      ift::config::TargetMode target_mode = ift::config::IFT,
+      bool include_empty_glyphs = false);
 
  private:
   SegmentationContext(
@@ -117,7 +122,7 @@ class SegmentationContext {
       std::unique_ptr<GlyphClosureCache> closure_cache,
       std::unique_ptr<RequestedSegmentationInformation> segmentation_info,
       std::shared_ptr<ift::common::DataFileResolver> resolver,
-      ift::config::TargetMode target_mode = ift::config::IFT,
+      ift::config::TargetMode target_mode, bool exclude_empty_glyphs,
       std::optional<double> estimated_compression_ratio = std::nullopt,
       std::optional<uint32_t> estimated_woff2_base_overhead = std::nullopt)
       : estimated_compression_ratio_(estimated_compression_ratio),
@@ -134,6 +139,7 @@ class SegmentationContext {
         init_font_brotli_quality_(init_font_brotli_quality),
         condition_analysis_mode_(condition_analysis_mode),
         target_mode_(target_mode),
+        exclude_empty_glyphs_(exclude_empty_glyphs),
         resolver_(std::move(resolver)) {
     patch_size_cache = NewPatchSizeCache(face, brotli_quality);
     patch_size_cache_for_init_font =
@@ -270,6 +276,11 @@ class SegmentationContext {
   // Regenerates glyphs conditions and groupings for all segments.
   absl::Status ReprocessAll();
 
+  // Excludes empty outline glyphs from InitFontMoveTargetGlyphs() in IFT mode
+  // and removes any remaining non-init empty glyphs from glyph_condition_set
+  // and glyph_groupings.
+  absl::Status ExcludeEmptyGlyphs();
+
  private:
   const ift::common::GlyphSet& TargetGlyphs() const {
     // In unicode range mode we generate fonts from the
@@ -287,6 +298,14 @@ class SegmentationContext {
     return (target_mode_ == config::UNICODE_RANGE)
                ? segmentation_info_->NonInitFontGlyphs()
                : segmentation_info_->NonInitFontNonEmptyGlyphs();
+  }
+
+  const ift::common::GlyphSet& InitFontMoveTargetGlyphs() const {
+    // During the initial font move phase (!exclude_empty_glyphs_), empty
+    // outline glyphs are included so high-probability empty-glyph codepoints
+    // (such as space) can be evaluated and moved into the initial font.
+    return exclude_empty_glyphs_ ? TargetGlyphs()
+                                 : segmentation_info_->NonInitFontGlyphs();
   }
 
   // Update the glyph groups for 'glyphs'.
@@ -400,6 +419,7 @@ class SegmentationContext {
 
   ift::config::ConditionAnalysisMode condition_analysis_mode_;
   ift::config::TargetMode target_mode_;
+  bool exclude_empty_glyphs_;
   std::shared_ptr<ift::common::DataFileResolver> resolver_;
 
   absl::flat_hash_map<glyph_id_t, double> initial_glyph_probabilities_;
