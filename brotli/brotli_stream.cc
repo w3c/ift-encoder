@@ -5,7 +5,7 @@
 #include "absl/log/log.h"
 #include "absl/strings/string_view.h"
 #include "brotli/shared_brotli_encoder.h"
-#include "c/enc/prefix.h"
+#include "c/enc/command.h"
 
 using absl::Span;
 using absl::Status;
