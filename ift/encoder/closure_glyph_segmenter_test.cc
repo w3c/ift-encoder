@@ -10,8 +10,11 @@
 #include "ift/common/int_set.h"
 #include "ift/common/test_font_loader.h"
 #include "ift/common/try.h"
+#include "ift/common/woff2.h"
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/candidate_merge.h"
+#include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/merge_strategy.h"
 #include "ift/encoder/merger.h"
@@ -1101,6 +1104,41 @@ TEST_F(ClosureGlyphSegmenterTest, TotalCost) {
       *segmenter.TotalCosts(roboto.get(), segmentation3, {&calculator});
   ASSERT_EQ(with_uncovered_cost[0].uncovered_ift_patch_cost,
             expected_uncovered_cost);
+}
+
+TEST_F(ClosureGlyphSegmenterTest, TotalCost_MixedModeUsesCutMixedModeInitSubset) {
+  hb_face_unique_ptr vf_face =
+      from_file("ift/common/testdata/Roboto[wdth,wght].ttf");
+  auto segmentation = segmenter.CodepointToGlyphSegments(
+      vf_face.get(), {'a'}, {{'b'}, {'c'}}, MergeStrategy::None());
+  ASSERT_TRUE(segmentation.ok()) << segmentation.status();
+  ASSERT_FALSE(segmentation->GidSegments().empty());
+
+  UnicodeFrequencies frequencies{
+      {{' ', ' '}, 100},
+      {{'a', 'a'}, 95},
+      {{'b', 'b'}, 50},
+      {{'c', 'c'}, 25},
+  };
+  UnigramProbabilityCalculator calculator(std::move(frequencies));
+
+  auto costs = segmenter.TotalCosts(vf_face.get(), *segmentation, {&calculator});
+  ASSERT_TRUE(costs.ok()) << costs.status();
+
+  auto expected_init = Compiler::CutMixedModeInitSubset(
+      vf_face.get(), segmentation->InitialFontSegment());
+  ASSERT_TRUE(expected_init.ok()) << expected_init.status();
+  auto expected_woff2 = ift::common::Woff2::EncodeWoff2(
+      expected_init->str(), /*glyf_transform=*/true, 11);
+  ASSERT_TRUE(expected_woff2.ok()) << expected_woff2.status();
+  EXPECT_EQ((*costs)[0].ift_init_cost,
+            static_cast<double>(expected_woff2->size()));
+
+  auto table_keyed_only_size = CandidateMerge::Woff2SizeOf(
+      vf_face.get(), segmentation->InitialFontSegment(), 11);
+  ASSERT_TRUE(table_keyed_only_size.ok()) << table_keyed_only_size.status();
+  EXPECT_NE((*costs)[0].ift_init_cost,
+            static_cast<double>(*table_keyed_only_size));
 }
 
 TEST_F(ClosureGlyphSegmenterTest, NoGlyphSegments_CostMerging) {

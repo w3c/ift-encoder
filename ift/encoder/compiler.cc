@@ -967,7 +967,6 @@ void Compiler::SetMixedModeSubsettingFlagsIfNeeded(
         input,
         hb_subset_input_get_flags(input) | HB_SUBSET_FLAGS_RETAIN_GIDS |
             HB_SUBSET_FLAGS_NOTDEF_OUTLINE |
-            HB_SUBSET_FLAGS_PASSTHROUGH_UNRECOGNIZED |
             // CFF tables are always desubroutinized for mixed mode encoding.
             // This ensures that for each glyph all data for that glyph is fully
             // self contained. See: https://w3c.github.io/IFT/Overview.html#cff
@@ -1069,6 +1068,31 @@ StatusOr<FontData> Compiler::RoundTripWoff2(string_view font,
                                             bool glyf_transform) {
   auto r = TRY(Woff2::EncodeWoff2(font, glyf_transform));
   return Woff2::DecodeWoff2(r.str());
+}
+
+StatusOr<FontData> Compiler::CutMixedModeInitSubset(
+    hb_face_t* face, const SubsetDefinition& init_subset) {
+  if (!face) {
+    return absl::InvalidArgumentError("Face must not be null.");
+  }
+
+  Compiler compiler;
+  compiler.SetFace(face);
+  compiler.force_mixed_mode_ = true;
+  TRYV(compiler.SetInitSubsetFromDef(init_subset));
+
+  ProcessingContext context(0);
+  context.init_subset_ = init_subset;
+  AddInitSubsetDefaults(context.init_subset_);
+  uint32_t gid_count = hb_face_get_glyph_count(face);
+  if (gid_count > 0) {
+    context.init_subset_.gids.insert(gid_count - 1);
+  }
+  context.force_long_loca_and_gvar_ =
+      TRY(FontHelper::HasLongLoca(face)) || FontHelper::HasWideGvar(face);
+
+  return compiler.CutSubset(context, face, context.init_subset_,
+                            /*generate_glyph_keyed_bases=*/true);
 }
 
 CompatId Compiler::ProcessingContext::GenerateCompatId() {
