@@ -1,5 +1,9 @@
 #include "ift/encoder/activation_condition.h"
 
+#include <algorithm>
+#include <vector>
+
+#include "absl/status/status.h"
 #include "gtest/gtest.h"
 #include "ift/common/int_set.h"
 #include "ift/encoder/subset_definition.h"
@@ -692,6 +696,162 @@ TEST(ActivationConditionTest, IsUnchangedByMerge) {
                    .IsUnchangedByMerge({1, 2}));
   EXPECT_FALSE(ActivationCondition::composite_condition({{1, 2, 3}, {2, 4}}, 0)
                    .IsUnchangedByMerge({1, 2}));
+}
+
+TEST(ActivationConditionTest, OrAll_Validation) {
+  std::vector<ActivationCondition> empty_values;
+  auto empty_res = ActivationCondition::OrAll(empty_values);
+  ASSERT_FALSE(empty_res.ok());
+  EXPECT_EQ(empty_res.status().code(), absl::StatusCode::kInvalidArgument);
+
+  std::vector<const ActivationCondition*> empty_ptrs;
+  auto empty_ptr_res = ActivationCondition::OrAll(empty_ptrs);
+  ASSERT_FALSE(empty_ptr_res.ok());
+  EXPECT_EQ(empty_ptr_res.status().code(), absl::StatusCode::kInvalidArgument);
+
+  auto cond = ActivationCondition::exclusive_segment(1, 0);
+  std::vector<const ActivationCondition*> with_null = {&cond, nullptr};
+  auto null_res = ActivationCondition::OrAll(with_null);
+  ASSERT_FALSE(null_res.ok());
+  EXPECT_EQ(null_res.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST(ActivationConditionTest,
+     OrAll_SingleElementPreservesExclusivenessAndPrefetches) {
+  auto single = ActivationCondition::exclusive_segment(7, 10);
+  single.SetEncoding(PatchEncoding::TABLE_KEYED_PARTIAL);
+  single.AddPrefetches({20, 30});
+
+  std::vector<ActivationCondition> values = {single};
+  auto res = ActivationCondition::OrAll(values);
+  ASSERT_TRUE(res.ok()) << res.status();
+  EXPECT_EQ(*res, single);
+  EXPECT_TRUE(res->IsExclusive());
+  EXPECT_EQ(res->activated(), 10);
+  EXPECT_EQ(res->Encoding(), PatchEncoding::TABLE_KEYED_PARTIAL);
+  EXPECT_EQ(res->prefetches(), (std::vector<patch_id_t>{20, 30}));
+
+  std::vector<const ActivationCondition*> ptrs = {&single};
+  auto ptr_res = ActivationCondition::OrAll(ptrs);
+  ASSERT_TRUE(ptr_res.ok()) << ptr_res.status();
+  EXPECT_EQ(*ptr_res, single);
+  EXPECT_TRUE(ptr_res->IsExclusive());
+}
+
+TEST(ActivationConditionTest, OrAll_AlwaysTrueAndOrderIndependence) {
+  auto a = ActivationCondition::or_segments({1, 2}, 10);
+  a.SetEncoding(PatchEncoding::TABLE_KEYED_FULL);
+  auto b = ActivationCondition::and_segments({3, 4}, 11);
+  b.SetEncoding(PatchEncoding::TABLE_KEYED_PARTIAL);
+  auto t = ActivationCondition::True(5);
+  t.SetEncoding(PatchEncoding::DEFAULT_ENCODING);
+
+  for (const auto& perm : std::vector<std::vector<ActivationCondition>>{
+           {t, a, b},
+           {a, t, b},
+           {a, b, t},
+       }) {
+    auto res = ActivationCondition::OrAll(perm);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_TRUE(res->IsAlwaysTrue());
+    EXPECT_FALSE(res->IsExclusive());
+    EXPECT_EQ(res->activated(), 11);
+    EXPECT_EQ(res->Encoding(), PatchEncoding::TABLE_KEYED_PARTIAL);
+  }
+
+  auto c = ActivationCondition::or_segments({5}, 9);
+  auto d = ActivationCondition::composite_condition({{6, 7}, {8}}, 12);
+  d.SetEncoding(PatchEncoding::TABLE_KEYED_FULL);
+
+  std::vector<ActivationCondition> items = {a, b, c, d};
+  ActivationCondition expected = ActivationCondition::Or(
+      ActivationCondition::Or(ActivationCondition::Or(a, b), c), d);
+  std::vector<size_t> order = {0, 1, 2, 3};
+  do {
+    std::vector<const ActivationCondition*> ptrs;
+    for (size_t idx : order) {
+      ptrs.push_back(&items[idx]);
+    }
+    auto res = ActivationCondition::OrAll(ptrs);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(*res, expected);
+  } while (std::next_permutation(order.begin(), order.end()));
+}
+
+TEST(ActivationConditionTest,
+     OrAll_CascadingCofactorCollapseAndPartialOverlap) {
+  {
+    auto b = ActivationCondition::exclusive_segment(1, 0);
+    auto m1 = ActivationCondition::composite_condition({{1, 2}, {2, 3}}, 0);
+    auto m2 = ActivationCondition::and_segments({2, 4}, 0);
+
+    std::vector<ActivationCondition> items = {b, m1, m2};
+    ActivationCondition expected =
+        ActivationCondition::Or(ActivationCondition::Or(b, m1), m2);
+    EXPECT_EQ(expected, ActivationCondition::or_segments({1, 2}, 0));
+
+    std::vector<size_t> order = {0, 1, 2};
+    do {
+      std::vector<const ActivationCondition*> ptrs = {
+          &items[order[0]], &items[order[1]], &items[order[2]]};
+      auto res = ActivationCondition::OrAll(ptrs);
+      ASSERT_TRUE(res.ok()) << res.status();
+      EXPECT_EQ(*res, expected);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
+
+  {
+    auto b = ActivationCondition::exclusive_segment(1, 0);
+    auto m1 = ActivationCondition::composite_condition({{1, 2}, {3, 4}}, 0);
+    auto m2 = ActivationCondition::composite_condition({{2, 5}, {3}}, 0);
+
+    std::vector<ActivationCondition> items = {b, m1, m2};
+    ActivationCondition expected =
+        ActivationCondition::Or(ActivationCondition::Or(b, m1), m2);
+
+    std::vector<size_t> order = {0, 1, 2};
+    do {
+      std::vector<const ActivationCondition*> ptrs = {
+          &items[order[0]], &items[order[1]], &items[order[2]]};
+      auto res = ActivationCondition::OrAll(ptrs);
+      ASSERT_TRUE(res.ok()) << res.status();
+      EXPECT_EQ(*res, expected);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
+}
+
+TEST(ActivationConditionTest,
+     OrAll_DelayedUnitaryAbsorptionAvoidsIntermediateBlowup) {
+  SegmentSet base_segments;
+  base_segments.insert_range(0, 999);
+
+  std::vector<ActivationCondition> conditions;
+  conditions.reserve(311);
+  conditions.push_back(ActivationCondition::or_segments(base_segments, 0));
+
+  for (segment_index_t i = 0; i < 20; ++i) {
+    for (segment_index_t j = 0; j < 10; ++j) {
+      segment_index_t l = 1000 + i;
+      segment_index_t v = 1020 + j;
+      segment_index_t t = 1030 + ((i + j) % 10);
+      conditions.push_back(ActivationCondition::and_segments({l, v, t}, 0));
+    }
+  }
+  for (segment_index_t i = 0; i < 10; ++i) {
+    for (segment_index_t j = 0; j < 10; ++j) {
+      segment_index_t l = 1000 + i;
+      segment_index_t v = 1020 + j;
+      conditions.push_back(ActivationCondition::and_segments({l, v}, 0));
+    }
+  }
+  for (segment_index_t j = 0; j < 10; ++j) {
+    conditions.push_back(ActivationCondition::exclusive_segment(1020 + j, 0));
+    base_segments.insert(1020 + j);
+  }
+
+  auto res = ActivationCondition::OrAll(conditions);
+  ASSERT_TRUE(res.ok()) << res.status();
+  EXPECT_EQ(*res, ActivationCondition::or_segments(base_segments, 0));
 }
 
 }  // namespace ift::encoder

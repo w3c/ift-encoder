@@ -1,5 +1,8 @@
 #include "ift/encoder/dependency_closure.h"
 
+#include <utility>
+#include <vector>
+
 #include "absl/log/log.h"
 #include "ift/common/font_helper.h"
 #include "ift/common/hb_set_unique_ptr.h"
@@ -288,10 +291,13 @@ DependencyClosure::EdgeConditionsToActivationCondition(
   std::optional<ConditionAndSegments> out;
 
   for (const std::vector<Node>& node_group : edge_conditions) {
-    std::optional<ConditionAndSegments> group_condition;
     if (node_group.empty()) {
       return absl::InternalError("Unexpected empty node condition group.");
     }
+
+    std::vector<const ActivationCondition*> group_conditions;
+    group_conditions.reserve(node_group.size());
+    SegmentSet group_interacting_segments;
 
     for (Node node : node_group) {
       auto it = node_conditions.find(node);
@@ -301,27 +307,28 @@ DependencyClosure::EdgeConditionsToActivationCondition(
         continue;
       }
 
-      if (!group_condition.has_value()) {
-        group_condition = it->second;
-      } else {
-        // edge_conditions is in cnf form, so the inner groups are disjunctive.
-        group_condition->condition = ActivationCondition::Or(group_condition->condition, it->second.condition);
-        group_condition->interacting_segments.union_set(it->second.interacting_segments);
-      }
+      group_conditions.push_back(&it->second.condition);
+      group_interacting_segments.union_set(it->second.interacting_segments);
     }
 
-    if (!group_condition.has_value()) {
-      // If group_condition is empty that means it's FALSE, and since the group
+    if (group_conditions.empty()) {
+      // If group_conditions is empty that means it's FALSE, and since the group
       // condition combines with AND with other sub-groups, the whole expression
       // is also false.
       return std::nullopt;
     }
 
+    ConditionAndSegments group_condition{
+        TRY(ActivationCondition::OrAll(group_conditions)),
+        std::move(group_interacting_segments),
+    };
+
     if (!out.has_value()) {
-      out = group_condition;
+      out = std::move(group_condition);
     } else {
-      out->condition = ActivationCondition::And(out->condition, group_condition->condition);
-      out->interacting_segments.union_set(group_condition->interacting_segments);
+      out->condition =
+          ActivationCondition::And(out->condition, group_condition.condition);
+      out->interacting_segments.union_set(group_condition.interacting_segments);
     }
   }
 
@@ -354,8 +361,16 @@ Status DependencyClosure::PropagateConditions(
           continue;
         }
 
-        std::optional<ConditionAndSegments> complete_condition;
+        std::vector<ActivationCondition> edge_conditions;
+        edge_conditions.reserve(it->second.size() + 1);
+        SegmentSet complete_interacting_segments;
+        if (node_conditions_it != node_conditions.end()) {
+          edge_conditions.push_back(node_conditions_it->second.condition);
+          complete_interacting_segments =
+              node_conditions_it->second.interacting_segments;
+        }
 
+        bool found_edge = false;
         for (const EdgeConditionsCnf& edge : it->second) {
           std::optional<ConditionAndSegments> condition =
               TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
@@ -365,35 +380,31 @@ Status DependencyClosure::PropagateConditions(
             continue;
           }
 
-          if (complete_condition.has_value()) {
-            complete_condition->condition =
-                ActivationCondition::Or(complete_condition->condition, condition->condition);
-            complete_condition->interacting_segments.union_set(condition->interacting_segments);
-          } else {
-            complete_condition = condition;
-          }
+          found_edge = true;
+          edge_conditions.push_back(std::move(condition->condition));
+          complete_interacting_segments.union_set(
+              condition->interacting_segments);
         }
 
-        if (!complete_condition.has_value()) {
+        if (!found_edge) {
           // If no condition has been found, the condition for this node in this
           // phase is FALSE so don't add a entry into the node_conditions map.
           continue;
         }
 
-        auto it_existing = node_conditions.find(n);
-        if (it_existing == node_conditions.end()) {
-          node_conditions.insert({n, *complete_condition});
+        ConditionAndSegments combined{
+            TRY(ActivationCondition::OrAll(edge_conditions)),
+            std::move(complete_interacting_segments),
+        };
+
+        if (node_conditions_it == node_conditions.end()) {
+          node_conditions.insert({n, std::move(combined)});
           modified.insert(n);
           changed = true;
-        } else {
-          ConditionAndSegments combined = it_existing->second;
-          combined.condition = ActivationCondition::Or(combined.condition, complete_condition->condition);
-          combined.interacting_segments.union_set(complete_condition->interacting_segments);
-          if (combined != it_existing->second) {
-            it_existing->second = std::move(combined);
-            modified.insert(n);
-            changed = true;
-          }
+        } else if (combined != node_conditions_it->second) {
+          node_conditions_it->second = std::move(combined);
+          modified.insert(n);
+          changed = true;
         }
       }
 

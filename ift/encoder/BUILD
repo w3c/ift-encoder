@@ -492,6 +492,7 @@ cc_test(
         "//ift/freq:common",
         "//ift/freq:mock_probability_calculator",
         "//ift/proto",
+        "@abseil-cpp//absl/status",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
