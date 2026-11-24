@@ -1406,4 +1406,40 @@ TEST_F(CompilerTest, PopulateTableKeyedPatchMap_OrdersByPatchSize) {
   EXPECT_FALSE(applied_uris.contains("03.ift_tk"));
 }
 
+TEST_F(CompilerTest, MixedMode_StripsUnrecognizedTables) {
+  auto orig_face = font.face();
+  flat_hash_map<hb_tag_t, std::string> tables;
+  for (hb_tag_t tag : FontHelper::GetTags(orig_face.get())) {
+    tables[tag] = FontHelper::TableData(orig_face.get(), tag).string();
+  }
+  constexpr hb_tag_t kPfEd = HB_TAG('P', 'f', 'E', 'd');
+  tables[kPfEd] = std::string(1024, 'x');
+  FontData input_font = FontHelper::BuildFont(tables);
+  auto input_face = input_font.face();
+  ASSERT_TRUE(FontHelper::GetTags(input_face.get()).contains(kPfEd));
+
+  Compiler compiler;
+  compiler.SetFace(input_face.get());
+  compiler.SetWoff2Encode(false);
+  ASSERT_TRUE(compiler.SetInitSubset(IntSet{'a'}).ok());
+  compiler.AddNonGlyphDataSegment(IntSet{'b'});
+  ASSERT_TRUE(compiler.AddGlyphDataPatch(1, {2}).ok());
+  ASSERT_TRUE(compiler.AddGlyphDataPatchCondition(
+                  PatchMap::Entry({'b'}, 1, PatchEncoding::GLYPH_KEYED))
+                  .ok());
+
+  auto encoding = compiler.Compile();
+  ASSERT_TRUE(encoding.ok()) << encoding.status();
+  auto encoded_face = encoding->init_font.face();
+  EXPECT_FALSE(FontHelper::GetTags(encoded_face.get()).contains(kPfEd));
+
+  auto cut_init =
+      Compiler::CutMixedModeInitSubset(input_face.get(), SubsetDefinition{'a'});
+  ASSERT_TRUE(cut_init.ok()) << cut_init.status();
+  auto cut_face = cut_init->face();
+  EXPECT_FALSE(FontHelper::GetTags(cut_face.get()).contains(kPfEd));
+  EXPECT_EQ(hb_face_get_glyph_count(cut_face.get()),
+            hb_face_get_glyph_count(input_face.get()));
+}
+
 }  // namespace ift::encoder

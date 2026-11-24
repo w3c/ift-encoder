@@ -164,6 +164,13 @@ class Compiler {
   static absl::StatusOr<ift::common::FontData> RoundTripWoff2(
       absl::string_view font, bool glyf_transform = true);
 
+  /*
+   * Cuts the initial font subset in mixed mode using `init_subset` (closured
+   * via hb_subset with mixed-mode flags and glyph-keyed base tables).
+   */
+  static absl::StatusOr<ift::common::FontData> CutMixedModeInitSubset(
+      hb_face_t* face, const SubsetDefinition& init_subset);
+
   absl::Status SetInitSubsetFromDef(const SubsetDefinition& init_subset) {
     if (!init_subset_.Empty()) {
       return absl::FailedPreconditionError("Base subset has already been set.");
@@ -322,7 +329,9 @@ class Compiler {
    * Returns true if this encoding will contain both glyph keyed and table keyed
    * patches.
    */
-  bool IsMixedMode() const { return !glyph_data_patches_.empty(); }
+  bool IsMixedMode() const {
+    return !glyph_data_patches_.empty() || force_mixed_mode_;
+  }
 
   absl::Status EnsureGlyphKeyedPatchesPopulated(
       ProcessingContext& context, const design_space_t& design_space,
@@ -418,6 +427,7 @@ class Compiler {
   bool use_prefetch_lists_ = false;
   bool include_all_segment_patches_ = false;
   bool woff2_encode_ = false;
+  bool force_mixed_mode_ = false;
   std::vector<uint8_t> override_url_template_prefix_;
 
   struct ProcessingContext {

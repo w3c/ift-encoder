@@ -25,6 +25,7 @@
 #include "ift/config/auto_segmenter_config.h"
 #include "ift/config/common.pb.h"
 #include "ift/encoder/activation_condition.h"
+#include "ift/encoder/compiler.h"
 #include "ift/encoder/glyph_groupings.h"
 #include "ift/encoder/glyph_segmentation.h"
 #include "ift/encoder/invalidation_set.h"
@@ -911,8 +912,18 @@ StatusOr<std::vector<SegmentationCost>> ClosureGlyphSegmenter::TotalCosts(
 
   double init_font_size = 0.0;
   if (target_mode_ != ift::config::UNICODE_RANGE) {
-    init_font_size = TRY(CandidateMerge::Woff2SizeOf(
-        original_face, segmentation.InitialFontSegment(), 11));
+    if (!segmentation.GidSegments().empty() ||
+        !segmentation.InitialFontGlyphClosure().empty()) {
+      FontData init_data = TRY(Compiler::CutMixedModeInitSubset(
+          original_face, segmentation.InitialFontSegment()));
+      // Mixed-mode always uses WOFF2 glyf_transform (see Compiler::Compile).
+      FontData woff2 =
+          TRY(Woff2::EncodeWoff2(init_data.str(), /*glyf_transform=*/true, 11));
+      init_font_size = static_cast<double>(woff2.size());
+    } else {
+      init_font_size = TRY(CandidateMerge::Woff2SizeOf(
+          original_face, segmentation.InitialFontSegment(), 11));
+    }
   }
   double non_ift_font_size =
       TRY(CandidateMerge::Woff2SizeOf(original_face, non_ift, 11));
