@@ -910,12 +910,13 @@ CandidateMerge::ComputePatchMergeDetails(
         absl::StrCat("Unexpected empty original conditions."));
   }
 
-  auto it = original_conditions.begin();
-  ActivationCondition merged_condition = *it++;
-  while (it != original_conditions.end()) {
-    merged_condition = ActivationCondition::Or(merged_condition, *it);
-    it++;
+  std::vector<const ActivationCondition*> cond_ptrs;
+  cond_ptrs.reserve(original_conditions.size());
+  for (const ActivationCondition& cond : original_conditions) {
+    cond_ptrs.push_back(&cond);
   }
+  ActivationCondition merged_condition =
+      TRY(ActivationCondition::OrAll(cond_ptrs));
 
   if (merger.Context().GetConditionAnalysisMode() ==
       config::DEP_GRAPH_ONLY_WITH_SIMPLIFICATION) {

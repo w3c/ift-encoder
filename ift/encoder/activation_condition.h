@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "absl/hash/hash.h"
+#include "absl/status/statusor.h"
 #include "ift/common/int_set.h"
 #include "ift/config/segmentation_plan.pb.h"
 #include "ift/encoder/segment.h"
@@ -81,6 +82,18 @@ class ActivationCondition {
   // from condition a (eg. activated, encoding).
   static ActivationCondition Or(const ActivationCondition& a,
                                 const ActivationCondition& b);
+
+  // Returns a new activation condition that activates when any condition in
+  // 'conditions' activates (logical OR across all inputs).
+  //
+  // Requires 'conditions' to be non-empty (and non-null for pointer overload).
+  // If 'conditions' has size 1, returns that single condition unchanged
+  // (preserving is_exclusive_). Otherwise combines metadata commutatively in
+  // the same way as Or().
+  static absl::StatusOr<ActivationCondition> OrAll(
+      absl::Span<const ActivationCondition* const> conditions);
+  static absl::StatusOr<ActivationCondition> OrAll(
+      absl::Span<const ActivationCondition> conditions);
 
   /*
    * Converts a list of activation conditions into a list of condition entries
@@ -264,6 +277,9 @@ class ActivationCondition {
  private:
   ActivationCondition()
       : conditions_(), activated_({0}), encoding_(proto::GLYPH_KEYED) {}
+
+  static ActivationCondition CombineOrMetadata(
+      absl::Span<const ActivationCondition* const> conditions);
 
   bool is_exclusive_ = false;
   // Represents:

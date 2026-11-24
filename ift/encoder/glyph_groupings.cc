@@ -1,6 +1,8 @@
 #include "ift/encoder/glyph_groupings.h"
 
 #include <optional>
+#include <utility>
+#include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/log/log.h"
@@ -229,7 +231,8 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
   }
 
   // Map representative to combined condition and glyphs.
-  flat_hash_map<glyph_id_t, ActivationCondition> merged_conditions;
+  flat_hash_map<glyph_id_t, std::vector<const ActivationCondition*>>
+      conditions_to_merge;
   flat_hash_map<glyph_id_t, GlyphSet> merged_glyphs;
 
   for (const auto& cond : affected_conditions) {
@@ -250,20 +253,21 @@ Status GlyphGroupings::RecomputeCombinedConditions() {
         combined_exclusive_segments_.insert(*cond.TriggeringSegments().begin());
       }
 
-      auto [it, inserted] = merged_conditions.insert({rep, cond});
-      if (!inserted) {
-        it->second = ActivationCondition::Or(it->second, cond);
-      }
+      conditions_to_merge[rep].push_back(&cond);
       merged_glyphs[rep].union_set(gids);
     } else {
       TRYV(AddConditionAndGlyphs(cond, gids, false));
     }
   }
 
-  if (simplify_combined_) {
-    for (auto& cond : merged_conditions) {
-      cond.second = cond.second.NonCompositeSuperset();
+  flat_hash_map<glyph_id_t, ActivationCondition> merged_conditions;
+  merged_conditions.reserve(conditions_to_merge.size());
+  for (const auto& [rep, conds] : conditions_to_merge) {
+    ActivationCondition merged = TRY(ActivationCondition::OrAll(conds));
+    if (simplify_combined_) {
+      merged = merged.NonCompositeSuperset();
     }
+    merged_conditions.insert({rep, std::move(merged)});
   }
 
   // Add the new combined conditions.

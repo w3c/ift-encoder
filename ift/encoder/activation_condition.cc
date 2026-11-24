@@ -163,16 +163,56 @@ ActivationCondition ActivationCondition::And(const ActivationCondition& a,
   return condition;
 }
 
-ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
-                                            const ActivationCondition& b) {
-  ActivationCondition condition;
-  // These fields all participate in operator==(), Hash() and operator<(), so
-  // they must be combined in a commutative and associative way. Otherwise
-  // folding Or() across a group of conditions would produce different results
-  // depending on the order the conditions are visited in.
-  condition.is_exclusive_ = false;
-  condition.activated_ = std::max(a.activated_, b.activated_);
-  condition.encoding_ = std::max(a.encoding_, b.encoding_);
+namespace {
+
+// A conjunction of disjunctive segment clauses: (c_0) AND (c_1) AND ...
+using CnfClauses = std::vector<SegmentSet>;
+
+bool IsSubsetOf(const SegmentSet& small, const SegmentSet& large) {
+  if (small.size() == 1) {
+    return large.contains(*small.min());
+  }
+  return small.is_subset_of(large);
+}
+
+bool AnyClauseIsSubsetOf(Span<const SegmentSet> clauses,
+                         const SegmentSet& superset) {
+  for (const SegmentSet& clause : clauses) {
+    if (IsSubsetOf(clause, superset)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void UnionIntoDisjunction(SegmentSet& target, const SegmentSet& addition) {
+  if (addition.size() == 1) {
+    target.insert(*addition.min());
+  } else {
+    target.union_set(addition);
+  }
+}
+
+CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
+  if (a.size() == 1 && b.size() == 1) {
+    const SegmentSet* larger = &a[0];
+    const SegmentSet* smaller = &b[0];
+    if (smaller->size() > larger->size()) {
+      std::swap(larger, smaller);
+    }
+    SegmentSet combined = *larger;
+    UnionIntoDisjunction(combined, *smaller);
+    return {std::move(combined)};
+  }
+
+  // If one side is a single clause B and any clause C_i of the other side is a
+  // subset of B, then that multi-clause side implies B, so (B OR other) == B.
+  if (a.size() == 1 && AnyClauseIsSubsetOf(b, a[0])) {
+    return a;
+  }
+  if (b.size() == 1 && AnyClauseIsSubsetOf(a, b[0])) {
+    return b;
+  }
 
   // The general approach to doing Or combination is to create a cross product
   // of the sub groups from a and b. However, for any sub groups of a and b that
@@ -185,15 +225,16 @@ ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
   // we can do this in a single pass since activation conditions always store
   // their conditions sorted internally.
 
+  CnfClauses out;
   std::vector<const SegmentSet*> a_unique;
-  a_unique.reserve(a.conditions_.size());
+  a_unique.reserve(a.size());
   std::vector<const SegmentSet*> b_unique;
-  b_unique.reserve(b.conditions_.size());
+  b_unique.reserve(b.size());
 
-  auto a_it = a.conditions().begin();
-  auto b_it = b.conditions().begin();
+  auto a_it = a.begin();
+  auto b_it = b.begin();
 
-  while (a_it != a.conditions().end() && b_it != b.conditions().end()) {
+  while (a_it != a.end() && b_it != b.end()) {
     if (*a_it < *b_it) {
       a_unique.push_back(&*a_it);
       a_it++;
@@ -201,17 +242,17 @@ ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
       b_unique.push_back(&*b_it);
       b_it++;
     } else {
-      condition.conditions_.push_back(*a_it);
+      out.push_back(*a_it);
       a_it++;
       b_it++;
     }
   }
 
-  while (a_it != a.conditions().end()) {
+  while (a_it != a.end()) {
     a_unique.push_back(&*a_it);
     a_it++;
   }
-  while (b_it != b.conditions().end()) {
+  while (b_it != b.end()) {
     b_unique.push_back(&*b_it);
     b_it++;
   }
@@ -221,21 +262,274 @@ ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
     // empty. We can skip cross product calc and simplification since the
     // identical clauses are pulled only from a and b which both are already
     // simplified.
-    return condition;
+    return out;
   }
 
-  condition.conditions_.reserve(condition.conditions_.size() +
-                                a_unique.size() * b_unique.size());
+  out.reserve(out.size() + a_unique.size() * b_unique.size());
   for (const auto* a_group : a_unique) {
     for (const auto* b_group : b_unique) {
       SegmentSet combined_group = *a_group;
-      combined_group.union_set(*b_group);
-      condition.conditions_.push_back(std::move(combined_group));
+      UnionIntoDisjunction(combined_group, *b_group);
+      out.push_back(std::move(combined_group));
     }
   }
-  Simplify(condition.conditions_);
+  Simplify(out);
+  return out;
+}
 
+Status ValidateOrAllInputs(Span<const ActivationCondition* const> conditions) {
+  if (conditions.empty()) {
+    return absl::InvalidArgumentError("OrAll requires at least one condition.");
+  }
+  for (const ActivationCondition* c : conditions) {
+    if (c == nullptr) {
+      return absl::InvalidArgumentError(
+          "OrAll received a null condition pointer.");
+    }
+  }
+  return absl::OkStatus();
+}
+
+bool AnyConditionIsAlwaysTrue(
+    Span<const ActivationCondition* const> conditions) {
+  return std::any_of(
+      conditions.begin(), conditions.end(),
+      [](const ActivationCondition* c) { return c->IsAlwaysTrue(); });
+}
+
+struct PartitionedClauses {
+  std::vector<const SegmentSet*> single_clauses;
+  std::vector<Span<const SegmentSet>> multi_clauses;
+};
+
+PartitionedClauses PartitionClauses(
+    Span<const ActivationCondition* const> conditions) {
+  PartitionedClauses partitioned;
+  partitioned.single_clauses.reserve(conditions.size());
+  partitioned.multi_clauses.reserve(conditions.size());
+  for (const ActivationCondition* c : conditions) {
+    if (c->conditions().size() == 1) {
+      partitioned.single_clauses.push_back(&c->conditions()[0]);
+    } else {
+      partitioned.multi_clauses.push_back(c->conditions());
+    }
+  }
+  return partitioned;
+}
+
+SegmentSet UnionSingleClauses(Span<const SegmentSet* const> single_clauses) {
+  if (single_clauses.empty()) {
+    return SegmentSet();
+  }
+  if (single_clauses.size() == 1) {
+    return *single_clauses.at(0);
+  }
+  const SegmentSet* largest =
+      *std::max_element(single_clauses.begin(), single_clauses.end(),
+                        [](const SegmentSet* a, const SegmentSet* b) {
+                          return a->size() < b->size();
+                        });
+  SegmentSet combined = *largest;
+  for (const SegmentSet* clause : single_clauses) {
+    if (clause != largest) {
+      UnionIntoDisjunction(combined, *clause);
+    }
+  }
+  return combined;
+}
+
+void CofactorTerm(CnfClauses& term, const SegmentSet& base_disjunction) {
+  bool modified = false;
+  for (SegmentSet& clause : term) {
+    if (clause.intersects(base_disjunction)) {
+      clause.subtract(base_disjunction);
+      modified = true;
+    }
+  }
+  if (modified) {
+    Simplify(term);
+  }
+}
+
+// Cofactors a non-absorbed `term` against `base_disjunction`. If it collapses
+// to a single clause, merges it into `base_disjunction` and returns true;
+// otherwise appends the reduced term to `retained`.
+bool CofactorTermOrMergeIntoBase(CnfClauses term, SegmentSet& base_disjunction,
+                                 std::vector<CnfClauses>& retained) {
+  CofactorTerm(term, base_disjunction);
+  if (term.size() == 1) {
+    UnionIntoDisjunction(base_disjunction, term[0]);
+    return true;
+  }
+  retained.push_back(std::move(term));
+  return false;
+}
+
+// Drops multi-clause terms implied by (absorbed into) `base_disjunction` and
+// cofactors remaining terms against `base_disjunction`, repeating whenever a
+// 1-clause collapse expands `base_disjunction`.
+std::vector<CnfClauses> AbsorbAndCofactorTerms(
+    Span<const Span<const SegmentSet>> multi_clauses,
+    SegmentSet& base_disjunction) {
+  std::vector<CnfClauses> terms;
+  terms.reserve(multi_clauses.size());
+  if (base_disjunction.empty()) {
+    for (Span<const SegmentSet> mc : multi_clauses) {
+      terms.emplace_back(mc.begin(), mc.end());
+    }
+    return terms;
+  }
+
+  bool base_grew = false;
+  for (Span<const SegmentSet> mc : multi_clauses) {
+    if (!AnyClauseIsSubsetOf(mc, base_disjunction)) {
+      if (CofactorTermOrMergeIntoBase(CnfClauses(mc.begin(), mc.end()),
+                                      base_disjunction, terms)) {
+        base_grew = true;
+      }
+    }
+  }
+
+  while (base_grew && !terms.empty()) {
+    base_grew = false;
+    std::vector<CnfClauses> prev_terms = std::move(terms);
+    terms.clear();
+    terms.reserve(prev_terms.size());
+    for (CnfClauses& term : prev_terms) {
+      if (!AnyClauseIsSubsetOf(term, base_disjunction)) {
+        if (CofactorTermOrMergeIntoBase(std::move(term), base_disjunction,
+                                        terms)) {
+          base_grew = true;
+        }
+      }
+    }
+  }
+
+  return terms;
+}
+
+// Deduplicates `terms` and folds them via a balanced binary tree of OrClauses
+// to avoid left-deep intermediate clause blowup. Assumes `!terms.empty()`.
+CnfClauses FoldTermsPairwise(std::vector<CnfClauses> terms) {
+  std::sort(terms.begin(), terms.end(),
+            [](const CnfClauses& a, const CnfClauses& b) {
+              if (a.size() != b.size()) {
+                return a.size() < b.size();
+              }
+              return a < b;
+            });
+  terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
+
+  while (terms.size() > 1) {
+    std::vector<CnfClauses> next_terms;
+    next_terms.reserve((terms.size() + 1) / 2);
+    for (size_t i = 0; i + 1 < terms.size(); i += 2) {
+      next_terms.push_back(OrClauses(terms[i], terms[i + 1]));
+    }
+    if (terms.size() % 2 == 1) {
+      next_terms.push_back(std::move(terms.back()));
+    }
+    terms = std::move(next_terms);
+  }
+
+  return std::move(terms[0]);
+}
+
+void DistributeDisjunctionIntoClauses(CnfClauses& clauses,
+                                      const SegmentSet& base_disjunction) {
+  if (base_disjunction.empty()) {
+    return;
+  }
+  // `clauses` comes from cofactored terms, so its clauses are already minimal
+  // and disjoint from `base_disjunction`; unioning `base_disjunction` into
+  // every clause preserves minimality, so Simplify() is not needed.
+  for (SegmentSet& clause : clauses) {
+    if (clause.size() < base_disjunction.size()) {
+      SegmentSet combined = base_disjunction;
+      UnionIntoDisjunction(combined, clause);
+      clause = std::move(combined);
+    } else {
+      UnionIntoDisjunction(clause, base_disjunction);
+    }
+  }
+  std::sort(clauses.begin(), clauses.end());
+}
+
+}  // namespace
+
+ActivationCondition ActivationCondition::CombineOrMetadata(
+    Span<const ActivationCondition* const> conditions) {
+  // These fields all participate in operator==(), Hash() and operator<(), so
+  // they must be combined in a commutative and associative way. Otherwise
+  // folding Or() across a group of conditions would produce different results
+  // depending on the order the conditions are visited in.
+  const std::vector<patch_id_t>* max_activated = &conditions[0]->activated_;
+  PatchEncoding max_encoding = conditions[0]->encoding_;
+  for (size_t i = 1; i < conditions.size(); ++i) {
+    if (conditions[i]->activated_ > *max_activated) {
+      max_activated = &conditions[i]->activated_;
+    }
+    max_encoding = std::max(max_encoding, conditions[i]->encoding_);
+  }
+
+  ActivationCondition result;
+  result.is_exclusive_ = false;
+  result.activated_ = *max_activated;
+  result.encoding_ = max_encoding;
+  return result;
+}
+
+ActivationCondition ActivationCondition::Or(const ActivationCondition& a,
+                                            const ActivationCondition& b) {
+  ActivationCondition condition = CombineOrMetadata({&a, &b});
+  if (a.IsAlwaysTrue() || b.IsAlwaysTrue()) {
+    return condition;
+  }
+
+  condition.conditions_ = OrClauses(a.conditions_, b.conditions_);
   return condition;
+}
+
+StatusOr<ActivationCondition> ActivationCondition::OrAll(
+    Span<const ActivationCondition* const> conditions) {
+  TRYV(ValidateOrAllInputs(conditions));
+  if (conditions.size() == 1) {
+    return *conditions[0];
+  }
+
+  ActivationCondition result = CombineOrMetadata(conditions);
+  if (AnyConditionIsAlwaysTrue(conditions)) {
+    return result;
+  }
+
+  PartitionedClauses partitioned = PartitionClauses(conditions);
+  SegmentSet base_disjunction = UnionSingleClauses(partitioned.single_clauses);
+  if (partitioned.multi_clauses.empty()) {
+    result.conditions_.push_back(std::move(base_disjunction));
+    return result;
+  }
+
+  std::vector<CnfClauses> remaining_terms =
+      AbsorbAndCofactorTerms(partitioned.multi_clauses, base_disjunction);
+  if (remaining_terms.empty()) {
+    result.conditions_.push_back(std::move(base_disjunction));
+    return result;
+  }
+
+  CnfClauses folded = FoldTermsPairwise(std::move(remaining_terms));
+  DistributeDisjunctionIntoClauses(folded, base_disjunction);
+  result.conditions_ = std::move(folded);
+  return result;
+}
+
+StatusOr<ActivationCondition> ActivationCondition::OrAll(
+    Span<const ActivationCondition> conditions) {
+  std::vector<const ActivationCondition*> ptrs;
+  ptrs.reserve(conditions.size());
+  for (const ActivationCondition& c : conditions) {
+    ptrs.push_back(&c);
+  }
+  return OrAll(ptrs);
 }
 
 bool ActivationCondition::Intersects(const common::SegmentSet& segments) const {
