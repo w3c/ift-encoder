@@ -1,6 +1,7 @@
 #include "ift/encoder/activation_condition.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -852,6 +853,103 @@ TEST(ActivationConditionTest,
   auto res = ActivationCondition::OrAll(conditions);
   ASSERT_TRUE(res.ok()) << res.status();
   EXPECT_EQ(*res, ActivationCondition::or_segments(base_segments, 0));
+}
+
+TEST(ActivationConditionTest, OrAll_TwoElementsMatchesOr) {
+  auto excl = ActivationCondition::exclusive_segment(1, 10);
+  excl.SetEncoding(PatchEncoding::TABLE_KEYED_FULL);
+  excl.AddPrefetches({20});
+
+  auto comp = ActivationCondition::composite_condition({{2, 3}, {4}}, 12);
+  comp.SetEncoding(PatchEncoding::TABLE_KEYED_PARTIAL);
+
+  auto always_true = ActivationCondition::True(5);
+
+  for (const auto& [lhs, rhs] :
+       std::vector<std::pair<ActivationCondition, ActivationCondition>>{
+           {excl, comp},
+           {comp, excl},
+           {excl, always_true},
+           {always_true, excl},
+       }) {
+    std::vector<const ActivationCondition*> ptrs = {&lhs, &rhs};
+    auto res = ActivationCondition::OrAll(ptrs);
+    ASSERT_TRUE(res.ok()) << res.status();
+    ActivationCondition expected = ActivationCondition::Or(lhs, rhs);
+    EXPECT_EQ(*res, expected);
+    EXPECT_FALSE(res->IsExclusive());
+  }
+}
+
+TEST(ActivationConditionTest,
+     OrAll_SubsumedMultiClauseAndMidFoldSingleClauseCollapse) {
+  // Multi-clause subsumption (A ⊆ B => B implies A => A OR B == A), with larger
+  // extensions appearing before smaller terms.
+  {
+    auto a = ActivationCondition::composite_condition({{0, 1}, {2}}, 0);
+    auto b1 =
+        ActivationCondition::composite_condition({{0, 1}, {2}, {3}, {4}}, 0);
+    auto b2 = ActivationCondition::composite_condition(
+        {{0, 1}, {2}, {5, 6}, {7, 8}, {9}}, 0);
+
+    std::vector<ActivationCondition> inputs = {b2, b1, a};
+    auto res = ActivationCondition::OrAll(inputs);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(*res, a);
+  }
+
+  // Zero single-clause inputs with large multi-clause chains before small
+  // 2-clause terms (models WorkSans/Biryani pattern where balanced-tree folding
+  // blows up intermediate cross products before reaching small absorbing
+  // terms).
+  {
+    std::vector<ActivationCondition> inputs;
+    for (segment_index_t k = 0; k < 40; ++k) {
+      inputs.push_back(ActivationCondition::composite_condition(
+          {{0, 1},
+           {10 + (k % 20), 10 + ((k + 1) % 20)},
+           {200 + k},
+           {300 + k},
+           {400 + k}},
+          0));
+    }
+    for (segment_index_t k = 0; k < 20; ++k) {
+      inputs.push_back(
+          ActivationCondition::composite_condition({{0, 1}, {10 + k}}, 0));
+    }
+
+    auto res = ActivationCondition::OrAll(inputs);
+    ASSERT_TRUE(res.ok()) << res.status();
+
+    ActivationCondition expected = inputs.back();
+    for (size_t i = inputs.size() - 1; i-- > 0;) {
+      expected = ActivationCondition::Or(expected, inputs[i]);
+    }
+    EXPECT_EQ(*res, expected);
+  }
+
+  // Mid-fold collapse: (t1 OR t2) collapses to 1 clause (s0 OR s1), which must
+  // fold into base_disjunction and distribute across remaining multi-clause t3.
+  {
+    auto t1 = ActivationCondition::composite_condition({{0, 1}, {0, 2}}, 0);
+    auto t2 = ActivationCondition::composite_condition({{0, 1}, {1, 3}}, 0);
+    auto t3 = ActivationCondition::composite_condition({{0, 4}, {5, 6}}, 0);
+
+    ActivationCondition expected =
+        ActivationCondition::composite_condition({{0, 1, 4}, {0, 1, 5, 6}}, 0);
+    EXPECT_EQ(ActivationCondition::Or(ActivationCondition::Or(t1, t2), t3),
+              expected);
+
+    std::vector<ActivationCondition> items = {t1, t2, t3};
+    std::vector<size_t> order = {0, 1, 2};
+    do {
+      std::vector<const ActivationCondition*> ptrs = {
+          &items[order[0]], &items[order[1]], &items[order[2]]};
+      auto res = ActivationCondition::OrAll(ptrs);
+      ASSERT_TRUE(res.ok()) << res.status();
+      EXPECT_EQ(*res, expected);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
 }
 
 }  // namespace ift::encoder
