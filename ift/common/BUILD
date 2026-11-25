@@ -140,6 +140,11 @@ cc_library(
     ],
 )
 
+exports_files(
+    ["testdata/Roboto-Regular.abcd.ttf"],
+    visibility = ["//batch_testing:__pkg__"],
+)
+
 filegroup(
     name = "testdata",
     srcs = glob(["testdata/**"]),

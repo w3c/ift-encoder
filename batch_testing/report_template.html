@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__TITLE__</title>
+  <style>
+    :root {
+      --background: #0f172a;
+      --foreground: #f8fafc;
+      --card: #1e293b;
+      --muted-foreground: #94a3b8;
+      --border: #334155;
+      --primary: #38bdf8;
+    }
+    html.light {
+      --background: #f8fafc;
+      --foreground: #0f172a;
+      --card: #ffffff;
+      --muted-foreground: #64748b;
+      --border: #e2e8f0;
+      --primary: #0284c7;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      background-color: var(--background);
+      color: var(--foreground);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 1.5rem;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3, p, pre { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    code, pre, .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    table { border-collapse: collapse; width: 100%; }
+    .bar-fill { transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--foreground); }
+
+    /* Layout & Spacing */
+    .max-w-7xl { max-width: 80rem; }
+    .mx-auto { margin-left: auto; margin-right: auto; }
+    .mx-1 { margin-left: 0.25rem; margin-right: 0.25rem; }
+    .space-y-6 > * + * { margin-top: 1.5rem; }
+    .space-y-2 > * + * { margin-top: 0.5rem; }
+    .p-2 { padding: 0.5rem; }
+    .p-2\.5 { padding: 0.625rem; }
+    .p-3 { padding: 0.75rem; }
+    .p-4 { padding: 1rem; }
+    .p-5 { padding: 1.25rem; }
+    .p-6 { padding: 1.5rem; }
+    .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+    .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .py-0\.5 { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+    .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+    .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+    .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+    .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+    .pt-4 { padding-top: 1rem; }
+    .mt-0\.5 { margin-top: 0.125rem; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-1\.5 { margin-top: 0.375rem; }
+    .mt-2 { margin-top: 0.5rem; }
+    .mt-3 { margin-top: 0.75rem; }
+    .mt-4 { margin-top: 1rem; }
+    .mb-1 { margin-bottom: 0.25rem; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mb-6 { margin-bottom: 1.5rem; }
+
+    /* Grid & Flex */
+    .block { display: block; }
+    .grid { display: grid; }
+    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .flex-wrap { flex-wrap: wrap; }
+    .flex-1 { flex: 1 1 0%; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+    .gap-4 { gap: 1rem; }
+    .gap-6 { gap: 1.5rem; }
+    @media (min-width: 640px) {
+      .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 768px) {
+      .md\:flex-row { flex-direction: row; }
+      .md\:items-center { align-items: center; }
+    }
+    @media (min-width: 1024px) {
+      .lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .lg\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      .lg\:grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .lg\:grid-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+      .lg\:flex-row { flex-direction: row; }
+      .lg\:items-center { align-items: center; }
+    }
+
+    /* Sizing & Overflow */
+    .w-full { width: 100%; }
+    .w-24 { width: 6rem; }
+    .w-48 { width: 12rem; }
+    .w-64 { width: 16rem; }
+    .h-4 { height: 1rem; }
+    .h-full { height: 100%; }
+    .max-h-44 { max-height: 11rem; }
+    .max-h-96 { max-height: 24rem; }
+    .overflow-hidden { overflow: hidden; }
+    .overflow-x-auto { overflow-x: auto; }
+    .overflow-y-auto { overflow-y: auto; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sticky { position: sticky; }
+    .top-0 { top: 0; }
+
+    /* Borders & Shadows */
+    .border { border: 1px solid var(--border); }
+    .border-b { border-bottom: 1px solid var(--border); }
+    .border-t { border-top: 1px solid var(--border); }
+    .border-r { border-right: 1px solid var(--border); }
+    .border-\[var\(--border\)\] { border-color: var(--border); }
+    .divide-y > * + * { border-top: 1px solid var(--border); }
+    .rounded { border-radius: 0.25rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    .rounded-xl { border-radius: 0.75rem; }
+    .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+
+    /* Typography */
+    .font-normal { font-weight: 400; }
+    .font-medium { font-weight: 500; }
+    .font-semibold { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+    .italic { font-style: italic; }
+    .uppercase { text-transform: uppercase; }
+    .tracking-wider { letter-spacing: 0.05em; }
+    .text-\[10px\] { font-size: 10px; line-height: 14px; }
+    .text-\[11px\] { font-size: 11px; line-height: 16px; }
+    .text-xs { font-size: 0.75rem; line-height: 1rem; }
+    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-base { font-size: 1rem; line-height: 1.5rem; }
+    .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+    .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+
+    /* Theme & Semantic Colors */
+    .bg-\[var\(--background\)\] { background-color: var(--background); }
+    .bg-\[var\(--card\)\] { background-color: var(--card); }
+    .hover\:bg-\[var\(--background\)\]:hover { background-color: var(--background); }
+    .text-\[var\(--foreground\)\] { color: var(--foreground); }
+    .text-\[var\(--muted-foreground\)\] { color: var(--muted-foreground); }
+    .text-emerald-400 { color: #34d399; }
+    .text-emerald-500 { color: #10b981; }
+    .text-sky-400 { color: #38bdf8; }
+    .text-sky-500 { color: #0ea5e9; }
+    .text-amber-400 { color: #fbbf24; }
+    .text-amber-500 { color: #f59e0b; }
+    .text-rose-400 { color: #fb7185; }
+    .text-rose-500 { color: #f43f5e; }
+    .text-slate-400 { color: #94a3b8; }
+    .bg-emerald-300 { background-color: #6ee7b7; }
+    .bg-emerald-400 { background-color: #34d399; }
+    .bg-emerald-500 { background-color: #10b981; }
+    .bg-amber-300 { background-color: #fcd34d; }
+    .bg-amber-400 { background-color: #fbbf24; }
+    .bg-amber-500 { background-color: #f59e0b; }
+    .bg-rose-400 { background-color: #fb7185; }
+    .bg-rose-500 { background-color: #f43f5e; }
+    .bg-slate-400 { background-color: #94a3b8; }
+    .bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+    .bg-sky-500\/20 { background-color: rgba(14, 165, 233, 0.2); }
+    .bg-rose-500\/20 { background-color: rgba(244, 63, 94, 0.2); }
+    .bg-amber-500\/20 { background-color: rgba(245, 158, 11, 0.2); }
+    .bg-slate-500\/20 { background-color: rgba(100, 116, 139, 0.2); }
+    .border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+    .border-sky-500\/30 { border-color: rgba(14, 165, 233, 0.3); }
+    .border-rose-500\/30 { border-color: rgba(244, 63, 94, 0.3); }
+    .border-amber-500\/30 { border-color: rgba(245, 158, 11, 0.3); }
+    .border-slate-500\/30 { border-color: rgba(100, 116, 139, 0.3); }
+    .hover\:border-sky-500:hover { border-color: #0ea5e9; }
+    .hover\:border-emerald-500:hover { border-color: #10b981; }
+    .hover\:border-amber-500:hover { border-color: #f59e0b; }
+    .hover\:border-rose-500:hover { border-color: #f43f5e; }
+    .hover\:border-slate-400:hover { border-color: #94a3b8; }
+    .focus\:outline-none:focus { outline: none; }
+    .focus\:border-sky-500:focus { border-color: #0ea5e9; }
+    .hover\:opacity-80:hover { opacity: 0.8; }
+    .transition { transition: all 0.15s ease-in-out; }
+  </style>
+</head>
+<body class="antialiased space-y-6 max-w-7xl mx-auto">
+
+  <!-- Header -->
+  <div id="header-container" class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-sm"></div>
+
+  <!-- Top KPI Cards -->
+  <div id="kpi-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4"></div>
+
+  <!-- Histograms -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+      <h2 class="font-semibold text-base">Distribution of Segmentation Time % Change</h2>
+      <p id="time-hist-caption" class="text-xs text-[var(--muted-foreground)] mb-4"></p>
+      <div id="time-hist" class="space-y-2 text-xs"></div>
+    </div>
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+      <h2 class="font-semibold text-base">Distribution of IFT Cost % Change</h2>
+      <p id="cost-hist-caption" class="text-xs text-[var(--muted-foreground)] mb-4"></p>
+      <div id="cost-hist" class="space-y-2 text-xs"></div>
+    </div>
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+      <h2 class="font-semibold text-base">Distribution of Uncovered Patch Cost % Change</h2>
+      <p id="uncov-hist-caption" class="text-xs text-[var(--muted-foreground)] mb-4"></p>
+      <div id="uncov-hist" class="space-y-2 text-xs"></div>
+    </div>
+  </div>
+
+  <!-- Percentiles & Quadrants -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Percentile Table -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+      <h2 class="font-semibold text-base mb-1">Quantile Distribution Comparison</h2>
+      <p class="text-xs text-[var(--muted-foreground)] mb-4">Percentiles for Total Segmentation Time (s), IFT Cost, and Uncovered Patch Cost</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+              <th class="py-2 px-2">Quantile</th>
+              <th class="py-2 px-2 text-right">Control Time</th>
+              <th class="py-2 px-2 text-right">Candidate Time</th>
+              <th class="py-2 px-2 text-right">Per-Font Time &Delta;% Quantile</th>
+              <th class="py-2 px-2 text-right">Per-Font Cost &Delta;% Quantile</th>
+              <th class="py-2 px-2 text-right">Per-Font Uncov &Delta;% Quantile</th>
+            </tr>
+          </thead>
+          <tbody id="quantiles-tbody" class="divide-y divide-[var(--border)] font-mono"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Joint Quadrants & Runtime Tiers -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm flex flex-col justify-between">
+      <div>
+        <h2 class="font-semibold text-base mb-1">Joint Outcome Quadrants (Time vs. Cost)</h2>
+        <p class="text-xs text-[var(--muted-foreground)] mb-4">Click any quadrant card to filter the interactive font table below</p>
+        <div id="quadrants-container" class="grid grid-cols-2 gap-3 text-xs mb-6"></div>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-sm mb-2">Breakdown by Control Runtime Tier</h3>
+        <table class="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+              <th class="py-1.5">Tier (Control Time)</th>
+              <th class="py-1.5 text-right">Fonts</th>
+              <th class="py-1.5 text-right">Total Time &Delta;</th>
+              <th class="py-1.5 text-right">Med Time &Delta;%</th>
+              <th class="py-1.5 text-right">Med Cost &Delta;%</th>
+              <th class="py-1.5 text-right">Med Uncov &Delta;%</th>
+            </tr>
+          </thead>
+          <tbody id="tiers-tbody" class="divide-y divide-[var(--border)] font-mono"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeouts & Errors Section -->
+  <div id="timeouts-section" class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+    <div id="timeouts-header" class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4"></div>
+    <div id="per-q-table-container"></div>
+    <div id="timeout-filter-buttons" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 mb-4 text-xs"></div>
+    <div class="overflow-x-auto max-h-96 overflow-y-auto border border-[var(--border)] rounded">
+      <table class="w-full text-xs text-left border-collapse">
+        <thead class="sticky top-0 bg-[var(--card)]">
+          <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+            <th class="py-2 px-2">Font Name</th>
+            <th class="py-2 px-2 text-right">Quality</th>
+            <th class="py-2 px-2">Type</th>
+            <th class="py-2 px-2">Status Change</th>
+            <th class="py-2 px-2">Control Status</th>
+            <th class="py-2 px-2">Candidate Status</th>
+          </tr>
+        </thead>
+        <tbody id="timeout-tbody" class="divide-y divide-[var(--border)] font-mono"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Full Interactive Explorer -->
+  <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+      <div>
+        <h2 id="explorer-title" class="font-semibold text-base">Interactive Font Explorer</h2>
+        <p class="text-xs text-[var(--muted-foreground)]">Search by font name, filter by preset or quadrant, and click any column header to sort</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <input id="search-input" type="text" placeholder="Search font (e.g. Noto, Sinhala, Arabic)..."
+               oninput="applyFilters()"
+               class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] focus:outline-none focus:border-sky-500 w-64" />
+        <select id="preset-select" onchange="applyFilters()"
+                class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)]">
+          <option value="all">All Matched Fonts</option>
+          <option value="speedups">Largest Time Speedups (&Delta;s &lt; 0)</option>
+          <option value="slowdowns">Largest Time Slowdowns (&Delta;s &gt; 0)</option>
+          <option value="cost_down">Largest Cost % Reductions (&Delta;% &lt; 0)</option>
+          <option value="cost_up">Largest Cost % Increases (&Delta;% &gt; 0)</option>
+          <option value="uncov_down">Largest Uncovered Cost % Reductions (&Delta;% &lt; 0)</option>
+          <option value="uncov_up">Largest Uncovered Cost % Increases (&Delta;% &gt; 0)</option>
+          <option value="has_uncov">Fonts with Uncovered Cost (&gt; 0)</option>
+          <option value="win_win">Quadrant: Faster &amp; Lower/Same Cost</option>
+          <option value="fast_exp">Quadrant: Faster &amp; Higher Cost</option>
+          <option value="slow_cheap">Quadrant: Slower/Same Time &amp; Lower/Same Cost</option>
+          <option value="slow_exp">Quadrant: Slower/Same Time &amp; Higher Cost</option>
+        </select>
+        <select id="limit-select" onchange="renderExplorerTable()"
+                class="px-2.5 py-1.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)]">
+          <option value="25">Show 25 rows</option>
+          <option value="50">Show 50 rows</option>
+          <option value="100">Show 100 rows</option>
+          <option value="500">Show 500 rows</option>
+          <option value="999999">Show All</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left border-collapse">
+        <thead>
+          <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+            <th onclick="sortBy('name')" class="py-2 px-2 sortable">Font Name <span id="sort-name"></span></th>
+            <th onclick="sortBy('q')" class="py-2 px-2 text-right sortable">Quality <span id="sort-q"></span></th>
+            <th onclick="sortBy('cps')" class="py-2 px-2 text-right sortable">Codepoints <span id="sort-cps"></span></th>
+            <th onclick="sortBy('bt')" class="py-2 px-2 text-right sortable">Control Time <span id="sort-bt"></span></th>
+            <th onclick="sortBy('ct')" class="py-2 px-2 text-right sortable">Candidate Time <span id="sort-ct"></span></th>
+            <th onclick="sortBy('td')" class="py-2 px-2 text-right sortable">Time &Delta; (s) <span id="sort-td"></span></th>
+            <th onclick="sortBy('tp')" class="py-2 px-2 text-right sortable">Time &Delta; (%) <span id="sort-tp"></span></th>
+            <th onclick="sortBy('bc')" class="py-2 px-2 text-right sortable">Control Cost <span id="sort-bc"></span></th>
+            <th onclick="sortBy('cc')" class="py-2 px-2 text-right sortable">Candidate Cost <span id="sort-cc"></span></th>
+            <th onclick="sortBy('cd')" class="py-2 px-2 text-right sortable">Cost &Delta; <span id="sort-cd"></span></th>
+            <th onclick="sortBy('cp')" class="py-2 px-2 text-right sortable">Cost &Delta; (%) <span id="sort-cp"></span></th>
+            <th onclick="sortBy('bu')" class="py-2 px-2 text-right sortable">Control Uncov <span id="sort-bu"></span></th>
+            <th onclick="sortBy('cu')" class="py-2 px-2 text-right sortable">Candidate Uncov <span id="sort-cu"></span></th>
+            <th onclick="sortBy('ud')" class="py-2 px-2 text-right sortable">Uncov &Delta; <span id="sort-ud"></span></th>
+            <th onclick="sortBy('up')" class="py-2 px-2 text-right sortable">Uncov &Delta; (%) <span id="sort-up"></span></th>
+          </tr>
+        </thead>
+        <tbody id="explorer-tbody" class="divide-y divide-[var(--border)] font-mono"></tbody>
+      </table>
+    </div>
+    <div id="table-footer" class="text-xs text-[var(--muted-foreground)] mt-3"></div>
+  </div>
+
+  <script>
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    const DATA = __DATA__;
+    let filteredRecords = [...DATA.records];
+    let currentSortKey = 'td';
+    let currentSortAsc = true;
+    let currentTimeoutFilter = (DATA.timeout_rows.some(r => r.status_key !== 'persistent')) ? 'non_persistent' : 'all';
+
+    function initPage() {
+      const n = DATA.records.length;
+      const t = DATA.time_stats;
+      const c = DATA.cost_stats;
+      const u = DATA.uncov_stats;
+      const q = DATA.quadrants;
+      const to = DATA.timeouts;
+      const baseName = DATA.base_name;
+      const candName = DATA.cand_name;
+
+      // Header
+      const qBadges = Object.entries(DATA.quality_counts)
+        .map(([qv, cnt]) => `<span class="font-mono">Q${esc(qv)}: ${cnt.toLocaleString()}</span>`)
+        .join(' &bull; ');
+
+      let notesHtml = '';
+      if (DATA.control_notes_text || DATA.candidate_notes_text) {
+        const ctrlTitle = DATA.control_dataset_name ? `${DATA.control_dataset_name}/NOTES.txt` : 'Control NOTES.txt';
+        const candTitle = DATA.candidate_dataset_name ? `${DATA.candidate_dataset_name}/NOTES.txt` : 'Candidate NOTES.txt';
+        const ctrlBlock = DATA.control_notes_text ? `
+          <div>
+            <div class="font-semibold text-sky-400 mb-1">Control Notes (${esc(ctrlTitle)}):</div>
+            <pre class="bg-[var(--background)] p-2.5 rounded border border-[var(--border)] font-mono overflow-x-auto text-[11px]">${esc(DATA.control_notes_text)}</pre>
+          </div>
+        ` : '';
+        const candBlock = DATA.candidate_notes_text ? `
+          <div>
+            <div class="font-semibold text-emerald-400 mb-1">Candidate Notes (${esc(candTitle)}):</div>
+            <pre class="bg-[var(--background)] p-2.5 rounded border border-[var(--border)] font-mono overflow-x-auto text-[11px]">${esc(DATA.candidate_notes_text)}</pre>
+          </div>
+        ` : '';
+        notesHtml = `
+          <div class="mt-4 pt-4 border-t border-[var(--border)] text-xs grid grid-cols-1 lg:grid-cols-2 gap-4">
+            ${ctrlBlock}
+            ${candBlock}
+          </div>
+        `;
+      } else if (DATA.notes_text) {
+        notesHtml = `
+          <div class="mt-4 pt-4 border-t border-[var(--border)] text-xs">
+            <div class="font-semibold text-[var(--muted-foreground)] mb-1">Dataset Notes (${esc(DATA.dataset_name)}/NOTES.txt):</div>
+            <pre class="bg-[var(--background)] p-2.5 rounded border border-[var(--border)] font-mono overflow-x-auto text-[11px]">${esc(DATA.notes_text)}</pre>
+          </div>
+        `;
+      }
+
+      let unmatchedCandHtml = '';
+      if (DATA.unmatched_candidate_only && DATA.unmatched_candidate_only.length > 0) {
+        const rows = DATA.unmatched_candidate_only.map(r => `
+          <tr>
+            <td class="py-1 px-2">${esc(r.font_name)}</td>
+            <td class="py-1 px-2 text-right text-emerald-400">Q${r.selected_quality}</td>
+            <td class="py-1 px-2 text-right">${r.total_time_s.toFixed(2)}s</td>
+            <td class="py-1 px-2 text-right">${Math.round(r.ift_total_cost).toLocaleString()}</td>
+            <td class="py-1 px-2 text-right">${Math.round(r.uncovered_ift_patch_cost).toLocaleString()}</td>
+            <td class="py-1 px-2 text-right text-amber-400">${r.other_max_quality !== null && r.other_max_quality !== undefined ? 'Q' + r.other_max_quality : 'None'}</td>
+          </tr>
+        `).join('');
+        unmatchedCandHtml = `
+          <div class="mt-4 pt-4 border-t border-[var(--border)] text-xs">
+            <div class="font-semibold text-emerald-400 mb-1">
+              ${DATA.unmatched_candidate_only.length.toLocaleString()} Font(s) Completed at Selected Quality in Candidate (${esc(candName)}) with No Matching Completed Record in Control (${esc(baseName)}):
+            </div>
+            <p class="text-[var(--muted-foreground)] mb-2">
+              These fonts are excluded from paired deltas because Control has no completed record at this quality level.
+            </p>
+            <div class="max-h-44 overflow-y-auto border border-[var(--border)] rounded bg-[var(--background)] p-2">
+              <table class="w-full text-xs text-left border-collapse font-mono">
+                <thead>
+                  <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                    <th class="py-1 px-2">Font Name</th>
+                    <th class="py-1 px-2 text-right">Candidate Quality</th>
+                    <th class="py-1 px-2 text-right">Candidate Time</th>
+                    <th class="py-1 px-2 text-right">Candidate Cost</th>
+                    <th class="py-1 px-2 text-right">Candidate Uncov Cost</th>
+                    <th class="py-1 px-2 text-right">Control Max Completed Quality</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-[var(--border)]">${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      let unmatchedCtrlHtml = '';
+      if (DATA.unmatched_control_only && DATA.unmatched_control_only.length > 0) {
+        const rows = DATA.unmatched_control_only.map(r => `
+          <tr>
+            <td class="py-1 px-2">${esc(r.font_name)}</td>
+            <td class="py-1 px-2 text-right text-sky-400">Q${r.selected_quality}</td>
+            <td class="py-1 px-2 text-right">${r.total_time_s.toFixed(2)}s</td>
+            <td class="py-1 px-2 text-right">${Math.round(r.ift_total_cost).toLocaleString()}</td>
+            <td class="py-1 px-2 text-right">${Math.round(r.uncovered_ift_patch_cost).toLocaleString()}</td>
+            <td class="py-1 px-2 text-right text-rose-400">${r.other_max_quality !== null && r.other_max_quality !== undefined ? 'Q' + r.other_max_quality : 'None'}</td>
+          </tr>
+        `).join('');
+        unmatchedCtrlHtml = `
+          <div class="mt-4 pt-4 border-t border-[var(--border)] text-xs">
+            <div class="font-semibold text-rose-400 mb-1">
+              ${DATA.unmatched_control_only.length.toLocaleString()} Font(s) Completed at Selected Quality in Control (${esc(baseName)}) with No Matching Completed Record in Candidate (${esc(candName)}):
+            </div>
+            <p class="text-[var(--muted-foreground)] mb-2">
+              These fonts completed in control but failed or have no completed record in candidate at this quality level.
+            </p>
+            <div class="max-h-44 overflow-y-auto border border-[var(--border)] rounded bg-[var(--background)] p-2">
+              <table class="w-full text-xs text-left border-collapse font-mono">
+                <thead>
+                  <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                    <th class="py-1 px-2">Font Name</th>
+                    <th class="py-1 px-2 text-right">Control Quality</th>
+                    <th class="py-1 px-2 text-right">Control Time</th>
+                    <th class="py-1 px-2 text-right">Control Cost</th>
+                    <th class="py-1 px-2 text-right">Control Uncov Cost</th>
+                    <th class="py-1 px-2 text-right">Candidate Max Completed Quality</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-[var(--border)]">${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      const toColor = to.diff_count < 0 ? 'text-emerald-500' : (to.diff_count > 0 ? 'text-rose-500' : 'text-amber-400');
+      const toSign = to.diff_count > 0 ? '+' : '';
+      const errColor = (to.diff_error_count || 0) < 0 ? 'text-emerald-500' : ((to.diff_error_count || 0) > 0 ? 'text-rose-500' : 'text-amber-400');
+      const errSign = (to.diff_error_count || 0) > 0 ? '+' : '';
+
+      document.getElementById('header-container').innerHTML = `
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-xs uppercase tracking-wider font-semibold text-[var(--muted-foreground)]">
+                Dataset: <code class="text-[var(--foreground)]">${esc(DATA.dataset_name)}</code> &bull; N = ${n.toLocaleString()} Matched Fonts
+              </span>
+              <button onclick="document.documentElement.classList.toggle('light')"
+                      class="text-xs px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--background)] hover:opacity-80">
+                Toggle Light/Dark Theme
+              </button>
+            </div>
+            <h1 class="text-2xl font-bold mt-2">
+              Control: <code class="text-sky-400 bg-[var(--background)] px-2 py-0.5 rounded border border-[var(--border)]">${esc(baseName)}</code>
+              <span class="text-[var(--muted-foreground)] font-normal mx-1">vs.</span>
+              Candidate: <code class="text-emerald-400 bg-[var(--background)] px-2 py-0.5 rounded border border-[var(--border)]">${esc(candName)}</code>
+            </h1>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1.5">
+              <span class="font-semibold text-[var(--foreground)]">Quality Selection:</span> ${esc(DATA.quality_mode_desc)}
+            </p>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1">
+              <span class="font-semibold text-[var(--foreground)]">Matched Quality Breakdown:</span> ${qBadges}
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="px-4 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-right">
+              <div class="text-xs text-[var(--muted-foreground)]">Net Corpus Time &Delta;</div>
+              <div class="text-lg font-bold ${t.delta_sum <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+                ${(t.delta_sum / 3600.0) >= 0 ? '+' : ''}${(t.delta_sum / 3600.0).toFixed(2)} hrs (${t.delta_pct >= 0 ? '+' : ''}${t.delta_pct.toFixed(2)}%)
+              </div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">${(t.control_sum/3600.0).toFixed(2)}h &rarr; ${(t.candidate_sum/3600.0).toFixed(2)}h</div>
+            </div>
+            <div class="px-4 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-right">
+              <div class="text-xs text-[var(--muted-foreground)]">Net Corpus Cost &Delta;</div>
+              <div class="text-lg font-bold ${c.delta_sum <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+                ${(c.delta_sum / 1e6) >= 0 ? '+' : ''}${(c.delta_sum / 1e6).toFixed(2)}M (${c.delta_pct >= 0 ? '+' : ''}${c.delta_pct.toFixed(2)}%)
+              </div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">${(c.control_sum/1e6).toFixed(2)}M &rarr; ${(c.candidate_sum/1e6).toFixed(2)}M</div>
+            </div>
+            <div class="px-4 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-right">
+              <div class="text-xs text-[var(--muted-foreground)]">Net Uncovered Cost &Delta;</div>
+              <div class="text-lg font-bold ${u.delta_sum <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+                ${(u.delta_sum / 1e6) >= 0 ? '+' : ''}${(u.delta_sum / 1e6).toFixed(2)}M ${u.delta_pct !== null ? `(${u.delta_pct >= 0 ? '+' : ''}${u.delta_pct.toFixed(2)}%)` : '(n/a)'}
+              </div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">${(u.control_sum/1e6).toFixed(2)}M &rarr; ${(u.candidate_sum/1e6).toFixed(2)}M</div>
+            </div>
+            <a href="#timeouts-section" class="px-4 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-right hover:border-sky-500 transition block">
+              <div class="text-xs text-[var(--muted-foreground)]">Timeouts</div>
+              <div class="text-lg font-bold ${toColor}">
+                ${to.control_count} &rarr; ${to.candidate_count} (${toSign}${to.diff_count})
+              </div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">
+                ${to.resolved_count} resolved &bull; ${to.new_count} new
+              </div>
+            </a>
+            <a href="#timeouts-section" class="px-4 py-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-right hover:border-sky-500 transition block">
+              <div class="text-xs text-[var(--muted-foreground)]">Errors</div>
+              <div class="text-lg font-bold ${errColor}">
+                ${to.control_error_count || 0} &rarr; ${to.candidate_error_count || 0} (${errSign}${to.diff_error_count || 0})
+              </div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">
+                ${to.resolved_error_count || 0} resolved &bull; ${to.new_error_count || 0} new
+              </div>
+            </a>
+          </div>
+        </div>
+        ${notesHtml}
+        ${unmatchedCandHtml}
+        ${unmatchedCtrlHtml}
+      `;
+
+      // Top KPI Cards
+      const uncovMedStr = u.delta_pct_median !== null ? `${u.delta_pct_median >= 0 ? '+' : ''}${u.delta_pct_median.toFixed(2)}%` : 'n/a';
+      document.getElementById('kpi-container').innerHTML = `
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Median Per-Font Time &Delta;</div>
+          <div class="text-2xl font-bold mt-1 ${t.delta_pct_median <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+            ${t.delta_pct_median >= 0 ? '+' : ''}${t.delta_pct_median.toFixed(2)}%
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            ${t.control_median.toFixed(2)}s &rarr; ${t.candidate_median.toFixed(2)}s (Mean: ${t.delta_pct_mean >= 0 ? '+' : ''}${t.delta_pct_mean.toFixed(2)}%)
+          </div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Runtime Direction</div>
+          <div class="text-2xl font-bold mt-1">
+            ${(t.improved_count / n * 100.0).toFixed(1)}% <span class="text-sm font-normal text-[var(--muted-foreground)]">faster</span>
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            ${t.improved_count.toLocaleString()} faster &bull; ${t.regressed_count.toLocaleString()} slower
+          </div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Median Per-Font Cost &Delta;</div>
+          <div class="text-2xl font-bold mt-1 ${c.delta_pct_median <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+            ${c.delta_pct_median >= 0 ? '+' : ''}${c.delta_pct_median.toFixed(2)}%
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            ${c.improved_count.toLocaleString()} lower (${(c.improved_count/n*100).toFixed(1)}%) &bull; ${c.regressed_count.toLocaleString()} higher (${(c.regressed_count/n*100).toFixed(1)}%)
+          </div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Median Uncovered Cost &Delta;</div>
+          <div class="text-2xl font-bold mt-1 ${(u.delta_pct_median !== null && u.delta_pct_median <= 0) ? 'text-emerald-500' : 'text-rose-500'}">
+            ${uncovMedStr}
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            ${u.improved_count.toLocaleString()} lower &bull; ${u.regressed_count.toLocaleString()} higher (${u.active_count.toLocaleString()} w/ uncov)
+          </div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Win-Win Rate (Faster &amp; &le; Cost)</div>
+          <div class="text-2xl font-bold mt-1 text-emerald-500">
+            ${(q.fast_cheap / n * 100.0).toFixed(1)}%
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            ${q.fast_cheap.toLocaleString()} win-win &bull; ${q.fast_expensive.toLocaleString()} trade-off
+          </div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] font-medium">Timeouts (${toSign}${to.diff_count}) &amp; Errors (${errSign}${to.diff_error_count || 0})</div>
+          <div class="text-2xl font-bold mt-1 ${toColor}">
+            ${to.candidate_count} <span class="text-sm font-normal text-[var(--muted-foreground)]">timeouts (${toSign}${to.diff_count})</span>
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1">
+            Errors: <span class="font-bold ${errColor}">${to.candidate_error_count || 0}</span> (${errSign}${to.diff_error_count || 0} vs ctrl) &bull; ${to.resolved_error_count || 0} res / ${to.new_error_count || 0} new
+          </div>
+        </div>
+      `;
+
+      // Histograms captions
+      document.getElementById('time-hist-caption').textContent =
+        `((Candidate Time - Control Time) / Control Time) across ${n.toLocaleString()} matched fonts`;
+      document.getElementById('cost-hist-caption').textContent =
+        `((Candidate Cost - Control Cost) / Control Cost) across ${n.toLocaleString()} matched fonts`;
+      document.getElementById('uncov-hist-caption').textContent =
+        `((Candidate Uncov - Control Uncov) / Control Uncov) across ${u.active_count.toLocaleString()} fonts w/ uncov > 0`;
+
+      renderHist('time-hist', DATA.time_hist);
+      renderHist('cost-hist', DATA.cost_hist);
+      renderHist('uncov-hist', DATA.uncov_hist);
+
+      // Quantiles
+      document.getElementById('quantiles-tbody').innerHTML = DATA.quantiles.map(qr => {
+        const uStr = qr.uncov_delta_pct !== null ? `${qr.uncov_delta_pct >= 0 ? '+' : ''}${qr.uncov_delta_pct.toFixed(2)}% (${Math.round(qr.uncov_delta) >= 0 ? '+' : ''}${Math.round(qr.uncov_delta).toLocaleString()})` : 'n/a';
+        return `
+          <tr class="${qr.is_median ? 'bg-[var(--background)] font-semibold' : ''}">
+            <td class="py-1.5 px-2">${esc(qr.label)}</td>
+            <td class="py-1.5 px-2 text-right">${qr.control_time_s.toFixed(2)}s</td>
+            <td class="py-1.5 px-2 text-right">${qr.candidate_time_s.toFixed(2)}s</td>
+            <td class="py-1.5 px-2 text-right ${qr.time_delta_pct <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+              ${qr.time_delta_pct >= 0 ? '+' : ''}${qr.time_delta_pct.toFixed(2)}% (${qr.time_delta_s >= 0 ? '+' : ''}${qr.time_delta_s.toFixed(2)}s)
+            </td>
+            <td class="py-1.5 px-2 text-right ${qr.cost_delta_pct <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+              ${qr.cost_delta_pct >= 0 ? '+' : ''}${qr.cost_delta_pct.toFixed(2)}% (${Math.round(qr.cost_delta) >= 0 ? '+' : ''}${Math.round(qr.cost_delta).toLocaleString()})
+            </td>
+            <td class="py-1.5 px-2 text-right ${(qr.uncov_delta_pct !== null && qr.uncov_delta_pct <= 0) ? 'text-emerald-500' : 'text-rose-500'}">
+              ${uStr}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Quadrants
+      document.getElementById('quadrants-container').innerHTML = `
+        <button onclick="setQuadrantFilter('win_win')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-emerald-500 transition">
+          <div class="font-semibold text-emerald-500">Faster &amp; Lower/Same Cost</div>
+          <div class="text-xl font-bold mt-1">${q.fast_cheap.toLocaleString()} <span class="text-xs font-normal text-[var(--muted-foreground)]">(${(q.fast_cheap / n * 100).toFixed(2)}%)</span></div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Strict win-win</div>
+        </button>
+        <button onclick="setQuadrantFilter('fast_exp')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-sky-500 transition">
+          <div class="font-semibold text-sky-500">Faster &amp; Higher Cost</div>
+          <div class="text-xl font-bold mt-1">${q.fast_expensive.toLocaleString()} <span class="text-xs font-normal text-[var(--muted-foreground)]">(${(q.fast_expensive / n * 100).toFixed(2)}%)</span></div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Speedup / cost trade-off</div>
+        </button>
+        <button onclick="setQuadrantFilter('slow_cheap')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-amber-500 transition">
+          <div class="font-semibold text-amber-500">Slower/Same Time &amp; Lower/Same Cost</div>
+          <div class="text-xl font-bold mt-1">${q.slow_cheap.toLocaleString()} <span class="text-xs font-normal text-[var(--muted-foreground)]">(${(q.slow_cheap / n * 100).toFixed(2)}%)</span></div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Cost savings / runtime trade-off</div>
+        </button>
+        <button onclick="setQuadrantFilter('slow_exp')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-rose-500 transition">
+          <div class="font-semibold text-rose-500">Slower/Same Time &amp; Higher Cost</div>
+          <div class="text-xl font-bold mt-1">${q.slow_expensive.toLocaleString()} <span class="text-xs font-normal text-[var(--muted-foreground)]">(${(q.slow_expensive / n * 100).toFixed(2)}%)</span></div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Strict regression</div>
+        </button>
+      `;
+
+      // Runtime Tiers
+      document.getElementById('tiers-tbody').innerHTML = DATA.runtime_tiers.map(tr => {
+        const uStr = tr.median_uncov_delta_pct !== null ? `${tr.median_uncov_delta_pct >= 0 ? '+' : ''}${tr.median_uncov_delta_pct.toFixed(2)}%` : 'n/a';
+        return `
+          <tr>
+            <td class="py-1.5 font-medium">${esc(tr.name)}</td>
+            <td class="py-1.5 text-right">${tr.count.toLocaleString()}</td>
+            <td class="py-1.5 text-right ${tr.time_delta_pct <= 0 ? 'text-emerald-500' : 'text-rose-500'}">
+              ${tr.time_delta_pct >= 0 ? '+' : ''}${tr.time_delta_pct.toFixed(2)}% (${tr.time_delta_sum >= 0 ? '+' : ''}${tr.time_delta_sum.toFixed(1)}s)
+            </td>
+            <td class="py-1.5 text-right">${tr.median_time_delta_pct >= 0 ? '+' : ''}${tr.median_time_delta_pct.toFixed(2)}%</td>
+            <td class="py-1.5 text-right">${tr.median_cost_delta_pct >= 0 ? '+' : ''}${tr.median_cost_delta_pct.toFixed(2)}%</td>
+            <td class="py-1.5 text-right">${uStr}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Timeouts Header
+      let distinctToHtml = '';
+      if (to.per_quality && to.per_quality.length > 1) {
+        distinctToHtml = `
+          <div class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)]" title="Fonts that timed out at >= 1 quality level">
+            Fonts w/ Any Timeout: <span class="font-mono font-bold">${to.control_fonts_any} &rarr; ${to.candidate_fonts_any} (${to.diff_fonts_any >= 0 ? '+' : ''}${to.diff_fonts_any})</span>
+          </div>
+          <div class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)]" title="Fonts that had non-timeout errors at >= 1 quality level">
+            Fonts w/ Any Error: <span class="font-mono font-bold">${to.control_error_fonts_any || 0} &rarr; ${to.candidate_error_fonts_any || 0} (${(to.diff_error_fonts_any || 0) >= 0 ? '+' : ''}${to.diff_error_fonts_any || 0})</span>
+          </div>
+        `;
+      }
+      document.getElementById('timeouts-header').innerHTML = `
+        <div>
+          <h2 class="font-semibold text-base">Timeouts &amp; Errors Comparison (<code class="text-xs">error_log.txt</code>)</h2>
+          <p class="text-xs text-[var(--muted-foreground)]">
+            Tracks (Font, Quality) runs that timed out or failed in <span class="font-semibold">${esc(baseName)}</span> vs. <span class="font-semibold">${esc(candName)}</span>
+            ${DATA.quality_filter !== null && DATA.quality_filter !== undefined ? `(Filtered to Quality ${DATA.quality_filter})` : '(Across All Quality Levels)'}
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3 text-xs">
+          <div class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)]">
+            Timeouts: <span class="font-mono font-bold">${to.control_count} &rarr; ${to.candidate_count} (<span class="${toColor}">${toSign}${to.diff_count}</span>)</span>
+          </div>
+          <div class="px-3 py-1.5 rounded bg-[var(--background)] border border-[var(--border)]">
+            Errors: <span class="font-mono font-bold">${to.control_error_count || 0} &rarr; ${to.candidate_error_count || 0} (<span class="${errColor}">${errSign}${to.diff_error_count || 0}</span>)</span>
+          </div>
+          ${distinctToHtml}
+        </div>
+      `;
+
+      // Per-Quality Table
+      if (to.per_quality && to.per_quality.length > 1) {
+        const rows = to.per_quality.map(pq => `
+          <tr>
+            <td class="py-1.5 px-3 font-semibold">Quality ${pq.quality_level}</td>
+            <td class="py-1.5 px-2 text-right">${pq.control_count}</td>
+            <td class="py-1.5 px-2 text-right">${pq.candidate_count}</td>
+            <td class="py-1.5 px-2 text-right font-bold ${pq.diff_count < 0 ? 'text-emerald-500' : (pq.diff_count > 0 ? 'text-rose-500' : '')}">${pq.diff_count >= 0 ? '+' : ''}${pq.diff_count}</td>
+            <td class="py-1.5 px-2 text-right text-emerald-400">${pq.resolved_count}</td>
+            <td class="py-1.5 px-2 text-right text-rose-400">${pq.new_count}</td>
+            <td class="py-1.5 px-2 text-right text-amber-400">${pq.persistent_count}</td>
+            <td class="py-1.5 px-2 text-right text-slate-400 border-r border-[var(--border)]">${pq.missing_count || 0}</td>
+            <td class="py-1.5 px-2 text-right">${pq.control_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right">${pq.candidate_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right font-bold ${(pq.diff_error_count || 0) < 0 ? 'text-emerald-500' : ((pq.diff_error_count || 0) > 0 ? 'text-rose-500' : '')}">${(pq.diff_error_count || 0) >= 0 ? '+' : ''}${pq.diff_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right text-emerald-400">${pq.resolved_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right text-rose-400">${pq.new_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right text-amber-400">${pq.persistent_error_count || 0}</td>
+            <td class="py-1.5 px-2 text-right text-slate-400">${pq.missing_error_count || 0}</td>
+          </tr>
+        `).join('');
+        document.getElementById('per-q-table-container').innerHTML = `
+          <div class="mb-4 overflow-x-auto">
+            <table class="w-full text-xs text-left border-collapse border border-[var(--border)] rounded font-mono">
+              <thead>
+                <tr class="bg-[var(--background)] border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                  <th class="py-1.5 px-3">Quality</th>
+                  <th class="py-1.5 px-2 text-right">Ctrl T/O</th>
+                  <th class="py-1.5 px-2 text-right">Cand T/O</th>
+                  <th class="py-1.5 px-2 text-right">T/O &Delta;</th>
+                  <th class="py-1.5 px-2 text-right text-emerald-400">T/O Res</th>
+                  <th class="py-1.5 px-2 text-right text-rose-400">T/O New</th>
+                  <th class="py-1.5 px-2 text-right text-amber-400">T/O Per</th>
+                  <th class="py-1.5 px-2 text-right text-slate-400 border-r border-[var(--border)]">T/O Mis</th>
+                  <th class="py-1.5 px-2 text-right">Ctrl Err</th>
+                  <th class="py-1.5 px-2 text-right">Cand Err</th>
+                  <th class="py-1.5 px-2 text-right">Err &Delta;</th>
+                  <th class="py-1.5 px-2 text-right text-emerald-400">Err Res</th>
+                  <th class="py-1.5 px-2 text-right text-rose-400">Err New</th>
+                  <th class="py-1.5 px-2 text-right text-amber-400">Err Per</th>
+                  <th class="py-1.5 px-2 text-right text-slate-400">Err Mis</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[var(--border)]">${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // Timeout Filter Buttons
+      const totalAll = to.rows.length;
+      const totalToOnly = to.rows.filter(r => r.category === 'TIMEOUT').length;
+      const totalErrOnly = to.rows.filter(r => r.category === 'ERROR').length;
+      const totalResolved = to.resolved_count + (to.resolved_error_count || 0);
+      const totalNew = to.new_count + (to.new_error_count || 0);
+      const totalPersistent = to.persistent_count + (to.persistent_error_count || 0);
+      const totalMissing = (to.missing_count || 0) + (to.missing_error_count || 0);
+
+      document.getElementById('timeout-filter-buttons').innerHTML = `
+        <button onclick="filterTimeouts('all')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-sky-500 transition">
+          <div class="font-semibold">Show All (${totalAll})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">All timeout &amp; error runs</div>
+        </button>
+        <button onclick="filterTimeouts('timeouts_only')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-sky-500 transition">
+          <div class="font-semibold text-sky-400">Timeouts Only (${totalToOnly})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Timeouts &amp; SIGTERM</div>
+        </button>
+        <button onclick="filterTimeouts('errors_only')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-rose-500 transition">
+          <div class="font-semibold text-rose-400">Errors Only (${totalErrOnly})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Exit codes &amp; exceptions</div>
+        </button>
+        <button onclick="filterTimeouts('resolved')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-emerald-500 transition">
+          <div class="font-semibold text-emerald-400">Resolved (${totalResolved})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Failed in control, completed in cand</div>
+        </button>
+        <button onclick="filterTimeouts('new')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-rose-500 transition">
+          <div class="font-semibold text-rose-400">New Failures (${totalNew})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Completed in ctrl, failed in cand</div>
+        </button>
+        <button onclick="filterTimeouts('persistent')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-amber-500 transition">
+          <div class="font-semibold text-amber-400">Persistent (${totalPersistent})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Failed in both trials</div>
+        </button>
+        <button onclick="filterTimeouts('missing')" class="p-3 text-left rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-slate-400 transition">
+          <div class="font-semibold text-slate-400">Missing Data (${totalMissing})</div>
+          <div class="text-[var(--muted-foreground)] mt-0.5">Failed in one trial, missing in other</div>
+        </button>
+      `;
+
+      document.getElementById('explorer-title').textContent = `Interactive Font Explorer (${n.toLocaleString()} Matched Fonts)`;
+
+      renderTimeoutTable();
+      sortRecords();
+      renderExplorerTable();
+    }
+
+    function renderHist(containerId, data) {
+      const maxPct = Math.max(...data.map(d => d.pct), 1);
+      const container = document.getElementById(containerId);
+      container.innerHTML = data.map(d => `
+        <div class="flex items-center gap-2">
+          <div class="w-48 truncate text-[var(--muted-foreground)]" title="${esc(d.label)}">${esc(d.label)}</div>
+          <div class="flex-1 bg-[var(--background)] h-4 rounded overflow-hidden border border-[var(--border)]">
+            <div class="${esc(d.color)} h-full bar-fill" style="width: ${(d.pct / maxPct) * 100}%"></div>
+          </div>
+          <div class="w-24 text-right font-mono">${d.count.toLocaleString()} (${d.pct.toFixed(1)}%)</div>
+        </div>
+      `).join('');
+    }
+
+    function filterTimeouts(mode) {
+      currentTimeoutFilter = mode;
+      renderTimeoutTable();
+    }
+
+    function renderTimeoutTable() {
+      const tbody = document.getElementById('timeout-tbody');
+      const rows = DATA.timeout_rows.filter(r => {
+        if (currentTimeoutFilter === 'all') return true;
+        if (currentTimeoutFilter === 'non_persistent') return r.status_key !== 'persistent';
+        if (currentTimeoutFilter === 'timeouts_only') return r.category === 'TIMEOUT';
+        if (currentTimeoutFilter === 'errors_only') return r.category === 'ERROR';
+        return r.status_key === currentTimeoutFilter;
+      });
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-3 px-2 text-center text-[var(--muted-foreground)] italic">No matching records for this filter.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr class="hover:bg-[var(--background)]">
+          <td class="py-1.5 px-2 font-mono font-medium" title="${esc(r.font_path)}">${esc(r.font_name)}</td>
+          <td class="py-1.5 px-2 text-right font-mono">Q${r.q}</td>
+          <td class="py-1.5 px-2 font-mono text-xs">
+            <span class="px-1.5 py-0.5 rounded text-[10px] ${r.category === 'TIMEOUT' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}">${esc(r.category || 'TIMEOUT')}</span>
+          </td>
+          <td class="py-1.5 px-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-semibold border ${esc(r.status_badge)}">${esc(r.status)}</span>
+          </td>
+          <td class="py-1.5 px-2 font-mono">${esc(r.base_desc)}</td>
+          <td class="py-1.5 px-2 font-mono">${esc(r.cand_desc)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function setQuadrantFilter(presetVal) {
+      document.getElementById('preset-select').value = presetVal;
+      if (presetVal === 'win_win' || presetVal === 'fast_exp') {
+        currentSortKey = 'td';
+        currentSortAsc = true;
+      } else {
+        currentSortKey = 'td';
+        currentSortAsc = false;
+      }
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const query = document.getElementById('search-input').value.trim().toLowerCase();
+      const preset = document.getElementById('preset-select').value;
+
+      filteredRecords = DATA.records.filter(r => {
+        if (query && !r.name.toLowerCase().includes(query) && !r.path.toLowerCase().includes(query)) {
+          return false;
+        }
+        if (preset === 'speedups') return r.td < 0;
+        if (preset === 'slowdowns') return r.td > 0;
+        if (preset === 'cost_down') return r.cd < 0;
+        if (preset === 'cost_up') return r.cd > 0;
+        if (preset === 'uncov_down') return r.ud < 0;
+        if (preset === 'uncov_up') return r.ud > 0;
+        if (preset === 'has_uncov') return r.bu > 0 || r.cu > 0;
+        if (preset === 'win_win') return r.td < 0 && r.cd <= 0;
+        if (preset === 'fast_exp') return r.td < 0 && r.cd > 0;
+        if (preset === 'slow_cheap') return r.td >= 0 && r.cd <= 0;
+        if (preset === 'slow_exp') return r.td >= 0 && r.cd > 0;
+        return true;
+      });
+
+      if (preset === 'speedups' && currentSortKey !== 'td') { currentSortKey = 'td'; currentSortAsc = true; }
+      if (preset === 'slowdowns' && currentSortKey !== 'td') { currentSortKey = 'td'; currentSortAsc = false; }
+      if (preset === 'cost_down' && currentSortKey !== 'cp') { currentSortKey = 'cp'; currentSortAsc = true; }
+      if (preset === 'cost_up' && currentSortKey !== 'cp') { currentSortKey = 'cp'; currentSortAsc = false; }
+      if (preset === 'uncov_down' && currentSortKey !== 'up') { currentSortKey = 'up'; currentSortAsc = true; }
+      if (preset === 'uncov_up' && currentSortKey !== 'up') { currentSortKey = 'up'; currentSortAsc = false; }
+      if (preset === 'has_uncov' && currentSortKey !== 'bu') { currentSortKey = 'bu'; currentSortAsc = false; }
+
+      sortRecords();
+      renderExplorerTable();
+    }
+
+    function sortBy(key) {
+      if (currentSortKey === key) {
+        currentSortAsc = !currentSortAsc;
+      } else {
+        currentSortKey = key;
+        currentSortAsc = (key === 'name' || key === 'td' || key === 'tp' || key === 'cd' || key === 'cp' || key === 'ud' || key === 'up');
+      }
+      sortRecords();
+      renderExplorerTable();
+    }
+
+    function sortRecords() {
+      const k = currentSortKey;
+      const dir = currentSortAsc ? 1 : -1;
+      filteredRecords.sort((a, b) => {
+        const valA = a[k] ?? (dir > 0 ? Infinity : -Infinity);
+        const valB = b[k] ?? (dir > 0 ? Infinity : -Infinity);
+        if (typeof valA === 'string') return valA.localeCompare(valB) * dir;
+        return (valA - valB) * dir;
+      });
+      document.querySelectorAll('[id^="sort-"]').forEach(el => el.textContent = '');
+      const indicator = document.getElementById('sort-' + k);
+      if (indicator) indicator.textContent = currentSortAsc ? '▲' : '▼';
+    }
+
+    function renderExplorerTable() {
+      const limit = parseInt(document.getElementById('limit-select').value, 10) || 25;
+      const slice = filteredRecords.slice(0, limit);
+      const tbody = document.getElementById('explorer-tbody');
+
+      tbody.innerHTML = slice.map(r => {
+        const tColor = r.tp < 0 ? 'text-emerald-500' : (r.tp > 0 ? 'text-rose-500' : '');
+        const cColor = r.cp < 0 ? 'text-emerald-500' : (r.cp > 0 ? 'text-rose-500' : '');
+        const uColor = r.ud < 0 ? 'text-emerald-500' : (r.ud > 0 ? 'text-rose-500' : '');
+        const tSign = r.td > 0 ? '+' : '';
+        const cSign = r.cd > 0 ? '+' : '';
+        const uSign = r.ud > 0 ? '+' : '';
+        const upStr = r.up !== null && r.up !== undefined ? `${uSign}${r.up.toFixed(2)}%` : 'n/a';
+        return `
+          <tr class="hover:bg-[var(--background)]">
+            <td class="py-2 px-2 font-mono font-medium" title="${esc(r.path)}">${esc(r.name)}</td>
+            <td class="py-2 px-2 text-right font-mono">Q${r.q}</td>
+            <td class="py-2 px-2 text-right font-mono">${r.cps.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono">${r.bt.toFixed(2)}s</td>
+            <td class="py-2 px-2 text-right font-mono">${r.ct.toFixed(2)}s</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${tColor}">${tSign}${r.td.toFixed(2)}s</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${tColor}">${tSign}${r.tp.toFixed(2)}%</td>
+            <td class="py-2 px-2 text-right font-mono">${r.bc.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono">${r.cc.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${cColor}">${cSign}${r.cd.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${cColor}">${cSign}${r.cp.toFixed(2)}%</td>
+            <td class="py-2 px-2 text-right font-mono">${r.bu.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono">${r.cu.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${uColor}">${uSign}${r.ud.toLocaleString()}</td>
+            <td class="py-2 px-2 text-right font-mono font-semibold ${uColor}">${upStr}</td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('table-footer').textContent =
+        `Showing ${slice.length.toLocaleString()} of ${filteredRecords.length.toLocaleString()} matching fonts (Total matched dataset: ${DATA.records.length.toLocaleString()} fonts)`;
+    }
+
+    initPage();
+  </script>
+</body>
+</html>

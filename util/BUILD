@@ -121,6 +121,7 @@ cc_binary(
     srcs = [
         "gen_ift_segmentation_plan.cc",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":auto_config_flags",
         "//ift",

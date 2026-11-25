@@ -8,7 +8,7 @@ average quality level across the font corpus while ensuring that at least 99.5%
 (configurable via --min-completion-rate) of the fonts in each bucket complete
 segmentation within the timeout (default 15 minutes / 900 seconds).
 
-Data files can be generated via: https://github.com/garretrieger/batch-font-runner
+Data files can be generated via: //batch_testing:run_gen_ift_segmentation_plan
 
 Usage:
   ./util/select_quality_thresholds.py /path/to/dataset_dir_or_scsv [options]
