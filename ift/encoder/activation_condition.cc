@@ -197,6 +197,34 @@ void UnionIntoDisjunction(SegmentSet& target, const SegmentSet& addition) {
   }
 }
 
+// Moves any clause in `candidates` that is a strict superset of some clause in
+// `others` directly into `out`, leaving only non-subsumed clauses in
+// `candidates`. If `b_j ⊂ a_i`, then `(a_i OR b_j) = a_i`, which subsumes all
+// other cross-product clauses `(a_i OR b_k)`.
+bool MoveSupersetClausesToOut(std::vector<const SegmentSet*>& candidates,
+                              Span<const SegmentSet* const> others,
+                              CnfClauses& out) {
+  size_t write = 0;
+  bool moved_any = false;
+  for (const SegmentSet* c : candidates) {
+    bool subsumed = false;
+    for (const SegmentSet* other : others) {
+      if (other->size() < c->size() && IsSubsetOf(*other, *c)) {
+        subsumed = true;
+        break;
+      }
+    }
+    if (subsumed) {
+      out.push_back(*c);
+      moved_any = true;
+    } else {
+      candidates[write++] = c;
+    }
+  }
+  candidates.resize(write);
+  return moved_any;
+}
+
 CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
   if (a.size() == 1 && b.size() == 1) {
     const SegmentSet* larger = &a[0];
@@ -269,12 +297,28 @@ CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
     return out;
   }
 
+  bool moved_subsumed = MoveSupersetClausesToOut(a_unique, b_unique, out);
+  moved_subsumed |= MoveSupersetClausesToOut(b_unique, a_unique, out);
+
+  if (a_unique.empty() || b_unique.empty()) {
+    if (moved_subsumed) {
+      std::sort(out.begin(), out.end());
+    }
+    return out;
+  }
+
   out.reserve(out.size() + a_unique.size() * b_unique.size());
   for (const auto* a_group : a_unique) {
     for (const auto* b_group : b_unique) {
-      SegmentSet combined_group = *a_group;
-      UnionIntoDisjunction(combined_group, *b_group);
-      out.push_back(std::move(combined_group));
+      if (a_group->size() < b_group->size()) {
+        SegmentSet combined_group = *b_group;
+        UnionIntoDisjunction(combined_group, *a_group);
+        out.push_back(std::move(combined_group));
+      } else {
+        SegmentSet combined_group = *a_group;
+        UnionIntoDisjunction(combined_group, *b_group);
+        out.push_back(std::move(combined_group));
+      }
     }
   }
   Simplify(out);
@@ -428,6 +472,67 @@ std::vector<CnfClauses> AbsorbAndCofactorToFixedPoint(
     }
   }
   return terms;
+}
+
+// Extracts any segments present in every clause of `clauses` (`∩_k C_k`) into
+// `base_disjunction`: `(I OR C'_0) AND ... AND (I OR C'_m) == I OR (C'_0 AND
+// ... AND C'_m)`.
+void ExtractClauseIntersection(Span<const SegmentSet> clauses,
+                               SegmentSet& base_disjunction) {
+  if (clauses.size() < 2) {
+    return;
+  }
+  size_t min_idx = 0;
+  for (size_t i = 1; i < clauses.size(); ++i) {
+    if (clauses[i].size() < clauses[min_idx].size()) {
+      min_idx = i;
+    }
+  }
+  const SegmentSet& smallest = clauses[min_idx];
+  if (smallest.empty()) {
+    return;
+  }
+  if (smallest.size() == 1) {
+    auto elem = *smallest.min();
+    if (base_disjunction.contains(elem)) {
+      return;
+    }
+    for (size_t i = 0; i < clauses.size(); ++i) {
+      if (i != min_idx && !clauses[i].contains(elem)) {
+        return;
+      }
+    }
+    base_disjunction.insert(elem);
+    return;
+  }
+
+  // Avoid allocating a SegmentSet copy when the first pair is already disjoint,
+  // or when `smallest` is already contained in `base_disjunction`.
+  size_t first_other = (min_idx == 0) ? 1 : 0;
+  if (!smallest.intersects(clauses[first_other]) ||
+      (!base_disjunction.empty() && smallest.is_subset_of(base_disjunction))) {
+    return;
+  }
+
+  SegmentSet common = smallest;
+  common.intersect(clauses[first_other]);
+  for (size_t i = 0; i < clauses.size() && !common.empty(); ++i) {
+    if (i == min_idx || i == first_other) {
+      continue;
+    }
+    common.intersect(clauses[i]);
+  }
+  if (!common.empty()) {
+    UnionIntoDisjunction(base_disjunction, common);
+  }
+}
+
+void ExtractMultiClauseIntersections(
+    Span<const Span<const SegmentSet>> multi_clauses,
+    SegmentSet& base_disjunction) {
+  for (Span<const SegmentSet> mc : multi_clauses) {
+    ExtractClauseIntersection(mc, base_disjunction);
+  }
 }
 
 // Drops multi-clause terms implied by (absorbed into) `base_disjunction` and
@@ -702,6 +807,8 @@ StatusOr<ActivationCondition> ActivationCondition::OrAll(
     result.conditions_.push_back(std::move(base_disjunction));
     return result;
   }
+
+  ExtractMultiClauseIntersections(partitioned.multi_clauses, base_disjunction);
 
   std::vector<CnfClauses> remaining_terms =
       AbsorbAndCofactorTerms(partitioned.multi_clauses, base_disjunction);

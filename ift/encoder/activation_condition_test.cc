@@ -1,6 +1,7 @@
 #include "ift/encoder/activation_condition.h"
 
 #include <algorithm>
+#include <random>
 #include <utility>
 #include <vector>
 
@@ -1038,6 +1039,171 @@ TEST(ActivationConditionTest,
     ASSERT_TRUE(res.ok()) << res.status();
     EXPECT_EQ(*res, expected);
   } while (std::next_permutation(order.begin(), order.end()));
+}
+
+TEST(ActivationConditionTest, Or_SubsumedClausesFactoredOut) {
+  auto eval_cnf = [](const ActivationCondition& cond, unsigned mask) {
+    for (const SegmentSet& clause : cond.conditions()) {
+      bool satisfied = false;
+      for (segment_index_t s : clause) {
+        if ((mask & (1u << s)) != 0) {
+          satisfied = true;
+          break;
+        }
+      }
+      if (!satisfied) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  auto check_canonical_antichain = [](const ActivationCondition& cond) {
+    const auto& clauses = cond.conditions();
+    EXPECT_TRUE(std::is_sorted(clauses.begin(), clauses.end()));
+    for (size_t i = 0; i < clauses.size(); ++i) {
+      for (size_t j = 0; j < clauses.size(); ++j) {
+        if (i != j) {
+          EXPECT_FALSE(clauses[i].is_subset_of(clauses[j]));
+        }
+      }
+    }
+  };
+
+  // Early return after MoveSupersetClausesToOut when all non-common clauses of
+  // one side are subsumed, including when the moved clause precedes a later
+  // common clause in canonical SegmentSet::operator< order.
+  {
+    auto a = ActivationCondition::composite_condition({{0, 1, 2}, {5, 6}}, 0);
+    auto b = ActivationCondition::composite_condition({{0, 1}, {5, 6}}, 0);
+    ActivationCondition ab = ActivationCondition::Or(a, b);
+    ActivationCondition ba = ActivationCondition::Or(b, a);
+    EXPECT_EQ(ab, ba);
+    EXPECT_EQ(ab, a);
+    check_canonical_antichain(ab);
+    for (unsigned mask = 0; mask < (1u << 7); ++mask) {
+      EXPECT_EQ(eval_cnf(ab, mask), eval_cnf(a, mask) || eval_cnf(b, mask));
+    }
+  }
+
+  // Bidirectional subsumption with remaining non-subsumed clauses on both
+  // sides.
+  {
+    auto a = ActivationCondition::composite_condition(
+        {{0, 1}, {2, 3, 4}, {6, 7}}, 0);
+    auto b = ActivationCondition::composite_condition(
+        {{2, 3}, {0, 1, 5}, {8, 9}}, 0);
+    ActivationCondition ab = ActivationCondition::Or(a, b);
+    ActivationCondition ba = ActivationCondition::Or(b, a);
+    EXPECT_EQ(ab, ba);
+    check_canonical_antichain(ab);
+    for (unsigned mask = 0; mask < (1u << 10); ++mask) {
+      EXPECT_EQ(eval_cnf(ab, mask), eval_cnf(a, mask) || eval_cnf(b, mask));
+    }
+  }
+
+  // Randomized multi-clause CNF pairs verified against exact truth tables.
+  std::mt19937 rng(12345);
+  for (int trial = 0; trial < 100; ++trial) {
+    auto make_random_cnf = [&]() {
+      unsigned num_clauses = 2 + (rng() % 6);
+      std::vector<SegmentSet> clauses;
+      clauses.reserve(num_clauses);
+      for (unsigned c = 0; c < num_clauses; ++c) {
+        SegmentSet s;
+        unsigned count = 1 + (rng() % 4);
+        for (unsigned k = 0; k < count; ++k) {
+          s.insert(rng() % 8);
+        }
+        clauses.push_back(std::move(s));
+      }
+      return ActivationCondition::composite_condition(clauses, 0);
+    };
+    auto a = make_random_cnf();
+    auto b = make_random_cnf();
+    ActivationCondition ab = ActivationCondition::Or(a, b);
+    ActivationCondition ba = ActivationCondition::Or(b, a);
+    EXPECT_EQ(ab, ba);
+    check_canonical_antichain(ab);
+    for (unsigned mask = 0; mask < (1u << 8); ++mask) {
+      EXPECT_EQ(eval_cnf(ab, mask), eval_cnf(a, mask) || eval_cnf(b, mask));
+    }
+  }
+}
+
+TEST(ActivationConditionTest, OrAll_ExtractsMultiClauseIntersectionsIntoBase) {
+  // ChironSungHK-style pattern: multi-clause terms share common disjuncts
+  // {100, 101} across every clause, which absorbs unrelated terms sharing
+  // segments with the extracted base once hoisted into `base_disjunction`.
+  {
+    std::vector<ActivationCondition> inputs = {
+        ActivationCondition::composite_condition(
+            {{100, 101, 0, 6}, {100, 101, 0, 11}, {100, 101, 200}}, 0),
+        ActivationCondition::composite_condition(
+            {{100, 101, 0, 6}, {100, 101, 0, 11}, {100, 101, 201}}, 0),
+        ActivationCondition::composite_condition(
+            {{100, 101, 0, 6}, {100, 101, 0, 11}, {100, 101, 202}}, 0),
+        ActivationCondition::composite_condition({{0, 14}, {100}}, 0),
+        ActivationCondition::composite_condition({{15, 16}, {101}}, 0),
+    };
+    ActivationCondition expected = inputs[0];
+    for (size_t i = 1; i < inputs.size(); ++i) {
+      expected = ActivationCondition::Or(expected, inputs[i]);
+    }
+    auto res = ActivationCondition::OrAll(inputs);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(*res, expected);
+
+    std::rotate(inputs.begin(), inputs.begin() + 3, inputs.end());
+    auto res_rot = ActivationCondition::OrAll(inputs);
+    ASSERT_TRUE(res_rot.ok()) << res_rot.status();
+    EXPECT_EQ(*res_rot, expected);
+  }
+
+  // Self-absorption edge case: extracting {2} from ({1, 2} AND {2, 3})
+  // alongside single-clause {1} makes base_disjunction = {1, 2}, which absorbs
+  // the multi-clause term without creating an empty clause.
+  {
+    auto single = ActivationCondition::or_segments({1}, 0);
+    auto multi = ActivationCondition::composite_condition({{1, 2}, {2, 3}}, 0);
+    auto other = ActivationCondition::composite_condition({{4, 5}, {6, 7}}, 0);
+    ActivationCondition expected = ActivationCondition::composite_condition(
+        {{1, 2, 4, 5}, {1, 2, 6, 7}}, 0);
+
+    std::vector<ActivationCondition> items = {single, multi, other};
+    std::vector<size_t> order = {0, 1, 2};
+    do {
+      std::vector<const ActivationCondition*> ptrs = {
+          &items[order[0]], &items[order[1]], &items[order[2]]};
+      auto res = ActivationCondition::OrAll(ptrs);
+      ASSERT_TRUE(res.ok()) << res.status();
+      EXPECT_EQ(*res, expected);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
+
+  // Zero initial single-clause inputs with single-element and multi-element
+  // clause intersections.
+  {
+    auto t1 = ActivationCondition::composite_condition({{1, 2}, {1, 3}}, 0);
+    auto t2 = ActivationCondition::composite_condition({{1, 4}, {2, 4}}, 0);
+    auto t3 = ActivationCondition::composite_condition({{4}, {5, 6}}, 0);
+    auto t4 = ActivationCondition::composite_condition(
+        {{10, 11, 12}, {10, 11, 13}, {10, 11, 14}}, 0);
+
+    ActivationCondition expected = ActivationCondition::Or(
+        ActivationCondition::Or(t1, t2), ActivationCondition::Or(t3, t4));
+
+    std::vector<ActivationCondition> items = {t1, t2, t3, t4};
+    std::vector<size_t> order = {0, 1, 2, 3};
+    do {
+      std::vector<const ActivationCondition*> ptrs = {
+          &items[order[0]], &items[order[1]], &items[order[2]],
+          &items[order[3]]};
+      auto res = ActivationCondition::OrAll(ptrs);
+      ASSERT_TRUE(res.ok()) << res.status();
+      EXPECT_EQ(*res, expected);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
 }
 
 }  // namespace ift::encoder
