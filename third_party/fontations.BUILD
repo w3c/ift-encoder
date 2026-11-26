@@ -81,6 +81,9 @@ rust_library(
     deps = [
         ":read_fonts",
         "@fontations_deps//:bytemuck",
+        "@fontations_deps//:once_cell",
+        "@fontations_deps//:smallvec",
+        "@fontations_deps//:yoke",
     ],
 )
 
@@ -88,10 +91,11 @@ rust_library(
     name = "skera",
     srcs = glob(include = ["skera/src/**/*.rs"]),
     deps = [
+        ":read_fonts",
         ":skrifa",
         ":write_fonts",
+        "@fontations_deps//:foldhash",
         "@fontations_deps//:hashbrown",
-        "@fontations_deps//:regex",
         "@fontations_deps//:thiserror",
     ],
 )
@@ -101,6 +105,7 @@ rust_library(
     srcs = glob(include = [
         "read-fonts/src/**/*.rs",
         "read-fonts/generated/**/*.rs",
+        "read-fonts/data/generated/**/*.rs",
     ]),
     crate_features = [
         "bytemuck",
@@ -110,6 +115,10 @@ rust_library(
     deps = [
         ":font_types",
         "@fontations_deps//:bytemuck",
+        "@fontations_deps//:foldhash",
+        "@fontations_deps//:once_cell",
+        "@fontations_deps//:smallvec",
+        "@fontations_deps//:yoke",
     ],
 )
 
@@ -120,14 +129,12 @@ rust_library(
         "write-fonts/generated/**/*.rs",
     ]),
     crate_features = [
-        "bytemuck",
-        "std",
+        "tables",
         "read",
     ],
     deps = [
         ":font_types",
         ":read_fonts",
-        "@fontations_deps//:bytemuck",
         "@fontations_deps//:indexmap",
         "@fontations_deps//:kurbo",
         "@fontations_deps//:log",

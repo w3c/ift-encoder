@@ -5,19 +5,22 @@ module(
 
 # Bazel Modules
 
-bazel_dep(name = "rules_cc", version = "0.2.16")
-bazel_dep(name = "rules_python", version = "1.8.0")
-bazel_dep(name = "abseil-py", version = "2.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.28")
+bazel_dep(name = "rules_python", version = "2.5.1")
+bazel_dep(name = "abseil-py", version = "2.4.0")
 
-bazel_dep(name = "googletest", version = "1.17.0.bcr.2")
-bazel_dep(name = "abseil-cpp", version = "20260107.0")
-bazel_dep(name = "protobuf", version = "33.4")
-bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d")
-bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "rules_rust", version = "0.68.1")
-bazel_dep(name = "glib", version = "2.82.2.bcr.7")
+bazel_dep(name = "googletest", version = "1.18.0.bcr.1")
+bazel_dep(name = "abseil-cpp", version = "20260817.0")
+bazel_dep(name = "protobuf", version = "37.0-rc3")
+bazel_dep(name = "riegeli", version = "0.0.0-20261117-64d553d")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_rust", version = "0.75.0")
+bazel_dep(name = "glib", version = "2.84.4.bcr.2")
 bazel_dep(name = "brotli", version = "1.2.1")
-bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+
+rules_python_config = use_extension("@rules_python//python/extensions:config.bzl", "config")
+rules_python_config.explicit_init_py(default = True)
 
 # Frequency Data
 bazel_dep(name = "ift_encoder_data", version = "git")
@@ -30,14 +33,14 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 # Unicode Data
 http_file(
     name = "unicode_data",
-    integrity = "sha256-Lh78HctZxXXu31zK5g+VIp9wbubQMYNSR9hDwR2WRww=",
-    urls = ["https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt"],
+    integrity = "sha256-BzZFHeQ5rnuvFCUTZhfaSV4J7lr75uOUN023AJ6giVA=",
+    urls = ["https://www.unicode.org/Public/18.0.0/ucd/UnicodeData.txt"],
 )
 
 http_file(
     name = "derived_normalization_props",
-    integrity = "sha256-cf1qIGosDN1B/ra39laqMQkdtF6c7ckmmF1xg5f55Ig=",
-    urls = ["https://www.unicode.org/Public/17.0.0/ucd/DerivedNormalizationProps.txt"],
+    integrity = "sha256-mKx/Z9mF/ngeMX9hguiF6UyrsMMUdp5t1z5IsiaTHM0=",
+    urls = ["https://www.unicode.org/Public/18.0.0/ucd/DerivedNormalizationProps.txt"],
 )
 
 
@@ -54,9 +57,9 @@ http_archive(
 http_archive(
     name = "harfbuzz",
     build_file = "//third_party:harfbuzz.BUILD",
-    strip_prefix = "harfbuzz-c5eda499b4bcc310095b19faec99c9749dabdb52",
-    integrity = "sha256-4yNdOLuwFK+A9zea2Ykvo1EZbfb+On36/7k7LaXFZYg=",
-    urls = ["https://github.com/harfbuzz/harfbuzz/archive/c5eda499b4bcc310095b19faec99c9749dabdb52.zip"],
+    strip_prefix = "harfbuzz-15.2.0",
+    integrity = "sha256-UZjSJbWcPVFlqgfFP1ynyp5c2i/CULI713QgVmu2b2M=",
+    urls = ["https://github.com/harfbuzz/harfbuzz/archive/refs/tags/15.2.0.zip"],
 )
 
 # Base 32 Hex
@@ -72,18 +75,18 @@ http_archive(
 http_archive(
     name = "ift_spec",
     build_file = "//third_party:ift_spec.BUILD",
-    sha256 = "6c634d76b49ff3a66bd908f81a892517b83c6c356be0bdf2977e66acd51f8498",
-    strip_prefix = "IFT-1bb61e0e69860143ffc7f4daa8e9f109fac746dd",
-    urls = ["https://github.com/w3c/IFT/archive/1bb61e0e69860143ffc7f4daa8e9f109fac746dd.zip"],
+    sha256 = "1871cace5fe85373ccc7fabc01849d4cd485f8e8c36010601a232ec84d1d170b",
+    strip_prefix = "IFT-56e987829dec2866f7f2ad883e50791739c261cb",
+    urls = ["https://github.com/w3c/IFT/archive/56e987829dec2866f7f2ad883e50791739c261cb.zip"],
 )
 
 # Fontations
 http_archive(
     name = "fontations",
-    urls = ["https://github.com/googlefonts/fontations/archive/f95a2db5b2367ddbe752884c39e13b62a2ea39bd.zip"],
-    strip_prefix = "fontations-f95a2db5b2367ddbe752884c39e13b62a2ea39bd",
+    urls = ["https://github.com/googlefonts/fontations/archive/4f115482ebf24d1989e2c4446bf877d4812a268b.zip"],
+    strip_prefix = "fontations-4f115482ebf24d1989e2c4446bf877d4812a268b",
     build_file = "//third_party:fontations.BUILD",
-    integrity = "sha256-ge23kFnixCUiaDdsgf2SZ1v9sqPdduEjss5rjrgUbUs=",
+    integrity = "sha256-sm0bY2BSmPUuvQv0oYPqtpsSrJH2vUCKVs0+1viH36k=",
 )
 
 
@@ -103,7 +106,6 @@ crate.from_cargo(
      "@fontations//:fuzz/Cargo.toml",
      "@fontations//:incremental-font-transfer/Cargo.toml",
      "@fontations//:skera/Cargo.toml",
-     "@fontations//:otexplorer/Cargo.toml",
      "@fontations//:read-fonts/Cargo.toml",
      "@fontations//:shared-brotli-patch-decoder/Cargo.toml",
      "@fontations//:skrifa/Cargo.toml",
@@ -118,5 +120,5 @@ bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 git_override(
     module_name = "hedron_compile_commands",
     remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
-    commit = "f5fbd4cee671d8d908f37c83abaf70fba5928fc7",
+    commit = "abb61a688167623088f8768cc9264798df6a9d10",
 )
