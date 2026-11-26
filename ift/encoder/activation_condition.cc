@@ -1,12 +1,15 @@
 #include "ift/encoder/activation_condition.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
 #include <optional>
 #include <vector>
 
 #include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/hash/hash.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -236,15 +239,15 @@ CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
   auto b_it = b.begin();
 
   while (a_it != a.end() && b_it != b.end()) {
-    if (*a_it < *b_it) {
-      a_unique.push_back(&*a_it);
-      a_it++;
-    } else if (*b_it < *a_it) {
-      b_unique.push_back(&*b_it);
-      b_it++;
-    } else {
+    if (*a_it == *b_it) {
       out.push_back(*a_it);
       a_it++;
+      b_it++;
+    } else if (*a_it < *b_it) {
+      a_unique.push_back(&*a_it);
+      a_it++;
+    } else {
+      b_unique.push_back(&*b_it);
       b_it++;
     }
   }
@@ -298,6 +301,44 @@ bool AnyConditionIsAlwaysTrue(
       [](const ActivationCondition* c) { return c->IsAlwaysTrue(); });
 }
 
+template <typename ClausesRange>
+size_t HashClauses(const ClausesRange& clauses) {
+  size_t h = absl::HashOf(clauses.size());
+  for (const SegmentSet& s : clauses) {
+    h = absl::HashOf(h, s.Hash());
+  }
+  return h;
+}
+
+struct ClauseSpanHash {
+  size_t operator()(Span<const SegmentSet> clauses) const {
+    return HashClauses(clauses);
+  }
+};
+
+struct ClauseSpanEq {
+  bool operator()(Span<const SegmentSet> a, Span<const SegmentSet> b) const {
+    return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
+  }
+};
+
+void DeduplicateMultiClauses(
+    std::vector<Span<const SegmentSet>>& multi_clauses) {
+  if (multi_clauses.size() <= 1) {
+    return;
+  }
+  absl::flat_hash_set<Span<const SegmentSet>, ClauseSpanHash, ClauseSpanEq>
+      seen;
+  seen.reserve(multi_clauses.size());
+  size_t out = 0;
+  for (size_t i = 0; i < multi_clauses.size(); ++i) {
+    if (seen.insert(multi_clauses[i]).second) {
+      multi_clauses[out++] = multi_clauses[i];
+    }
+  }
+  multi_clauses.resize(out);
+}
+
 struct PartitionedClauses {
   std::vector<const SegmentSet*> single_clauses;
   std::vector<Span<const SegmentSet>> multi_clauses;
@@ -315,6 +356,7 @@ PartitionedClauses PartitionClauses(
       partitioned.multi_clauses.push_back(c->conditions());
     }
   }
+  DeduplicateMultiClauses(partitioned.multi_clauses);
   return partitioned;
 }
 
@@ -420,18 +462,116 @@ std::vector<CnfClauses> AbsorbAndCofactorTerms(
   return terms;
 }
 
-// Sorts `terms` canonically by ascending clause count, deduplicates, and drops
-// any term whose clause set contains an earlier smaller term (`A ⊆ B => (B ->
-// A)`, so `A OR B == A`).
+struct CnfClausesPtrHash {
+  size_t operator()(const CnfClauses* clauses) const {
+    return HashClauses(*clauses);
+  }
+};
+
+struct CnfClausesPtrEq {
+  bool operator()(const CnfClauses* a, const CnfClauses* b) const {
+    return *a == *b;
+  }
+};
+
+void DeduplicateTerms(std::vector<CnfClauses>& terms) {
+  if (terms.size() <= 1) {
+    return;
+  }
+  absl::flat_hash_set<const CnfClauses*, CnfClausesPtrHash, CnfClausesPtrEq>
+      seen;
+  seen.reserve(terms.size());
+  std::vector<size_t> keep_indices;
+  keep_indices.reserve(terms.size());
+  for (size_t i = 0; i < terms.size(); ++i) {
+    if (seen.insert(&terms[i]).second) {
+      keep_indices.push_back(i);
+    }
+  }
+  if (keep_indices.size() == terms.size()) {
+    return;
+  }
+  for (size_t out = 0; out < keep_indices.size(); ++out) {
+    size_t src = keep_indices[out];
+    if (out != src) {
+      terms[out] = std::move(terms[src]);
+    }
+  }
+  terms.resize(keep_indices.size());
+}
+
+// Strict total order over SegmentSets that resolves equal sets (via cached
+// hash) and differing sizes in O(1) before walking elements via `operator<`.
+bool SegmentSetLessFast(const SegmentSet& a, const SegmentSet& b) {
+  if (a == b) {
+    return false;
+  }
+  if (a.size() != b.size()) {
+    return a.size() < b.size();
+  }
+  return a < b;
+}
+
+bool CnfClausesLessFast(const CnfClauses& a, const CnfClauses& b) {
+  if (a.size() != b.size()) {
+    return a.size() < b.size();
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i] == b[i]) {
+      continue;
+    }
+    return SegmentSetLessFast(a[i], b[i]);
+  }
+  return false;
+}
+
+bool TermContainsClause(const CnfClauses& term, const SegmentSet& clause) {
+  for (const SegmentSet& c : term) {
+    if (c == clause) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Returns true iff every clause in `subset` also appears in `superset`. Both
+// must be sorted canonically by `SegmentSet::operator<`.
+bool ContainsAllClauses(const CnfClauses& superset, const CnfClauses& subset) {
+  if (subset.size() > superset.size()) {
+    return false;
+  }
+  if (superset.size() <= 8) {
+    for (const SegmentSet& c : subset) {
+      if (!TermContainsClause(superset, c)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  auto sup_it = superset.begin();
+  auto sub_it = subset.begin();
+  while (sup_it != superset.end() && sub_it != subset.end()) {
+    if (*sup_it == *sub_it) {
+      ++sup_it;
+      ++sub_it;
+    } else if (*sup_it < *sub_it) {
+      ++sup_it;
+    } else {
+      return false;
+    }
+  }
+  return sub_it == subset.end();
+}
+
+// Deduplicates, sorts `terms` by ascending clause count, and drops any term
+// whose clause set contains an earlier smaller term (`A ⊆ B => (B -> A)`, so
+// `A OR B == A`).
 void SortAndFilterSubsumedTerms(std::vector<CnfClauses>& terms) {
-  std::sort(terms.begin(), terms.end(),
-            [](const CnfClauses& a, const CnfClauses& b) {
-              if (a.size() != b.size()) {
-                return a.size() < b.size();
-              }
-              return a < b;
-            });
-  terms.erase(std::unique(terms.begin(), terms.end()), terms.end());
+  DeduplicateTerms(terms);
+  if (terms.size() <= 1) {
+    return;
+  }
+  std::sort(terms.begin(), terms.end(), CnfClausesLessFast);
 
   std::vector<CnfClauses> kept;
   kept.reserve(terms.size());
@@ -441,8 +581,7 @@ void SortAndFilterSubsumedTerms(std::vector<CnfClauses>& terms) {
       if (smaller.size() >= term.size()) {
         break;
       }
-      if (std::includes(term.begin(), term.end(), smaller.begin(),
-                        smaller.end())) {
+      if (ContainsAllClauses(term, smaller)) {
         subsumed = true;
         break;
       }
