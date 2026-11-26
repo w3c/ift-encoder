@@ -952,4 +952,92 @@ TEST(ActivationConditionTest,
   }
 }
 
+TEST(ActivationConditionTest,
+     OrAll_DeduplicatesManyIdenticalLargeMultiClauseConditions) {
+  SegmentSet s0;
+  s0.insert(0);
+  s0.insert_range(1000, 1064);
+  SegmentSet s1;
+  s1.insert(1);
+  s1.insert_range(2000, 2064);
+  SegmentSet s2;
+  s2.insert(2);
+  s2.insert_range(3000, 3064);
+  SegmentSet s3;
+  s3.insert(3);
+  s3.insert_range(4000, 4064);
+  SegmentSet s4;
+  s4.insert(4);
+  s4.insert_range(5000, 5064);
+
+  auto c1 = ActivationCondition::composite_condition({s0, s1}, 0);
+  auto c2 = ActivationCondition::composite_condition({s3, s4}, 0);
+  // Subsumed by `c1` (tests <= 8-clause subsumption scan).
+  auto c1_subsumed = ActivationCondition::composite_condition({s0, s1, s2}, 0);
+
+  ActivationCondition expected = ActivationCondition::Or(c1, c2);
+
+  std::vector<ActivationCondition> conditions;
+  conditions.reserve(201);
+  for (int i = 0; i < 100; ++i) {
+    conditions.push_back(c1);
+    conditions.push_back(c2);
+  }
+  conditions.push_back(c1_subsumed);
+
+  std::vector<const ActivationCondition*> ptrs;
+  ptrs.reserve(conditions.size());
+  for (const auto& c : conditions) {
+    ptrs.push_back(&c);
+  }
+  auto res = ActivationCondition::OrAll(ptrs);
+  ASSERT_TRUE(res.ok()) << res.status();
+  EXPECT_EQ(*res, expected);
+
+  // Also cover > 8-clause terms so `ContainsAllClauses` exercises its
+  // linear-merge branch for both subsumed and non-subsumed pairs.
+  std::vector<SegmentSet> nine_clauses;
+  for (unsigned i = 0; i < 9; ++i) {
+    nine_clauses.push_back({i, 500});
+  }
+  auto large_base = ActivationCondition::composite_condition(nine_clauses, 0);
+  std::vector<SegmentSet> ten_clauses = nine_clauses;
+  ten_clauses.push_back({9, 500});
+  auto large_subsumed =
+      ActivationCondition::composite_condition(ten_clauses, 0);
+  auto small_other =
+      ActivationCondition::composite_condition({{50, 501}, {51, 502}}, 0);
+
+  ActivationCondition large_expected =
+      ActivationCondition::Or(large_base, small_other);
+  auto large_res = ActivationCondition::OrAll(
+      {&large_base, &large_base, &large_subsumed, &small_other});
+  ASSERT_TRUE(large_res.ok()) << large_res.status();
+  EXPECT_EQ(*large_res, large_expected);
+}
+
+TEST(ActivationConditionTest,
+     OrAll_FastComparatorAndSubsumptionOrderIndependence) {
+  auto t_eq_a = ActivationCondition::composite_condition({{0, 1}, {2, 3}}, 0);
+  auto t_eq_b = ActivationCondition::composite_condition({{0, 4}, {5, 6}}, 0);
+  auto t_diff_size =
+      ActivationCondition::composite_condition({{7}, {8, 9, 10}}, 0);
+  auto t_subsumed =
+      ActivationCondition::composite_condition({{0, 1}, {2, 3}, {11, 12}}, 0);
+
+  ActivationCondition expected = ActivationCondition::Or(
+      ActivationCondition::Or(t_eq_a, t_eq_b), t_diff_size);
+
+  std::vector<ActivationCondition> items = {t_eq_a, t_eq_b, t_diff_size,
+                                            t_subsumed};
+  std::vector<size_t> order = {0, 1, 2, 3};
+  do {
+    std::vector<const ActivationCondition*> ptrs = {
+        &items[order[0]], &items[order[1]], &items[order[2]], &items[order[3]]};
+    auto res = ActivationCondition::OrAll(ptrs);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(*res, expected);
+  } while (std::next_permutation(order.begin(), order.end()));
+}
+
 }  // namespace ift::encoder
