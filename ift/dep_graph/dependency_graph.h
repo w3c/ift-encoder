@@ -54,7 +54,11 @@ class DependencyGraph {
            tag == kPhaseDecomposition || tag == kPhaseComposition;
   }
 
-  static constexpr uint32_t kNumberOfClosurePhases = 10;
+  static constexpr bool IsSinglePassClosurePhase(hb_tag_t tag) {
+    return tag == common::FontHelper::kMATH;
+  }
+
+  static constexpr uint32_t kNumberOfClosurePhases = 11;
 
   // Reference for the phases and ordering:
   // _populate_gids_to_retain() from
@@ -67,22 +71,23 @@ class DependencyGraph {
       /* 4 */ common::FontHelper::kCmap,
       /* 5 */ common::FontHelper::kMATH,
       /* 6 */ common::FontHelper::kGSUB,
-      /* 7 */ common::FontHelper::kCOLR,
-      /* 8 */ common::FontHelper::kGlyf,
-      /* 9 */ common::FontHelper::kCFF,
+      /* 7 */ common::FontHelper::kMATH,
+      /* 8 */ common::FontHelper::kCOLR,
+      /* 9 */ common::FontHelper::kGlyf,
+      /* 10 */ common::FontHelper::kCFF,
   };
   static_assert(std::size(kClosurePhaseTable) == kNumberOfClosurePhases);
 
   static constexpr uint32_t kClosurePhaseNodeFilter[] = {
       /* Init + Bidi */ Node::NodeType::SEGMENT | Node::NodeType::INIT_FONT |
           Node::NodeType::UNICODE | Node::NodeType::FEATURE,
-      /* Variation Selectors */ Node::NodeType::UNICODE |
-          Node::NodeType::GLYPH,
+      /* Variation Selectors */ Node::NodeType::UNICODE | Node::NodeType::GLYPH,
       /* Decomposition */ Node::NodeType::UNICODE,
       /* Composition */ Node::NodeType::UNICODE,
       /* cmap */ Node::NodeType::UNICODE | Node::NodeType::GLYPH,
-      /* MATH */ Node::NodeType::GLYPH,
+      /* MATH (pre-GSUB) */ Node::NodeType::GLYPH,
       /* GSUB */ Node::NodeType::GLYPH,
+      /* MATH (post-GSUB) */ Node::NodeType::GLYPH,
       /* COLR */ Node::NodeType::GLYPH,
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
@@ -95,10 +100,11 @@ class DependencyGraph {
       /* Decomposition */ Node::NodeType::UNICODE,
       /* Composition */ Node::NodeType::UNICODE,
       /* cmap */ Node::NodeType::UNICODE,
-      /* MATH */ Node::NodeType::GLYPH,
+      /* MATH (pre-GSUB) */ Node::NodeType::GLYPH,
       // For GSUB we also need to consider reached features as starting nodes
       // since those have outgoing GSUB edges.
       /* GSUB */ Node::NodeType::GLYPH | Node::NodeType::FEATURE,
+      /* MATH (post-GSUB) */ Node::NodeType::GLYPH,
       /* COLR */ Node::NodeType::GLYPH,
       /* glyf */ Node::NodeType::GLYPH,
       /* CFF */ Node::NodeType::GLYPH,
@@ -183,6 +189,7 @@ class DependencyGraph {
     absl::flat_hash_set<Node> visited{};
     Traversal traversal;
     bool collect_context = true;
+    bool single_pass = false;
 
     absl::Status Visit(const TraversalContext<ClosureState>& context,
                        const PendingEdge& edge);

@@ -465,7 +465,9 @@ Status DependencyGraph::ClosureState::Visit(
     traversal.Visit(edge.dest, edge.table_tag);
   }
 
-  Reached(edge.dest);
+  if (!single_pass) {
+    Reached(edge.dest);
+  }
   return absl::OkStatus();
 }
 
@@ -827,11 +829,12 @@ StatusOr<Traversal> DependencyGraph::ClosureTraversal(
   // 2. Unicode canonical decomposition (unicode -> unicode)
   // 3. Unicode canonical composition (unicode -> unicode)
   // 4. cmap nominal unicode -> glyph
-  // 5. MATH closure
+  // 5. MATH closure (single-pass pre-GSUB)
   // 6. GSUB glyph closure
-  // 7. COLR closure
-  // 8. glyf closure
-  // 9. CFF closure
+  // 7. MATH closure (single-pass post-GSUB)
+  // 8. COLR closure
+  // 9. glyf closure
+  // 10. CFF closure
   //
   // Reference for the phases and ordering:
   // _populate_gids_to_retain() from
@@ -920,10 +923,13 @@ Status DependencyGraph::ClosureSubTraversal(
     }
   }
 
+  hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase_index];
   TraversalContext<ClosureState> context = *base_context;
   context.SetReached(start_nodes);
   context.callback.SetStartNodes(start_nodes);
-  context.table_filter = {DependencyGraph::kClosurePhaseTable[phase_index]};
+  context.callback.single_pass =
+      DependencyGraph::IsSinglePassClosurePhase(table);
+  context.table_filter = {table};
   context.node_type_filter =
       DependencyGraph::kClosurePhaseNodeFilter[phase_index];
   traversal_full.Merge(TRY(TraverseGraph(&context)));

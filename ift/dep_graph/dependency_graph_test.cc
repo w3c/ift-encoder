@@ -29,6 +29,7 @@ using ift::common::FontData;
 using ift::common::FontHelper;
 using ift::common::GlyphSet;
 using ift::common::hb_face_unique_ptr;
+using ift::common::SegmentSet;
 using ift::encoder::glyph_id_t;
 using ift::encoder::GlyphClosureCache;
 using ift::encoder::RequestedSegmentationInformation;
@@ -1283,6 +1284,35 @@ TEST_F(DependencyGraphTest, ContextualNestedLigatureRetainsBothRequirements) {
                              &segmentation_info->FullCodepointClosure());
   ASSERT_TRUE(r.ok()) << r.status();
   EXPECT_TRUE(r->ReachedGlyphs().contains(gid_onehalf));
+}
+
+TEST_F(DependencyGraphTest, PostGsubMathClosure) {
+  hb_face_unique_ptr math_face =
+      loader->LoadFace("ift/common/testdata/NotoSansMath-Regular.subset.ttf")
+          .value();
+  Reconfigure(math_face.get(), WithDefaultFeatures({}), {{{0x222B}}});
+
+  // uni222B (17) -> GSUB rtlm -> uni222B.rtlm (19) -> MATH variant ->
+  // uni222B.rtlm.s01 (29).
+  EXPECT_TRUE(segmentation_info->FullClosure().contains(17));
+  EXPECT_TRUE(segmentation_info->FullClosure().contains(19));
+  EXPECT_TRUE(segmentation_info->FullClosure().contains(29));
+
+  auto r = graph.ClosureTraversal(SegmentSet{0});
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(17 /* uni222B */));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(19 /* uni222B.rtlm */));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(29 /* uni222B.rtlm.s01 */));
+
+  // Verify post-GSUB MATH also triggers when uni222B is in the init font.
+  Reconfigure(math_face.get(), WithDefaultFeatures({0x222B}), {});
+  r = graph.ClosureTraversal({Node::InitFont()},
+                             &segmentation_info->FullClosure(),
+                             &segmentation_info->FullCodepointClosure());
+  ASSERT_TRUE(r.ok()) << r.status();
+  EXPECT_TRUE(r->ReachedGlyphs().contains(17 /* uni222B */));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(19 /* uni222B.rtlm */));
+  EXPECT_TRUE(r->ReachedGlyphs().contains(29 /* uni222B.rtlm.s01 */));
 }
 
 // TODO(garretrieger):
