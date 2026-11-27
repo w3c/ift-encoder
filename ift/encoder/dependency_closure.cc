@@ -335,6 +335,75 @@ DependencyClosure::EdgeConditionsToActivationCondition(
   return out;
 }
 
+StatusOr<bool> DependencyClosure::PropagateNodeCondition(
+    Node n,
+    const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
+    const flat_hash_map<Node, ConditionAndSegments>& input_conditions,
+    flat_hash_map<Node, ConditionAndSegments>& output_conditions,
+    flat_hash_set<Node>& modified) {
+  auto it = incoming_edges.find(n);
+  if (it == incoming_edges.end()) {
+    // we only process nodes that have incoming edges within each phase.
+    return false;
+  }
+
+  auto node_conditions_it = output_conditions.find(n);
+  if (node_conditions_it != output_conditions.end() &&
+      node_conditions_it->second.condition.IsAlwaysTrue()) {
+    // If node is always true, it's condition cannot change further.
+    return false;
+  }
+
+  std::vector<ActivationCondition> edge_conditions;
+  edge_conditions.reserve(it->second.size() + 1);
+  SegmentSet complete_interacting_segments;
+  if (node_conditions_it != output_conditions.end()) {
+    edge_conditions.push_back(node_conditions_it->second.condition);
+    complete_interacting_segments =
+        node_conditions_it->second.interacting_segments;
+  }
+
+  bool found_edge = false;
+  for (const EdgeConditionsCnf& edge : it->second) {
+    std::optional<ConditionAndSegments> condition =
+        TRY(EdgeConditionsToActivationCondition(edge, input_conditions));
+    if (!condition.has_value()) {
+      // std::nullopt means the condition for this edge is false, since
+      // it combines with OR with other edges, we can just skip it.
+      continue;
+    }
+
+    found_edge = true;
+    edge_conditions.push_back(std::move(condition->condition));
+    complete_interacting_segments.union_set(condition->interacting_segments);
+  }
+
+  if (!found_edge) {
+    // If no condition has been found, the condition for this node in this
+    // phase is FALSE so don't add a entry into the output_conditions map.
+    return false;
+  }
+
+  ConditionAndSegments combined{
+      TRY(ActivationCondition::OrAll(edge_conditions)),
+      std::move(complete_interacting_segments),
+  };
+
+  if (node_conditions_it == output_conditions.end()) {
+    output_conditions.insert({n, std::move(combined)});
+    modified.insert(n);
+    return true;
+  }
+
+  if (combined != node_conditions_it->second) {
+    node_conditions_it->second = std::move(combined);
+    modified.insert(n);
+    return true;
+  }
+
+  return false;
+}
+
 Status DependencyClosure::PropagateConditions(
     const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
     const std::vector<std::vector<Node>>& sccs,
@@ -348,64 +417,8 @@ Status DependencyClosure::PropagateConditions(
     while (changed) {
       changed = false;
       for (Node n : scc) {
-        auto it = incoming_edges.find(n);
-        if (it == incoming_edges.end()) {
-          // we only process nodes that have incoming edges within each phase.
-          continue;
-        }
-
-        auto node_conditions_it = node_conditions.find(n);
-        if (node_conditions_it != node_conditions.end() &&
-            node_conditions_it->second.condition.IsAlwaysTrue()) {
-          // If node is always true, it's condition cannot change further.
-          continue;
-        }
-
-        std::vector<ActivationCondition> edge_conditions;
-        edge_conditions.reserve(it->second.size() + 1);
-        SegmentSet complete_interacting_segments;
-        if (node_conditions_it != node_conditions.end()) {
-          edge_conditions.push_back(node_conditions_it->second.condition);
-          complete_interacting_segments =
-              node_conditions_it->second.interacting_segments;
-        }
-
-        bool found_edge = false;
-        for (const EdgeConditionsCnf& edge : it->second) {
-          std::optional<ConditionAndSegments> condition =
-              TRY(EdgeConditionsToActivationCondition(edge, node_conditions));
-          if (!condition.has_value()) {
-            // std::nullopt means the condition for this edge is false, since
-            // it combines with OR with other edges, we can just skip it.
-            continue;
-          }
-
-          found_edge = true;
-          edge_conditions.push_back(std::move(condition->condition));
-          complete_interacting_segments.union_set(
-              condition->interacting_segments);
-        }
-
-        if (!found_edge) {
-          // If no condition has been found, the condition for this node in this
-          // phase is FALSE so don't add a entry into the node_conditions map.
-          continue;
-        }
-
-        ConditionAndSegments combined{
-            TRY(ActivationCondition::OrAll(edge_conditions)),
-            std::move(complete_interacting_segments),
-        };
-
-        if (node_conditions_it == node_conditions.end()) {
-          node_conditions.insert({n, std::move(combined)});
-          modified.insert(n);
-          changed = true;
-        } else if (combined != node_conditions_it->second) {
-          node_conditions_it->second = std::move(combined);
-          modified.insert(n);
-          changed = true;
-        }
+        changed |= TRY(PropagateNodeCondition(
+            n, incoming_edges, node_conditions, node_conditions, modified));
       }
 
       if (scc.size() == 1) {
@@ -416,6 +429,19 @@ Status DependencyClosure::PropagateConditions(
     }
   }
 
+  return absl::OkStatus();
+}
+
+Status DependencyClosure::PropagateConditionsSinglePass(
+    const flat_hash_map<Node, std::vector<EdgeConditionsCnf>>& incoming_edges,
+    const flat_hash_set<Node>& nodes_to_update,
+    const flat_hash_map<Node, ConditionAndSegments>& input_conditions,
+    flat_hash_map<Node, ConditionAndSegments>& output_conditions,
+    flat_hash_set<Node>& modified) const {
+  for (Node n : nodes_to_update) {
+    TRY(PropagateNodeCondition(n, incoming_edges, input_conditions,
+                               output_conditions, modified));
+  }
   return absl::OkStatus();
 }
 
@@ -575,19 +601,31 @@ Status DependencyClosure::UpdateAllNodeConditions(
   }
 
   flat_hash_set<Node> modified;
+  std::optional<uint32_t> prev_phase;
   for (uint32_t phase : phases) {
     hb_tag_t table = DependencyGraph::kClosurePhaseTable[phase];
     auto next_phase = phases.lower_bound(phase);
     next_phase++;
 
-    auto sccs = TRY(graph_.StronglyConnectedComponents(
-        {table}, DependencyGraph::kClosurePhaseNodeFilter[phase], &reachable));
-
     const auto& incoming_edges = TRY(IncomingEdgesForClosurePhase(
         phase, full_closure_changed, &reachable_with_changed_init_nodes));
 
-    TRYV(PropagateConditions(incoming_edges, sccs,
-                             phase_node_condition_cache_[phase], modified));
+    if (DependencyGraph::IsSinglePassClosurePhase(table)) {
+      if (!prev_phase.has_value()) {
+        return absl::InternalError(
+            "Single-pass closure phase cannot be the first active phase.");
+      }
+      TRYV(PropagateConditionsSinglePass(
+          incoming_edges, reachable, phase_node_condition_cache_[*prev_phase],
+          phase_node_condition_cache_[phase], modified));
+    } else {
+      auto sccs = TRY(graph_.StronglyConnectedComponents(
+          {table}, DependencyGraph::kClosurePhaseNodeFilter[phase],
+          &reachable));
+
+      TRYV(PropagateConditions(incoming_edges, sccs,
+                               phase_node_condition_cache_[phase], modified));
+    }
 
     // Transfer the modified conditions forward to the next phase (or final
     // output)
@@ -600,6 +638,8 @@ Status DependencyClosure::UpdateAllNodeConditions(
       next_phase_conditions->insert_or_assign<>(
           n, phase_node_condition_cache_[phase].at(n));
     }
+
+    prev_phase = phase;
   }
 
   return absl::OkStatus();

@@ -160,12 +160,34 @@ class DependencyClosure {
       const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
           node_conditions);
 
+  static absl::StatusOr<bool> PropagateNodeCondition(
+      dep_graph::Node n,
+      const absl::flat_hash_map<dep_graph::Node,
+                                std::vector<dep_graph::EdgeConditionsCnf>>&
+          incoming_edges,
+      const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
+          input_conditions,
+      absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
+          output_conditions,
+      absl::flat_hash_set<dep_graph::Node>& modified);
+
   absl::Status PropagateConditions(
       const absl::flat_hash_map<dep_graph::Node,
                                 std::vector<dep_graph::EdgeConditionsCnf>>&
           incoming_edges,
       const std::vector<std::vector<dep_graph::Node>>& sccs,
       absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>& conditions,
+      absl::flat_hash_set<dep_graph::Node>& modified) const;
+
+  absl::Status PropagateConditionsSinglePass(
+      const absl::flat_hash_map<dep_graph::Node,
+                                std::vector<dep_graph::EdgeConditionsCnf>>&
+          incoming_edges,
+      const absl::flat_hash_set<dep_graph::Node>& nodes_to_update,
+      const absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
+          input_conditions,
+      absl::flat_hash_map<dep_graph::Node, ConditionAndSegments>&
+          output_conditions,
       absl::flat_hash_set<dep_graph::Node>& modified) const;
 
   DependencyClosure(dep_graph::DependencyGraph&& graph,

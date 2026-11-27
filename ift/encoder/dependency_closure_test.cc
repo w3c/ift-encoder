@@ -1483,6 +1483,84 @@ TEST_F(DependencyClosureTest, AlwaysTrueGlyphs_NestedContextOverApproximation) {
   EXPECT_TRUE(dependency_closure->AllGlyphConditions().at(4).IsAlwaysTrue());
 }
 
+TEST_F(DependencyClosureTest, PostGsubMathClosure) {
+  hb_face_unique_ptr math_face =
+      from_file("ift/common/testdata/NotoSansMath-Regular.subset.ttf");
+  Reconfigure(math_face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{0x222B}},  // uni222B
+                  /* 1 */ {{0x2044}},  // fraction
+              });
+
+  // uni222B (17) -> GSUB rtlm -> uni222B.rtlm (19) -> MATH variant ->
+  // uni222B.rtlm.s01 (29).
+  ASSERT_TRUE(segmentation_info->FullClosure().contains(29));
+  auto conditions = dependency_closure->AllGlyphConditions();
+  for (glyph_id_t gid : segmentation_info->FullClosure()) {
+    if (!segmentation_info->InitFontGlyphs().contains(gid)) {
+      EXPECT_TRUE(conditions.contains(gid)) << "missing gid " << gid;
+    }
+  }
+  EXPECT_EQ(conditions.at(19 /* uni222B.rtlm */).ToString(), "if (s0) then p0");
+  EXPECT_EQ(conditions.at(29 /* uni222B.rtlm.s01 */).ToString(),
+            "if (s0) then p0");
+
+  Status s = CompareAnalysis({0});
+  EXPECT_TRUE(s.ok()) << s;
+  s = CompareAnalysis({1});
+  EXPECT_TRUE(s.ok()) << s;
+
+  // Move uni222B into the init font and verify post-GSUB MATH glyphs move into
+  // the init font cleanly during incremental InitFontChanged updates.
+  s = segmentation_info->ReassignInitSubset(*closure_cache,
+                                            WithDefaultFeatures({0x222B}));
+  ASSERT_TRUE(s.ok()) << s;
+  s = dependency_closure->InitFontChanged(SegmentSet::all());
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto updated = dependency_closure->AllGlyphConditions();
+  EXPECT_FALSE(updated.contains(17 /* uni222B */));
+  EXPECT_FALSE(updated.contains(19 /* uni222B.rtlm */));
+  EXPECT_FALSE(updated.contains(29 /* uni222B.rtlm.s01 */));
+  s = CompareAnalysis({1});
+  EXPECT_TRUE(s.ok()) << s;
+}
+
+TEST_F(DependencyClosureTest, ChainContextFormat2SharedRuleDifferentLookahead) {
+  hb_face_unique_ptr sogdian_face =
+      from_file("ift/common/testdata/NotoSansSogdian-Regular.subset.ttf");
+  Reconfigure(sogdian_face.get(), WithDefaultFeatures(),
+              {
+                  /* 0 */ {{0x10F30}},  // AlephSep
+                  /* 1 */ {{0x10F3A}},  // MemSep
+                  /* 2 */ {{0x10F42}},  // TawSep
+              });
+
+  // Lookups 9 and 11 share deduplicated Coverage, InputClassDef, RuleSet, and
+  // Rule tables and differ only in LookAheadClassDef (Aleph vs Taw). Without
+  // keying HarfBuzz's depend context_set_cache on backtrack/lookahead class
+  // defs, activating Mem + Taw misses the Taw context edges for MemIni.L (19)
+  // and MemMed.L (20).
+  for (const SegmentSet& segs :
+       {SegmentSet{0}, SegmentSet{1}, SegmentSet{2}, SegmentSet{0, 1},
+        SegmentSet{1, 2}, SegmentSet{0, 2}}) {
+    Status s = CompareAnalysis(segs);
+    EXPECT_TRUE(s.ok()) << "segments " << segs.ToString() << ": " << s;
+  }
+
+  GlyphSet mem_only = ActivatedGlyphs({1});
+  EXPECT_FALSE(mem_only.contains(19 /* MemIni.L */));
+  EXPECT_FALSE(mem_only.contains(20 /* MemMed.L */));
+
+  GlyphSet mem_and_aleph = ActivatedGlyphs({0, 1});
+  EXPECT_TRUE(mem_and_aleph.contains(19 /* MemIni.L */));
+  EXPECT_TRUE(mem_and_aleph.contains(20 /* MemMed.L */));
+
+  GlyphSet mem_and_taw = ActivatedGlyphs({1, 2});
+  EXPECT_TRUE(mem_and_taw.contains(19 /* MemIni.L */));
+  EXPECT_TRUE(mem_and_taw.contains(20 /* MemMed.L */));
+}
+
 }  // namespace ift::encoder
 
 // TODO(garretrieger): missing tests
