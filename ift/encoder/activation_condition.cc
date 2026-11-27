@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <iterator>
 #include <optional>
 #include <vector>
 
@@ -201,28 +200,26 @@ void UnionIntoDisjunction(SegmentSet& target, const SegmentSet& addition) {
 // `others` directly into `out`, leaving only non-subsumed clauses in
 // `candidates`. If `b_j ⊂ a_i`, then `(a_i OR b_j) = a_i`, which subsumes all
 // other cross-product clauses `(a_i OR b_k)`.
-bool MoveSupersetClausesToOut(std::vector<const SegmentSet*>& candidates,
+void MoveSupersetClausesToOut(std::vector<const SegmentSet*>& candidates,
                               Span<const SegmentSet* const> others,
                               CnfClauses& out) {
   size_t write = 0;
-  bool moved_any = false;
   for (const SegmentSet* c : candidates) {
+    size_t c_size = c->size();
     bool subsumed = false;
     for (const SegmentSet* other : others) {
-      if (other->size() < c->size() && IsSubsetOf(*other, *c)) {
+      if (other->size() < c_size && IsSubsetOf(*other, *c)) {
         subsumed = true;
         break;
       }
     }
     if (subsumed) {
       out.push_back(*c);
-      moved_any = true;
     } else {
       candidates[write++] = c;
     }
   }
   candidates.resize(write);
-  return moved_any;
 }
 
 CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
@@ -297,13 +294,11 @@ CnfClauses OrClauses(const CnfClauses& a, const CnfClauses& b) {
     return out;
   }
 
-  bool moved_subsumed = MoveSupersetClausesToOut(a_unique, b_unique, out);
-  moved_subsumed |= MoveSupersetClausesToOut(b_unique, a_unique, out);
+  MoveSupersetClausesToOut(a_unique, b_unique, out);
+  MoveSupersetClausesToOut(b_unique, a_unique, out);
 
   if (a_unique.empty() || b_unique.empty()) {
-    if (moved_subsumed) {
-      std::sort(out.begin(), out.end());
-    }
+    std::sort(out.begin(), out.end());
     return out;
   }
 
@@ -366,26 +361,25 @@ struct ClauseSpanEq {
   }
 };
 
-void DeduplicateMultiClauses(
-    std::vector<Span<const SegmentSet>>& multi_clauses) {
-  if (multi_clauses.size() <= 1) {
-    return;
-  }
-  absl::flat_hash_set<Span<const SegmentSet>, ClauseSpanHash, ClauseSpanEq>
-      seen;
-  seen.reserve(multi_clauses.size());
-  size_t out = 0;
-  for (size_t i = 0; i < multi_clauses.size(); ++i) {
-    if (seen.insert(multi_clauses[i]).second) {
-      multi_clauses[out++] = multi_clauses[i];
-    }
-  }
-  multi_clauses.resize(out);
-}
-
 struct PartitionedClauses {
   std::vector<const SegmentSet*> single_clauses;
   std::vector<Span<const SegmentSet>> multi_clauses;
+
+  void Deduplicate() {
+    if (multi_clauses.size() <= 1) {
+      return;
+    }
+    absl::flat_hash_set<Span<const SegmentSet>, ClauseSpanHash, ClauseSpanEq>
+        seen;
+    seen.reserve(multi_clauses.size());
+    size_t out = 0;
+    for (size_t i = 0; i < multi_clauses.size(); ++i) {
+      if (seen.insert(multi_clauses[i]).second) {
+        multi_clauses[out++] = multi_clauses[i];
+      }
+    }
+    multi_clauses.resize(out);
+  }
 };
 
 PartitionedClauses PartitionClauses(
@@ -400,7 +394,7 @@ PartitionedClauses PartitionClauses(
       partitioned.multi_clauses.push_back(c->conditions());
     }
   }
-  DeduplicateMultiClauses(partitioned.multi_clauses);
+  partitioned.Deduplicate();
   return partitioned;
 }
 
@@ -436,42 +430,6 @@ void CofactorTerm(CnfClauses& term, const SegmentSet& base_disjunction) {
   if (modified) {
     Simplify(term);
   }
-}
-
-// Cofactors a non-absorbed `term` against `base_disjunction`. If it collapses
-// to a single clause, merges it into `base_disjunction` and returns true;
-// otherwise appends the reduced term to `retained`.
-bool CofactorTermOrMergeIntoBase(CnfClauses term, SegmentSet& base_disjunction,
-                                 std::vector<CnfClauses>& retained) {
-  CofactorTerm(term, base_disjunction);
-  if (term.size() == 1) {
-    UnionIntoDisjunction(base_disjunction, term[0]);
-    return true;
-  }
-  retained.push_back(std::move(term));
-  return false;
-}
-
-// Repeatedly drops multi-clause terms implied by `base_disjunction` and
-// cofactors surviving terms until no more terms collapse to a single clause.
-std::vector<CnfClauses> AbsorbAndCofactorToFixedPoint(
-    std::vector<CnfClauses> terms, SegmentSet& base_disjunction) {
-  bool base_grew = true;
-  while (base_grew && !terms.empty()) {
-    base_grew = false;
-    std::vector<CnfClauses> prev_terms = std::move(terms);
-    terms.clear();
-    terms.reserve(prev_terms.size());
-    for (CnfClauses& term : prev_terms) {
-      if (!AnyClauseIsSubsetOf(term, base_disjunction)) {
-        if (CofactorTermOrMergeIntoBase(std::move(term), base_disjunction,
-                                        terms)) {
-          base_grew = true;
-        }
-      }
-    }
-  }
-  return terms;
 }
 
 // Extracts any segments present in every clause of `clauses` (`∩_k C_k`) into
@@ -535,12 +493,14 @@ void ExtractMultiClauseIntersections(
   }
 }
 
-// Drops multi-clause terms implied by (absorbed into) `base_disjunction` and
-// cofactors remaining terms against `base_disjunction`, repeating whenever a
-// 1-clause collapse expands `base_disjunction`.
+// Drops multi-clause terms that imply (are absorbed into) `base_disjunction`
+// and cofactors remaining terms against `base_disjunction`. Because
+// ExtractMultiClauseIntersections() already hoisted each term's clause
+// intersection into `base_disjunction`, no surviving term can collapse to a
+// single clause here.
 std::vector<CnfClauses> AbsorbAndCofactorTerms(
     Span<const Span<const SegmentSet>> multi_clauses,
-    SegmentSet& base_disjunction) {
+    const SegmentSet& base_disjunction) {
   std::vector<CnfClauses> terms;
   terms.reserve(multi_clauses.size());
   if (base_disjunction.empty()) {
@@ -550,20 +510,13 @@ std::vector<CnfClauses> AbsorbAndCofactorTerms(
     return terms;
   }
 
-  bool base_grew = false;
   for (Span<const SegmentSet> mc : multi_clauses) {
     if (!AnyClauseIsSubsetOf(mc, base_disjunction)) {
-      if (CofactorTermOrMergeIntoBase(CnfClauses(mc.begin(), mc.end()),
-                                      base_disjunction, terms)) {
-        base_grew = true;
-      }
+      CnfClauses term(mc.begin(), mc.end());
+      CofactorTerm(term, base_disjunction);
+      terms.push_back(std::move(term));
     }
   }
-
-  if (base_grew && !terms.empty()) {
-    return AbsorbAndCofactorToFixedPoint(std::move(terms), base_disjunction);
-  }
-
   return terms;
 }
 
@@ -579,7 +532,7 @@ struct CnfClausesPtrEq {
   }
 };
 
-void DeduplicateTerms(std::vector<CnfClauses>& terms) {
+void Deduplicate(std::vector<CnfClauses>& terms) {
   if (terms.size() <= 1) {
     return;
   }
@@ -672,7 +625,7 @@ bool ContainsAllClauses(const CnfClauses& superset, const CnfClauses& subset) {
 // whose clause set contains an earlier smaller term (`A ⊆ B => (B -> A)`, so
 // `A OR B == A`).
 void SortAndFilterSubsumedTerms(std::vector<CnfClauses>& terms) {
-  DeduplicateTerms(terms);
+  Deduplicate(terms);
   if (terms.size() <= 1) {
     return;
   }
@@ -701,34 +654,14 @@ void SortAndFilterSubsumedTerms(std::vector<CnfClauses>& terms) {
 // Folds multi-clause CNF terms sequentially from smallest clause count to
 // largest so small terms widen the accumulator's disjunctive clauses early and
 // absorb combinations from larger terms at each step (avoiding the isolated
-// right-subtree blowup of balanced-tree folding). If the accumulator collapses
-// to a single clause mid-fold, merges it into `base_disjunction` and cofactors
-// the remaining tail. Returns `std::nullopt` if all terms collapse into
-// `base_disjunction`.
-std::optional<CnfClauses> FoldMultiClauseTerms(std::vector<CnfClauses> terms,
-                                               SegmentSet& base_disjunction) {
-  while (!terms.empty()) {
-    SortAndFilterSubsumedTerms(terms);
-    CnfClauses acc = std::move(terms[0]);
-    bool collapsed_to_base = false;
-    for (size_t i = 1; i < terms.size(); ++i) {
-      acc = OrClauses(acc, terms[i]);
-      if (acc.size() == 1) {
-        UnionIntoDisjunction(base_disjunction, acc[0]);
-        std::vector<CnfClauses> tail(
-            std::make_move_iterator(terms.begin() + i + 1),
-            std::make_move_iterator(terms.end()));
-        terms =
-            AbsorbAndCofactorToFixedPoint(std::move(tail), base_disjunction);
-        collapsed_to_base = true;
-        break;
-      }
-    }
-    if (!collapsed_to_base) {
-      return acc;
-    }
+// right-subtree blowup of balanced-tree folding). Assumes `!terms.empty()`.
+CnfClauses FoldMultiClauseTerms(std::vector<CnfClauses> terms) {
+  SortAndFilterSubsumedTerms(terms);
+  CnfClauses acc = std::move(terms[0]);
+  for (size_t i = 1; i < terms.size(); ++i) {
+    acc = OrClauses(acc, terms[i]);
   }
-  return std::nullopt;
+  return acc;
 }
 
 void DistributeDisjunctionIntoClauses(CnfClauses& clauses,
@@ -817,15 +750,9 @@ StatusOr<ActivationCondition> ActivationCondition::OrAll(
     return result;
   }
 
-  std::optional<CnfClauses> folded =
-      FoldMultiClauseTerms(std::move(remaining_terms), base_disjunction);
-  if (!folded.has_value()) {
-    result.conditions_.push_back(std::move(base_disjunction));
-    return result;
-  }
-
-  DistributeDisjunctionIntoClauses(*folded, base_disjunction);
-  result.conditions_ = std::move(*folded);
+  CnfClauses folded = FoldMultiClauseTerms(std::move(remaining_terms));
+  DistributeDisjunctionIntoClauses(folded, base_disjunction);
+  result.conditions_ = std::move(folded);
   return result;
 }
 
